@@ -1,0 +1,7 @@
+# Secrets — never commit (Phase 1 extends this file with build/tooling ignores)
+*.key
+*.key.pub
+*.pem
+.env
+.env.*
+!.env.example

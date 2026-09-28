@@ -1,0 +1,33 @@
+# Phase 1 — Foundation
+
+**Status:** ⚪ Not started · **Depends on:** P0 exit · **Agents:** backend-engineer, payments-finance-engineer, ux-ui-designer, devops-engineer (CI), qa-security-reviewer
+
+## Goal
+A working monorepo with the domain core, database schema, PromptPay library and design tokens, all tested, before any feature screens exist.
+
+## Scope
+- **In:**
+  - monorepo scaffold, Biome, tsconfig references, boundary lint rules;
+  - CI (lint, typecheck, test, build);
+  - `packages/shared`: money, business date, enums, order/payment state machines, permission matrix, Zod schemas;
+  - `packages/db`: schema v1, migrations, seed with a Thai sample menu and the initial PromptPay ID in settings;
+  - `packages/promptpay`;
+  - `packages/i18n` skeleton;
+  - `packages/ui` tokens + base components;
+  - `design/` brand and wireframes for key screens;
+  - Claude Code hooks: format and typecheck after edits, protect applied migrations and `.env*`.
+- **Out:** feature screens, deployment.
+
+## Exit criteria
+- [ ] `pnpm install && pnpm build && pnpm test` passes locally and in CI
+- [ ] State-machine tests cover every allowed and forbidden transition
+- [ ] Money tests: rounding, totals with modifiers, cash change
+- [ ] PromptPay: decoded TLV + CRC match the reference library for the test matrix; **scanned correctly in the owner's 2 bank apps, K PLUS and Krungthai NEXT** (test PromptPay 0642230924, personal test account; list amounts and results below)
+- [ ] Migrations run on an empty Postgres; seed loads
+- [ ] Wireframes for POS order entry, payment sheet and LINE menu/checkout approved by the owner
+
+## As built
+_Fill in with `/checkpoint`: packages created, key modules, schema tables, test counts._
+
+## Log
+_Empty._
