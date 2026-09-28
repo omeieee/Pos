@@ -105,6 +105,7 @@ This is the **single source of truth for technology and design choices**. Other 
 ## D-11 · Money and time — Proposed
 - **Decision:** amounts are stored as integer **satang** (`bigint`), in THB only. The server always computes totals. Timestamps are stored as `timestamptz` in UTC and shown in Asia/Bangkok time. Reports group by `business_date`, whose cutoff is configurable (default 04:00, so late-night sales count for the previous day).
 - **Why:** no floating-point rounding errors, and daily totals are correct even if the shop closes after midnight.
+- **TypeScript representation (2026-09-29, P1):** in code, satang is a branded `number` that must be a safe integer (`Number.isSafeInteger`, ±9×10¹⁵ satang), not JS `BigInt`. The DB column stays `bigint`, read by Drizzle in `number` mode. Why: `BigInt` cannot go through `JSON.stringify`, Zod-over-HTTP or React without custom serialization, and the shop's amounts are many orders of magnitude below the limit. Guards in `packages/shared/money` reject non-integers and unsafe values.
 
 ## D-12 · Language — Proposed
 - **Decision:** the UI is Thai-first, with English as the second language. The Thai locale shows Buddhist Era dates by default. Every user-facing string lives in `packages/i18n`. The fonts are Thai-capable, and the final choice belongs to the design system (P1).
