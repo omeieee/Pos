@@ -22,7 +22,9 @@ function toMap(payload: string): Record<string, string> {
 
 /** Deterministic amount matrix: edges plus a pseudo-random sweep from ฿0.01 to ฿99,999.99. */
 function amountMatrix(): number[] {
-  const amounts = [1, 9, 10, 99, 100, 101, 1000, 4550, 7500, 12345, 99999, 100000, 9999999];
+  const amounts = [
+    1, 9, 10, 99, 100, 101, 1000, 4550, 7500, 12345, 99999, 100000, 9999999, 999999999,
+  ];
   let seed = 20260929;
   for (let i = 0; i < 300; i++) {
     seed = (seed * 1103515245 + 12345) % 2147483648;
@@ -107,4 +109,9 @@ describe('rejects bad targets', () => {
   ] as PromptpaySettings[])('%j', (t) => {
     expect(() => promptpayPayload(t, satang(100))).toThrow(RangeError);
   });
+});
+
+test('decodeTlv rejects non-digit lengths', () => {
+  expect(() => decodeTlv('00 101')).toThrow(RangeError);
+  expect(() => decodeTlv('00-101')).toThrow(RangeError);
 });

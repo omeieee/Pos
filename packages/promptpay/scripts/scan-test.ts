@@ -1,6 +1,6 @@
 /**
  * Writes an HTML page of PromptPay QR codes for the manual bank-app scan test
- * (P1 exit criterion). Usage: node scripts/scan-test.ts <out.html> [phone]
+ * (P1 exit criterion). Usage: node scripts/scan-test.ts <out.html> <promptpay-phone>
  * Scan each code in the bank app WITHOUT paying and note the name and amount shown.
  */
 import { writeFileSync } from 'node:fs';
@@ -8,8 +8,11 @@ import QRCode from 'qrcode';
 import { promptpayPayload } from '../src/payload.ts';
 
 const out = process.argv[2];
-const phone = process.argv[3] ?? '0642230924';
-if (!out) throw new Error('usage: node scripts/scan-test.ts <out.html> [phone]');
+// The PromptPay ID is never hardcoded (CLAUDE.md rule 3); pass the one from settings.
+const phone = process.argv[3];
+if (!out || !phone || !/^0\d{9}$/.test(phone)) {
+  throw new Error('usage: node scripts/scan-test.ts <out.html> <promptpay-phone, 10 digits>');
+}
 
 const amounts = [100, 4550, 7500, 12000, 99999];
 const cards: string[] = [];

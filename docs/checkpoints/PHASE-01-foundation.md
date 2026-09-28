@@ -37,5 +37,13 @@ A working monorepo with the domain core, database schema, PromptPay library and 
 - **Sync note:** `menu_item_channel_prices`, `menu_item_modifier_groups` and `order_items` have no `rev`; the API must bump the parent row (`menu_items` / `orders`) in the same transaction when they change.
 - **Infra/CI:** `.github/workflows/ci.yml`; `infra/supabase/bootstrap.sql`; hooks in `.claude/settings.json` (protect migrations/.env, format + per-package typecheck).
 
+## Carry-forward from the P1 QA review (2026-09-29)
+Fixed in P1: purity lint gaps (M1), protect hook fails closed and covers relative paths + `migrations/meta` (M2), scan script needs the phone argument (M3), `pnpm audit --prod` in CI (M4), TRUNCATE blocked by migration 0003 (F1), TLV length validation + max amount in the matrix (F11).
+- **P2:** sync must exclude `staff.pin_hash` and `devices.token_hash` (F10); `SET search_path` on the SQL functions and run the migration set on Supabase 17.6 (F9); link tables need a parent-row bump or their own sync columns (F4); decide on dev-only esbuild advisory via drizzle-kit.
+- **P3:** DB-level guards for confirmed payments (immutable amount/method, allowed status edges, no `order_items` update) and lock the order row on confirm (F2); separate staff vs customer order input, the server sets the channel and customer (F5); `settingPermission(key)` so `promptpay` needs `settings.promptpay` (F6); zero-total/overpayment/exact-amount rules (F7); staff PIN to leave the iPad customer-facing mode (F12, with Q14.6).
+- **P3/P4:** define `gov_copay_schemes.channels` as the payment location, add CHECKs (F3).
+- **Before P5:** seed must not load the personal test PromptPay ID in production (F8).
+- **Tooling (low):** hook path quoting and case-insensitive root match, dependents typecheck (F13); pin CI actions by SHA and add a secret scan (F14); a lint fixture test for the purity rules.
+
 ## Log
 - 2026-09-29 · Foundation built; owner checks pending ([PROGRESS](../PROGRESS.md#2026-09-29--p1--foundation-built-awaiting-owner-checks))

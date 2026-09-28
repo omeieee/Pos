@@ -45,7 +45,29 @@
               "options": {
                 "patterns": [
                   {
-                    "group": ["node:*", "fs", "path", "http", "https", "net", "child_process"],
+                    "group": [
+                      "node:*",
+                      "node:*/**",
+                      "fs",
+                      "fs/**",
+                      "path",
+                      "http",
+                      "https",
+                      "http2",
+                      "net",
+                      "tls",
+                      "dgram",
+                      "dns",
+                      "dns/**",
+                      "os",
+                      "crypto",
+                      "child_process",
+                      "worker_threads",
+                      "stream",
+                      "stream/**",
+                      "cluster",
+                      "vm"
+                    ],
                     "message": "Pure package: no I/O (CLAUDE.md dependency rules)."
                   },
                   {
@@ -67,7 +89,14 @@
                   "process": "Pure package: no env access.",
                   "window": "Pure package: no DOM.",
                   "document": "Pure package: no DOM.",
-                  "localStorage": "Pure package: no storage."
+                  "localStorage": "Pure package: no storage.",
+                  "globalThis": "Pure package: no ambient globals.",
+                  "WebSocket": "Pure package: no network.",
+                  "XMLHttpRequest": "Pure package: no network.",
+                  "navigator": "Pure package: no DOM.",
+                  "sessionStorage": "Pure package: no storage.",
+                  "indexedDB": "Pure package: no storage.",
+                  "require": "Pure package: ESM imports only."
                 }
               }
             }

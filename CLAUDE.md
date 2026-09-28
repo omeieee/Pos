@@ -111,7 +111,7 @@ backend-engineer · pos-frontend-engineer · line-integration-engineer · paymen
 - `pnpm install` · `pnpm lint` (Biome) · `pnpm format` · `pnpm build` (typecheck all) · `pnpm test` (Vitest, all packages)
 - `pnpm --filter @sds/db db:generate` (new migration from schema; never edit applied ones) · migrations + seed run on PGlite in tests (`createPgliteDb()`, `seed()`)
 - `pnpm --filter @sds/ui tokens:css` (regenerate `design/wireframes/tokens.css`)
-- `node packages/promptpay/scripts/scan-test.ts <out.html>` (bank-app QR scan page)
+- `node packages/promptpay/scripts/scan-test.ts <out.html> <promptpay-phone>` (bank-app QR scan page)
 - Later: dev, e2e, deploy (P2–P3)
 
 ## Glossary

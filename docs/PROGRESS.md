@@ -5,7 +5,7 @@
 
 > **Handoff for the next session (read first):**
 > - **P1 code is pushed** (`main`, up to 2e48741). Local: `pnpm install && pnpm lint && pnpm build && pnpm test` all pass (1,808 tests).
-> - **Waiting on the owner:** (1) confirm the GitHub Actions CI run is green (no `gh` CLI/token here); (2) scan the K PLUS QR test page (`packages/promptpay/scan-test.local.html`, regenerate with `node packages/promptpay/scripts/scan-test.ts packages/promptpay/scan-test.local.html`) and report, per amount: recipient name shown, exact amount, amount locked (yes/no); (3) approve `design/wireframes/index.html` and answer Q14 in `10-open-questions.md`.
+> - **Waiting on the owner:** (1) confirm the GitHub Actions CI run is green (no `gh` CLI/token here); (2) scan the K PLUS QR test page (`packages/promptpay/scan-test.local.html`, regenerate with `node packages/promptpay/scripts/scan-test.ts packages/promptpay/scan-test.local.html <promptpay-phone>`) and report, per amount: recipient name shown, exact amount, amount locked (yes/no); (3) approve `design/wireframes/index.html` and answer Q14 in `10-open-questions.md`.
 > - **Local tools:** Node 24 + pnpm 12.6.0. No Docker; PGlite 0.4.x (PostgreSQL 17) for local DB/tests.
 > - **Still open, not blocking:** Q3 (tax status; ภ.ง.ด.94 due 30 Sep 2026), Q11, Q12, reserved IP, ไทยช่วยไทย on room delivery, room-delivery fee.
 > - **Standing rule:** before starting each phase, ask the owner for all missing information that phase needs (see `CLAUDE.md` workflow).
@@ -20,6 +20,7 @@ Newest entries first. Add entries with `/checkpoint`. Each entry covers what cha
 - **Verification:** `pnpm install --frozen-lockfile`, `pnpm lint` (62 files, clean), `pnpm build` (5/5), `pnpm test` (5/5: shared 466, promptpay 1271, db 15, i18n 20, ui 36). Supabase: advisor lints = [], RLS probe table got RLS on, anon/authenticated execute = false. Hooks tested by hand (migration/.env block → exit 2; type error → exit 2) and live (Write to `.env.hookprobe` blocked by the hook). CI run: **not verified** (no access).
 - **Decisions:** D-11 note (satang = branded safe-integer `number`); D-03 note (PGlite pinned 0.4.x = PG17).
 - **Open issues:** CI green unconfirmed; K PLUS scan; wireframe approval; brand.md §9 questions; React base components deferred to P3 (no app yet).
+- **QA review (qa-security-reviewer):** no rule violations; M1–M4, F1 and F11 fixed afterwards (`pnpm lint` clean, `pnpm build` 5/5, `pnpm test` 5/5 with promptpay 1276 and db 20, `pnpm audit --prod` clean). Other findings carried forward in the P1 checkpoint.
 - **Next:** owner checks → close P1 → P2 kickoff questions.
 - **Commit:** 420cb8c, 1f318f0, ccf5d4d, 118b533, c1ffb66, 72b97e1, 2e48741; this entry uncommitted
 

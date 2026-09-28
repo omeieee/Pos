@@ -237,4 +237,11 @@ describe('integrity rules', () => {
       /orders_client_request_id_key/,
     );
   });
+
+  test.each(['orders', 'order_items', 'payments', 'expenses', 'audit_log'])(
+    'TRUNCATE %s is blocked',
+    async (table) => {
+      await expectDbError(db.execute(sql.raw(`truncate ${table} cascade`)), /not allowed/);
+    },
+  );
 });

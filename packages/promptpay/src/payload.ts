@@ -81,8 +81,9 @@ export function decodeTlv(data: string): TlvField[] {
   let i = 0;
   while (i < data.length) {
     const tag = data.slice(i, i + 2);
-    const len = Number(data.slice(i + 2, i + 4));
-    if (!/^\d{2}$/.test(tag) || !Number.isInteger(len) || i + 4 + len > data.length) {
+    const lenText = data.slice(i + 2, i + 4);
+    const len = Number(lenText);
+    if (!/^\d{2}$/.test(tag) || !/^\d{2}$/.test(lenText) || i + 4 + len > data.length) {
       throw new RangeError(`malformed TLV at ${i}`);
     }
     fields.push({ tag, value: data.slice(i + 4, i + 4 + len) });
