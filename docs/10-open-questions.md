@@ -73,7 +73,7 @@ Does the LINE OA "แซ่บโดนเส้น" already exist (plan, follow
 - **P1 kickoff answers (2026-09-29):**
   - Claude **may commit** to git. Push permission not stated yet, so ask before the first push.
   - `corepack enable pnpm` approved. Installed pnpm 12.6.0 with shims in `%APPDATA%\npm`, because the default `Program Files\nodejs` needs admin.
-  - **Supabase project replaced:** the new ref is `yejvrooxqdpynruwnegg`, and `.mcp.json` was updated with the same features. The old ref `msxzudufpewhdramjihv` no longer resolves. The region (Singapore expected) is confirmed after the MCP sign-in.
+  - **Supabase project replaced:** the new ref is `yejvrooxqdpynruwnegg`, and `.mcp.json` was updated with the same features. The old ref `msxzudufpewhdramjihv` no longer resolves. **Region confirmed: Singapore (AWS `ap-southeast-1`).** Checked by mapping the IPv6 address of `db.yejvrooxqdpynruwnegg.supabase.co` to AWS's published IP ranges. This puts it next to the VM in `ap-singapore-1`.
 
 ### Q11 · Receipts
 Do customers need receipts? E-receipt in LINE, printed (after P8), or both? Does anyone ask for a tax invoice?
