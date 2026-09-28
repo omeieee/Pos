@@ -10,7 +10,7 @@ The first five questions change the design; the rest refine it.
 - **Answer:** no logo, colours or fonts yet. The ux-ui-designer agent proposes an initial style. The UI must stay **fully customizable**: design tokens, design work in Figma / Claude Design, and brand settings changeable later without code.
 
 ### Banking apps for PromptPay tests (asked 2026-09-29)
-- **Answer:** **K PLUS (Kasikorn)** and **Krungthai NEXT**. PromptPay `0642230924` is the owner's **personal account, for testing only**. The real shop account will be provided later and set in settings (P3). The Phase 1 scan test uses **1 app** (K PLUS or Krungthai NEXT, the owner's choice); more apps when the owner decides (updated 2026-09-29).
+- **Answer:** **K PLUS (Kasikorn)** and **Krungthai NEXT**. PromptPay `0642230924` is the owner's **personal account, for testing only**. The real shop account will be provided later and set in settings (P3). The Phase 1 scan test uses **1 app** (K PLUS or Krungthai NEXT, the owner's choice); more apps when the owner decides (updated 2026-09-29). **P1 test app chosen (2026-09-29): K PLUS.**
 
 ### Q1 · Oracle VM: shape, region and account type
 Which shape is the VM: **VM.Standard.A1.Flex (ARM)** or **VM.Standard.E2.1.Micro (AMD, 1 GB)**? How many OCPUs and how much RAM, in which region? Is the account **Always Free only** or **Pay-As-You-Go**?
@@ -77,6 +77,11 @@ Does the LINE OA "แซ่บโดนเส้น" already exist (plan, follow
   - **New requirement:** UX/UI mockups and customization that can be adjusted **independently for each of the 3 devices** (iPad, iPhone, laptop). Recorded as A4 per-device customization.
   - `corepack enable pnpm` approved. Installed pnpm 12.6.0 with shims in `%APPDATA%\npm`, because the default `Program Files\nodejs` needs admin.
   - **Supabase project replaced:** the new ref is `yejvrooxqdpynruwnegg`, and `.mcp.json` was updated with the same features. The old ref `msxzudufpewhdramjihv` no longer resolves. **Region confirmed: Singapore (AWS `ap-southeast-1`).** Checked by mapping the IPv6 address of `db.yejvrooxqdpynruwnegg.supabase.co` to AWS's published IP ranges. This puts it next to the VM in `ap-singapore-1`.
+- **P1 start answers (2026-09-29):**
+  - Owner said go for P1 and authorized the needed changes.
+  - Supabase MCP authenticated. Security advisor fix applied: `revoke execute on public.rls_auto_enable()` from `public, anon, authenticated` ([infra/supabase/bootstrap.sql](../infra/supabase/bootstrap.sql)). The function and its `ensure_rls` event trigger are kept, because they turn on RLS for new `public` tables.
+  - PromptPay scan test app: **K PLUS**.
+  - Wireframes: **HTML only in P1.** Figma (team "ome's team", Starter plan, few MCP calls a month) comes later.
 
 ### Q11 · Receipts
 Do customers need receipts? E-receipt in LINE, printed (after P8), or both? Does anyone ask for a tax invoice?

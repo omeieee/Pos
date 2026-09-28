@@ -14,7 +14,7 @@ A working monorepo with the domain core, database schema, PromptPay library and 
   - `packages/promptpay`;
   - `packages/i18n` skeleton;
   - `packages/ui` tokens + base components, with **per-device overrides for iPad, iPhone and laptop** (A4);
-  - `design/` brand and wireframes for key screens, **for each of the 3 devices**, delivered **both as HTML pages in `design/` and in Figma**;
+  - `design/` brand and wireframes for key screens, **for each of the 3 devices**, as HTML pages in `design/` (Figma deferred by the owner, 2026-09-29);
   - Claude Code hooks: format and typecheck after edits, protect applied migrations and `.env*`.
 - **Out:** feature screens, deployment.
 
@@ -22,9 +22,9 @@ A working monorepo with the domain core, database schema, PromptPay library and 
 - [ ] `pnpm install && pnpm build && pnpm test` passes locally and in CI
 - [ ] State-machine tests cover every allowed and forbidden transition
 - [ ] Money tests: rounding, totals with modifiers, cash change
-- [ ] PromptPay: decoded TLV + CRC match the reference library for the test matrix; **scanned correctly in 1 of the owner's bank apps (K PLUS or Krungthai NEXT)**; more apps when the owner decides (test PromptPay 0642230924, personal test account; list amounts and results below)
+- [ ] PromptPay: decoded TLV + CRC match the reference library for the test matrix; **scanned correctly in K PLUS** (owner's choice, 2026-09-29); more apps when the owner decides (test PromptPay 0642230924, personal test account; list amounts and results below)
 - [ ] Migrations run on an empty Postgres; seed loads
-- [ ] Wireframes/mockups for POS order entry, payment sheet and LINE menu/checkout, for **iPad, iPhone and laptop**, in **both** `design/` HTML and Figma, approved by the owner
+- [ ] Wireframes/mockups for POS order entry, payment sheet and LINE menu/checkout, for **iPad, iPhone and laptop**, as `design/` HTML (Figma deferred), approved by the owner
 - [ ] Per-device tokens: changing one device's overrides leaves the other two unchanged
 
 ## As built

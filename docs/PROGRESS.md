@@ -6,7 +6,7 @@
 > **Handoff for the next session (read first):**
 > - **No code exists yet.** The owner asked not to code until they say so in a new session.
 > - **P1 inputs are settled.** Answers are in [10-open-questions.md](10-open-questions.md); the stack is Accepted in [decisions.md](decisions.md).
-> - **P1 prerequisites confirmed (2026-09-29):** Claude may commit and push to `main`. Supabase project `yejvrooxqdpynruwnegg` (Singapore); its MCP still needs re-auth (restart Claude Code → `/mcp`), which doesn't block P1.
+> - **P1 prerequisites confirmed (2026-09-29):** Claude may commit and push to `main`. Supabase project `yejvrooxqdpynruwnegg` (Singapore); MCP authenticated.
 > - **Local tools:** Node 24 + pnpm 12.6.0 (shims in `%APPDATA%
 pm`). No Docker, so use **PGlite** for local DB/tests.
 > - **Still open, not blocking P1:** Q3 (tax status; ภ.ง.ด.94 due 30 Sep 2026), Q11, Q12 (costs: owner provides later), reserved IP, and whether ไทยช่วยไทย can be paid on room delivery.
