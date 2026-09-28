@@ -12,3 +12,6 @@ dist/
 .turbo/
 coverage/
 *.tsbuildinfo
+
+# Local-only generated pages (e.g. PromptPay scan test)
+*.local.html

@@ -102,3 +102,14 @@ You want installable apps for iPad, iPhone and Windows/macOS/Linux.
 - *Why it matters:* it decides the order and cost of P10. Desktop costs ฿0; iOS needs the fee and a Mac.
 - *Default:* desktop (Windows) first; iOS after the fee is accepted and Mac access is sorted.
 - **Answer (2026-09-29):** native apps are a **future project, not in current scope**, for any platform. The owner plans to **buy a MacBook later** to use Xcode for iPad/iPhone deployment. The platform order and the Apple fee are decided when P10 starts.
+
+### Q14 · Wireframe review (P1 exit criterion)
+Open `design/wireframes/index.html` in a browser and approve it or list changes. Details in [design/brand.md §9](../design/brand.md#9-open-questions-for-the-owner).
+1. **Colours:** chili red + orange on warm white, or another direction?
+2. **Thai font:** IBM Plex Sans Thai (loopless, modern) or Sarabun (looped, easier for older customers)?
+3. **Menu prices:** `฿50` on menu tiles and `฿50.00` only in totals?
+4. **Room delivery fee:** is there one? The mockups show none.
+5. **Food photos:** will you provide them? Otherwise POS tiles are text-only.
+6. **iPad customer-facing mode:** the confirm button is hidden while the QR faces the customer, and staff long-press to return. Is that OK?
+- **Answer:**
+

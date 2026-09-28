@@ -1,21 +1,27 @@
 # Progress Log
 
-**Current phase:** P0 — Planning ([checkpoint](checkpoints/PHASE-00-planning.md)), status **ready for P1**. The owner will say when to start coding.
-**Next phase:** P1 — Foundation ([checkpoint](checkpoints/PHASE-01-foundation.md)).
+**Current phase:** P1 — Foundation ([checkpoint](checkpoints/PHASE-01-foundation.md)), status **in progress**: code complete, waiting on owner checks.
+**Next phase:** P2 — Cloud skeleton ([checkpoint](checkpoints/PHASE-02-cloud-skeleton.md)).
 
 > **Handoff for the next session (read first):**
-> - **No code exists yet.** The owner asked not to code until they say so in a new session.
-> - **P1 inputs are settled.** Answers are in [10-open-questions.md](10-open-questions.md); the stack is Accepted in [decisions.md](decisions.md).
-> - **P1 prerequisites confirmed (2026-09-29):** Claude may commit and push to `main`. Supabase project `yejvrooxqdpynruwnegg` (Singapore); MCP authenticated.
-> - **Local tools:** Node 24 + pnpm 12.6.0 (shims in `%APPDATA%
-pm`). No Docker, so use **PGlite** for local DB/tests.
-> - **Still open, not blocking P1:** Q3 (tax status; ภ.ง.ด.94 due 30 Sep 2026), Q11, Q12 (costs: owner provides later), reserved IP, and whether ไทยช่วยไทย can be paid on room delivery.
-> - **LINE OA:** already exists, but has no Messaging API/bot and no ordering UI yet (P4).
+> - **P1 code is pushed** (`main`, up to 2e48741). Local: `pnpm install && pnpm lint && pnpm build && pnpm test` all pass (1,808 tests).
+> - **Waiting on the owner:** (1) confirm the GitHub Actions CI run is green (no `gh` CLI/token here); (2) scan the K PLUS QR test page (`packages/promptpay/scan-test.local.html`, regenerate with `node packages/promptpay/scripts/scan-test.ts packages/promptpay/scan-test.local.html`) and report, per amount: recipient name shown, exact amount, amount locked (yes/no); (3) approve `design/wireframes/index.html` and answer Q14 in `10-open-questions.md`.
+> - **Local tools:** Node 24 + pnpm 12.6.0. No Docker; PGlite 0.4.x (PostgreSQL 17) for local DB/tests.
+> - **Still open, not blocking:** Q3 (tax status; ภ.ง.ด.94 due 30 Sep 2026), Q11, Q12, reserved IP, ไทยช่วยไทย on room delivery, room-delivery fee.
 > - **Standing rule:** before starting each phase, ask the owner for all missing information that phase needs (see `CLAUDE.md` workflow).
 
 Newest entries first. Add entries with `/checkpoint`. Each entry covers what changed, how it was verified, what was decided, and what comes next. State facts only, and never record tests as passed unless they were run.
 
 ---
+
+## 2026-09-29 · P1 · Foundation built (awaiting owner checks)
+- **Summary:** monorepo and domain core built; Supabase advisor fixed (revoke on `rls_auto_enable`, trigger kept). Owner answers: K PLUS for the scan test; wireframes HTML-only (Figma deferred).
+- **Changed:** root tooling (pnpm, Turborepo, Biome boundary rules, TS 7 strict); `packages/shared`, `promptpay`, `db`, `i18n`, `ui`; `design/` (brand + 9 wireframes, by ux-ui-designer agent); `.github/workflows/ci.yml`; `.claude/settings.json` + hooks; `infra/supabase/bootstrap.sql`; docs 03, 10, decisions, P1 checkpoint.
+- **Verification:** `pnpm install --frozen-lockfile`, `pnpm lint` (62 files, clean), `pnpm build` (5/5), `pnpm test` (5/5: shared 466, promptpay 1271, db 15, i18n 20, ui 36). Supabase: advisor lints = [], RLS probe table got RLS on, anon/authenticated execute = false. Hooks tested by hand (migration/.env block → exit 2; type error → exit 2) and live (Write to `.env.hookprobe` blocked by the hook). CI run: **not verified** (no access).
+- **Decisions:** D-11 note (satang = branded safe-integer `number`); D-03 note (PGlite pinned 0.4.x = PG17).
+- **Open issues:** CI green unconfirmed; K PLUS scan; wireframe approval; brand.md §9 questions; React base components deferred to P3 (no app yet).
+- **Next:** owner checks → close P1 → P2 kickoff questions.
+- **Commit:** 420cb8c, 1f318f0, ccf5d4d, 118b533, c1ffb66, 72b97e1, 2e48741; this entry uncommitted
 
 ## 2026-09-29 · P0 · P1 prerequisites confirmed
 - **Summary:** connections checked and the P1 kickoff answers recorded.

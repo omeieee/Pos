@@ -127,11 +127,12 @@ Editing one device's settings can never change another device. This is a P1 exit
 - Strings live in `packages/i18n` (th, en). Status labels match the payment state machine (`status.payment.*`).
 
 ## 9. Open questions for the owner
+The open ones (1–3, 6–8) are also listed in [10-open-questions.md](../docs/10-open-questions.md) (Q14), which is where answers are recorded.
 1. **Colours:** is chili red + orange on warm white right for the shop, or does the owner prefer another direction (for example deeper red, or dark mode for the kitchen)?
 2. **Looped or loopless Thai:** keep IBM Plex Sans Thai (loopless, modern), or switch to Sarabun (looped, traditional) for older customers?
 3. **Menu prices:** show "฿50" (whole baht) on menu tiles, and "฿50.00" only in totals? That is the current proposal.
-4. **ไทยช่วยไทย split:** the mockups show an *estimated* 60/40 split. Confirm the ratio and any per-person daily cap so the estimate is honest, or drop the estimate and show only the full amount.
-5. **Scheme hours:** the scheme's daily hours to enforce (placeholder 06:00 in the "outside hours" state).
+4. ~~ไทยช่วยไทย split~~ **Answered in [04 §3.1](../docs/04-integrations.md#31-facts-checked-sept-2026):** 60/40, government cap ฿200 per person per day and ฿1,000 per round. The estimate stays, labelled "ประมาณการ"; the customer's remaining cap is known only to เป๋าตัง.
+5. ~~Scheme hours~~ **Answered:** 06:00–23:00 at shops (seeded in `gov_copay_schemes`).
 6. **Delivery fee** for room delivery: none is shown. Is there one?
 7. **Photos:** will the owner provide real food photos? Without them, POS tiles can switch to text-only (a per-device setting in P3).
 8. **Customer-facing mode (iPad):** the confirm button is hidden while the iPad faces the customer, and staff long-press to return. Is that acceptable at the counter?

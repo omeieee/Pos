@@ -8,7 +8,7 @@ A cloud POS for a made-to-order noodle restaurant inside a condominium.
 - **Hosting** runs 24/7 on free tiers (Oracle VM + Cloudflare). The UI is Thai-first.
 
 ## Status and sources of truth
-- **Current phase:** the header of [docs/PROGRESS.md](docs/PROGRESS.md). At the time of writing it is P0 Planning, and **no application code exists yet**.
+- **Current phase:** the header of [docs/PROGRESS.md](docs/PROGRESS.md). P1 Foundation built the packages; apps come in P2–P4.
 - **Stack and design choices:** [docs/decisions.md](docs/decisions.md). Don't restate them elsewhere, and don't change them silently. Propose a decision entry first.
 - **Open owner questions:** [docs/10-open-questions.md](docs/10-open-questions.md).
 
@@ -108,7 +108,11 @@ backend-engineer · pos-frontend-engineer · line-integration-engineer · paymen
 - Agents report back to the main session, which records progress with `/checkpoint`. Agents do not edit `PROGRESS.md`.
 
 ## Commands
-_Filled in during P1_: install, dev, test, e2e, build, `db:migrate`, `db:seed`, deploy.
+- `pnpm install` · `pnpm lint` (Biome) · `pnpm format` · `pnpm build` (typecheck all) · `pnpm test` (Vitest, all packages)
+- `pnpm --filter @sds/db db:generate` (new migration from schema; never edit applied ones) · migrations + seed run on PGlite in tests (`createPgliteDb()`, `seed()`)
+- `pnpm --filter @sds/ui tokens:css` (regenerate `design/wireframes/tokens.css`)
+- `node packages/promptpay/scripts/scan-test.ts <out.html>` (bank-app QR scan page)
+- Later: dev, e2e, deploy (P2–P3)
 
 ## Glossary
 | Thai | Meaning here |
