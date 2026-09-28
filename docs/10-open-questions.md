@@ -113,3 +113,13 @@ Open `design/wireframes/index.html` in a browser and approve it or list changes.
 6. **iPad customer-facing mode:** the confirm button is hidden while the QR faces the customer, and staff long-press to return. Is that OK?
 - **Answer (2026-09-29):** the owner asked for a full redesign in Claude Design ([canvas](https://claude.ai/artifact/3bpHFKf3KGsAH5EMN1CE3H)) and accepted it as the P1 direction. Items 1–6 are **deferred to the P3 kickoff**, before any screen is coded.
 
+### P2 kickoff answers (2026-09-29)
+- **VM changes:** Claude writes the setup as scripts in `infra/`; **the owner runs them** over SSH. Claude's own SSH use stays read-only (rule 11).
+- **SSH lockdown:** **Tailscale**. Port 22 is closed to the internet once Tailscale works.
+- **Backups:** **OCI Object Storage only** (no card at Cloudflare, so no R2). ⚠️ Risk accepted by the owner: VM and backups are with the same provider. Free mitigation to consider later: an automatic weekly copy to the owner's laptop.
+- **Public IP:** **stay ephemeral** for now; decide again before P4 (LINE webhook).- **Alerts go to:** omeza25482548@gmail.com (healthchecks.io, UptimeRobot, Sentry).
+- **Web apps:** GitHub Actions → Cloudflare Pages with a scoped API token (Pages: Edit) + account ID as repo secrets. Projects: `sds-pos` (staff) and `sds-order` (LINE customer app).
+- **API deploy:** GitHub Actions over Tailscale with a separate deploy key (not the owner's key).
+- **Supabase DB password:** the owner has it; it goes only into the VM `.env` and a GitHub secret.
+- **Backup key (age):** the owner has no password manager. Private key kept as a **printed copy** plus a **USB drive at home**; Bitwarden recommended later.
+- **Pending from the owner:** create Tailscale, healthchecks.io, UptimeRobot and Sentry accounts; OCI bucket + Customer Secret Key (Claude gives the clicks).

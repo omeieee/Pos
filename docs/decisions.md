@@ -137,6 +137,7 @@ This is the **single source of truth for technology and design choices**. Other 
   - An external uptime check on `/healthz`, and Sentry's free tier for errors.
   - A restore drill every month.
 - **Targets:** at most 1 hour of data lost (RPO), and back online within 2 hours (RTO).
+- **Status note (2026-09-29, P2 kickoff):** the owner chose **OCI Object Storage only** for backups (no card at Cloudflare, so no R2). Risk accepted: the VM and the backups are with one provider. Mitigation to consider: a weekly automatic copy to the owner's laptop. The age private key is kept printed plus on a USB drive (no password manager yet).
 
 ## D-19 · Client platforms and the native path — Proposed (depends on Q13)
 - **Now (P3–P5), web first:**

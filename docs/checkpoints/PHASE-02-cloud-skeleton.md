@@ -16,9 +16,9 @@ Put the 24/7 platform in place before features: a minimal API and app shells are
 - **Out:** business features.
 
 ## Exit criteria
-- [ ] `https://<sslip-hostname>/healthz` is served by Caddy with a valid Let's Encrypt certificate; only 80/443 (+ restricted SSH) are reachable, checked from outside
+- [ ] `https://<sslip-hostname>/healthz` is served by Caddy with a valid Let's Encrypt certificate; only 80/443 are reachable from the internet (SSH via Tailscale only), checked from outside
 - [ ] Merging to `main` deploys the API and web apps automatically; rollback procedure written and tried once
-- [ ] Hourly encrypted backup lands in R2 (+ second copy); a missed run raises an alert
+- [ ] Hourly encrypted backup lands in **OCI Object Storage** (owner's choice 2026-09-29: no R2); a missed run raises an alert
 - [ ] **Restore drill passed:** the dump restores into a fresh container and sanity queries match
 - [ ] Rebuild-on-new-host procedure documented (target ≤ 2 h)
 - [ ] Free-tier usage checked (Oracle Free Tier, Supabase, Cloudflare Pages); idle-reclamation rebuild procedure tested
