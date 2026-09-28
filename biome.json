@@ -1,0 +1,113 @@
+{
+  "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
+  "files": {
+    "includes": ["**", "!**/migrations", "!design", "!docs"]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 100
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "single",
+      "trailingCommas": "all",
+      "semicolons": "always"
+    }
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended",
+      "suspicious": {
+        "noExplicitAny": "error"
+      }
+    }
+  },
+  "overrides": [
+    {
+      "includes": ["packages/shared/**", "packages/promptpay/**", "packages/finance/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["node:*", "fs", "path", "http", "https", "net", "child_process"],
+                    "message": "Pure package: no I/O (CLAUDE.md dependency rules)."
+                  },
+                  {
+                    "group": ["drizzle-orm", "drizzle-orm/*", "@electric-sql/*", "pg", "postgres"],
+                    "message": "Only packages/db imports the ORM or a DB driver."
+                  },
+                  {
+                    "group": ["@line/*", "react", "react-dom"],
+                    "message": "Pure package: no LINE SDK or UI."
+                  }
+                ]
+              }
+            },
+            "noRestrictedGlobals": {
+              "level": "error",
+              "options": {
+                "deniedGlobals": {
+                  "fetch": "Pure package: no network.",
+                  "process": "Pure package: no env access.",
+                  "window": "Pure package: no DOM.",
+                  "document": "Pure package: no DOM.",
+                  "localStorage": "Pure package: no storage."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "apps/**",
+        "packages/ui/**",
+        "packages/i18n/**",
+        "packages/line/**",
+        "packages/notify/**",
+        "packages/escpos/**"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "drizzle-orm",
+                      "drizzle-orm/*",
+                      "drizzle-kit",
+                      "@electric-sql/*",
+                      "pg",
+                      "postgres"
+                    ],
+                    "message": "Only packages/db imports the ORM or a DB driver."
+                  },
+                  {
+                    "group": ["**/apps/**", "@sds/app-*"],
+                    "message": "An app never imports another app."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

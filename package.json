@@ -1,0 +1,23 @@
+{
+  "name": "saap-don-sen-pos",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@12.6.0",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "turbo run typecheck build",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "lint": "biome check .",
+    "format": "biome check --write ."
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.14",
+    "@types/node": "^24.0.0",
+    "turbo": "2.11.5",
+    "typescript": "7.0.2",
+    "vitest": "5.0.2"
+  }
+}

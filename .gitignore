@@ -5,3 +5,10 @@
 .env
 .env.*
 !.env.example
+
+# Build and tooling
+node_modules/
+dist/
+.turbo/
+coverage/
+*.tsbuildinfo
