@@ -19,10 +19,11 @@ A working monorepo with the domain core, database schema, PromptPay library and 
 - **Out:** feature screens, deployment.
 
 ## Exit criteria
-- [ ] `pnpm install && pnpm build && pnpm test` passes locally and in CI — locally ✅ 2026-09-29; CI run not yet confirmed
+- [x] `pnpm install && pnpm build && pnpm test` passes locally and in CI (locally 2026-09-29; CI green, confirmed by the owner 2026-09-29)
 - [x] State-machine tests cover every allowed and forbidden transition (`shared/src/machines.test.ts`: every state × state × 6 actors, plus reason and step-up)
 - [x] Money tests: rounding, totals with modifiers, cash change (`shared/src/money.test.ts`)
-- [ ] PromptPay: decoded TLV + CRC match the reference library for the test matrix (✅ 1,271 tests, 313 amounts × 4 targets); **scanned correctly in K PLUS** (owner's choice, 2026-09-29); more apps when the owner decides (test PromptPay 0642230924, personal test account; list amounts and results below)
+- [x] PromptPay: decoded TLV + CRC match the reference library for the test matrix (✅ 1,271 tests, 313 amounts × 4 targets); **scanned correctly in K PLUS** (owner's choice, 2026-09-29); more apps when the owner decides (test PromptPay 0642230924, personal test account; list amounts and results below)
+  - **Scan results (owner, 2026-09-29, K PLUS, test PromptPay 0642230924, ฿1.00):** our QR (A) and the reference library's QR (B) both scanned. The amount showed as locked. First attempt failed because the page drew the QR as inline SVG, which K PLUS could not read; `scripts/scan-test.ts` now outputs black-on-white PNG (010891f).
 - [x] Migrations run on an empty Postgres; seed loads (`db/src/db.test.ts` on PGlite 0.4.6 = PostgreSQL 17)
 - [ ] Wireframes/mockups for POS order entry, payment sheet and LINE menu/checkout, for **iPad, iPhone and laptop**, as `design/` HTML (Figma deferred), approved by the owner
 - [x] Per-device tokens: changing one device's overrides leaves the other two unchanged (`ui/src/resolve.test.ts`)

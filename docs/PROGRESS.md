@@ -5,7 +5,7 @@
 
 > **Handoff for the next session (read first):**
 > - **P1 code is pushed** (`main`, up to 2e48741). Local: `pnpm install && pnpm lint && pnpm build && pnpm test` all pass (1,808 tests).
-> - **Waiting on the owner:** (1) confirm the GitHub Actions CI run is green (no `gh` CLI/token here); (2) scan the K PLUS QR test page (`packages/promptpay/scan-test.local.html`, regenerate with `node packages/promptpay/scripts/scan-test.ts packages/promptpay/scan-test.local.html <promptpay-phone>`) and report, per amount: recipient name shown, exact amount, amount locked (yes/no); (3) approve `design/wireframes/index.html` and answer Q14 in `10-open-questions.md`.
+> - **Owner checks:** CI green ✅; K PLUS scan ✅ (ours and reference, ฿1.00). **Remaining:** approve the wireframe redesign in Claude Design (https://claude.ai/artifact/3bpHFKf3KGsAH5EMN1CE3H), then close P1.
 > - **Local tools:** Node 24 + pnpm 12.6.0. No Docker; PGlite 0.4.x (PostgreSQL 17) for local DB/tests.
 > - **Still open, not blocking:** Q3 (tax status; ภ.ง.ด.94 due 30 Sep 2026), Q11, Q12, reserved IP, ไทยช่วยไทย on room delivery, room-delivery fee.
 > - **Standing rule:** before starting each phase, ask the owner for all missing information that phase needs (see `CLAUDE.md` workflow).
@@ -13,6 +13,15 @@
 Newest entries first. Add entries with `/checkpoint`. Each entry covers what changed, how it was verified, what was decided, and what comes next. State facts only, and never record tests as passed unless they were run.
 
 ---
+
+## 2026-09-29 · P1 · Owner checks: CI green, K PLUS scan passes
+- **Summary:** the owner confirmed the CI run is green. K PLUS first could not read the QR (inline SVG on the page); after switching to black-on-white PNG, both our QR and the reference library's scanned (฿1.00, amount locked). The owner asked for a complete redesign of the wireframes in Claude Design instead of approving the HTML set.
+- **Changed:** `packages/promptpay/scripts/scan-test.ts` (PNG output, 010891f); P1 checkpoint exit criteria.
+- **Verification:** PNG QRs decoded back to the exact payloads with jsQR before sending; owner scan in K PLUS.
+- **Decisions:** none.
+- **Open issues:** wireframe redesign in Claude Design, then owner approval (last P1 exit criterion).
+- **Next:** finish the 9 redesigned boards → owner approval → close P1 → P2 kickoff questions.
+- **Commit:** this entry
 
 ## 2026-09-29 · P1 · Foundation built (awaiting owner checks)
 - **Summary:** monorepo and domain core built; Supabase advisor fixed (revoke on `rls_auto_enable`, trigger kept). Owner answers: K PLUS for the scan test; wireframes HTML-only (Figma deferred).
