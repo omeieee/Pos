@@ -70,6 +70,10 @@ Are you comfortable with TypeScript, React and Node? Will anyone besides you (wi
 Does the LINE OA "แซ่บโดนเส้น" already exist (plan, followers)? Is the GitHub repo `omeieee/Pos` private? Do you already own a domain?
 - *Default:* new OA; the repo is private (it will contain the PromptPay ID in seed data, so keep it private).
 - **Answer (2026-09-29):** the GitHub repo is **private**. **LINE OA: already exists** (added 2026-09-29), but it is **not yet connected to the Messaging API** (no bot/webhook) and has **no ordering UI** (no rich menu or customer app). P4 connects it; ask for its name/ID and plan at P4 kickoff. Commit/push permission for Claude: **not given yet**, so ask at the start of P1.
+- **P1 kickoff answers (2026-09-29):**
+  - Claude **may commit** to git. Push permission not stated yet, so ask before the first push.
+  - `corepack enable pnpm` approved. Installed pnpm 12.6.0 with shims in `%APPDATA%\npm`, because the default `Program Files\nodejs` needs admin.
+  - **Supabase project replaced:** the new ref is `yejvrooxqdpynruwnegg`, and `.mcp.json` was updated with the same features. The old ref `msxzudufpewhdramjihv` no longer resolves. The region (Singapore expected) is confirmed after the MCP sign-in.
 
 ### Q11 · Receipts
 Do customers need receipts? E-receipt in LINE, printed (after P8), or both? Does anyone ask for a tax invoice?
