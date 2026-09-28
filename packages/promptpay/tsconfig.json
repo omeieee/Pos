@@ -1,0 +1,4 @@
+{
+  "extends": "@sds/config/tsconfig.base.json",
+  "include": ["src"]
+}

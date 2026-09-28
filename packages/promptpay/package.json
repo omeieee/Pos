@@ -1,0 +1,22 @@
+{
+  "name": "@sds/promptpay",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@sds/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@sds/config": "workspace:*",
+    "@types/qrcode": "^1.5.6",
+    "promptpay-qr": "0.5.0",
+    "qrcode": "^1.5.4"
+  }
+}

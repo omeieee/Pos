@@ -32,7 +32,11 @@
   },
   "overrides": [
     {
-      "includes": ["packages/shared/**", "packages/promptpay/**", "packages/finance/**"],
+      "includes": [
+        "packages/shared/src/**",
+        "packages/promptpay/src/**",
+        "packages/finance/src/**"
+      ],
       "linter": {
         "rules": {
           "style": {
