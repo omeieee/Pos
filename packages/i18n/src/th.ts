@@ -1,0 +1,91 @@
+/**
+ * Thai catalog: the source of truth for message keys (Thai-first, D-12).
+ * Params use `{name}` placeholders. Keep wording short enough for an iPhone button.
+ */
+export const th = {
+  // Common actions
+  'common.save': 'บันทึก',
+  'common.cancel': 'ยกเลิก',
+  'common.back': 'ย้อนกลับ',
+  'common.close': 'ปิด',
+  'common.confirm': 'ยืนยัน',
+  'common.edit': 'แก้ไข',
+  'common.delete': 'ลบ',
+  'common.retry': 'ลองอีกครั้ง',
+  'common.search': 'ค้นหา',
+  'common.loading': 'กำลังโหลด…',
+  'common.total': 'ยอดรวม',
+  'common.subtotal': 'รวมรายการ',
+  'common.qty': 'จำนวน',
+  'common.note': 'หมายเหตุ',
+  'common.offline': 'ออฟไลน์ · บันทึกไว้ในเครื่อง รอซิงก์',
+  'common.pendingSync': 'รอซิงก์ {count} รายการ',
+  'common.error': 'เกิดข้อผิดพลาด กรุณาลองอีกครั้ง',
+
+  // Order and payment status (always shown with colour + icon + text)
+  'status.payment.unpaid': 'ยังไม่ชำระ',
+  'status.payment.awaiting_confirmation': 'รอตรวจสอบ',
+  'status.payment.partially_paid': 'ชำระบางส่วน',
+  'status.payment.paid': 'ชำระแล้ว',
+  'status.payment.refunded': 'คืนเงินแล้ว',
+  'status.order.new': 'ใหม่',
+  'status.order.preparing': 'กำลังทำ',
+  'status.order.ready': 'พร้อมรับ',
+  'status.order.completed': 'เสร็จสิ้น',
+  'status.order.cancelled': 'ยกเลิกแล้ว',
+
+  // POS order entry
+  'pos.orderEntry.title': 'รับออเดอร์',
+  'pos.orderEntry.searchPlaceholder': 'ค้นหาเมนู',
+  'pos.orderEntry.soldOut': 'หมด',
+  'pos.orderEntry.addToOrder': 'เพิ่มลงออเดอร์',
+  'pos.orderEntry.emptyCart': 'ยังไม่มีรายการ แตะเมนูเพื่อเพิ่ม',
+  'pos.orderEntry.charge': 'คิดเงิน {amount}',
+  'pos.orderEntry.hold': 'พักออเดอร์',
+  'pos.orderEntry.fulfilment.dine_in': 'ทานที่ร้าน',
+  'pos.orderEntry.fulfilment.takeaway': 'กลับบ้าน',
+  'pos.modifier.noodle': 'เส้น',
+  'pos.modifier.spice': 'ความเผ็ด',
+  'pos.modifier.extra': 'พิเศษ',
+
+  // Payment sheet
+  'payment.title': 'ชำระเงิน',
+  'payment.amountDue': 'ยอดที่ต้องชำระ',
+  'payment.method.cash': 'เงินสด',
+  'payment.method.promptpay': 'พร้อมเพย์',
+  'payment.method.gov_copay': 'ไทยช่วยไทย',
+  'payment.cash.tendered': 'รับเงินมา',
+  'payment.cash.exact': 'พอดี',
+  'payment.cash.change': 'เงินทอน',
+  'payment.cash.short': 'ยังขาดอีก {amount}',
+  'payment.promptpay.scanToPay': 'สแกนเพื่อจ่าย',
+  'payment.promptpay.showCustomer': 'แสดงให้ลูกค้าสแกน',
+  'payment.promptpay.accountName': 'ชื่อบัญชี {name}',
+  'payment.govCopay.step1': 'เปิดแอป ถุงเงิน แล้วสร้าง QR ยอด {amount}',
+  'payment.govCopay.step2': 'ให้ลูกค้าสแกนด้วยแอป เป๋าตัง ที่หน้าร้าน',
+  'payment.govCopay.step3': 'เห็นยอดเข้าในถุงเงินแล้ว จึงกดยืนยันรับเงิน',
+  'payment.govCopay.estimatedSplit': 'ประมาณการ: รัฐจ่าย {gov} · ลูกค้าจ่าย {customer}',
+  'payment.govCopay.storefrontOnly': 'ใช้ได้เฉพาะชำระที่หน้าร้าน',
+  'payment.claimed': 'ลูกค้าแจ้งว่าโอนแล้ว · รอตรวจสอบยอดเข้า',
+  'payment.reference': 'เลขอ้างอิง (ไม่บังคับ)',
+  'payment.confirm': 'ยืนยันรับเงิน',
+  'payment.confirmHint': 'ตรวจยอดเข้าบัญชีก่อนกดยืนยันทุกครั้ง',
+
+  // LINE customer app: menu and checkout
+  'line.menu.title': 'เมนู',
+  'line.menu.closed': 'ร้านปิดรับออเดอร์ · เปิดอีกครั้ง {time}',
+  'line.menu.reorder': 'สั่งซ้ำ',
+  'line.cart.viewCart': 'ดูตะกร้า · {count} รายการ',
+  'line.checkout.title': 'ยืนยันคำสั่งซื้อ',
+  'line.checkout.pickup': 'รับที่ร้าน',
+  'line.checkout.roomDelivery': 'ส่งถึงห้อง',
+  'line.checkout.roomNumber': 'เลขห้อง',
+  'line.checkout.paymentMethod': 'วิธีชำระเงิน',
+  'line.checkout.cashNote': 'ชำระเงินสดตอนรับอาหาร',
+  'line.checkout.govCopayPickupOnly': 'ไทยช่วยไทย ใช้ได้เฉพาะรับที่ร้าน',
+  'line.checkout.privacy': 'เราใช้เลขห้องและประวัติการสั่งเพื่อจัดส่งเท่านั้น',
+  'line.checkout.placeOrder': 'สั่งเลย · {amount}',
+  'line.checkout.staffConfirms': 'ร้านจะตรวจสอบยอดโอนและยืนยันให้ในแชท',
+} as const;
+
+export type MessageKey = keyof typeof th;

@@ -1,0 +1,17 @@
+{
+  "name": "@sds/ui",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "tokens:css": "node scripts/generate-tokens-css.ts"
+  },
+  "devDependencies": {
+    "@sds/config": "workspace:*"
+  }
+}

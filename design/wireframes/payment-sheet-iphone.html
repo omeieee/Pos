@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Payment sheet · iPhone</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=Kanit:wght@600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="wireframe.css">
+</head>
+<body class="review">
+<header class="review-head">
+  <h1>2 · ชำระเงิน (Payment sheet) · iPhone 390×844</h1>
+  <p>Same rules as iPad: amount due is the hero, only staff confirm. Method tabs on top, confirm button at the bottom (thumb reach).</p>
+</header>
+<nav class="review-nav">
+  <a href="index.html">ทั้งหมด</a>
+  <a href="payment-sheet-ipad.html">iPad</a>
+  <a href="payment-sheet-iphone.html" aria-current="page">Payment · iPhone</a>
+  <a href="payment-sheet-laptop.html">Laptop</a>
+</nav>
+
+<div class="review-row">
+<div>
+<p class="review-cap">A · Cash</p>
+<div class="frame" data-device="iphone">
+  <div class="statusbar"><span>10:43</span><span>5G 100%</span></div>
+  <div class="appbar" style="min-height:52px"><button class="btn btn-ghost btn-sm" style="padding:0"><span class="i i-back"></span></button><span class="strong grow">ชำระเงิน · S-013</span><span class="badge badge-unpaid"><span class="i i-circle"></span>ยังไม่ชำระ</span></div>
+  <div class="col pad" style="flex:1;gap:12px">
+    <div class="due"><span class="lbl">ยอดที่ต้องชำระ</span><span class="amount-hero">฿200.00</span></div>
+    <div class="seg"><span class="on"><span class="i i-cash"></span>เงินสด</span><span><span class="i i-qr"></span>พร้อมเพย์</span><span><span class="i i-hands"></span>ไทยช่วยไทย</span></div>
+    <div class="row between"><span class="label" style="margin:0">รับเงินมา</span><span class="money strong" style="font-size:28px">฿500.00</span></div>
+    <div class="tenders"><button class="btn">พอดี</button><button class="btn on">฿500</button><button class="btn">฿1,000</button></div>
+    <div class="keypad">
+      <button class="btn">1</button><button class="btn">2</button><button class="btn">3</button>
+      <button class="btn">4</button><button class="btn">5</button><button class="btn">6</button>
+      <button class="btn">7</button><button class="btn">8</button><button class="btn">9</button>
+      <button class="btn">00</button><button class="btn">0</button><button class="btn" aria-label="ลบ"><span class="i i-back"></span></button>
+    </div>
+    <div class="change"><span class="strong">เงินทอน</span><span class="v">฿300.00</span></div>
+  </div>
+  <div class="bottombar" style="padding-bottom:34px"><button class="btn btn-success btn-lg btn-block"><span class="i i-check-circle"></span>ยืนยันรับเงิน <span class="money">฿200.00</span></button></div>
+</div>
+</div>
+
+<div>
+<p class="review-cap">B · PromptPay (show the phone), then claimed</p>
+<div class="frame" data-device="iphone">
+  <div class="statusbar"><span>10:47</span><span>5G 100%</span></div>
+  <div class="appbar" style="min-height:52px"><button class="btn btn-ghost btn-sm" style="padding:0"><span class="i i-back"></span></button><span class="strong grow"><span class="src">L</span> L-014</span><span class="badge badge-claimed"><span class="i i-clock"></span>รอตรวจสอบ</span></div>
+  <div class="col pad" style="flex:1;gap:12px">
+    <div class="seg"><span><span class="i i-cash"></span>เงินสด</span><span class="on"><span class="i i-qr"></span>พร้อมเพย์</span><span><span class="i i-hands"></span>ไทยช่วยไทย</span></div>
+    <div class="card" style="overflow:hidden">
+      <div class="pp-head" style="border-radius:0"><span>THAI QR PAYMENT</span><span>PromptPay</span></div>
+      <div style="padding:12px 56px 4px"><div class="qr"><span class="eye"></span><span class="tag">ตัวอย่าง QR</span></div></div>
+      <div style="text-align:center;padding:0 12px 10px"><div class="muted small">ยอดที่ต้องชำระ</div><div class="amount-hero">฿110.00</div></div>
+    </div>
+    <div class="banner banner-info" style="border-radius:var(--sds-radius-md)"><span class="i i-clock"></span><span class="grow">ลูกค้าแจ้งว่าโอนแล้ว 10:46 · ดูสลิป</span><span class="i i-chev"></span></div>
+    <div class="field placeholder">เลขอ้างอิง / 4 ตัวท้าย (ไม่บังคับ)</div>
+  </div>
+  <div class="bottombar stack-sm" style="padding-bottom:34px">
+    <div class="xs muted" style="text-align:center">ตรวจยอดเข้าบัญชีก่อนกดยืนยันทุกครั้ง</div>
+    <button class="btn btn-success btn-lg btn-block"><span class="i i-check-circle"></span>ยืนยันรับเงิน <span class="money">฿110.00</span></button>
+  </div>
+</div>
+</div>
+
+<div>
+<p class="review-cap">C · ไทยช่วยไทย guided step</p>
+<div class="frame" data-device="iphone">
+  <div class="statusbar"><span>10:43</span><span>5G 100%</span></div>
+  <div class="appbar" style="min-height:52px"><button class="btn btn-ghost btn-sm" style="padding:0"><span class="i i-back"></span></button><span class="strong grow">ชำระเงิน · S-013</span><span class="badge badge-unpaid"><span class="i i-circle"></span>ยังไม่ชำระ</span></div>
+  <div class="col pad" style="flex:1;gap:14px">
+    <div class="seg"><span><span class="i i-cash"></span>เงินสด</span><span><span class="i i-qr"></span>พร้อมเพย์</span><span class="on"><span class="i i-hands"></span>ไทยช่วยไทย</span></div>
+    <div class="card pad">
+      <div class="small muted">พิมพ์ยอดนี้ในแอป ถุงเงิน (เต็มจำนวน)</div>
+      <div class="amount-hero">฿200.00</div>
+      <div class="divider" style="margin:8px 0"></div>
+      <div class="xs strong" style="color:var(--sds-color-warning-text)"><span class="i i-info"></span> ประมาณการ · ยอดจริงดูในถุงเงิน</div>
+      <div class="sumrow small"><span class="muted">รัฐจ่าย ~60%</span><span class="money strong">฿120.00</span></div>
+      <div class="sumrow small"><span class="muted">ลูกค้าจ่าย ~40%</span><span class="money strong">฿80.00</span></div>
+    </div>
+    <ol class="steps">
+      <li class="done"><div>สร้าง QR ใน <strong>ถุงเงิน</strong> ยอด <strong class="money">฿200.00</strong></div></li>
+      <li class="now"><div>ลูกค้าสแกนด้วย <strong>เป๋าตัง</strong> ที่หน้าร้าน<div class="xs muted">ห้ามส่ง QR ทาง LINE</div></div></li>
+      <li><div>เห็นยอดเข้าแล้ว กดยืนยัน</div></li>
+    </ol>
+    <div class="xs muted"><span class="i i-store"></span> ถึง 30 พ.ย. 2569 · หน้าร้านเท่านั้น</div>
+  </div>
+  <div class="bottombar" style="padding-bottom:34px"><button class="btn btn-success btn-lg btn-block"><span class="i i-check-circle"></span>ยืนยันรับเงิน <span class="money">฿200.00</span></button></div>
+</div>
+</div>
+</div>
+
+<section class="states">
+  <div class="state" data-device="iphone"><div class="cap">CONFIRMED</div><div class="in"><span class="badge badge-paid" style="align-self:flex-start"><span class="i i-check-circle"></span>ชำระแล้ว</span><div class="amount-hero" style="font-size:36px">฿200.00</div><div class="small muted">ยืนยันโดย อ. · 10:44 · เงินสด</div></div></div>
+  <div class="state" data-device="iphone"><div class="cap">ERROR · ยืนยันไม่สำเร็จ</div><div class="in"><div class="banner banner-danger" style="border-radius:10px"><span class="i i-alert"></span><span class="grow">ออเดอร์นี้ถูกยืนยันจากอีกเครื่องแล้ว</span></div><div class="small">ไม่ได้บันทึกซ้ำ (idempotent) · ดูประวัติการชำระ</div></div></div>
+  <div class="state" data-device="iphone"><div class="cap">OFFLINE / PENDING SYNC</div><div class="in"><div class="banner banner-offline" style="border-radius:10px"><span class="i i-wifi-off"></span><span class="grow">ยืนยันแล้ว · รอซิงก์</span></div><span class="badge badge-paid" style="align-self:flex-start"><span class="i i-check-circle"></span>ชำระแล้ว <span class="i i-sync"></span></span></div></div>
+  <div class="state" data-device="iphone"><div class="cap">LOADING</div><div class="in"><div class="skel" style="width:45%;height:40px"></div><div class="skel" style="height:44px"></div><div class="skel" style="height:160px"></div></div></div>
+  <div class="state" data-device="iphone"><div class="cap">EMPTY · N/A</div><div class="in"><div class="small muted">N/A: the sheet only opens from an order that has items; an order with no items cannot be charged (คิดเงิน is disabled, see order entry EMPTY).</div></div></div>
+</section>
+
+<section class="review-notes">
+  <h2>Notes for review</h2>
+  <ol>
+    <li>The staff member turns the phone to the customer for PromptPay (B); the amount sits directly under the QR.</li>
+    <li>Claimed (รอตรวจสอบ) is blue + clock icon + text; confirmed is green + check + text; unpaid is amber + dashed circle + text.</li>
+    <li>Tender buttons below the total are hidden on iPhone to save space (iPad shows them disabled).</li>
+  </ol>
+</section>
+</body>
+</html>

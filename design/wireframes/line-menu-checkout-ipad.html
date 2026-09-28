@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LINE menu and checkout · iPad</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=Kanit:wght@600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="wireframe.css">
+</head>
+<body class="review">
+<header class="review-head">
+  <h1>3 · สั่งผ่าน LINE (customer menu + checkout) · iPad 1180×820</h1>
+  <p>Same customer app in LINE on a tablet: menu and cart side by side, so the customer never loses the total.</p>
+</header>
+<nav class="review-nav">
+  <a href="index.html">ทั้งหมด</a>
+  <a href="line-menu-checkout-ipad.html" aria-current="page">LINE · iPad</a>
+  <a href="line-menu-checkout-iphone.html">iPhone</a>
+  <a href="line-menu-checkout-laptop.html">Laptop</a>
+</nav>
+
+<div class="review-row">
+<div class="frame" data-device="ipad">
+  <div class="statusbar"><span>12:10</span><span>80%</span></div>
+  <div class="linebar"><span class="i i-x"></span><span class="grow">แซ่บโดนเส้น<span class="sub">liff.line.me</span></span><span style="width:18px"></span></div>
+  <div class="body">
+    <section class="menu" style="gap:14px">
+      <div class="row between">
+        <div><span class="wordmark"><span class="mark"><span class="i i-bowl"></span></span>แซ่บโดนเส้น</span><div class="small muted">ก๋วยเตี๋ยวทำสดทุกชาม · ส่งถึงห้อง 13:00–23:00</div></div>
+        <span class="badge badge-paid"><span class="i i-check"></span>เปิดรับออเดอร์</span>
+      </div>
+      <div class="card row" style="padding:10px 14px;background:var(--sds-color-accent-subtle);border-color:transparent">
+        <span class="i i-sync" style="color:var(--sds-color-accent-text)"></span>
+        <div class="grow"><span class="strong">สั่งซ้ำครั้งก่อน</span> <span class="muted small">เกาเหลาหมูตุ๋น, บะหมี่แห้งหมูแดง · <span class="money">฿110.00</span></span></div>
+        <button class="btn btn-sm" style="background:var(--sds-color-surface)">สั่งซ้ำ</button>
+      </div>
+      <div class="chips"><span class="chip on">แนะนำ</span><span class="chip">ก๋วยเตี๋ยว</span><span class="chip">บะหมี่</span><span class="chip">ของทานเล่น</span><span class="chip">เครื่องดื่ม</span></div>
+      <div class="grid" style="grid-template-columns:repeat(3,minmax(0,1fr))">
+        <div class="tile"><div class="ph"><span class="i i-bowl"></span></div><div class="meta"><span class="name">ก๋วยเตี๋ยวต้มยำ</span><div class="row between"><span class="price">฿50</span><span class="addbtn"><span class="i i-plus"></span></span></div></div></div>
+        <div class="tile"><div class="ph v5"><span class="i i-bowl"></span></div><div class="meta"><span class="name">ก๋วยเตี๋ยวเรือหมูน้ำตกสูตรเข้มข้นใส่เลือดหมู</span><div class="row between"><span class="price">฿55</span><span class="addbtn"><span class="i i-plus"></span></span></div></div></div>
+        <div class="tile"><div class="ph v2"><span class="i i-bowl"></span></div><span class="qtybadge">1</span><div class="meta"><span class="name">เกาเหลาหมูตุ๋น</span><div class="row between"><span class="price">฿60</span><span class="addbtn"><span class="i i-plus"></span></span></div></div></div>
+        <div class="tile"><div class="ph v6"><span class="i i-bowl"></span></div><span class="qtybadge">1</span><div class="meta"><span class="name">บะหมี่แห้งหมูแดง</span><div class="row between"><span class="price">฿50</span><span class="addbtn"><span class="i i-plus"></span></span></div></div></div>
+        <div class="tile soldout"><div class="ph v3"><span class="i i-bowl"></span></div><span class="soldflag badge badge-danger"><span class="i i-x"></span>หมด</span><div class="meta"><span class="name">ต้มยำทะเลรวมมิตร</span><span class="price">฿70</span></div></div>
+        <div class="tile"><div class="ph v4"><span class="i i-bowl"></span></div><div class="meta"><span class="name">น้ำเก๊กฮวย</span><div class="row between"><span class="price">฿20</span><span class="addbtn"><span class="i i-plus"></span></span></div></div></div>
+      </div>
+    </section>
+    <aside class="cart" style="width:400px">
+      <div class="pad stack" style="flex:1;gap:14px;overflow:hidden">
+        <h2 style="font-size:var(--sds-font-size-xl)">ตะกร้าของคุณ</h2>
+        <div>
+          <div class="sumrow"><span>1× เกาเหลาหมูตุ๋น</span><span class="money">฿60.00</span></div>
+          <div class="sumrow"><span>1× บะหมี่แห้งหมูแดง</span><span class="money">฿50.00</span></div>
+        </div>
+        <div class="seg"><span><span class="i i-store"></span>รับที่ร้าน</span><span class="on"><span class="i i-door"></span>ส่งถึงห้อง</span></div>
+        <div><span class="label">เลขห้อง <span class="muted xs">(จำไว้จากครั้งก่อน)</span></span><div class="field">1205</div></div>
+        <div class="stack-sm">
+          <div class="group-title">วิธีชำระเงิน</div>
+          <div class="optcard"><span class="radio"></span><span class="i i-qr"></span><div class="grow"><div class="t">พร้อมเพย์</div><div class="d">ได้ QR ยอดพอดีในแชท</div></div></div>
+          <div class="optcard on"><span class="radio"></span><span class="i i-cash"></span><div class="grow"><div class="t">เงินสด</div><div class="d">จ่ายตอนรับอาหาร</div></div></div>
+          <div class="optcard off"><span class="radio"></span><span class="i i-hands"></span><div class="grow"><div class="t">ไทยช่วยไทย</div><div class="d">ใช้ได้เฉพาะรับที่ร้าน</div></div></div>
+        </div>
+      </div>
+      <div class="cart-foot">
+        <div class="sumrow total"><span>ยอดรวม</span><span class="money">฿110.00</span></div>
+        <div class="trust"><span class="i i-shield"></span><span>เราใช้เลขห้องเพื่อจัดส่งเท่านั้น · <a href="#" style="color:inherit">นโยบายความเป็นส่วนตัว</a></span></div>
+        <button class="btn btn-primary btn-lg btn-block">สั่งเลย · <span class="money">฿110.00</span></button>
+      </div>
+    </aside>
+  </div>
+</div>
+</div>
+
+<section class="states">
+  <div class="state" data-device="ipad"><div class="cap">CLOSED · หยุดรับ LINE ชั่วคราว</div><div class="in"><div class="banner banner-offline" style="border-radius:10px"><span class="i i-pause"></span><span class="grow">หยุดรับออเดอร์ทาง LINE ชั่วคราว · เปิดอีกครั้ง 14:30</span></div><button class="btn btn-primary btn-block is-disabled" disabled>สั่งเลย</button></div></div>
+  <div class="state" data-device="ipad"><div class="cap">LOADING</div><div class="in"><div class="row"><div class="skel grow" style="height:110px"></div><div class="skel grow" style="height:110px"></div><div class="skel grow" style="height:110px"></div></div></div></div>
+  <div class="state" data-device="ipad"><div class="cap">ERROR · ราคาเปลี่ยน</div><div class="in"><div class="banner banner-danger" style="border-radius:10px"><span class="i i-alert"></span><span class="grow">บะหมี่แห้งหมูแดง หมดแล้ว</span></div><div class="small">นำออกจากตะกร้าแล้ว ยอดใหม่ <strong class="money">฿60.00</strong> ตรวจก่อนสั่งอีกครั้ง</div></div></div>
+  <div class="state" data-device="ipad"><div class="cap">EMPTY · ตะกร้าว่าง</div><div class="in"><div class="empty"><span class="i i-cart"></span><div>ตะกร้ายังว่าง</div></div></div></div>
+  <div class="state" data-device="ipad"><div class="cap">OFFLINE</div><div class="in"><div class="banner banner-offline" style="border-radius:10px"><span class="i i-wifi-off"></span><span class="grow">ไม่มีสัญญาณ · ดูเมนูที่โหลดไว้ได้ แต่ยังสั่งไม่ได้</span></div><div class="small muted">Customer orders are never queued offline: nothing is sent until the customer taps again with a connection (no pending-sync for customers).</div></div></div>
+</section>
+
+<section class="review-notes">
+  <h2>Notes for review</h2>
+  <ol>
+    <li>Cash selected with room delivery: the chat reply says "ยังไม่ชำระ · จ่ายเงินสดตอนรับอาหาร".</li>
+    <li>If an item sells out between browsing and ordering, the server rejects it and the cart explains the change with the new total (server computes totals; UI only shows them).</li>
+  </ol>
+</section>
+</body>
+</html>

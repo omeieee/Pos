@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Payment sheet · Laptop</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=Kanit:wght@600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="wireframe.css">
+</head>
+<body class="review">
+<header class="review-head">
+  <h1>2 · ชำระเงิน (Payment sheet) · Laptop 1440×900</h1>
+  <p>The payment queue stays in view on the left. Keyboard: type the tendered amount; Enter confirms only from the focused confirm button.</p>
+</header>
+<nav class="review-nav">
+  <a href="index.html">ทั้งหมด</a>
+  <a href="payment-sheet-ipad.html">iPad</a>
+  <a href="payment-sheet-iphone.html">iPhone</a>
+  <a href="payment-sheet-laptop.html" aria-current="page">Payment · Laptop</a>
+</nav>
+
+<div class="review-row">
+<div>
+<p class="review-cap">A · Claimed PromptPay (queue on the left, check + confirm on the right)</p>
+<div class="frame" data-device="laptop">
+  <div class="appbar">
+    <span class="wordmark"><span class="mark"><span class="i i-bowl"></span></span>แซ่บโดนเส้น</span>
+    <span class="grow"></span><span class="net">ออนไลน์</span><span class="avatar">อ</span>
+  </div>
+  <div class="body">
+    <aside class="paynav" style="width:380px;padding:0">
+      <div class="pad row between"><h2 style="font-size:var(--sds-font-size-lg)">รอชำระ / รอตรวจสอบ</h2><span class="badge badge-neutral">3</span></div>
+      <div class="line" style="background:var(--sds-color-info-subtle)"><span class="src">L</span><div class="what"><div class="strong">L-014 · ส่งถึงห้อง 1205</div><div class="mods">พร้อมเพย์ · 10:46</div></div><div class="stack-sm" style="align-items:flex-end;gap:2px"><span class="amt">฿110.00</span><span class="badge badge-claimed"><span class="i i-clock"></span>รอตรวจสอบ</span></div></div>
+      <div class="line"><span class="src">S</span><div class="what"><div class="strong">S-013 · ทานที่ร้าน</div><div class="mods">ยังไม่เลือกวิธี · 10:42</div></div><div class="stack-sm" style="align-items:flex-end;gap:2px"><span class="amt">฿200.00</span><span class="badge badge-unpaid"><span class="i i-circle"></span>ยังไม่ชำระ</span></div></div>
+      <div class="line"><span class="src">L</span><div class="what"><div class="strong">L-012 · รับที่ร้าน</div><div class="mods">เงินสดตอนรับ · 10:30</div></div><div class="stack-sm" style="align-items:flex-end;gap:2px"><span class="amt">฿95.00</span><span class="badge badge-unpaid"><span class="i i-circle"></span>ยังไม่ชำระ</span></div></div>
+    </aside>
+    <section class="paydetail" style="max-width:980px">
+      <div class="row between">
+        <div class="due"><span class="lbl">ยอดที่ต้องชำระ · L-014 · คุณเอ ห้อง 1205</span><span class="amount-hero">฿110.00</span></div>
+        <div class="seg" style="width:420px"><span><span class="i i-cash"></span>เงินสด</span><span class="on"><span class="i i-qr"></span>พร้อมเพย์</span><span><span class="i i-hands"></span>ไทยช่วยไทย</span></div>
+      </div>
+      <div class="banner banner-info" style="border-radius:var(--sds-radius-md);padding:10px 16px"><span class="i i-clock"></span><span class="grow">ลูกค้าแจ้งว่าโอนแล้ว · 10:46 · ส่งสลิปใน LINE</span></div>
+      <div class="row" style="gap:24px;align-items:flex-start">
+        <div class="card" style="width:220px;padding:10px"><div class="ph" style="aspect-ratio:3/5;border-radius:8px;background:linear-gradient(180deg,#E9F3EC,#FFFFFF);color:var(--sds-color-text-muted)"><div style="text-align:center"><span class="i i-image" style="width:36px;height:36px"></span><div class="small">รูปสลิปจากลูกค้า</div></div></div></div>
+        <div class="card pad" style="width:240px"><div class="pp-head" style="margin:-16px -16px 12px;border-radius:16px 16px 0 0"><span>THAI QR</span><span>PromptPay</span></div><div class="qr"><span class="eye"></span><span class="tag">ตัวอย่าง</span></div><div class="row between" style="margin-top:8px"><span class="small muted">QR ที่ส่งให้ลูกค้า</span><span class="money strong">฿110.00</span></div></div>
+        <div class="stack grow">
+          <h3 style="font-size:var(--sds-font-size-lg)">ก่อนยืนยัน ตรวจในแอปธนาคารว่า</h3>
+          <ol class="steps"><li>มียอดเข้า <strong class="money">฿110.00</strong></li><li>เวลาโอนและชื่อผู้โอนตรงกับสลิป</li><li>ยอดนี้ยังไม่ได้ใช้กับออเดอร์อื่น</li></ol>
+          <div><span class="label">เลขอ้างอิง / 4 ตัวท้าย (ไม่บังคับ)</span><div class="field placeholder">เช่น 7731</div></div>
+        </div>
+      </div>
+      <span class="grow"></span>
+      <div class="row" style="justify-content:flex-end"><button class="btn">ยังไม่พบยอดเข้า</button><button class="btn btn-success btn-lg focus-demo" style="min-width:360px"><span class="i i-check-circle"></span>ยืนยันรับเงิน <span class="money">฿110.00</span> <kbd class="xs" style="opacity:.8">Enter</kbd></button></div>
+    </section>
+  </div>
+</div>
+</div>
+
+<div>
+<p class="review-cap">B · Cash and ไทยช่วยไทย tabs (right-hand panel only)</p>
+<div class="row" style="gap:32px;align-items:flex-start">
+<div class="frame short" data-device="laptop" style="--frame-w:700px">
+  <div class="paydetail">
+    <div class="row between"><div class="due"><span class="lbl">ยอดที่ต้องชำระ · S-013</span><span class="amount-hero">฿200.00</span></div><span class="badge badge-unpaid"><span class="i i-circle"></span>ยังไม่ชำระ</span></div>
+    <div class="seg"><span class="on"><span class="i i-cash"></span>เงินสด</span><span><span class="i i-qr"></span>พร้อมเพย์</span><span><span class="i i-hands"></span>ไทยช่วยไทย</span></div>
+    <div><span class="label">รับเงินมา (พิมพ์ตัวเลขได้เลย)</span><div class="field focus-demo" style="min-height:60px;font-size:30px;font-weight:700;justify-content:flex-end"><span class="money">฿500.00</span></div></div>
+    <div class="tenders" style="grid-template-columns:repeat(6,1fr)"><button class="btn">พอดี</button><button class="btn is-disabled" disabled>฿20</button><button class="btn is-disabled" disabled>฿50</button><button class="btn is-disabled" disabled>฿100</button><button class="btn on">฿500</button><button class="btn">฿1,000</button></div>
+    <div class="change"><span class="strong">เงินทอน</span><span class="v">฿300.00</span></div>
+    <button class="btn btn-success btn-lg btn-block"><span class="i i-check-circle"></span>ยืนยันรับเงิน <span class="money">฿200.00</span> · ทอน <span class="money">฿300.00</span></button>
+  </div>
+</div>
+<div class="frame short" data-device="laptop" style="--frame-w:700px">
+  <div class="paydetail">
+    <div class="row between"><div class="due"><span class="lbl">พิมพ์ยอดนี้ในแอป ถุงเงิน (เต็มจำนวน)</span><span class="amount-hero">฿200.00</span></div><span class="badge badge-paid"><span class="i i-check"></span>อยู่ในช่วงโครงการ</span></div>
+    <div class="seg"><span><span class="i i-cash"></span>เงินสด</span><span><span class="i i-qr"></span>พร้อมเพย์</span><span class="on"><span class="i i-hands"></span>ไทยช่วยไทย</span></div>
+    <div class="card pad stack-sm"><div class="xs strong" style="color:var(--sds-color-warning-text)"><span class="i i-info"></span> ประมาณการเท่านั้น · ยอดจริงดูในถุงเงิน</div><div class="sumrow"><span class="muted">รัฐจ่าย (ประมาณ 60%)</span><span class="money strong">฿120.00</span></div><div class="sumrow"><span class="muted">ลูกค้าจ่าย (ประมาณ 40%)</span><span class="money strong">฿80.00</span></div></div>
+    <ol class="steps"><li class="done">สร้าง QR ใน <strong>ถุงเงิน</strong> ยอด <strong class="money">฿200.00</strong></li><li class="now">ลูกค้าสแกนด้วย <strong>เป๋าตัง</strong> ที่หน้าร้าน (ห้ามส่งทาง LINE)</li><li>เห็นยอดเข้าในถุงเงินแล้ว จึงกดยืนยัน</li></ol>
+    <button class="btn btn-success btn-lg btn-block"><span class="i i-check-circle"></span>ยืนยันรับเงิน <span class="money">฿200.00</span></button>
+  </div>
+</div>
+</div>
+</div>
+</div>
+
+<section class="states">
+  <div class="state" data-device="laptop"><div class="cap">EMPTY · ไม่มีรายการรอชำระ</div><div class="in"><div class="empty"><span class="i i-check-circle"></span><div>ไม่มีออเดอร์รอชำระ</div></div></div></div>
+  <div class="state" data-device="laptop"><div class="cap">LOADING</div><div class="in"><div class="skel" style="width:50%;height:40px"></div><div class="skel"></div><div class="skel" style="width:70%"></div></div></div>
+  <div class="state" data-device="laptop"><div class="cap">ERROR</div><div class="in"><div class="banner banner-danger" style="border-radius:8px"><span class="i i-alert"></span><span class="grow">ยืนยันไม่สำเร็จ · ยังไม่ได้บันทึก</span></div><button class="btn btn-sm"><span class="i i-sync"></span>ลองอีกครั้ง</button></div></div>
+  <div class="state" data-device="laptop"><div class="cap">OFFLINE / PENDING SYNC</div><div class="in"><div class="banner banner-offline" style="border-radius:8px"><span class="i i-wifi-off"></span><span class="grow">ออฟไลน์ · ยืนยันแล้ว รอซิงก์ 1</span></div></div></div>
+</section>
+
+<section class="review-notes">
+  <h2>Notes for review</h2>
+  <ol>
+    <li>Laptop keeps the payment queue visible: claimed orders sort to the top with a blue "รอตรวจสอบ" badge.</li>
+    <li>The focused control shows the focus ring (keyboard users). Enter confirms only when the confirm button has focus; it is never the default action on page load.</li>
+  </ol>
+</section>
+</body>
+</html>

@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Saap Don Sen wireframes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=Kanit:wght@600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="wireframe.css">
+<style>
+  .idx { max-width: 1100px; margin: 0 auto; padding: 32px 24px 48px; }
+  .idx table { width: 100%; border-collapse: collapse; background: #F6F2EC; border-radius: 12px; overflow: hidden; }
+  .idx th, .idx td { padding: 14px 16px; text-align: left; border-bottom: 1px solid #D6CEC3; vertical-align: top; }
+  .idx th { font-size: 13px; color: #5E554D; font-weight: 600; }
+  .idx td a { display: inline-block; padding: 6px 14px; border-radius: 999px; background: #2B2622; color: #FFF; text-decoration: none; font-size: 14px; margin: 2px 0; }
+  .swatches { display: flex; flex-wrap: wrap; gap: 10px; margin: 16px 0 28px; }
+  .sw { width: 128px; border-radius: 10px; overflow: hidden; border: 1px solid #D6CEC3; background: #FFF; font-size: 12px; }
+  .sw div:first-child { height: 52px; }
+  .sw div:last-child { padding: 6px 8px; line-height: 1.4; }
+  .nums { font-variant-numeric: tabular-nums; font-size: 28px; font-weight: 700; text-align: right; width: 220px; line-height: 1.3; }
+</style>
+</head>
+<body class="review">
+<main class="idx">
+  <span class="wordmark" style="font-size:32px"><span class="mark"><span class="i i-bowl"></span></span>แซ่บโดนเส้น</span>
+  <h1 style="font-size:22px;margin:12px 0 4px">P1 wireframes · 3 screens × 3 devices</h1>
+  <p class="muted" style="margin:0 0 20px">Proposal for owner approval. Every colour, size and font on these pages comes from <code>tokens.css</code>, generated from <code>packages/ui</code>. Brand rationale: <code>design/brand.md</code>. Menu items, names and QR codes are placeholders.</p>
+
+  <table>
+    <thead><tr><th>Screen</th><th>iPad 1180×820</th><th>iPhone 390×844</th><th>Laptop 1440×900</th></tr></thead>
+    <tbody>
+      <tr><td><strong>1 · รับออเดอร์</strong><br><span class="small muted">Staff POS order entry, options sheet</span></td>
+        <td><a href="pos-order-entry-ipad.html">เปิด iPad</a></td><td><a href="pos-order-entry-iphone.html">เปิด iPhone</a></td><td><a href="pos-order-entry-laptop.html">เปิด Laptop</a></td></tr>
+      <tr><td><strong>2 · ชำระเงิน</strong><br><span class="small muted">Cash + change, PromptPay (customer-facing), claimed slip check, ไทยช่วยไทย guided step, staff confirm</span></td>
+        <td><a href="payment-sheet-ipad.html">เปิด iPad</a></td><td><a href="payment-sheet-iphone.html">เปิด iPhone</a></td><td><a href="payment-sheet-laptop.html">เปิด Laptop</a></td></tr>
+      <tr><td><strong>3 · สั่งผ่าน LINE</strong><br><span class="small muted">Customer menu, checkout (pickup / room), payment choice, after-order status</span></td>
+        <td><a href="line-menu-checkout-ipad.html">เปิด iPad</a></td><td><a href="line-menu-checkout-iphone.html">เปิด iPhone</a></td><td><a href="line-menu-checkout-laptop.html">เปิด Laptop</a></td></tr>
+    </tbody>
+  </table>
+
+  <h2 style="font-size:18px;margin:28px 0 0">Palette (default tokens)</h2>
+  <div class="swatches">
+    <div class="sw"><div style="background:var(--sds-color-brand)"></div><div><strong>brand</strong><br>ปุ่มหลัก</div></div>
+    <div class="sw"><div style="background:var(--sds-color-accent)"></div><div><strong>accent</strong><br>ตกแต่งเท่านั้น</div></div>
+    <div class="sw"><div style="background:var(--sds-color-success)"></div><div><strong>success</strong><br>ยืนยันรับเงิน</div></div>
+    <div class="sw"><div style="background:var(--sds-color-bg)"></div><div><strong>bg</strong><br>พื้นหลัง</div></div>
+    <div class="sw"><div style="background:var(--sds-color-text)"></div><div><strong>text</strong></div></div>
+    <div class="sw"><div style="background:var(--sds-color-warning-subtle)"></div><div><span class="badge badge-unpaid"><span class="i i-circle"></span>ยังไม่ชำระ</span></div></div>
+    <div class="sw"><div style="background:var(--sds-color-info-subtle)"></div><div><span class="badge badge-claimed"><span class="i i-clock"></span>รอตรวจสอบ</span></div></div>
+    <div class="sw"><div style="background:var(--sds-color-success-subtle)"></div><div><span class="badge badge-paid"><span class="i i-check-circle"></span>ชำระแล้ว</span></div></div>
+  </div>
+
+  <h2 style="font-size:18px;margin:0 0 8px">Tabular figures check</h2>
+  <div class="nums">฿1,111.11<br>฿8,888.88<br>฿200.00</div>
+  <p class="small muted">Digits must line up vertically; amounts use <code>font-variant-numeric: tabular-nums</code>.</p>
+
+  <h2 style="font-size:18px;margin:24px 0 4px">Regenerate tokens.css</h2>
+  <p class="small" style="margin:0">From the repo root: <code>pnpm --filter @sds/ui tokens:css</code></p>
+</main>
+</body>
+</html>

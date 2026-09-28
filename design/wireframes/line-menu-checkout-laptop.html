@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LINE menu and checkout · Laptop</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=Kanit:wght@600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="wireframe.css">
+</head>
+<body class="review">
+<header class="review-head">
+  <h1>3 · สั่งผ่าน LINE (customer menu + checkout) · Laptop 1440×900</h1>
+  <p>LINE for PC opens the customer app in a browser window. Centered content (max 1200 px), sticky checkout column. Pickup branch shown.</p>
+</header>
+<nav class="review-nav">
+  <a href="index.html">ทั้งหมด</a>
+  <a href="line-menu-checkout-ipad.html">iPad</a>
+  <a href="line-menu-checkout-iphone.html">iPhone</a>
+  <a href="line-menu-checkout-laptop.html" aria-current="page">LINE · Laptop</a>
+</nav>
+
+<div class="review-row">
+<div class="frame" data-device="laptop">
+  <div class="appbar" style="justify-content:center">
+    <div class="row" style="width:1200px">
+      <span class="wordmark"><span class="mark"><span class="i i-bowl"></span></span>แซ่บโดนเส้น</span>
+      <span class="small muted">ก๋วยเตี๋ยวทำสดทุกชาม</span>
+      <span class="grow"></span>
+      <span class="badge badge-paid"><span class="i i-check"></span>เปิดรับออเดอร์ · หน้าร้าน 11:00–23:00</span>
+      <button class="btn btn-sm btn-ghost"><span class="i i-list"></span>ออเดอร์ของฉัน</button>
+    </div>
+  </div>
+  <div class="body" style="justify-content:center">
+    <div class="row" style="width:1200px;align-items:stretch;gap:0">
+      <section class="menu" style="padding-left:0">
+        <div class="chips"><span class="chip on">แนะนำ</span><span class="chip">ก๋วยเตี๋ยว</span><span class="chip">บะหมี่</span><span class="chip">ของทานเล่น</span><span class="chip">เครื่องดื่ม</span></div>
+        <div class="grid" style="grid-template-columns:repeat(4,minmax(0,1fr))">
+          <div class="tile"><div class="ph"><span class="i i-bowl"></span></div><span class="qtybadge">1</span><div class="meta"><span class="name">ก๋วยเตี๋ยวต้มยำ</span><div class="row between"><span class="price">฿50</span><span class="addbtn"><span class="i i-plus"></span></span></div></div></div>
+          <div class="tile"><div class="ph v2"><span class="i i-bowl"></span></div><div class="meta"><span class="name">ก๋วยเตี๋ยวน้ำใส</span><div class="row between"><span class="price">฿45</span><span class="addbtn"><span class="i i-plus"></span></span></div></div></div>
+          <div class="tile"><div class="ph v5"><span class="i i-bowl"></span></div><div class="meta"><span class="name">ก๋วยเตี๋ยวเรือหมูน้ำตกสูตรเข้มข้นใส่เลือดหมู</span><div class="row between"><span class="price">฿55</span><span class="addbtn"><span class="i i-plus"></span></span></div></div></div>
+          <div class="tile"><div class="ph v2"><span class="i i-bowl"></span></div><div class="meta"><span class="name">เกาเหลาหมูตุ๋น</span><div class="row between"><span class="price">฿60</span><span class="addbtn"><span class="i i-plus"></span></span></div></div></div>
+          <div class="tile"><div class="ph v6"><span class="i i-bowl"></span></div><div class="meta"><span class="name">บะหมี่แห้งหมูแดง</span><div class="row between"><span class="price">฿50</span><span class="addbtn"><span class="i i-plus"></span></span></div></div></div>
+          <div class="tile soldout"><div class="ph v3"><span class="i i-bowl"></span></div><span class="soldflag badge badge-danger"><span class="i i-x"></span>หมด</span><div class="meta"><span class="name">ต้มยำทะเลรวมมิตร</span><span class="price">฿70</span></div></div>
+          <div class="tile"><div class="ph v6"><span class="i i-bowl"></span></div><span class="qtybadge">1</span><div class="meta"><span class="name">ชาเย็น</span><div class="row between"><span class="price">฿25</span><span class="addbtn"><span class="i i-plus"></span></span></div></div></div>
+          <div class="tile"><div class="ph v4"><span class="i i-bowl"></span></div><div class="meta"><span class="name">น้ำเก๊กฮวย</span><div class="row between"><span class="price">฿20</span><span class="addbtn"><span class="i i-plus"></span></span></div></div></div>
+        </div>
+      </section>
+      <aside class="cart" style="width:420px;border-right:1px solid var(--sds-color-border)">
+        <div class="pad stack" style="flex:1;gap:14px;overflow:hidden">
+          <h2 style="font-size:var(--sds-font-size-xl)">ยืนยันคำสั่งซื้อ</h2>
+          <div>
+            <div class="sumrow"><span>1× ก๋วยเตี๋ยวต้มยำ <span class="xs muted">เส้นเล็ก · เผ็ดน้อย</span></span><span class="money">฿50.00</span></div>
+            <div class="sumrow"><span>1× ชาเย็น</span><span class="money">฿25.00</span></div>
+          </div>
+          <div class="seg"><span class="on"><span class="i i-store"></span>รับที่ร้าน</span><span><span class="i i-door"></span>ส่งถึงห้อง</span></div>
+          <div class="stack-sm">
+            <div class="group-title">วิธีชำระเงิน</div>
+            <div class="optcard"><span class="radio"></span><span class="i i-qr"></span><div class="grow"><div class="t">พร้อมเพย์</div><div class="d">ได้ QR ยอดพอดีในแชท</div></div></div>
+            <div class="optcard"><span class="radio"></span><span class="i i-cash"></span><div class="grow"><div class="t">เงินสด</div><div class="d">จ่ายตอนรับอาหาร</div></div></div>
+            <div class="optcard on"><span class="radio"></span><span class="i i-hands"></span><div class="grow"><div class="t">ไทยช่วยไทย</div><div class="d">จ่ายที่หน้าร้านด้วยแอป เป๋าตัง ตอนรับอาหาร · ร้านจะสร้าง QR ให้สแกนต่อหน้า</div></div></div>
+          </div>
+        </div>
+        <div class="cart-foot">
+          <div class="sumrow total"><span>ยอดรวม</span><span class="money">฿75.00</span></div>
+          <div class="trust"><span class="i i-shield"></span><span>ยังไม่ต้องจ่ายตอนนี้ ร้านยืนยันการชำระที่หน้าร้าน · <a href="#" style="color:inherit">นโยบายความเป็นส่วนตัว</a></span></div>
+          <button class="btn btn-primary btn-lg btn-block">สั่งเลย · <span class="money">฿75.00</span></button>
+        </div>
+      </aside>
+    </div>
+  </div>
+</div>
+</div>
+
+<section class="states">
+  <div class="state" data-device="laptop"><div class="cap">CLOSED · ร้านปิดวันนี้</div><div class="in"><div class="banner banner-offline" style="border-radius:8px"><span class="i i-pause"></span><span class="grow">วันนี้ร้านหยุด · เปิดอีกครั้ง พรุ่งนี้ 11:00</span></div></div></div>
+  <div class="state" data-device="laptop"><div class="cap">SCHEME ENDED</div><div class="in"><div class="optcard off"><span class="radio"></span><span class="i i-hands"></span><div class="grow"><div class="t">ไทยช่วยไทย</div><div class="d">โครงการสิ้นสุดแล้ว (30 พ.ย. 2569)</div></div></div><div class="small muted">When no scheme is active the option is hidden entirely.</div></div></div>
+  <div class="state" data-device="laptop"><div class="cap">ERROR / OFFLINE</div><div class="in"><div class="banner banner-danger" style="border-radius:8px"><span class="i i-wifi-off"></span><span class="grow">เชื่อมต่อไม่ได้ · ยังไม่ได้สั่ง</span></div><button class="btn btn-sm"><span class="i i-sync"></span>ลองอีกครั้ง</button></div></div>
+  <div class="state" data-device="laptop"><div class="cap">LOADING</div><div class="in"><div class="row"><div class="skel grow" style="height:90px"></div><div class="skel grow" style="height:90px"></div><div class="skel grow" style="height:90px"></div></div><div class="skel" style="width:40%"></div></div></div>
+  <div class="state" data-device="laptop"><div class="cap">EMPTY · ตะกร้าว่าง</div><div class="in"><div class="empty"><span class="i i-cart"></span><div>ตะกร้ายังว่าง<br><span class="small">เลือกเมนูทางซ้ายได้เลย</span></div></div><button class="btn btn-primary btn-block is-disabled" disabled>สั่งเลย</button></div></div>
+</section>
+
+<section class="review-notes">
+  <h2>Notes for review</h2>
+  <ol>
+    <li>Pickup + ไทยช่วยไทย: the customer is told plainly they pay in person with เป๋าตัง; the chat confirmation repeats this and never includes a QR.</li>
+    <li>Content is capped at 1200 px so lines and prices stay close together on wide screens.</li>
+  </ol>
+</section>
+</body>
+</html>
