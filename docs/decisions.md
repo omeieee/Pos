@@ -51,6 +51,7 @@ This is the **single source of truth for technology and design choices**. Other 
 - **Why:** orders, items and payments are relational, and reporting needs SQL (`date_trunc`, window functions). Drizzle keeps the SQL visible and typed. Plain Postgres lets us move between Oracle, Supabase and a Mini PC.
 - **Alternatives:** Firestore (realtime built in, weak for reports); SQLite/PocketBase (simple, fewer reporting tools); Cloudflare D1 (ties us to Workers).
 - **Revisit if:** Q1 is answered (VM shape), or the database grows past the free limits.
+- **PGlite version (2026-09-29, P1):** pinned to **0.4.x, which embeds PostgreSQL 17**, the same major as Supabase (17.6). PGlite 0.5.x embeds PostgreSQL 18, where migrations could use PG18-only features that then fail on Supabase. Upgrade PGlite only together with the Supabase major version. Migrations are plain SQL/plpgsql with no extensions, so the same set runs on both.
 - **Status note (2026-09-29):** the VM is a **VM.Standard.E2.1.Micro (1 GB RAM) in ap-singapore-1**, so **Path B** applies. Postgres runs on Supabase free, created in the Singapore region next to the VM. Record: [infra/oracle/README.md](../infra/oracle/README.md).
 
 ## D-04 · Realtime sync — Proposed

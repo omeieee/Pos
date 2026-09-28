@@ -3,14 +3,16 @@
 PostgreSQL and Drizzle (see [D-03](decisions.md#d-03--database--open-q1)). This is the logical design. The Drizzle schema in `packages/db` (P1) is the source of truth once it exists; keep this file in step with it.
 
 ## 1. Conventions
-- **IDs:** UUIDv7 (`uuid`), which sort by time. People see `order_no`, never the UUID.
+- **IDs:** UUIDv7 (`uuid`), which sort by time, from the portable `uuid_generate_v7()` SQL function (native `uuidv7()` needs PostgreSQL 18). People see `order_no`, never the UUID.
 - **Money:** `bigint` in satang, with the suffix `_satang`. THB only. Round half up to 1 satang only in `packages/shared`.
 - **Time:** `timestamptz` (UTC). `business_date date` = local date in Asia/Bangkok minus the cutoff (default 04:00).
 - **Sync columns** on every table that is synced to clients:
   - `version int`: increments on each update, used for optimistic locking;
   - `rev bigint`: the global `rev_seq`, set by a trigger on insert and update;
   - `updated_at`.
-- **Soft delete:** menu data uses `archived_at`. Financial rows are never deleted; they are voided or refunded.
+
+  A `BEFORE INSERT OR UPDATE` trigger sets all three, so no code path can forget them (as built in P1).
+- **Soft delete:** menu data uses `archived_at`. Financial rows are never deleted; they are voided or refunded. Triggers reject `DELETE` on `orders`, `order_items`, `payments` and `expenses`, and any change to `audit_log` (append-only).
 - **Snapshots:** an order item copies the name, price, cost and modifiers at the time of sale, so later menu edits never change history.
 - **Single shop:** there is no `shop_id`. Adding branches later means adding it (listed in the architecture doc's revisit table).
 
@@ -55,8 +57,8 @@ erDiagram
 ### Payments
 | Table | Key columns |
 |---|---|
-| `payments` | `id, order_id, method` (`cash, promptpay, gov_copay, platform, other`)`, status` (`pending, claimed, confirmed, cancelled, voided, refunded`)`, amount_satang, tendered_satang?, change_satang?, promptpay_target_masked?, qr_payload?, scheme_id?, est_gov_share_satang?, est_customer_share_satang?, slip_image_key?, slip_ref?` (P9 duplicate-slip check)`, reference_note, claimed_at, confirmed_by_staff_id?, confirmed_at, void_reason, version, rev` |
-| `gov_copay_schemes` | `id, code, name_th, name_en, gov_share_bp` (6000 = 60%)`, gov_daily_cap_satang, gov_total_cap_satang?, active_from, active_to, active_hours` (e.g. `06:00–23:00`)`, channels text[]` (default `{storefront}`)`, settlement_note, enabled` |
+| `payments` | `id, order_id, method` (`cash, promptpay, gov_copay, platform, other`)`, status` (`pending, claimed, confirmed, cancelled, voided, refunded`)`, amount_satang, tendered_satang?, change_satang?, promptpay_target_masked?, qr_payload?, scheme_id?, est_gov_share_satang?, est_customer_share_satang?, slip_image_key?, slip_ref?` (P9 duplicate-slip check)`, reference_note, claimed_at, confirmed_by_staff_id?, confirmed_at, void_reason, client_request_id` (unique, idempotent POST)`, version, rev`. A check requires `confirmed_by_staff_id` and `confirmed_at` once confirmed |
+| `gov_copay_schemes` | `id, code, name_th, name_en, gov_share_bp` (6000 = 60%)`, gov_daily_cap_satang, gov_total_cap_satang?, active_from, active_to, active_from_minute, active_to_minute` (minutes from local midnight, e.g. 360–1380 = `06:00–23:00`)`, channels text[]` (default `{storefront}`)`, settlement_note, enabled` |
 
 ### People and devices
 | Table | Key columns |
@@ -77,7 +79,7 @@ Tax **rules**, meaning brackets, flat-rate %, thresholds and allowance caps, are
 ### Settings, integration and audit
 | Table | Key columns |
 |---|---|
-| `settings` | `key (pk), value jsonb, version, updated_by, updated_at`. Keys: `shop`, `promptpay` (`id_type, id_value`), `payment_methods`, `numbering`, `business_day`, `line_policy`, `retention` |
+| `settings` | `key (pk), value jsonb, version, updated_by, updated_at`. Keys: `shop`, `promptpay` (`id_type, id_value`), `payment_methods`, `numbering`, `business_day`, `opening_hours` (A3), `line_policy`, `retention` |
 | `line_events` | `webhook_event_id (unique), type, user_id, payload jsonb, received_at, processed_at, error`. Kept 30 days |
 | `line_message_log` | `id, customer_id, kind` (`reply, push`)`, template, order_id?, counted boolean, sent_at`, used by the quota tracker |
 | `audit_log` | `id, at, actor_type` (`staff, customer, system`)`, actor_id, device_id, action, entity, entity_id, before jsonb, after jsonb, ip` |
