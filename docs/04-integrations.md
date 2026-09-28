@@ -106,7 +106,7 @@ A customer cannot scan a QR that is on their own screen. The flow therefore:
 
 ### 2.4 Checking that it works (P1 exit criterion)
 - Unit tests against the reference library for a range of amounts (฿0.01 up to ฿99,999.99), all ID types, and CRC edge cases.
-- Real scans with **at least 3 bank apps** (e.g. K PLUS, SCB EASY, Krungthai NEXT). Each must show the right recipient name and exact amount, with the amount locked. Record the results in the Phase 1 checkpoint.
+- Real scans in the owner's bank app: **1 app at P1** (K PLUS or Krungthai NEXT); more apps when the owner decides. Each must show the right recipient name and exact amount, with the amount locked. Record the results in the Phase 1 checkpoint.
 
 ### 2.5 Manual confirmation: risks and optional helpers
 - **Fake slips are common.** Staff must confirm from the bank app's incoming-transfer notification, never from the slip image alone.

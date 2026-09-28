@@ -17,7 +17,7 @@ flowchart LR
 | Phase | Goal | Main exit criteria | Size |
 |---|---|---|---|
 | **P0 Planning** | Agree scope, architecture and decisions | Open questions answered; decisions Accepted/Proposed; roadmap agreed | S |
-| **P1 Foundation** | Monorepo, tooling, domain core, DB schema, PromptPay library, design tokens | CI green; state-machine and money tests; PromptPay verified in K PLUS + Krungthai NEXT; schema migrates from zero | M |
+| **P1 Foundation** | Monorepo, tooling, domain core, DB schema, PromptPay library, design tokens | CI green; state-machine and money tests; PromptPay verified in 1 bank app (more later); schema migrates from zero | M |
 | **P2 Cloud skeleton** | The 24/7 platform, before features | Oracle VM + Caddy HTTPS (free hostname) live; `/healthz` monitored; backup + **restore drill** passed; deploy on merge | M |
 | **P3 Storefront POS** | Sell at the counter | Device + PIN auth; menu CRUD with modifiers; order entry; order board/kitchen view; cash change calculator; PromptPay QR screen; gov co-pay flow; method change; void; realtime < 1 s across 2 devices; offline outbox; daily summary | L |
 | **P4 LINE ordering** | Order and pay through LINE | OA + channels; webhook (signature, idempotent); rich menu; customer app; reply-first messages with the QR image; slip / "โอนแล้ว"; status page; quota tracker; privacy notice | L |

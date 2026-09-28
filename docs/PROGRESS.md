@@ -6,8 +6,9 @@
 > **Handoff for the next session (read first):**
 > - **No code exists yet.** The owner asked not to code until they say so in a new session.
 > - **P1 inputs are settled.** Answers are in [10-open-questions.md](10-open-questions.md); the stack is Accepted in [decisions.md](decisions.md).
-> - **Ask at P1 kickoff:** may Claude commit/push, and is `.mcp.json` (Supabase MCP) authenticated?
-> - **Local tools:** Node 24 is installed. pnpm is not (enable with `corepack enable pnpm`). Docker is not, so use **PGlite** for local DB/tests.
+> - **P1 prerequisites confirmed (2026-09-29):** Claude may commit and push to `main`. Supabase project `yejvrooxqdpynruwnegg` (Singapore); its MCP still needs re-auth (restart Claude Code → `/mcp`), which doesn't block P1.
+> - **Local tools:** Node 24 + pnpm 12.6.0 (shims in `%APPDATA%
+pm`). No Docker, so use **PGlite** for local DB/tests.
 > - **Still open, not blocking P1:** Q3 (tax status; ภ.ง.ด.94 due 30 Sep 2026), Q11, Q12 (costs: owner provides later), reserved IP, and whether ไทยช่วยไทย can be paid on room delivery.
 > - **LINE OA:** already exists, but has no Messaging API/bot and no ordering UI yet (P4).
 > - **Standing rule:** before starting each phase, ask the owner for all missing information that phase needs (see `CLAUDE.md` workflow).
@@ -15,6 +16,20 @@
 Newest entries first. Add entries with `/checkpoint`. Each entry covers what changed, how it was verified, what was decided, and what comes next. State facts only, and never record tests as passed unless they were run.
 
 ---
+
+## 2026-09-29 · P0 · P1 prerequisites confirmed
+- **Summary:** connections checked and the P1 kickoff answers recorded.
+  - Supabase: the old ref didn't exist, so it was replaced by `yejvrooxqdpynruwnegg`, region **Singapore** (`ap-southeast-1`). The MCP sign-in is still refused on reconnect.
+  - pnpm 12.6.0 installed. Claude may commit and push to `main`. Hooks are allowed in the shared `.claude/settings.json`.
+  - PromptPay scan test: **1 bank app** for now.
+  - Wireframes are delivered in **both** `design/` HTML and Figma.
+  - **New A4 sub-requirement:** per-device (iPad / iPhone / laptop) mockups and independently adjustable customization.
+- **Changed:** `.mcp.json`; 01 (N-row, A4), 04 §2.4, 09 P1 row, P1 checkpoint scope + exit criteria, 10 (answers).
+- **Verification:** `git ls-remote origin` OK (repo empty); VM :22 open, :80/:443 closed; project REST → 401 (up, key required); DB IPv6 matched AWS ranges → ap-southeast-1; `pnpm -v` → 12.6.0; Supabase MCP → "needs authentication".
+- **Decisions:** none (requirements only).
+- **Open issues:** Supabase MCP re-auth (needed by P2); which bank app to test with (owner's choice).
+- **Next:** push, then P1 kickoff: monorepo scaffold.
+- **Commit:** a0c2fc2, d42097b, plus the docs commit that adds this entry
 
 ## 2026-09-29 · P0 · Owner answers recorded; ready for P1
 - **Summary:** the owner answered the P1-blocking questions:

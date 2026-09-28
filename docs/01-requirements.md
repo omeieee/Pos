@@ -14,7 +14,7 @@ It must run unattended 24/7, on free tiers wherever possible, with no on-site se
 |---|---|
 | Fast counter service | An order with modifiers can be entered in ≤ 20 s. The change calculation needs no mental maths. |
 | Nothing missed from LINE | A LINE order appears on every staff device with a sound within 2 s. |
-| Exact payment amount | Every PromptPay QR encodes the shop's current PromptPay ID and the exact order total. Verified with ≥ 3 Thai bank apps. |
+| Exact payment amount | Every PromptPay QR encodes the shop's current PromptPay ID and the exact order total. Verified in the owner's bank app(s): **1 app at P1**, more when the owner decides. |
 | One truth across devices | A change on one device shows on the others in < 1 s (p95), with no stale screens after reconnecting. |
 | Useful numbers | Daily, monthly and yearly revenue, top items, P&L and a tax estimate are available without spreadsheets. |
 | ฿0 running cost | No recurring bill except a domain. The LINE plan is upgraded only if volume needs it. |
@@ -137,6 +137,7 @@ The laptop is for the back office, not a cashier terminal. The AIS router provid
 
   The customer app and LINE replies respect it and say when ordering reopens.
 - **A4** **Customizable look** (added 2026-09-29): brand name, logo, colours and fonts come from design tokens and can be changed in settings without code. Design sources live in Figma / Claude Design.
+  - **Per-device customization** (added 2026-09-29): **iPad, iPhone and laptop/desktop** each have their own layout and adjustable settings, independent of the other two (e.g. grid columns, text and button size, density, which panels show). Base tokens are shared, and each device class overrides them. P1 builds the token structure and mockups for all 3; P3 adds the settings screen to change them without code.
 
 ### Future (X)
 - **X1** Kitchen printer (Xprinter XP-80T) through the Mini PC print agent. Each ticket shows:

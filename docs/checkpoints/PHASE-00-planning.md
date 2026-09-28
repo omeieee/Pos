@@ -40,3 +40,4 @@ Documentation only. The repo layout in [02 §3](../02-architecture.md#3-componen
 - 2026-09-29: planning pack written. See [PROGRESS.md](../PROGRESS.md).
 - 2026-09-29: VM reported as set up; SSH key files git-ignored; browser targets and the native-apps plan (D-19, P10, Q13) added. See [PROGRESS.md](../PROGRESS.md).
 - 2026-09-29: VM recorded (E2.1.Micro, ap-singapore-1, Free Tier) → Path B; native apps deferred until the MacBook purchase.
+- 2026-09-29: P1 prerequisites confirmed (Supabase in Singapore, pnpm, commit/push, per-device customization). See [PROGRESS.md](../PROGRESS.md).

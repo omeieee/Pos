@@ -10,7 +10,7 @@ The first five questions change the design; the rest refine it.
 - **Answer:** no logo, colours or fonts yet. The ux-ui-designer agent proposes an initial style. The UI must stay **fully customizable**: design tokens, design work in Figma / Claude Design, and brand settings changeable later without code.
 
 ### Banking apps for PromptPay tests (asked 2026-09-29)
-- **Answer:** **K PLUS (Kasikorn)** and **Krungthai NEXT**. PromptPay `0642230924` is the owner's **personal account, for testing only**. The real shop account will be provided later and set in settings (P3). The Phase 1 scan test uses these 2 apps.
+- **Answer:** **K PLUS (Kasikorn)** and **Krungthai NEXT**. PromptPay `0642230924` is the owner's **personal account, for testing only**. The real shop account will be provided later and set in settings (P3). The Phase 1 scan test uses **1 app** (K PLUS or Krungthai NEXT, the owner's choice); more apps when the owner decides (updated 2026-09-29).
 
 ### Q1 · Oracle VM: shape, region and account type
 Which shape is the VM: **VM.Standard.A1.Flex (ARM)** or **VM.Standard.E2.1.Micro (AMD, 1 GB)**? How many OCPUs and how much RAM, in which region? Is the account **Always Free only** or **Pay-As-You-Go**?
@@ -71,7 +71,10 @@ Does the LINE OA "แซ่บโดนเส้น" already exist (plan, follow
 - *Default:* new OA; the repo is private (it will contain the PromptPay ID in seed data, so keep it private).
 - **Answer (2026-09-29):** the GitHub repo is **private**. **LINE OA: already exists** (added 2026-09-29), but it is **not yet connected to the Messaging API** (no bot/webhook) and has **no ordering UI** (no rich menu or customer app). P4 connects it; ask for its name/ID and plan at P4 kickoff. Commit/push permission for Claude: **not given yet**, so ask at the start of P1.
 - **P1 kickoff answers (2026-09-29):**
-  - Claude **may commit** to git. Push permission not stated yet, so ask before the first push.
+  - Claude **may commit and push directly** to `origin/main` on GitHub.
+  - Claude Code hooks may go in the shared `.claude/settings.json`.
+  - Wireframes: deliver **both** HTML pages in `design/` and Figma.
+  - **New requirement:** UX/UI mockups and customization that can be adjusted **independently for each of the 3 devices** (iPad, iPhone, laptop). Recorded as A4 per-device customization.
   - `corepack enable pnpm` approved. Installed pnpm 12.6.0 with shims in `%APPDATA%\npm`, because the default `Program Files\nodejs` needs admin.
   - **Supabase project replaced:** the new ref is `yejvrooxqdpynruwnegg`, and `.mcp.json` was updated with the same features. The old ref `msxzudufpewhdramjihv` no longer resolves. **Region confirmed: Singapore (AWS `ap-southeast-1`).** Checked by mapping the IPv6 address of `db.yejvrooxqdpynruwnegg.supabase.co` to AWS's published IP ranges. This puts it next to the VM in `ap-singapore-1`.
 
