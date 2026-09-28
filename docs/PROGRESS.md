@@ -1,18 +1,27 @@
 # Progress Log
 
-**Current phase:** P1 — Foundation ([checkpoint](checkpoints/PHASE-01-foundation.md)), status **in progress**: code complete, waiting on owner checks.
-**Next phase:** P2 — Cloud skeleton ([checkpoint](checkpoints/PHASE-02-cloud-skeleton.md)).
+**Current phase:** P2 — Cloud skeleton ([checkpoint](checkpoints/PHASE-02-cloud-skeleton.md)), status **kickoff questions pending**.
+**Previous:** P1 — Foundation ✅ Done 2026-09-29 ([checkpoint](checkpoints/PHASE-01-foundation.md)).
 
 > **Handoff for the next session (read first):**
-> - **P1 code is pushed** (`main`, up to 2e48741). Local: `pnpm install && pnpm lint && pnpm build && pnpm test` all pass (1,808 tests).
-> - **Owner checks:** CI green ✅; K PLUS scan ✅ (ours and reference, ฿1.00). **Remaining:** approve the wireframe redesign in Claude Design (https://claude.ai/artifact/3bpHFKf3KGsAH5EMN1CE3H), then close P1.
-> - **Local tools:** Node 24 + pnpm 12.6.0. No Docker; PGlite 0.4.x (PostgreSQL 17) for local DB/tests.
+> - **P1 is closed.** Packages: shared, promptpay, db, i18n, ui. `pnpm lint && pnpm build && pnpm test` pass locally and in CI.
+> - **Design direction:** [Claude Design canvas](https://claude.ai/artifact/3bpHFKf3KGsAH5EMN1CE3H). Polish and `packages/ui` token alignment happen at the P3 kickoff (Q14 deferred).
+> - **P2 next:** ask the owner every missing P2 input in one list (standing rule), then start.
+> - **Carry-forward for P2** (from the P1 QA review, see P1 checkpoint): sync excludes `pin_hash`/`token_hash`; `SET search_path` on SQL functions; run migrations on Supabase 17.6; link-table sync; esbuild dev advisory.
+> - **Local tools:** Node 24 + pnpm 12.6.0; no Docker; PGlite 0.4.x (PostgreSQL 17).
 > - **Still open, not blocking:** Q3 (tax status; ภ.ง.ด.94 due 30 Sep 2026), Q11, Q12, reserved IP, ไทยช่วยไทย on room delivery, room-delivery fee.
-> - **Standing rule:** before starting each phase, ask the owner for all missing information that phase needs (see `CLAUDE.md` workflow).
 
 Newest entries first. Add entries with `/checkpoint`. Each entry covers what changed, how it was verified, what was decided, and what comes next. State facts only, and never record tests as passed unless they were run.
 
 ---
+
+## 2026-09-29 · P1 · Closed
+- **Summary:** the owner accepted the Claude Design redesign ([canvas](https://claude.ai/artifact/3bpHFKf3KGsAH5EMN1CE3H), 9 boards) as the P1 wireframes; visual polish is deferred to the P3 kickoff. All P1 exit criteria are met.
+- **Changed:** P1 checkpoint (Done), P2 checkpoint (in progress), `design/brand.md` (superseded note), Q14 answer, this log.
+- **Verification:** owner approval in chat; earlier checks as recorded below.
+- **Decisions:** none.
+- **Next:** P2 kickoff: ask the owner for all missing P2 inputs.
+- **Commit:** this entry
 
 ## 2026-09-29 · P1 · Owner checks: CI green, K PLUS scan passes
 - **Summary:** the owner confirmed the CI run is green. K PLUS first could not read the QR (inline SVG on the page); after switching to black-on-white PNG, both our QR and the reference library's scanned (฿1.00, amount locked). The owner asked for a complete redesign of the wireframes in Claude Design instead of approving the HTML set.

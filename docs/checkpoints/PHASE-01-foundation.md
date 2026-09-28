@@ -1,6 +1,6 @@
 # Phase 1 — Foundation
 
-**Status:** 🟡 In progress (code complete 2026-09-29; owner checks pending) · **Depends on:** P0 exit · **Agents:** backend-engineer, payments-finance-engineer, ux-ui-designer, devops-engineer (CI), qa-security-reviewer
+**Status:** ✅ Done (2026-09-29) · **Depends on:** P0 exit · **Agents:** backend-engineer, payments-finance-engineer, ux-ui-designer, devops-engineer (CI), qa-security-reviewer
 
 ## Goal
 A working monorepo with the domain core, database schema, PromptPay library and design tokens, all tested, before any feature screens exist.
@@ -25,7 +25,7 @@ A working monorepo with the domain core, database schema, PromptPay library and 
 - [x] PromptPay: decoded TLV + CRC match the reference library for the test matrix (✅ 1,271 tests, 313 amounts × 4 targets); **scanned correctly in K PLUS** (owner's choice, 2026-09-29); more apps when the owner decides (test PromptPay 0642230924, personal test account; list amounts and results below)
   - **Scan results (owner, 2026-09-29, K PLUS, test PromptPay 0642230924, ฿1.00):** our QR (A) and the reference library's QR (B) both scanned. The amount showed as locked. First attempt failed because the page drew the QR as inline SVG, which K PLUS could not read; `scripts/scan-test.ts` now outputs black-on-white PNG (010891f).
 - [x] Migrations run on an empty Postgres; seed loads (`db/src/db.test.ts` on PGlite 0.4.6 = PostgreSQL 17)
-- [ ] Wireframes/mockups for POS order entry, payment sheet and LINE menu/checkout, for **iPad, iPhone and laptop**, as `design/` HTML (Figma deferred), approved by the owner
+- [x] Wireframes/mockups for POS order entry, payment sheet and LINE menu/checkout, for **iPad, iPhone and laptop**, approved by the owner (2026-09-29). The owner asked for a full redesign in **Claude Design** ([canvas](https://claude.ai/artifact/3bpHFKf3KGsAH5EMN1CE3H), 9 boards), which supersedes the `design/wireframes` HTML set. Visual polish is deferred to the P3 kickoff; `packages/ui` tokens still hold the earlier proposal.
 - [x] Per-device tokens: changing one device's overrides leaves the other two unchanged (`ui/src/resolve.test.ts`)
 
 ## As built
@@ -34,7 +34,7 @@ A working monorepo with the domain core, database schema, PromptPay library and 
 - **promptpay:** `promptpayPayload`, `crc16`, `decodeTlv`, `hasValidCrc`; `scripts/scan-test.ts` → HTML QR page.
 - **db:** Drizzle schema v1 (21 tables, 03-data-model), migrations 0000 functions (`uuid_generate_v7`, `set_sync_columns`, `forbid_change`), 0001 schema, 0002 triggers; `createPgliteDb()`, idempotent `seed()`.
 - **i18n:** th/en catalogs, `t()`, `formatBaht`, BE `formatDate`. **ui:** tokens + iPad/iPhone/laptop overrides, `resolveTokens`, `toCssVariables`, contrast helpers; `pnpm --filter @sds/ui tokens:css`. React components deferred to P3.
-- **design/:** `brand.md`, `wireframes/` (3 screens × 3 devices + index).
+- **design/:** `brand.md`, `wireframes/` (first HTML proposal). Approved direction: [Claude Design canvas](https://claude.ai/artifact/3bpHFKf3KGsAH5EMN1CE3H).
 - **Sync note:** `menu_item_channel_prices`, `menu_item_modifier_groups` and `order_items` have no `rev`; the API must bump the parent row (`menu_items` / `orders`) in the same transaction when they change.
 - **Infra/CI:** `.github/workflows/ci.yml`; `infra/supabase/bootstrap.sql`; hooks in `.claude/settings.json` (protect migrations/.env, format + per-package typecheck).
 
@@ -48,3 +48,4 @@ Fixed in P1: purity lint gaps (M1), protect hook fails closed and covers relativ
 
 ## Log
 - 2026-09-29 · Foundation built; owner checks pending ([PROGRESS](../PROGRESS.md#2026-09-29--p1--foundation-built-awaiting-owner-checks))
+- 2026-09-29 · Owner checks passed; P1 closed ([PROGRESS](../PROGRESS.md#2026-09-29--p1--closed))

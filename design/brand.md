@@ -2,7 +2,9 @@
 
 **Status:** proposal for owner approval (2026-09-29). The owner has no logo, colours or fonts yet. Every value below is a **default in settings**, not a fixed choice (requirement A4).
 
-Mockups: open [`wireframes/index.html`](wireframes/index.html) in a browser.
+**Superseded (2026-09-29):** the owner chose a full redesign in Claude Design: [canvas](https://claude.ai/artifact/3bpHFKf3KGsAH5EMN1CE3H) (cream paper, ink rail, clay accent; Chonburi + Anuphan). This file and `wireframes/` stay as the first proposal. Tokens in `packages/ui` are aligned with the canvas at the P3 kickoff.
+
+First-proposal mockups: open [`wireframes/index.html`](wireframes/index.html) in a browser.
 Token source of truth: `packages/ui/src/tokens.ts`.
 
 ---

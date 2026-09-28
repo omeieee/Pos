@@ -111,5 +111,5 @@ Open `design/wireframes/index.html` in a browser and approve it or list changes.
 4. **Room delivery fee:** is there one? The mockups show none.
 5. **Food photos:** will you provide them? Otherwise POS tiles are text-only.
 6. **iPad customer-facing mode:** the confirm button is hidden while the QR faces the customer, and staff long-press to return. Is that OK?
-- **Answer:**
+- **Answer (2026-09-29):** the owner asked for a full redesign in Claude Design ([canvas](https://claude.ai/artifact/3bpHFKf3KGsAH5EMN1CE3H)) and accepted it as the P1 direction. Items 1–6 are **deferred to the P3 kickoff**, before any screen is coded.
 

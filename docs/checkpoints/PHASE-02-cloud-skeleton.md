@@ -1,6 +1,6 @@
 # Phase 2 — Cloud Walking Skeleton
 
-**Status:** ⚪ Not started · **Depends on:** P1, Q1, Q8 · **Agents:** devops-engineer, backend-engineer, qa-security-reviewer
+**Status:** 🟡 In progress (kickoff questions pending) · **Depends on:** P1, Q1, Q8 · **Agents:** devops-engineer, backend-engineer, qa-security-reviewer
 
 ## Goal
 Put the 24/7 platform in place before features: a minimal API and app shells are deployed, monitored, backed up and restorable.
