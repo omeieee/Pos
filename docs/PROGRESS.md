@@ -1,13 +1,13 @@
 # Progress Log
 
-**Current phase:** P2 — Cloud skeleton ([checkpoint](checkpoints/PHASE-02-cloud-skeleton.md)), status **kickoff questions pending**.
+**Current phase:** P2 — Cloud skeleton ([checkpoint](checkpoints/PHASE-02-cloud-skeleton.md)), status **in progress: first deploy live; QA fixes written, awaiting owner decisions, commit and redeploy**.
 **Previous:** P1 — Foundation ✅ Done 2026-09-29 ([checkpoint](checkpoints/PHASE-01-foundation.md)).
 
 > **Handoff for the next session (read first):**
-> - **P2 code is done and pushed** (277642b api/db/web shells, a006f80 infra). Nothing is deployed yet.
-> - **Waiting on the owner: `infra/SETUP.md` Round 1** (browser only: accounts, Tailscale policy + OAuth client, OCI ports 80/443 + bucket + secret key, age key on USB, healthchecks.io, Cloudflare token, Supabase session-pooler URL, GitHub secrets/variables). The owner reports "Round 1 done" + OCI namespace (never secrets).
-> - **Then:** Round 2 (owner runs `bootstrap.sh`, joins Tailscale, closes port 22), Round 3 (first deploy, external check, restore drill, rollback test). Claude verifies with read-only SSH / port checks.
-> - **VM state checked 2026-09-29 (read-only):** Ubuntu 24.04.5, 954 MB RAM, 43 GB free, no swap/Docker/Tailscale; iptables allows only 22 then REJECT. Ports 80/443 closed from outside.
+> - **P2 is deployed:** API live at `https://138-2-67-89.sslip.io` (Caddy + Let's Encrypt, `/healthz` and `/readyz` OK, image 33bfb96), web apps `sds-pos.pages.dev` and `sds-order.pages.dev` return 200, UptimeRobot monitor set (owner report). Backup hourly to OCI works; **restore drill passed 2026-09-29**.
+> - **Still to do in P2 (SETUP 3.5/3.7):** ghcr prune access (3.2) and External check (3.3) are green (owner report 2026-09-29). Prove the missed-backup alert (owner deferred it to another day) (stop `backup` outside opening hours before a slot, wait slot + 30 min grace, confirm the email, restart it); try the rollback once (RUNBOOK option B) and redeploy main; decide the second Micro VM for the rebuild test; then QA review (qa-security-reviewer) and close P2.
+> - **VM state (verified 2026-09-29):** Ubuntu 24.04, 2 GB swap, Docker 29.8.1, `deploy` user, Tailscale `sds-pos` (SSH on, tag:server, auto-update on), public port 22 closed, `/opt/sds/.env` complete (mode 600). Containers api, backup, caddy all healthy. Reach it with `ssh pos-ts` / `ssh deploy@sds-pos`. Owner approved write/exec on `pos-oracle` / `sds-pos` and piping the age key from `F:` into the restore drill.
+> - **Not verified:** GitHub secrets/variables (no `gh` on the laptop; owner reported them done), Tailscale key expiry on `sds-pos` (owner reported disabled), OCI Pay-As-You-Go upgrade (recommended in docs/05 §1).
 > - **Open decision:** the rebuild-on-new-host test needs a second free Micro VM; ask the owner at Round 3.
 > - **Design:** [Claude Design canvas](https://claude.ai/artifact/3bpHFKf3KGsAH5EMN1CE3H); polish at P3 kickoff.
 > - **Local tools:** Node 24 + pnpm 12.6.0; no Docker; PGlite 0.4.x (PostgreSQL 17).
@@ -16,6 +16,33 @@
 Newest entries first. Add entries with `/checkpoint`. Each entry covers what changed, how it was verified, what was decided, and what comes next. State facts only, and never record tests as passed unless they were run.
 
 ---
+
+## 2026-09-30 · P2 · QA review and fixes (uncommitted, not yet deployed)
+- **Summary:** qa-security-reviewer reviewed P2: exit criteria not met, 1 High + 4 Medium. Fixed by backend-engineer (db/api) and devops-engineer (infra/CI/docs).
+- **Changed:** TLS forced for remote DB connections (`postgresOptions`), prod config rejects `sslmode=disable`; Drizzle params scrubbed from logs/Sentry (`apps/api/src/redact.ts`), `sendDefaultPii:false`; CORS methods incl. PATCH; `seed` moved to `@sds/db/seed` (test PromptPay ID gone from the API bundle); deploy workflows now run after green CI on `main` (`workflow_run`), use the CI-verified sha, `environment: production`, actions pinned by SHA, wrangler pinned; pre-deploy backup skipped only on the true first deploy; Caddyfile change detection + security headers; Pages `_headers`; drill runs on tmpfs and fails on empty restored tables; backup heartbeat 30 min, healthchecks URL no longer logged; docs 05 §6, RUNBOOK, SETUP (H1/H2 owner hardening) updated.
+- **Verification (run this session, combined tree):** `pnpm lint` 95 files clean, `pnpm build --force` 11/11, `pnpm test --force` 8/8 (api 34, db 43, shared 466, promptpay 1276, ui 36, i18n 20, web 1+1). Agent-run: shellcheck + actionlint clean, stub-docker harness 40 checks, deploy `plan` script 18 cases, Caddy headers and CSP in Chrome. **Not run:** the workflows on GitHub, anything on the VM, TLS handshake to Supabase, `run drill` on a real Docker daemon.
+- **Decisions:** none recorded. Pending: `verify-full` against Supabase CA (needs a decision entry); Tailscale `check` for `ubuntu`/`deploy`; GitHub plan for environment protection.
+- **Open issues:** live `DATABASE_URL` still lacks `sslmode` (code forces TLS anyway); Supabase "Enforce SSL" off; the merge-to-main auto deploy and rollback are still untried; LIFF CSP needs a real-LINE-device check in P4; F5 (least-privilege OCI key) optional.
+- **Next:** owner decisions → commit → first automatic deploy (check `/readyz` = first TLS handshake, Caddy restart blip) → rollback test → close P2.
+- **Commit:** uncommitted
+
+## 2026-09-29 · P2 · First deploy live; restore drill passed
+- **Summary:** the owner ran Deploy API and Deploy web apps (green) and set the UptimeRobot monitor. Claude verified the result from outside and on the VM, then ran the restore drill with the age key piped from the USB drive over stdin (key never printed or stored).
+- **Changed:** nothing in the repo; VM now runs api, caddy and backup.
+- **Verification (run this session):** `/healthz` → ok (version 33bfb96), `/readyz` → ok; cert issuer Let's Encrypt (YE1), expires 2026-12-28; from the laptop ports 22, 3000, 5432, 2019 closed; `dc ps`: api, backup, caddy all healthy; `backup-list` shows `hourly/sds-20260929T160506Z-hourly.dump.age`; both `*.pages.dev` sites return 200; restore drill: decrypted OK, pg_restore without errors, migrations restored=5 prod=5, DRILL PASSED. Weak point: the DB has no business rows yet, so the row-count comparison is all zeros.
+- **Decisions:** none.
+- **Open issues:** missed-backup alert not yet proven; rollback not tried; the External check and ghcr prune runs are green per the owner but not seen by Claude; missed-backup alert test deferred by the owner; the merge-to-main auto-deploy was not exercised (runs were manual); rebuild test needs a second Micro VM; UptimeRobot/Tailscale commercial terms; repeat the drill once real data exists.
+- **Next:** rollback test (3.7), alert test on a later day (3.5), QA review, close P2.
+- **Commit:** uncommitted
+
+## 2026-09-29 · P2 · Setup Rounds 1–2 done; VM ready for first deploy
+- **Summary:** the owner finished Round 1 (accounts, Tailscale policy + OAuth client, OCI ports/bucket/secret key, age key on USB, healthchecks.io, Cloudflare token, Supabase pooler URL, GitHub secrets/variables) and Round 2 (bootstrap, tailnet join, key expiry off, port 22 closed). Claude created `/opt/sds/.env` from the template and filled the non-secret values; the owner filled the five secrets.
+- **Changed:** VM `/opt/sds/.env` (+ `.env.example`), Tailscale auto-update on; laptop `~/.ssh/config` (`pos-ts` shortcut); `age` 1.3.1 installed via winget. No repo code changed.
+- **Verification (run this session):** SSH over the tailnet as `ubuntu` and `deploy` OK; swap 2G, Docker 29.8.1, iptables 80/443 open; `ssh pos-oracle` to public :22 times out; `.env` mode 600, UTF-8 without CRLF, 12 variable names present, no template placeholders left (names only, no values read). `F:` is a removable drive holding `sds-backup.agekey` (189 bytes, contents not read), no copy in the repo. Not run: anything in Round 3, GitHub secret check.
+- **Decisions:** none. OCI namespace `axlbox7jjb21` is recorded in the VM `.env` (not secret).
+- **Open issues:** UptimeRobot and Tailscale Personal terms for commercial use unchecked; OCI Pay-As-You-Go upgrade (idle reclaim) not confirmed; second Micro VM for the rebuild test.
+- **Next:** Round 3 first deploy (SETUP 3.1–3.7).
+- **Commit:** uncommitted
 
 ## 2026-09-29 · P2 · Code complete; waiting on owner setup (Round 1)
 - **Summary:** API skeleton, db client split, web shells, VM bootstrap, compose stack, OCI backups, deploy workflows, SETUP.md and RUNBOOK.md written by backend-engineer and devops-engineer agents, reviewed and committed.

@@ -1,1 +1,2 @@
-- [Local lint tools](reference_local_lint_tools.md) — no docker/shellcheck/actionlint locally; download to scratchpad; use Git Bash for ssh piping
+- [Local lint tools](reference_local_lint_tools.md) — no docker/shellcheck/actionlint locally; download to scratchpad; compose `config`, caddy, chrome CSP test recipes
+- [GitHub plan limits](project_github_plan_limits.md) — private repo, likely Free: no env secrets/branch protection; owner steps must be plan-conditional

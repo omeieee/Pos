@@ -76,20 +76,23 @@ The layout depends on the VM shape (**Q1**):
 - **Keep the key's Windows permissions owner-only.** It is currently owner read-only, which is correct. Windows OpenSSH refuses keys that other accounts can read.
 - **Never commit, print or paste the private key** (docs, chat, CI logs). Tools refer to it by path only. CI deploys (P2) sign in with **Tailscale SSH** as `deploy` (`tag:ci`), so no key is stored in GitHub; this key is never used by CI.
 
-- [ ] Record public IP, login user, shape, OCPU/RAM, region, availability domain and OCID in `infra/oracle/README.md`. These are not secrets; the key is.
-- [ ] Upgrade the account to PAYG and add a budget alert (recommended; the owner currently stays on **Free Tier**). Confirm the shapes stay Always Free.
-- [ ] Path B on 1 GB: 2 GB swap file; Node heap capped; images built in CI (amd64) and pulled from GHCR.
-- [ ] Ubuntu LTS image, SSH keys only, root login and password auth disabled.
-- [ ] Admin access: SSH restricted to the owner's IP in the OCI security list, **or** Tailscale (no public SSH at all).
-- [ ] `unattended-upgrades` for security patches. Reboot window 03:00–05:00 on Mondays.
-- [ ] Docker Engine + Compose plugin. Log rotation (`max-size`, `max-file`) on every service.
-- [ ] Remember that Oracle's Ubuntu image has its own iptables rules on top of the security list. **Interim setup (Caddy):** open TCP 80 and 443 in **both** the OCI security list and the VM's iptables, and nothing else except SSH from the owner. Caddy handles HTTPS; the API listens only on the internal Docker network.
-- [ ] Hostname stability: the public IP is **ephemeral** (checked 2026-09-29). Before LINE goes live (P4), decide whether to switch to a **reserved** public IP (the IP changes once, then survives rebuilds; check that it's free on Free Tier) or accept updating the URLs after any rebuild.
-- [ ] Rate limiting and request-size limits in Caddy and the API; fail2ban or Caddy logs checked for scanning noise.
-- [ ] Postgres not published to the host; the app DB user has least privilege.
-- [ ] `.env` is `chmod 600` and owned by the deploy user. Secrets are also in a password manager.
-- [ ] `restart: unless-stopped` and health checks on every service.
-- [ ] Record the instance OCID, region and shape in `infra/oracle/README.md`, with no secrets.
+Status as of 2026-09-29 (VM state verified by the P2 sessions; ✅ = done, the unticked items say what is missing):
+- [ ] Record public IP, login user, shape, OCPU/RAM, region, availability domain and OCID in `infra/oracle/README.md`. These are not secrets; the key is. *All recorded except the full OCID: the README has only its tail.*
+- [ ] Upgrade the account to PAYG and add a budget alert (recommended; the owner currently stays on **Free Tier**). Confirm the shapes stay Always Free. *Not done: still Free Tier, no budget alert; idle-reclamation risk stays (05 §3).*
+- [x] Path B on 1 GB: 2 GB swap file; Node heap capped (384 MB, `apps/api/Dockerfile`); images built in CI (amd64) and pulled from GHCR.
+- [x] Ubuntu LTS image, SSH keys only, root login and password auth disabled (`bootstrap.sh` `sshd_config.d/01-sds.conf`, applied 2026-09-29).
+- [x] Admin access: Tailscale, no public SSH at all (OCI port 22 rule deleted; public :22 times out, tailnet SSH works).
+- [x] `unattended-upgrades` for security patches. Reboot window 03:00–05:00 on Mondays. (Covers Ubuntu only: the Docker/Tailscale repos and the Caddy/backup images are patched by the monthly RUNBOOK steps.)
+- [x] Docker Engine + Compose plugin. Log rotation (`max-size`, `max-file`) on every service.
+- [x] Remember that Oracle's Ubuntu image has its own iptables rules on top of the security list. **Interim setup (Caddy):** open TCP 80 and 443 in **both** the OCI security list and the VM's iptables, and nothing else except SSH from the owner. Caddy handles HTTPS; the API listens only on the internal Docker network. *Verified from outside: 22, 3000, 5432, 2019 closed; External check workflow weekly.*
+- [ ] Hostname stability: the public IP is **ephemeral** (checked 2026-09-29). Before LINE goes live (P4), decide whether to switch to a **reserved** public IP (the IP changes once, then survives rebuilds; check that it's free on Free Tier) or accept updating the URLs after any rebuild. *Not decided yet (before P4).*
+- [ ] Rate limiting and request-size limits in Caddy and the API; fail2ban or Caddy logs checked for scanning noise. *Done: request-size limit in Caddy (6 MB), rate limiting in the API (`@fastify/rate-limit`). Not done: no rate limiting in Caddy (the stock image has no module), fail2ban not installed (`INSTALL_FAIL2BAN=1` in `bootstrap.sh` if wanted; SSH is not exposed), scanning noise in the Caddy logs not yet reviewed.*
+- [x] Postgres not published to the host (there is no Postgres on the VM; the DB is Supabase).
+- [ ] The app DB user has least privilege. *Not done: the API connects as Supabase `postgres` (BYPASSRLS). Plan a dedicated role before real business data.*
+- [x] `.env` is `chmod 600` and owned by the deploy user (`deploy.sh` refuses to run otherwise).
+- [ ] Secrets are also in a password manager. *Not done: there is no password manager yet (D-18: age key on paper + USB).*
+- [x] `restart: unless-stopped` and health checks on every service (`dc ps`: api, backup, caddy healthy). The one-shot `drill` tool service (`run --rm`, profile `tools`) is the deliberate exception: `restart: "no"`, no health check.
+- [ ] Record the instance OCID, region and shape in `infra/oracle/README.md`, with no secrets. *Region and shape yes; only the OCID tail.*
 
 ## 7. Backups and disaster recovery
 - **Database:**
@@ -99,8 +102,8 @@ The layout depends on the VM shape (**Q1**):
   - every run pings healthchecks.io, so a missed backup raises an alert.
 - **Files:** menu photos and slips are stored in R2 (lifecycle rule deletes slips after 90 days). Nothing important lives only on the VM's disk.
 - **Restore drill (monthly):** restore the latest dump into a throwaway container, run row-count and sanity queries, and record the result in `docs/PROGRESS.md`.
-- **Rebuilding elsewhere (RTO ≤ 2 h):** `infra/oracle/bootstrap.sh` and the Compose files build a fresh host. Restore the dump, point the Tunnel at the new host, and change nothing else. Backup hosts: the Mini PC (through the same Tunnel) or a low-cost VPS.
-- **Keep the age private key off the VM** (password manager plus a printed copy). Without it the backups can't be read.
+- **Rebuilding elsewhere (RTO ≤ 2 h):** `infra/oracle/bootstrap.sh` and the Compose files build a fresh host. Restore the dump, then update the hostname (interim, D-10: the sslip.io name follows the new IP, RUNBOOK "IP changed"; once a domain and Tunnel exist: point the Tunnel at the new host), and change nothing else. Backup hosts: the Mini PC (through the same Tunnel) or a low-cost VPS.
+- **Keep the age private key off the VM** (a printed copy plus a USB drive; no password manager yet, D-18). It is never stored at rest on the VM: the restore drill streams it into a throwaway container's memory. Without it the backups can't be read.
 
 ## 8. Monitoring and alerting
 | Signal | Tool | Alert to |
@@ -114,20 +117,23 @@ The layout depends on the VM shape (**Q1**):
 
 ## 9. CI/CD
 - **On a pull request:** install (pnpm cache) → Biome → typecheck → unit tests → build (Turborepo, only what changed).
-- **On merge to `main`** (P2, as built; owner setup in [infra/SETUP.md](../infra/SETUP.md)):
+- **After CI is green on `main`** (P2, as built; owner setup in [infra/SETUP.md](../infra/SETUP.md)):
+  - **Trigger:** both deploy workflows run on `workflow_run` of the CI workflow, only for a successful CI run of a *push* to `main` of this repo, and they check out and deploy exactly the commit CI verified (`head_sha`, not the branch tip; a superseded commit is skipped). A red CI ships nothing. A manual run (`workflow_dispatch`, on `main`) is the owner's explicit override. `workflow_run` cannot filter by path, so Deploy API skips docs-only changes itself (RUNBOOK "Deploys"); the web deploy runs on every green push.
+  - **Secrets:** the jobs that use `TS_OAUTH_*` / `CLOUDFLARE_*` declare `environment: production`; third-party actions are pinned by commit SHA and wrangler by exact version. Restricting the environment to `main` and branch protection need a paid GitHub plan for a private repo (SETUP "H1"). Trade-off: `deploy` is in the docker group, i.e. root-equivalent (RUNBOOK "Deploy trust model").
   - **Web apps** (`deploy-web.yml`):
     - GitHub Actions builds `pos-web` and `liff-web` with `VITE_API_BASE_URL=https://$API_HOST`;
     - `cloudflare/wrangler-action` uploads them (`pages deploy`) to the Pages projects `sds-pos` and `sds-order`;
-    - it uses a scoped API token (Pages: Edit), not the Pages Git integration.
+    - it uses a scoped API token (Pages: Edit), not the Pages Git integration;
+    - each app ships `public/_headers` (CSP with `frame-ancestors 'none'`, `nosniff`, referrer policy); the workflow fills in the API host from `API_HOST` and refuses to deploy a leftover placeholder.
   - **API** (`deploy-api.yml`). The VM never builds and never holds the repo:
     1. build `ghcr.io/omeieee/pos-api:<sha>` (and the backup image) for amd64 in Actions, and push to GHCR;
     2. join the tailnet as `tag:ci` (Tailscale OAuth client). SSH as `deploy` through **Tailscale SSH**, so there is no deploy key and no public port 22;
     3. copy the compose bundle (`infra/compose/*`) to `/opt/sds`;
     4. `docker login ghcr.io` on the VM with the job's read-only token, `pull`, then `logout` at the end (no registry credentials stay on the VM);
-    5. **pre-deploy backup** (`predeploy/` prefix), then run migrations (`docker compose run --rm api node dist/migrate.js`) before the new API starts;
+    5. **pre-deploy backup** (`predeploy/` prefix; skipped only on the very first deploy, and the deploy stops if it fails), then run migrations (`docker compose run --rm api node dist/migrate.js`, heap-capped like the API) before the new API starts;
     6. `docker compose up -d --wait`, and check that the running image is the new tag and healthy;
     7. smoke-test `https://$API_HOST/healthz` from the runner;
-    8. on failure, roll back to `PREVIOUS_API_IMAGE` (kept in `/opt/sds/.deploy-state`).
+    8. on failure **after the new image was switched in** (`deploy.sh apply` exit 10, or a failed smoke test), roll back to `PREVIOUS_API_IMAGE` (kept in `/opt/sds/.deploy-state`); a failure before the switch changes nothing and is not rolled back.
   - **External check** (`external-check.yml`, weekly + manual): valid certificate on 443, http→https, and only 80/443 reachable from the internet.
 - **Migrations:** forward-only, and never edit one that has already been applied. Keep them backward-compatible across one deploy (expand → migrate → contract).
 - **Rollback:** `deploy.sh rollback` on the VM (previous image), or run `deploy-api.yml` with `image_tag=<older sha>`. Migrations are not reverted, and a database restore is needed only if a migration was destructive (avoid those). See [infra/RUNBOOK.md](../infra/RUNBOOK.md#rollback).
@@ -137,7 +143,7 @@ The layout depends on the VM shape (**Q1**):
 |---|---|
 | Continuously | Auto-restart, health checks, uptime/backup/error alerts, quota tracker |
 | Weekly (5 min) | Look over the alerts and Sentry digest, and check that the OS patched itself |
-| Monthly (30 min) | Restore drill · dependency updates (Renovate/Dependabot PRs) · LINE quota trend · disk trend |
+| Monthly (30 min) | Restore drill · Docker/Tailscale apt upgrade, Caddy image pull, backup image rebuild (RUNBOOK "Monthly patching") · dependency updates (Renovate/Dependabot PRs) · LINE quota trend · disk trend |
 | Quarterly | Re-check free-tier terms (this file) · access review (devices, staff) · rotate secrets · update tax rules if the year changed |
 | Yearly | Renew the domain · add the new tax-year rules file · clean up per the PDPA retention policy |
 
