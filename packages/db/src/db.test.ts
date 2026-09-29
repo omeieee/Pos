@@ -1,11 +1,11 @@
 import type { PGlite } from '@electric-sql/pglite';
 import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
-import { createPgliteDb, type Db } from './client.ts';
+import { createPgliteDb, type PgliteDb } from './pglite.ts';
 import { SYNCED_TABLES } from './schema.ts';
 import { seed } from './seed.ts';
 
-let db: Db;
+let db: PgliteDb;
 let client: PGlite;
 
 beforeAll(async () => {
@@ -35,6 +35,25 @@ describe('migrations on an empty Postgres', () => {
   test('run on PostgreSQL 17 (same major as Supabase)', async () => {
     const [v] = await rows<{ server_version: string }>(sql`show server_version`);
     expect(v?.server_version).toMatch(/^17\./);
+  });
+
+  test('our functions pin search_path (Supabase lint 0011)', async () => {
+    const fns = await rows<{ proname: string; proconfig: string[] | null }>(
+      sql`select proname, proconfig from pg_proc
+          where pronamespace = 'public'::regnamespace
+            and proname in ('uuid_generate_v7', 'set_sync_columns', 'forbid_change')
+          order by proname`,
+    );
+    expect(fns.map((f) => f.proname)).toEqual([
+      'forbid_change',
+      'set_sync_columns',
+      'uuid_generate_v7',
+    ]);
+    for (const f of fns) {
+      expect(f.proconfig ?? []).toContainEqual(
+        expect.stringMatching(/^search_path=public,\s*pg_temp$/),
+      );
+    }
   });
 
   test('create every table in schema v1', async () => {

@@ -4,7 +4,8 @@
   "version": "0.0.0",
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./pglite": "./src/pglite.ts"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
@@ -14,9 +15,11 @@
   "dependencies": {
     "@electric-sql/pglite": "0.4.6",
     "@sds/shared": "workspace:*",
-    "drizzle-orm": "0.45.3"
+    "drizzle-orm": "0.45.3",
+    "postgres": "^3.4.9"
   },
   "devDependencies": {
+    "@electric-sql/pglite-socket": "0.1.6",
     "@sds/config": "workspace:*",
     "drizzle-kit": "0.31.11"
   }

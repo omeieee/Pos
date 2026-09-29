@@ -1,0 +1,25 @@
+# Secrets never enter the build context.
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+*.key
+*.key.pub
+*.pem
+
+# Not needed to build the API image.
+.git
+.github
+.claude
+.turbo
+**/.turbo
+node_modules
+**/node_modules
+**/dist
+coverage
+design
+docs
+infra
+*.local.html

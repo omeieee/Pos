@@ -1,0 +1,1 @@
+- [pnpm release-age gate](pnpm-release-age.md) — pnpm add may silently add minimumReleaseAgeExclude; revert yaml+lock, pin older
