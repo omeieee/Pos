@@ -1,6 +1,6 @@
 # Progress Log
 
-**Current phase:** P2 — Cloud skeleton ([checkpoint](checkpoints/PHASE-02-cloud-skeleton.md)), status **in progress: first deploy live; QA fixes written, awaiting owner decisions, commit and redeploy**.
+**Current phase:** P2 — Cloud skeleton ([checkpoint](checkpoints/PHASE-02-cloud-skeleton.md)), status **in progress: first deploy live; QA fixes committed, redeploy (first automatic deploy) pending**.
 **Previous:** P1 — Foundation ✅ Done 2026-09-29 ([checkpoint](checkpoints/PHASE-01-foundation.md)).
 
 > **Handoff for the next session (read first):**
@@ -17,14 +17,14 @@ Newest entries first. Add entries with `/checkpoint`. Each entry covers what cha
 
 ---
 
-## 2026-09-30 · P2 · QA review and fixes (uncommitted, not yet deployed)
+## 2026-09-30 · P2 · QA review and fixes (committed, deploy pending)
 - **Summary:** qa-security-reviewer reviewed P2: exit criteria not met, 1 High + 4 Medium. Fixed by backend-engineer (db/api) and devops-engineer (infra/CI/docs).
 - **Changed:** TLS forced for remote DB connections (`postgresOptions`), prod config rejects `sslmode=disable`; Drizzle params scrubbed from logs/Sentry (`apps/api/src/redact.ts`), `sendDefaultPii:false`; CORS methods incl. PATCH; `seed` moved to `@sds/db/seed` (test PromptPay ID gone from the API bundle); deploy workflows now run after green CI on `main` (`workflow_run`), use the CI-verified sha, `environment: production`, actions pinned by SHA, wrangler pinned; pre-deploy backup skipped only on the true first deploy; Caddyfile change detection + security headers; Pages `_headers`; drill runs on tmpfs and fails on empty restored tables; backup heartbeat 30 min, healthchecks URL no longer logged; docs 05 §6, RUNBOOK, SETUP (H1/H2 owner hardening) updated.
 - **Verification (run this session, combined tree):** `pnpm lint` 95 files clean, `pnpm build --force` 11/11, `pnpm test --force` 8/8 (api 34, db 43, shared 466, promptpay 1276, ui 36, i18n 20, web 1+1). Agent-run: shellcheck + actionlint clean, stub-docker harness 40 checks, deploy `plan` script 18 cases, Caddy headers and CSP in Chrome. **Not run:** the workflows on GitHub, anything on the VM, TLS handshake to Supabase, `run drill` on a real Docker daemon.
 - **Decisions:** none recorded. Pending: `verify-full` against Supabase CA (needs a decision entry); Tailscale `check` for `ubuntu`/`deploy`; GitHub plan for environment protection.
 - **Open issues:** live `DATABASE_URL` still lacks `sslmode` (code forces TLS anyway); Supabase "Enforce SSL" off; the merge-to-main auto deploy and rollback are still untried; LIFF CSP needs a real-LINE-device check in P4; F5 (least-privilege OCI key) optional.
-- **Next:** owner decisions → commit → first automatic deploy (check `/readyz` = first TLS handshake, Caddy restart blip) → rollback test → close P2.
-- **Commit:** uncommitted
+- **Next:** owner decisions → first automatic deploy (check `/readyz` = first TLS handshake, Caddy restart blip) → rollback test → close P2.
+- **Commit:** 25f0e62 (db/api), 4681e59 (web headers), 341a685 (infra/CI), 5dfa646 + this entry (docs)
 
 ## 2026-09-29 · P2 · First deploy live; restore drill passed
 - **Summary:** the owner ran Deploy API and Deploy web apps (green) and set the UptimeRobot monitor. Claude verified the result from outside and on the VM, then ran the restore drill with the age key piped from the USB drive over stdin (key never printed or stored).

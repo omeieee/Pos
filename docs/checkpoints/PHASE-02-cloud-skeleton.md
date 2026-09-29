@@ -35,4 +35,4 @@ Put the 24/7 platform in place before features: a minimal API and app shells are
 - 2026-09-29 · Code complete; waiting on owner setup Round 1 ([PROGRESS](../PROGRESS.md))
 - 2026-09-29 · Setup Rounds 1–2 done; VM ready for first deploy ([PROGRESS](../PROGRESS.md))
 - 2026-09-29 · First deploy live; restore drill passed ([PROGRESS](../PROGRESS.md))
-- 2026-09-30 · QA review and fixes, uncommitted ([PROGRESS](../PROGRESS.md))
+- 2026-09-30 · QA review and fixes committed (25f0e62..5dfa646) ([PROGRESS](../PROGRESS.md))
