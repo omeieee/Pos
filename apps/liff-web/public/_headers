@@ -1,0 +1,16 @@
+# Cloudflare Pages response headers for the customer app (sds-order.pages.dev),
+# which LINE opens in its in-app browser as a LIFF app.
+# Vite copies this file to dist/, and Pages reads it from there.
+# __API_HOST__ is replaced with the API hostname (repo variable API_HOST) by
+# .github/workflows/deploy-web.yml after the build, and the deploy fails if it
+# is still there.
+# TODO(P4, line-integration-engineer): the LINE origins below (LIFF SDK script,
+# api/access/liff.line.me, *.line-scdn.net images and SDK) are from the LIFF
+# docs, NOT yet checked on a real LINE device. Load the app inside LINE, watch
+# for CSP violations, and tighten or extend this list.
+# Referrer stays "strict-origin-when-cross-origin" (not no-referrer) so the
+# LINE login redirect and LIFF SDK are not surprised.
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Content-Security-Policy: default-src 'self'; script-src 'self' https://static.line-scdn.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://__API_HOST__ https://*.line-scdn.net https://*.line.me; font-src 'self'; connect-src 'self' https://__API_HOST__ wss://__API_HOST__ https://*.line.me https://*.line-scdn.net; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self' https://*.line.me; frame-ancestors 'none'

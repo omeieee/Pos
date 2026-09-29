@@ -1,0 +1,10 @@
+# Cloudflare Pages response headers for the staff app (sds-pos.pages.dev).
+# Vite copies this file to dist/, and Pages reads it from there.
+# __API_HOST__ is replaced with the API hostname (repo variable API_HOST) by
+# .github/workflows/deploy-web.yml after the build, and the deploy fails if it
+# is still there. Add anything new the app loads (fonts, CDNs, Sentry ingest,
+# push services) to the matching directive below, or the browser will block it.
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: no-referrer
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://__API_HOST__; font-src 'self'; connect-src 'self' https://__API_HOST__ wss://__API_HOST__; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
