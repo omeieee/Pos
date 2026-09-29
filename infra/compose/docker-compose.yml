@@ -1,0 +1,106 @@
+# SDS POS production stack on the Oracle E2.1.Micro (1 GB RAM, Path B).
+# Lives at /opt/sds on the VM; CI copies it there (deploy-api.yml).
+#
+# Always run compose through ./dc (adds --env-file .deploy-state, which holds
+# the image tags written by deploy.sh). Secrets and settings: /opt/sds/.env.
+#
+# Postgres is Supabase (session pooler), so no database container here.
+
+name: sds
+
+x-logging: &logging
+  driver: local
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  api:
+    image: ${API_IMAGE:?API_IMAGE is set by deploy.sh in .deploy-state - use ./dc}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL missing in .env}
+      CORS_ORIGINS: ${CORS_ORIGINS:?CORS_ORIGINS missing in .env}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      GIT_SHA: ${GIT_SHA:-unknown}
+    # Reachable only by caddy on the internal network; nothing published.
+    expose:
+      - "3000"
+    networks:
+      - edge
+    # The image's CMD caps the V8 heap at 384 MB (apps/api/Dockerfile).
+    mem_limit: 512m
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/healthz').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    logging: *logging
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      API_HOST: ${API_HOST:?API_HOST missing in .env}
+      ACME_EMAIL: ${ACME_EMAIL:?ACME_EMAIL missing in .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Certificates survive restarts/redeploys (avoid ACME rate limits).
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - edge
+    mem_limit: 96m
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:2019/config/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging: *logging
+
+  backup:
+    image: ${BACKUP_IMAGE:?BACKUP_IMAGE is set by deploy.sh in .deploy-state - use ./dc}
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL missing in .env}
+      AGE_RECIPIENT: ${AGE_RECIPIENT:?AGE_RECIPIENT missing in .env}
+      OCI_S3_NAMESPACE: ${OCI_S3_NAMESPACE:?OCI_S3_NAMESPACE missing in .env}
+      OCI_S3_REGION: ${OCI_S3_REGION:-ap-singapore-1}
+      OCI_S3_BUCKET: ${OCI_S3_BUCKET:?OCI_S3_BUCKET missing in .env}
+      OCI_S3_ACCESS_KEY_ID: ${OCI_S3_ACCESS_KEY_ID:?OCI_S3_ACCESS_KEY_ID missing in .env}
+      OCI_S3_SECRET_ACCESS_KEY: ${OCI_S3_SECRET_ACCESS_KEY:?OCI_S3_SECRET_ACCESS_KEY missing in .env}
+      HC_PING_URL: ${HC_PING_URL:-}
+    # Own network: outbound only, cannot reach the api container.
+    networks:
+      - jobs
+    mem_limit: 256m
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/healthcheck"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    logging: *logging
+
+networks:
+  edge: {}
+  jobs: {}
+
+volumes:
+  caddy_data: {}
+  caddy_config: {}

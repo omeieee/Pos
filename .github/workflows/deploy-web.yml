@@ -1,0 +1,92 @@
+name: Deploy web apps
+
+# Builds apps/pos-web and apps/liff-web and uploads them to Cloudflare Pages
+# (Direct Upload): sds-pos (staff) and sds-order (LINE customer app).
+# Skipped (not failed) until the owner sets the repo variable WEB_DEPLOY_ENABLED=true.
+# The API URL is derived from the single repo variable API_HOST.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - apps/pos-web/**
+      - apps/liff-web/**
+      - packages/**
+      - package.json
+      - pnpm-lock.yaml
+      - turbo.json
+      - .github/workflows/deploy-web.yml
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-web
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    if: vars.WEB_DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      VITE_API_BASE_URL: https://${{ vars.API_HOST }}
+    steps:
+      - name: Check repo variables
+        run: |
+          [ -n "${{ vars.API_HOST }}" ] || { echo "::error::repo variable API_HOST is empty"; exit 1; }
+
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build pos-web and liff-web
+        run: pnpm exec turbo run build --filter=./apps/pos-web --filter=./apps/liff-web
+
+      - name: Check build output
+        run: |
+          test -f apps/pos-web/dist/index.html
+          test -f apps/liff-web/dist/index.html
+          # The API URL should be baked in (catches Turbo strict-env dropping it).
+          for app in pos-web liff-web; do
+            grep -rqF "${VITE_API_BASE_URL}" "apps/${app}/dist" \
+              || echo "::warning::${app}: VITE_API_BASE_URL not found in the bundle (check turbo.json env)"
+          done
+
+      # Wrangler is installed in an empty folder, not into the pnpm workspace.
+      - name: Prepare wrangler folder
+        run: |
+          mkdir -p .cf-deploy
+          echo '{"private":true}' > .cf-deploy/package.json
+
+      - name: Create the Pages projects if missing (one-time)
+        working-directory: .cf-deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          list="$(npx --yes wrangler@4 pages project list)"
+          for p in sds-pos sds-order; do
+            if printf '%s\n' "$list" | grep -qw "$p"; then
+              echo "$p exists"
+            else
+              npx --yes wrangler@4 pages project create "$p" --production-branch=main
+            fi
+          done
+
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          packageManager: npm
+          workingDirectory: .cf-deploy
+          command: |
+            pages deploy ../apps/pos-web/dist --project-name=sds-pos --branch=main --commit-hash=${{ github.sha }}
+            pages deploy ../apps/liff-web/dist --project-name=sds-order --branch=main --commit-hash=${{ github.sha }}

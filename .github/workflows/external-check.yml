@@ -1,0 +1,70 @@
+name: External check
+
+# Checked from OUTSIDE (a GitHub runner on the internet), the P2 exit criterion:
+#   - https://API_HOST/healthz answers 2xx with a valid, trusted certificate
+#   - http:// redirects to https://
+#   - only 80/443 are reachable; 22, 3000, 5432, 2019 are NOT
+# Weekly on Monday 09:17 Asia/Bangkok, or by hand.
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 2 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    # Quiet until the first deploy is enabled, so Monday runs don't fail early.
+    if: vars.DEPLOY_ENABLED == 'true' && vars.API_HOST != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      API_HOST: ${{ vars.API_HOST }}
+    steps:
+      - name: Resolve public IP
+        run: |
+          set -euo pipefail
+          ip="$(getent ahostsv4 "${API_HOST}" | awk 'NR == 1 { print $1 }')"
+          [ -n "$ip" ] || { echo "::error::${API_HOST} does not resolve"; exit 1; }
+          echo "PUBLIC_IP=${ip}" >> "$GITHUB_ENV"
+          echo "${API_HOST} -> ${ip}"
+
+      - name: HTTPS /healthz with a valid certificate
+        run: |
+          set -euo pipefail
+          # curl verifies the chain and hostname by default; no -k anywhere.
+          curl -fsS --max-time 15 "https://${API_HOST}/healthz"; echo
+          cert="$(echo | openssl s_client -connect "${PUBLIC_IP}:443" -servername "${API_HOST}" 2>/dev/null \
+            | openssl x509 -noout -issuer -enddate)"
+          echo "$cert"
+          echo | openssl s_client -connect "${PUBLIC_IP}:443" -servername "${API_HOST}" 2>/dev/null \
+            | openssl x509 -noout -checkend 1209600 \
+            || { echo "::error::certificate expires within 14 days"; exit 1; }
+          if ! printf '%s' "$cert" | grep -q "Let's Encrypt"; then
+            echo "::warning::certificate issuer is not Let's Encrypt (Caddy may have fallen back to ZeroSSL)"
+          fi
+
+      - name: HTTP redirects to HTTPS
+        run: |
+          set -euo pipefail
+          out="$(curl -sS -o /dev/null --max-time 15 -w '%{http_code} %{redirect_url}' "http://${API_HOST}/healthz")"
+          echo "$out"
+          case "$out" in
+            30[178]\ https://*) echo "redirect OK" ;;
+            *) echo "::error::http:// does not redirect to https://"; exit 1 ;;
+          esac
+
+      - name: Only 80/443 reachable
+        run: |
+          set -uo pipefail
+          open_port() { timeout 6 bash -c "exec 3<>/dev/tcp/${PUBLIC_IP}/$1" 2>/dev/null; }
+          bad=0
+          for p in 80 443; do
+            if open_port "$p"; then echo "port $p open (expected)"; else echo "::error::port $p closed"; bad=1; fi
+          done
+          for p in 22 3000 5432 2019; do
+            if open_port "$p"; then echo "::error::port $p is reachable from the internet"; bad=1; else echo "port $p closed (expected)"; fi
+          done
+          exit "$bad"

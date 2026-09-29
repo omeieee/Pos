@@ -1,0 +1,38 @@
+# Caddy in front of the API (D-10 interim: sslip.io hostname + ACME cert).
+# API_HOST / ACME_EMAIL come from /opt/sds/.env via docker-compose.yml.
+#
+# Rate limiting: the stock caddy image has no rate-limit module (it needs a
+# custom xcaddy build). Per-route rate limits live in the API
+# (@fastify/rate-limit); Caddy enforces body size and header timeouts.
+
+{
+	email {$ACME_EMAIL}
+	servers {
+		# No HTTP/3: UDP 443 is not opened in the OCI security list.
+		protocols h1 h2
+		timeouts {
+			read_header 10s
+			idle 2m
+		}
+	}
+}
+
+{$API_HOST} {
+	request_body {
+		# Slip images are resized client-side; 6 MB leaves headroom.
+		max_size 6MB
+	}
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+		-Server
+	}
+	# WebSocket upgrades pass through reverse_proxy unchanged.
+	reverse_proxy api:3000
+	log {
+		output stdout
+		format json
+	}
+}

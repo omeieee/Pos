@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# docker compose for /opt/sds with both env files. Usage: ./dc ps | ./dc logs api | ...
+set -euo pipefail
+cd "$(dirname "$0")"
+exec docker compose --env-file .env --env-file .deploy-state "$@"

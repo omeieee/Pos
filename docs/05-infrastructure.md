@@ -74,7 +74,7 @@ The layout depends on the VM shape (**Q1**):
       IdentitiesOnly yes
   ```
 - **Keep the key's Windows permissions owner-only.** It is currently owner read-only, which is correct. Windows OpenSSH refuses keys that other accounts can read.
-- **Never commit, print or paste the private key** (docs, chat, CI logs). Tools refer to it by path only. CI deploys (P2) use a **separate deploy key**, not this one.
+- **Never commit, print or paste the private key** (docs, chat, CI logs). Tools refer to it by path only. CI deploys (P2) sign in with **Tailscale SSH** as `deploy` (`tag:ci`), so no key is stored in GitHub; this key is never used by CI.
 
 - [ ] Record public IP, login user, shape, OCPU/RAM, region, availability domain and OCID in `infra/oracle/README.md`. These are not secrets; the key is.
 - [ ] Upgrade the account to PAYG and add a budget alert (recommended; the owner currently stays on **Free Tier**). Confirm the shapes stay Always Free.
@@ -94,7 +94,7 @@ The layout depends on the VM shape (**Q1**):
 ## 7. Backups and disaster recovery
 - **Database:**
   - `pg_dump -Fc` every hour during opening hours, plus a nightly full dump;
-  - each dump is encrypted with `age`, uploaded to **R2**, and copied to **OCI Object Storage**;
+  - each dump is encrypted with `age` and uploaded to **OCI Object Storage** (owner's choice 2026-09-29: no R2; same-provider risk accepted);
   - retention: hourly for 48 h, daily for 30 days, monthly for 12 months;
   - every run pings healthchecks.io, so a missed backup raises an alert.
 - **Files:** menu photos and slips are stored in R2 (lifecycle rule deletes slips after 90 days). Nothing important lives only on the VM's disk.
@@ -114,17 +114,23 @@ The layout depends on the VM shape (**Q1**):
 
 ## 9. CI/CD
 - **On a pull request:** install (pnpm cache) → Biome → typecheck → unit tests → build (Turborepo, only what changed).
-- **On merge to `main`:**
-  - web apps build and deploy through **Cloudflare Pages** Git integration, with preview URLs for PRs;
-  - the API is deployed by a GitHub Actions job over SSH/Tailscale to the VM:
-    1. `git pull`;
-    2. `docker compose build` (Path A) or `pull` (Path B);
-    3. run migrations;
-    4. `up -d`;
-    5. smoke-test `/healthz`;
-    6. report the result.
+- **On merge to `main`** (P2, as built; owner setup in [infra/SETUP.md](../infra/SETUP.md)):
+  - **Web apps** (`deploy-web.yml`):
+    - GitHub Actions builds `pos-web` and `liff-web` with `VITE_API_BASE_URL=https://$API_HOST`;
+    - `cloudflare/wrangler-action` uploads them (`pages deploy`) to the Pages projects `sds-pos` and `sds-order`;
+    - it uses a scoped API token (Pages: Edit), not the Pages Git integration.
+  - **API** (`deploy-api.yml`). The VM never builds and never holds the repo:
+    1. build `ghcr.io/omeieee/pos-api:<sha>` (and the backup image) for amd64 in Actions, and push to GHCR;
+    2. join the tailnet as `tag:ci` (Tailscale OAuth client). SSH as `deploy` through **Tailscale SSH**, so there is no deploy key and no public port 22;
+    3. copy the compose bundle (`infra/compose/*`) to `/opt/sds`;
+    4. `docker login ghcr.io` on the VM with the job's read-only token, `pull`, then `logout` at the end (no registry credentials stay on the VM);
+    5. **pre-deploy backup** (`predeploy/` prefix), then run migrations (`docker compose run --rm api node dist/migrate.js`) before the new API starts;
+    6. `docker compose up -d --wait`, and check that the running image is the new tag and healthy;
+    7. smoke-test `https://$API_HOST/healthz` from the runner;
+    8. on failure, roll back to `PREVIOUS_API_IMAGE` (kept in `/opt/sds/.deploy-state`).
+  - **External check** (`external-check.yml`, weekly + manual): valid certificate on 443, http→https, and only 80/443 reachable from the internet.
 - **Migrations:** forward-only, and never edit one that has already been applied. Keep them backward-compatible across one deploy (expand → migrate → contract).
-- **Rollback:** redeploy the previous git tag, with a database restore only if a migration was destructive (avoid those).
+- **Rollback:** `deploy.sh rollback` on the VM (previous image), or run `deploy-api.yml` with `image_tag=<older sha>`. Migrations are not reverted, and a database restore is needed only if a migration was destructive (avoid those). See [infra/RUNBOOK.md](../infra/RUNBOOK.md#rollback).
 
 ## 10. Running it 24/7 without babysitting
 | When | What (most of it automated) |

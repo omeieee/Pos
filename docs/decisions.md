@@ -133,7 +133,7 @@ This is the **single source of truth for technology and design choices**. Other 
 
 ## D-18 · Backups and monitoring — Proposed
 - **Decision:**
-  - Hourly `pg_dump` during opening hours plus a nightly full dump. Dumps are encrypted with `age` and copied to Cloudflare R2, with a second copy in OCI Object Storage. A healthchecks.io ping fires if a backup is missed.
+  - Hourly `pg_dump` during opening hours plus a nightly full dump. Dumps are encrypted with `age` and stored in OCI Object Storage (see the status note: R2 dropped). A healthchecks.io ping fires if a backup is missed.
   - An external uptime check on `/healthz`, and Sentry's free tier for errors.
   - A restore drill every month.
 - **Targets:** at most 1 hour of data lost (RPO), and back online within 2 hours (RTO).

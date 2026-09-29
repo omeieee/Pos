@@ -36,7 +36,7 @@ Recorded 2026-09-29 from the owner's OCI console screenshots.
   - add a 2 GB swap file;
   - cap the Node heap (e.g. `--max-old-space-size=384`);
   - build Docker images in GitHub Actions (amd64) and pull them from GHCR. Don't build on the VM.
-- **Free Tier idle reclamation:** a Micro VM counts as idle if, over 7 days, CPU p95 < 20% and network < 20%. A light POS load may meet that. With Path B the VM holds **no data** (the database is on Supabase and backups are in R2), so if the VM is reclaimed, rebuilding it is a short scripted job rather than a data loss. The clean fix is still upgrading to PAYG, which costs ฿0 within Always Free; that is the owner's decision.
+- **Free Tier idle reclamation:** a Micro VM counts as idle if, over 7 days, CPU p95 < 20% and network < 20%. A light POS load may meet that. With Path B the VM holds **no data** (the database is on Supabase and backups are in OCI Object Storage), so if the VM is reclaimed, rebuilding it is a short scripted job (`infra/oracle/bootstrap.sh`, see `infra/RUNBOOK.md`) rather than a data loss. The clean fix is still upgrading to PAYG, which costs ฿0 within Always Free; that is the owner's decision.
 
 ## SSH config entry (optional; add to `~/.ssh/config`)
 ```

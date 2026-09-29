@@ -1,0 +1,1 @@
+- [Local lint tools](reference_local_lint_tools.md) — no docker/shellcheck/actionlint locally; download to scratchpad; use Git Bash for ssh piping

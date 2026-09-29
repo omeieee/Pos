@@ -1,0 +1,231 @@
+name: Deploy API
+
+# Build the API + backup images in CI (the 1 GB VM never builds), push to GHCR,
+# then deploy to the Oracle VM over Tailscale SSH (no SSH key, no public port).
+# Skipped (not failed) until the owner sets the repo variable DEPLOY_ENABLED=true.
+# Setup: infra/SETUP.md. Rollback/redeploy: infra/RUNBOOK.md.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - apps/api/**
+      - packages/**
+      - infra/compose/**
+      - infra/backup/**
+      - package.json
+      - pnpm-lock.yaml
+      - .github/workflows/deploy-api.yml
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Redeploy an existing pos-api tag (a full git sha) instead of building this commit"
+        required: false
+        default: ""
+
+concurrency:
+  group: deploy-api
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  API_REPO: ghcr.io/${{ github.repository_owner }}/pos-api
+  BACKUP_REPO: ghcr.io/${{ github.repository_owner }}/pos-backup
+
+jobs:
+  build:
+    if: vars.DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      api_image: ${{ steps.tags.outputs.api_image }}
+      backup_image: ${{ steps.tags.outputs.backup_image }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve image tags
+        id: tags
+        env:
+          INPUT_TAG: ${{ inputs.image_tag }}
+        run: |
+          set -euo pipefail
+          if [ -n "${INPUT_TAG}" ]; then
+            if ! printf '%s' "${INPUT_TAG}" | grep -Eq '^[0-9a-f]{40}$'; then
+              echo "::error::image_tag must be a full 40-char git sha"; exit 1
+            fi
+            echo "api_image=${API_REPO}:${INPUT_TAG}" >> "$GITHUB_OUTPUT"
+            echo "build_api=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "api_image=${API_REPO}:${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+            echo "build_api=true" >> "$GITHUB_OUTPUT"
+          fi
+          # Backup image tag = hash of its source files, so an unchanged
+          # backup image is not rebuilt or re-pushed on every deploy.
+          hash="$(git ls-files -s infra/backup | sha256sum | cut -c1-16)"
+          echo "backup_image=${BACKUP_REPO}:src-${hash}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push API image
+        if: steps.tags.outputs.build_api == 'true'
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: apps/api/Dockerfile
+          platforms: linux/amd64
+          push: true
+          provenance: false
+          tags: |
+            ${{ steps.tags.outputs.api_image }}
+            ${{ env.API_REPO }}:latest
+          cache-from: type=gha,scope=pos-api
+          cache-to: type=gha,mode=max,scope=pos-api
+
+      - name: Check that a redeployed tag exists
+        if: steps.tags.outputs.build_api != 'true'
+        run: docker buildx imagetools inspect "${{ steps.tags.outputs.api_image }}" > /dev/null
+
+      - name: Does the backup image already exist?
+        id: backup_exists
+        run: |
+          if docker buildx imagetools inspect "${{ steps.tags.outputs.backup_image }}" > /dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build and push backup image
+        if: steps.backup_exists.outputs.exists != 'true'
+        uses: docker/build-push-action@v7
+        with:
+          context: infra/backup
+          platforms: linux/amd64
+          push: true
+          provenance: false
+          tags: |
+            ${{ steps.tags.outputs.backup_image }}
+            ${{ env.BACKUP_REPO }}:latest
+          cache-from: type=gha,scope=pos-backup
+          cache-to: type=gha,mode=max,scope=pos-backup
+
+      # Private GHCR storage is limited on GitHub Free; keep a short history.
+      # Needs the repo to have the Admin role on each package (SETUP.md);
+      # best effort so a missing permission never blocks a deploy.
+      - name: Prune old pos-api versions
+        continue-on-error: true
+        uses: actions/delete-package-versions@v5
+        with:
+          package-name: pos-api
+          package-type: container
+          min-versions-to-keep: 10
+      - name: Prune old pos-backup versions
+        continue-on-error: true
+        uses: actions/delete-package-versions@v5
+        with:
+          package-name: pos-backup
+          package-type: container
+          min-versions-to-keep: 4
+
+  deploy:
+    needs: build
+    if: vars.DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Read-only package token: this token is handed to the VM for `docker pull`.
+    permissions:
+      contents: read
+      packages: read
+    env:
+      API_IMAGE: ${{ needs.build.outputs.api_image }}
+      BACKUP_IMAGE: ${{ needs.build.outputs.backup_image }}
+      API_HOST: ${{ vars.API_HOST }}
+      DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check repo variables
+        run: |
+          [ -n "${API_HOST}" ] || { echo "::error::repo variable API_HOST is empty"; exit 1; }
+          [ -n "${DEPLOY_HOST}" ] || { echo "::error::repo variable DEPLOY_HOST is empty"; exit 1; }
+
+      - name: Join the tailnet (ephemeral node, tag:ci)
+        uses: tailscale/github-action@v4
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+
+      - name: Resolve the VM's tailnet address
+        run: |
+          set -euo pipefail
+          ip="$(tailscale ip -4 "${DEPLOY_HOST}")"
+          echo "VM_IP=${ip}" >> "$GITHUB_ENV"
+          # Tailscale SSH authenticates by tailnet identity (ACL: tag:ci -> deploy),
+          # so no SSH key exists for CI. WireGuard already authenticates the peer.
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "Host sds-vm" "  HostName ${ip}" "  User deploy" \
+            "  StrictHostKeyChecking no" "  UserKnownHostsFile /dev/null" \
+            "  LogLevel ERROR" "  ConnectTimeout 20" > ~/.ssh/config
+          ssh sds-vm 'id -un && docker compose version'
+
+      - name: Copy compose bundle to /opt/sds
+        run: |
+          set -euo pipefail
+          tar -C infra/compose -czf - docker-compose.yml Caddyfile .env.example deploy.sh dc run-restore-drill.sh \
+            | ssh sds-vm 'tar -C /opt/sds -xzf - && chmod 755 /opt/sds/deploy.sh /opt/sds/dc /opt/sds/run-restore-drill.sh && chmod 644 /opt/sds/.env.example'
+
+      - name: Registry login on the VM (job token, read-only)
+        id: login
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_ACTOR: ${{ github.actor }}
+        run: |
+          # shellcheck disable=SC2029  # actor name expands here on purpose; token goes via stdin
+          printf '%s' "${GH_TOKEN}" | ssh sds-vm "docker login ghcr.io -u '${GH_ACTOR}' --password-stdin"
+
+      - name: Deploy (pull, pre-deploy backup, migrate, up)
+        id: apply
+        run: |
+          # shellcheck disable=SC2029  # image names expand here on purpose
+          ssh sds-vm "/opt/sds/deploy.sh apply '${API_IMAGE}' '${BACKUP_IMAGE}'"
+
+      - name: Smoke test https://API_HOST/healthz (public, through Caddy)
+        id: smoke
+        run: |
+          for i in $(seq 1 12); do
+            if curl -fsS --max-time 10 "https://${API_HOST}/healthz"; then echo; echo "smoke OK"; exit 0; fi
+            echo "attempt ${i} failed; retrying in 5s"; sleep 5
+          done
+          echo "::error::https://${API_HOST}/healthz did not answer 2xx"
+          exit 1
+
+      - name: Roll back the API on failure
+        if: failure() && steps.apply.outcome != 'skipped' && steps.login.outcome == 'success'
+        run: |
+          # shellcheck disable=SC2029
+          ssh sds-vm "/opt/sds/deploy.sh rollback '${API_IMAGE}'"
+
+      - name: Registry logout on the VM
+        if: always() && env.VM_IP != ''
+        run: ssh sds-vm 'docker logout ghcr.io' || true
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### Deploy API"
+            echo "- API image: \`${API_IMAGE}\`"
+            echo "- Backup image: \`${BACKUP_IMAGE}\`"
+            echo "- Apply: ${{ steps.apply.outcome }} · Smoke: ${{ steps.smoke.outcome }}"
+          } >> "$GITHUB_STEP_SUMMARY"
