@@ -5,7 +5,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./pglite": "./src/pglite.ts"
+    "./pglite": "./src/pglite.ts",
+    "./seed": "./src/seed.ts"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",

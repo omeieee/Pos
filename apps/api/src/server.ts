@@ -2,6 +2,7 @@ import { createDb, pingDb } from '@sds/db';
 import type { FastifyInstance } from 'fastify';
 import { buildApp } from './app.ts';
 import { ConfigError, loadConfig } from './config.ts';
+import { sentryOptions } from './redact.ts';
 
 function loadConfigOrExit() {
   try {
@@ -22,7 +23,9 @@ if (config.sentryDsn) {
   // Loaded only when configured. Inside the bundle Sentry reports errors but cannot
   // auto-instrument libraries (that needs `--import` before the app loads).
   const Sentry = await import('@sentry/node');
-  Sentry.init({ dsn: config.sentryDsn, environment: config.nodeEnv, release: config.version });
+  Sentry.init(
+    sentryOptions({ dsn: config.sentryDsn, environment: config.nodeEnv, release: config.version }),
+  );
   setup = (app) => Sentry.setupFastifyErrorHandler(app);
 }
 

@@ -2,6 +2,7 @@ import cors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
 import Fastify, { type FastifyInstance, type FastifyServerOptions } from 'fastify';
 import type { Config } from './config.ts';
+import { scrubLogArgs, serializeErr } from './redact.ts';
 
 export type AppOptions = {
   config: Pick<Config, 'corsOrigins' | 'version'>;
@@ -35,9 +36,25 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
+/** Every logger the app builds gets the redacting `err` serializer; `false` stays off. */
+function withErrRedaction(logger: AppOptions['logger'] = true): NonNullable<AppOptions['logger']> {
+  if (logger === false) return false;
+  const base = logger === true ? {} : logger;
+  return {
+    ...base,
+    serializers: { ...base.serializers, err: serializeErr },
+    hooks: {
+      ...base.hooks,
+      logMethod(args, method) {
+        method.apply(this, scrubLogArgs(args) as typeof args);
+      },
+    },
+  };
+}
+
 export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
   const app = Fastify({
-    logger: options.logger ?? true,
+    logger: withErrRedaction(options.logger),
     // Only private-network hops (Caddy on the Docker network) may set X-Forwarded-For,
     // so rate limits key on the real client IP and cannot be spoofed from outside.
     trustProxy: 'loopback, linklocal, uniquelocal',
@@ -60,6 +77,8 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
 
   await app.register(cors, {
     origin: options.config.corsOrigins.length > 0 ? options.config.corsOrigins : false,
+    // v11 defaults to GET, HEAD and POST only; PATCH (expectedVersion) must pass the preflight.
+    methods: ['GET', 'HEAD', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
   });
   await app.register(rateLimit, {
     global: false,

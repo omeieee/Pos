@@ -6,6 +6,7 @@
 import { fileURLToPath } from 'node:url';
 import { runMigrations } from '@sds/db';
 import { databaseUrlSchema } from './config.ts';
+import { redactQueryParams } from './redact.ts';
 
 const parsed = databaseUrlSchema.safeParse(process.env.DATABASE_URL);
 if (!parsed.success) {
@@ -21,7 +22,7 @@ try {
 } catch (error) {
   // Messages only (no connection string is part of them); the cause holds the Postgres error.
   const e = error as Error & { cause?: { message?: string; code?: string } };
-  console.error(`migration failed: ${e.message}`);
+  console.error(`migration failed: ${redactQueryParams(e.message)}`);
   if (e.cause?.message) console.error(`cause: ${e.cause.code ?? ''} ${e.cause.message}`);
   process.exit(1);
 }

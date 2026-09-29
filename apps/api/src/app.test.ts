@@ -77,11 +77,85 @@ describe('GET /readyz', () => {
   });
 });
 
+describe('5xx errors', () => {
+  test('return the generic error body and log no query parameters', async () => {
+    const lines: string[] = [];
+    const a = await make({
+      logger: { level: 'error', stream: { write: (line: string) => void lines.push(line) } },
+    });
+    // Built exactly like drizzle-orm's DrizzleQueryError; the values are made up.
+    a.get('/boom', async () => {
+      const sqlText = 'insert into "customers" ("phone", "note") values ($1, $2)';
+      throw Object.assign(new Error(`Failed query: ${sqlText}\nparams: 0812345678,ห้อง 1204`), {
+        query: sqlText,
+        params: ['0812345678', 'ห้อง 1204'],
+        cause: Object.assign(new Error('duplicate key'), {
+          code: '23505',
+          detail: 'Key (phone)=(0812345678) already exists.',
+        }),
+      });
+    });
+
+    const res = await a.inject({ method: 'GET', url: '/boom' });
+    expect(res.statusCode).toBe(500);
+    expect(res.json()).toEqual({
+      code: 'INTERNAL',
+      message: 'Internal server error',
+      details: {},
+    });
+
+    const log = lines.join('');
+    expect(log).toContain('Failed query: insert into');
+    expect(log).toContain('23505');
+    expect(log).not.toContain('0812345678');
+    expect(log).not.toContain('ห้อง');
+  });
+
+  test('pino copies err.message into msg when no message is given: that copy is scrubbed too', async () => {
+    const lines: string[] = [];
+    const a = await make({
+      logger: { level: 'error', stream: { write: (line: string) => void lines.push(line) } },
+    });
+    const err = new Error('Failed query: select 1\nparams: 0812345678,ห้อง 1204');
+    a.log.error(err);
+    a.log.error({ err });
+    a.log.error({ err }, err.message);
+    a.log.error(err.message);
+
+    expect(lines).toHaveLength(4);
+    for (const line of lines) {
+      expect(line).toContain('Failed query: select 1');
+      expect(line).not.toContain('0812345678');
+      expect(line).not.toContain('ห้อง');
+    }
+  });
+});
+
 describe('other routes and CORS', () => {
   test('unknown routes return 404 in the error shape', async () => {
     const res = await (await make()).inject({ method: 'GET', url: '/v1/orders' });
     expect(res.statusCode).toBe(404);
     expect(res.json()).toMatchObject({ code: 'NOT_FOUND', details: {} });
+  });
+
+  test('preflight allows PATCH, PUT and DELETE (@fastify/cors defaults to GET, HEAD, POST)', async () => {
+    const a = await make();
+    for (const method of ['PATCH', 'PUT', 'DELETE']) {
+      const res = await a.inject({
+        method: 'OPTIONS',
+        url: '/v1/orders/1',
+        headers: {
+          origin: 'https://pos.example.pages.dev',
+          'access-control-request-method': method,
+          'access-control-request-headers': 'content-type,idempotency-key',
+        },
+      });
+      expect(res.statusCode, method).toBe(204);
+      expect(res.headers['access-control-allow-origin']).toBe('https://pos.example.pages.dev');
+      expect(String(res.headers['access-control-allow-methods']).split(/,\s*/), method).toContain(
+        method,
+      );
+    }
   });
 
   test('allows only configured origins', async () => {

@@ -36,6 +36,39 @@ describe('loadConfig', () => {
     expect(() => loadConfig({ DATABASE_URL: 'mysql://x' })).toThrow(/DATABASE_URL/);
   });
 
+  describe('TLS to the database', () => {
+    const production = (url: string) => ({ NODE_ENV: 'production', DATABASE_URL: url });
+
+    test.each(['?sslmode=disable', '?sslmode=DISABLE', '?ssl=false', '?ssl=disable'])(
+      'production rejects %s, without echoing the URL',
+      (query) => {
+        let message = '';
+        try {
+          loadConfig(production(SECRET_URL + query));
+        } catch (e) {
+          expect(e).toBeInstanceOf(ConfigError);
+          message = (e as Error).message;
+        }
+        expect(message).toMatch(/DATABASE_URL/);
+        expect(message).toMatch(/TLS/);
+        expect(message).not.toContain('s3cret');
+      },
+    );
+
+    test.each(['', '?sslmode=require', '?sslmode=verify-full'])(
+      'production accepts a URL with sslmode "%s"',
+      (query) => {
+        expect(loadConfig(production(SECRET_URL + query)).databaseUrl).toBe(SECRET_URL + query);
+      },
+    );
+
+    test('outside production, sslmode=disable is allowed (local Postgres)', () => {
+      const url = `${SECRET_URL}?sslmode=disable`;
+      expect(loadConfig({ NODE_ENV: 'development', DATABASE_URL: url }).databaseUrl).toBe(url);
+      expect(loadConfig({ DATABASE_URL: url }).databaseUrl).toBe(url);
+    });
+  });
+
   test('errors never echo values', () => {
     let message = '';
     try {
