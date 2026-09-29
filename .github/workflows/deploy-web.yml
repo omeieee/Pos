@@ -4,18 +4,18 @@ name: Deploy web apps
 # (Direct Upload): sds-pos (staff) and sds-order (LINE customer app).
 # Skipped (not failed) until the owner sets the repo variable WEB_DEPLOY_ENABLED=true.
 # The API URL is derived from the single repo variable API_HOST.
+#
+# Automatic deploys run only AFTER the CI workflow finished green for a push to
+# main of this repo (workflow_run), and deploy exactly the commit CI verified
+# (head_sha, not the branch tip). Manual runs (workflow_dispatch, on main) are
+# the owner's explicit override. workflow_run ignores `paths:`, so every green
+# push to main redeploys the web apps (cheap and harmless: identical files).
 
 on:
-  push:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
     branches: [main]
-    paths:
-      - apps/pos-web/**
-      - apps/liff-web/**
-      - packages/**
-      - package.json
-      - pnpm-lock.yaml
-      - turbo.json
-      - .github/workflows/deploy-web.yml
   workflow_dispatch:
 
 concurrency:
@@ -25,20 +25,78 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  # Exact wrangler version (used by npx below and by wrangler-action). Bump on
+  # purpose, e.g. at the quarterly review, after reading its release notes.
+  WRANGLER_VERSION: "4.141.0"
+
 jobs:
+  plan:
+    # Manual: started on main. workflow_run: CI succeeded, it ran for a push
+    # (never a pull_request, so no fork code), on main, of THIS repo.
+    if: >-
+      vars.WEB_DEPLOY_ENABLED == 'true' && (
+        (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') || (
+          github.event.workflow_run.conclusion == 'success' &&
+          github.event.workflow_run.event == 'push' &&
+          github.event.workflow_run.head_branch == 'main' &&
+          github.event.workflow_run.head_repository.full_name == github.repository))
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      sha: ${{ steps.plan.outputs.sha }}
+      deploy: ${{ steps.plan.outputs.deploy }}
+    steps:
+      - name: Decide what to deploy
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          out() { echo "$1=$2" >> "$GITHUB_OUTPUT"; }
+          if [ "${EVENT}" = "workflow_dispatch" ]; then
+            out sha "${GITHUB_SHA}"; out deploy true
+            exit 0
+          fi
+          printf '%s' "${HEAD_SHA}" | grep -Eq '^[0-9a-f]{40}$' \
+            || { echo "::error::workflow_run head_sha is not a 40-char sha"; exit 1; }
+          out sha "${HEAD_SHA}"
+          # A re-run of an old CI run must not roll production back.
+          tip="$(gh api "repos/${REPO}/git/ref/heads/main" --jq .object.sha)"
+          if [ "${tip}" != "${HEAD_SHA}" ]; then
+            echo "::notice::main is now ${tip}; ${HEAD_SHA} is superseded, not deploying it"
+            out deploy false; exit 0
+          fi
+          out deploy true
+
   deploy:
-    if: vars.WEB_DEPLOY_ENABLED == 'true'
+    needs: plan
+    if: needs.plan.outputs.deploy == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # Holds the Cloudflare secrets (can publish the staff app). With a plan that
+    # supports it, restrict this environment to branch main and keep the
+    # CLOUDFLARE_* secrets in it (infra/SETUP.md).
+    environment: production
     env:
       VITE_API_BASE_URL: https://${{ vars.API_HOST }}
+      API_HOST: ${{ vars.API_HOST }}
     steps:
       - name: Check repo variables
         run: |
-          [ -n "${{ vars.API_HOST }}" ] || { echo "::error::repo variable API_HOST is empty"; exit 1; }
+          [ -n "${API_HOST}" ] || { echo "::error::repo variable API_HOST is empty"; exit 1; }
 
+      # workflow_run's github.sha is the tip of main, NOT the commit CI tested.
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+        with:
+          ref: ${{ needs.plan.outputs.sha }}
+          persist-credentials: false
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
       - uses: actions/setup-node@v4
         with:
           node-version: 24
@@ -58,6 +116,21 @@ jobs:
               || echo "::warning::${app}: VITE_API_BASE_URL not found in the bundle (check turbo.json env)"
           done
 
+      # public/_headers (CSP etc.) names the API host as __API_HOST__; fill it in
+      # from the one repo variable, and refuse to deploy a placeholder.
+      - name: Put the API host into the Pages _headers files
+        run: |
+          set -euo pipefail
+          printf '%s' "${API_HOST}" | grep -Eq '^[A-Za-z0-9.-]+$' \
+            || { echo "::error::API_HOST is not a plain hostname"; exit 1; }
+          for app in pos-web liff-web; do
+            f="apps/${app}/dist/_headers"
+            test -f "${f}" || { echo "::error::${f} missing (apps/${app}/public/_headers)"; exit 1; }
+            sed -i "s/__API_HOST__/${API_HOST}/g" "${f}"
+            if grep -q '__API_HOST__' "${f}"; then echo "::error::placeholder left in ${f}"; exit 1; fi
+            grep -qF "https://${API_HOST}" "${f}" || { echo "::error::API host not in ${f}"; exit 1; }
+          done
+
       # Wrangler is installed in an empty folder, not into the pnpm workspace.
       - name: Prepare wrangler folder
         run: |
@@ -71,22 +144,23 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           set -euo pipefail
-          list="$(npx --yes wrangler@4 pages project list)"
+          list="$(npx --yes "wrangler@${WRANGLER_VERSION}" pages project list)"
           for p in sds-pos sds-order; do
             if printf '%s\n' "$list" | grep -qw "$p"; then
               echo "$p exists"
             else
-              npx --yes wrangler@4 pages project create "$p" --production-branch=main
+              npx --yes "wrangler@${WRANGLER_VERSION}" pages project create "$p" --production-branch=main
             fi
           done
 
       - name: Deploy to Cloudflare Pages
-        uses: cloudflare/wrangler-action@v4
+        uses: cloudflare/wrangler-action@953926a2e2182532811c01a25e53647d93bf07c0 # v4.1.3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          wranglerVersion: ${{ env.WRANGLER_VERSION }}
           packageManager: npm
           workingDirectory: .cf-deploy
           command: |
-            pages deploy ../apps/pos-web/dist --project-name=sds-pos --branch=main --commit-hash=${{ github.sha }}
-            pages deploy ../apps/liff-web/dist --project-name=sds-order --branch=main --commit-hash=${{ github.sha }}
+            pages deploy ../apps/pos-web/dist --project-name=sds-pos --branch=main --commit-hash=${{ needs.plan.outputs.sha }}
+            pages deploy ../apps/liff-web/dist --project-name=sds-order --branch=main --commit-hash=${{ needs.plan.outputs.sha }}

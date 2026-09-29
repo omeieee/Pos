@@ -97,6 +97,30 @@ services:
       start_period: 30s
     logging: *logging
 
+  # One-shot tool, never started by `up` (profile "tools"): the monthly restore
+  # drill, run by /opt/sds/run-restore-drill.sh. Same image and settings as
+  # `backup`, plus two things the always-on service should not carry:
+  #  - /tmp/drill is a tmpfs, so the decrypted dump and the throwaway PGDATA
+  #    live in RAM, never on the container's disk layer (they are not "stored at
+  #    rest"; under memory pressure the kernel may still swap them to the VM's
+  #    swap file). mode 1777 = like /tmp; the script makes its own 700 dir in it.
+  #  - its own memory limit. tmpfs pages count against the container's memory:
+  #    a full 256m scratch + ~130m for postgres, pg_restore, age and rclone must
+  #    fit, so 512m here (the 2 GB swap absorbs pressure). `backup` stays at 256m.
+  # 256m is plenty for today's DB (a few MB). Supabase Free caps the DB at
+  # 500 MB, so if the drill ever stops with "No space left on device", raise size=.
+  # restart "no" and no healthcheck on purpose: it is `run --rm`, not a service.
+  drill:
+    extends:
+      service: backup
+    profiles: ["tools"]
+    restart: "no"
+    healthcheck:
+      disable: true
+    mem_limit: 512m
+    tmpfs:
+      - /tmp/drill:size=256m,mode=1777
+
 networks:
   edge: {}
   jobs: {}

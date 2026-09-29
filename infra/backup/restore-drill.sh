@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 # Restore drill. Runs inside a throwaway container of the backup image
 # (postgres:17 based), started on the VM by /opt/sds/run-restore-drill.sh:
-#   1. reads the age PRIVATE key from stdin (never written to disk, never logged)
+#   1. reads the age PRIVATE key from stdin (kept in memory only: no file, never
+#      logged, so never stored at rest)
 #   2. downloads the newest dump (or the object given as $1)
 #   3. decrypts it, starts a private Postgres 17 inside this container,
 #      restores, runs sanity queries, and compares with production
 #   4. the container is removed by `--rm` when this exits
-# Exit 0 = DRILL PASSED.
+# The decrypted dump and the throwaway PGDATA live on the tmpfs mounted at
+# /tmp/drill (compose service `drill`), i.e. in RAM. Exit 0 = PASSED or CHECK.
 set -euo pipefail
 export LC_ALL=C   # sort and join must agree on collation
 
@@ -14,7 +16,13 @@ LOG_TAG=drill
 # shellcheck source=lib.sh
 . /usr/local/lib/sds-backup/lib.sh
 
-work=/tmp/drill
+scratch=/tmp/drill
+# Refuse to run anywhere the plaintext dump could land on a disk layer.
+if [[ "$(stat -f -c %T "$scratch" 2>/dev/null)" != tmpfs ]]; then
+  log "$scratch is not a tmpfs: refusing to write the decrypted dump to disk (use /opt/sds/run-restore-drill.sh)"
+  exit 3
+fi
+work="$scratch/run"   # a subdirectory: the tmpfs mount point itself can't be removed
 sock="$work/sock"
 pgdata="$work/data"
 cleanup() {
@@ -25,7 +33,7 @@ cleanup() {
 }
 trap cleanup EXIT
 rm -rf "$work"
-mkdir -p "$sock" && chmod 700 "$work"
+mkdir -m 700 "$work" && mkdir "$sock"
 
 # --- 1. age private key from stdin -----------------------------------------
 key=""
@@ -99,9 +107,14 @@ restored_mig="$(local_psql -At -c "$mig_sql" 2>/dev/null || echo missing)"
 prod_counts="$(psql "$DATABASE_URL" -X -At -F ' ' -c "$counts_sql" 2>/dev/null || echo unavailable)"
 prod_mig="$(psql "$DATABASE_URL" -X -At -c "$mig_sql" 2>/dev/null || echo unavailable)"
 
+# Tables that are empty in the restore but not in production. Reads the joined
+# "table restored prod" lines on stdin; non-numeric cells ("-") never match.
+empty_but_in_prod() { awk '$2 == "0" && $3 ~ /^[0-9]+$/ && $3 > 0 { print $1 }'; }
+
+joined="$(join -a1 -a2 -e '-' -o '0,1.2,2.2' <(echo "$restored_counts" | sort) <(echo "$prod_counts" | sort))"
 echo
 echo "== Restored vs production (production is live, so later rows are normal) =="
-join -a1 -a2 -e '-' -o '0,1.2,2.2' <(echo "$restored_counts" | sort) <(echo "$prod_counts" | sort) \
+echo "$joined" \
   | awk 'BEGIN { printf "%-40s %12s %12s\n", "table", "restored", "prod" }
          { printf "%-40s %12s %12s\n", $1, $2, $3 }'
 echo
@@ -113,6 +126,11 @@ if [[ "$restored_mig" == "missing" ]]; then
 elif [[ "$prod_mig" != "unavailable" && "$restored_mig" != "$prod_mig" ]]; then
   log "migration count differs (a migration after this dump is fine; otherwise investigate)"
   status=CHECK
+fi
+empty_tables="$(echo "$joined" | empty_but_in_prod | tr '\n' ' ')"
+if [[ -n "$empty_tables" ]]; then
+  log "restored table(s) EMPTY while production has rows: ${empty_tables}- the dump or restore lost data; if a table only got its first rows after this dump, re-run with a newer object"
+  status=FAILED
 fi
 restored_tables="$(echo "$restored_counts" | awk '{ print $1 }' | sort)"
 prod_tables="$(echo "$prod_counts" | awk '{ print $1 }' | sort)"

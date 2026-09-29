@@ -38,14 +38,18 @@ Admin console → **Access controls** → replace the policy with the one below 
     { "src": ["tag:ci"], "dst": ["tag:server"], "ip": ["tcp:22"] }
   ],
   "ssh": [
-    // you: ubuntu (admin) or deploy on the server
-    { "action": "accept", "src": ["autogroup:member"], "dst": ["tag:server"], "users": ["ubuntu", "deploy"] },
-    // CI: only the deploy user, no human check (it runs unattended)
+    // you: ubuntu (sudo = root) or deploy (docker group = root-equivalent) on the
+    // server. "check" makes Tailscale ask you to re-confirm in the browser every
+    // 12 h, so a stolen, logged-in laptop is not a standing root shell.
+    { "action": "check", "src": ["autogroup:member"], "dst": ["tag:server"], "users": ["ubuntu", "deploy"] },
+    // CI: only the deploy user, no human check (it runs unattended): must stay "accept"
     { "action": "accept", "src": ["tag:ci"], "dst": ["tag:server"], "users": ["deploy"] }
   ]
 }
 ```
-For extra safety you can change your own rule to `"action": "check"`. Tailscale will then ask you to re-confirm in the browser every 12 h. The CI rule must stay `accept`.
+- With `check`, the first `ssh pos-ts` after 12 h prints a URL. Open it in the browser, approve, and the command continues. Scripts and Claude sessions that use SSH hit the same prompt.
+- If you would rather have no prompts, set your own rule to `"accept"`; then anyone holding your logged-in laptop is root on the VM. The CI rule must stay `accept` either way.
+- **This file is documentation: the live policy changes only when you paste it into the admin console and Save.** If you set up the policy earlier with `accept`, do that now (owner step, once).
 
 **Tell Claude:** "Tailscale policy saved".
 
@@ -77,7 +81,7 @@ Leave the port 22 rule for now; it is removed in step 2.6.
 3. **Customer Secret Key:** profile → **My profile** → **Customer secret keys** → **Generate secret key**, name `sds-backup`.
    - The **secret** is shown only once. Put it straight into your editor for `/opt/sds/.env` (step 2.7), or into a text file on the USB drive.
    - The **Access key** appears in the list afterwards.
-   - This key can use Object Storage only, but with **your** permissions. Optional hardening (later): a dedicated IAM user limited to this bucket.
+   - This key can use Object Storage only, but with **your** permissions (it could delete every backup if the VM were compromised). Optional hardening: "H2" at the end of this file.
 
 **Tell Claude:** "bucket created, namespace is `<namespace>`" (the namespace is fine to share; the keys are not).
 
@@ -114,6 +118,10 @@ The Pages projects `sds-pos` and `sds-order` are created by the workflow on its 
 - **Connection string:** Project → **Connect** → **Session pooler** (port **5432**, user `postgres.yejvrooxqdpynruwnegg`) → copy the URI and put in your DB password.
   - If the password contains `@ : / ? #`, URL-encode them (`@` → `%40`, `:` → `%3A`, `/` → `%2F`, `?` → `%3F`, `#` → `%23`).
   - **Not** the transaction pooler (6543), and **not** `db.yejvrooxqdpynruwnegg.supabase.co`, which is IPv6-only and unreachable from the VM.
+- **Require TLS (owner step, once; do it when the shop is closed, and keep this order):**
+  1. Add **`?sslmode=require`** to the end of `DATABASE_URL` in `/opt/sds/.env` (the template already has it), then `ssh deploy@sds-pos '/opt/sds/dc up -d api backup'`.
+  2. Check `curl -sS https://138-2-67-89.sslip.io/readyz` and that the next backup logs `OK` (or run `dc exec -T backup backup hourly`). If either fails, fix the URL before going on.
+  3. Only then: Supabase → Project Settings → **Database** → SSL Configuration → turn **Enforce SSL on incoming connections** on, and repeat the two checks. (Turning it on first could cut off a client that still connects without TLS.)
 - **Optional:** Project Settings → **Data API** → disable it. We don't use PostgREST; this removes a public surface.
 
 ### 1.10 GitHub secrets and variables
@@ -130,6 +138,7 @@ Repo → **Settings → Secrets and variables → Actions**.
 | Variable | `DEPLOY_ENABLED` | leave **unset** until step 3.1 |
 | Variable | `WEB_DEPLOY_ENABLED` | leave **unset** until step 3.4 |
 
+- The **workflows already say `environment: production`** on the two jobs that use the Tailscale and Cloudflare secrets. Keep the four secrets above at repository level until "Optional hardening" (end of this file) says your GitHub plan can restrict that environment.
 - The **database password is not needed in GitHub**: migrations run on the VM with `/opt/sds/.env`. Keep it out of GitHub unless a later workflow needs it.
 - **No SSH deploy key is needed:** CI signs in through Tailscale SSH as `deploy` (policy in 1.2). If Tailscale SSH ever has to be turned off, the fallback is a dedicated ed25519 key in a `DEPLOY_SSH_KEY` secret; ask Claude to switch the workflow.
 
@@ -230,8 +239,9 @@ ssh pos-ts 'sudo ls -l /opt/sds/.env; sudo file /opt/sds/.env; sudo grep -oE "^[
 ### 3.1 First API deploy
 - GitHub → Variables → set `DEPLOY_ENABLED` = `true`.
 - **Actions → Deploy API → Run workflow** (leave `image_tag` empty).
-- **Expected:** both jobs green, and the summary shows the image tags.
-  - The first run skips the pre-deploy backup, because the backup service isn't running yet.
+- **Expected:** the `plan`, `build` and `deploy` jobs are green, and the summary shows the commit and image tags.
+  - The first run skips the pre-deploy backup only because there is no `/opt/sds/.deploy-state` yet (nothing deployed, nothing to back up). Every later deploy takes one, or stops if it cannot.
+  - After this first manual run, deploys start by themselves when CI is green on `main` (see RUNBOOK "Deploys").
   - Caddy gets its certificate on the first HTTPS request. The smoke test retries for about 1 minute.
 
 Check from anywhere:
@@ -280,3 +290,26 @@ This needs the backend agent's `apps/pos-web` and `apps/liff-web` to exist.
 Follow RUNBOOK → **Rollback**, option B (redeploy an older sha), then deploy `main` again.
 
 **Tell Claude (end of round 3):** the URLs of the green workflow runs, the `dc ps` output, the object listing and the drill output (none of these contain secrets).
+
+---
+
+## Optional hardening (owner, after P2 is closed)
+
+### H1. Whoever can run workflows on `main` is root on the VM
+The deploy job signs in as `deploy`, and `deploy` is in the `docker` group, which is root-equivalent (RUNBOOK "Deploy trust model"). Controls that already work on any plan: deploys start only after green CI on `main` (or a manual run on `main`), and each runs the exact CI-verified commit. GitHub's stronger controls depend on your plan:
+
+- **Check your plan** (GitHub → Settings → Billing and plans). GitHub's docs (checked 2026-09-29): for a **private** repo, environments with deployment-branch rules and environment secrets, and branch protection with required checks, need **GitHub Pro, Team or Enterprise**. On **Free** they are ignored, and `environment: production` in the workflows is only a label.
+- **A paid plan costs money, so it is your decision.** Claude will not upgrade anything.
+- **On Free:** keep the repo private with no collaborators, keep 2FA on your GitHub account, and set Settings → Actions → General → "Fork pull request workflows" to require approval.
+- **On Pro/Team (or a public repo):**
+  1. Settings → **Environments** → New environment `production` → Deployment branches and tags → **Selected branches** → `main`.
+  2. Move `TS_OAUTH_CLIENT_ID`, `TS_OAUTH_SECRET`, `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` into that environment's secrets, then delete the repository-level copies. **Do this only if the plan supports it: on Free, environment secrets are ignored and the deploys would run with empty secrets.** The repository variables (`DEPLOY_ENABLED`, `API_HOST`, ...) stay where they are.
+  3. Settings → **Branches** (or Rulesets) → protect `main`: require the status check **`check`** (the CI job) before merging. Changes then reach `main` through a pull request.
+  4. Check: a manual **Deploy API** run started on `main` is green; deploy secrets are not readable from other branches.
+
+### H2. Backup key with least privilege (free, ~15 min)
+The key in `/opt/sds/.env` has all of your permissions. A key that can only create and read objects cannot be used to delete the backups. Do the steps in this order, so pruning never stops:
+1. **Lifecycle rules first** (they replace the age-based pruning in `backup.sh`). OCI console → Object Storage → bucket `sds-backups` → **Lifecycle Policy Rules** → one **Delete** rule per prefix (Object name filter: prefix): `hourly/` after 2 days, `predeploy/` 14, `daily/` 31, `monthly/` 370. OCI needs this policy in the root compartment, or the rules do nothing: `Allow service objectstorage-ap-singapore-1 to manage object-family in tenancy`.
+2. **A dedicated IAM user:** Identity → create user `sds-backup-writer` and group `sds-backup-writers` (add the user), then a policy in the root compartment (use the group-name form the console shows for your identity domain): `Allow group sds-backup-writers to manage objects in tenancy where all {target.bucket.name='sds-backups', any {request.permission='OBJECT_CREATE', request.permission='OBJECT_INSPECT', request.permission='OBJECT_READ'}}`. (Permission names checked in OCI's Object Storage policy reference on 2026-09-29; create = upload, inspect = list, read = download for restores.)
+3. **New key:** as that user, generate a Customer Secret Key; put it in `/opt/sds/.env` (`OCI_S3_ACCESS_KEY_ID`, `OCI_S3_SECRET_ACCESS_KEY`), then `ssh deploy@sds-pos '/opt/sds/dc up -d backup'`. Prove it: `dc exec -T backup backup hourly`, `dc exec -T backup backup-list`, and one restore drill. Only then delete your own old key.
+4. Expect `WARN: prune ... failed` lines in the backup log from then on. The key can't delete, so `backup.sh`'s own pruning is refused; the backup itself still succeeds. Not tested by Claude: verify step 3 before deleting the old key.

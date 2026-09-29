@@ -27,6 +27,11 @@
 		Strict-Transport-Security "max-age=31536000"
 		X-Content-Type-Options nosniff
 		Referrer-Policy no-referrer
+		# JSON API only: nothing to render, embed or cache (/healthz, /readyz and
+		# every /v1 response). ">" sets the field after the proxy has written its
+		# headers, so an upstream value can never weaken these two.
+		>Cache-Control "no-store"
+		>Content-Security-Policy "default-src 'none'; frame-ancestors 'none'"
 		-Server
 	}
 	# WebSocket upgrades pass through reverse_proxy unchanged.

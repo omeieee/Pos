@@ -13,7 +13,7 @@ Playbooks for when something breaks. Setup lives in [SETUP.md](SETUP.md); the de
 | Web apps | `https://sds-pos.pages.dev` (staff), `https://sds-order.pages.dev` (customers) |
 | Database | Supabase project `yejvrooxqdpynruwnegg` (session pooler, port 5432) |
 | Backups | OCI bucket `sds-backups`: `hourly/` 48 h, `daily/` 31 d, `monthly/` 370 d, `predeploy/` 14 d |
-| Backup key | age private key: printed copy + USB drive at home. **Never on the VM or laptop** |
+| Backup key | age private key: printed copy + USB drive at home. **Never stored at rest on the VM or the laptop.** During a restore drill it is streamed from the USB drive into a throwaway container's memory and discarded |
 | Alerts | UptimeRobot (`/readyz`), healthchecks.io (`sds-backup`), Sentry → omeza25482548@gmail.com |
 | Break-glass | re-add OCI ingress TCP 22 from your IP/32 → `ssh pos-oracle`; or OCI Console connection (SETUP 2.6) |
 
@@ -36,7 +36,7 @@ Playbooks for when something breaks. Setup lives in [SETUP.md](SETUP.md); the de
      ssh deploy@sds-pos '/opt/sds/dc logs --tail 200 api'
      ssh deploy@sds-pos '/opt/sds/dc logs --tail 100 caddy'
      ```
-   - Check memory with `ssh pos-ts 'free -m; dmesg -T | grep -i -E "killed process|oom" | tail'`. An OOM kill means the 1 GB is exhausted; the API heap cap is 320 MB.
+   - Check memory with `ssh pos-ts 'free -m; dmesg -T | grep -i -E "killed process|oom" | tail'`. An OOM kill means the 1 GB is exhausted; the API heap cap is 384 MB (`--max-old-space-size=384` in `apps/api/Dockerfile`; the container limit is 512 MB).
 3. **Restart one service:** `ssh deploy@sds-pos '/opt/sds/dc restart api'`.
    - If it started after a deploy, see **Rollback**.
    - Caddy certificate errors in the logs: see "Certificate problems" below.
@@ -63,7 +63,7 @@ Playbooks for when something breaks. Setup lives in [SETUP.md](SETUP.md); the de
   3. Don't delete business records by hand.
   4. Long term: plan a move (PAYG / Path A); that is an owner decision.
 - **Connection errors** (`too many clients`, pooler auth):
-  - check that `DATABASE_URL` in `/opt/sds/.env` is the **session pooler, port 5432**;
+  - check that `DATABASE_URL` in `/opt/sds/.env` is the **session pooler, port 5432**, and ends in **`?sslmode=require`** (Supabase "Enforce SSL" is on, SETUP 1.9);
   - if the DB password was reset in Supabase, update `.env`, then `./dc up -d api backup`.
 - **Supabase outage:** status.supabase.com. Nothing to do on our side; staff take orders on paper and key them in afterwards.
 
@@ -87,13 +87,16 @@ ssh deploy@sds-pos '/opt/sds/run-restore-drill.sh' < /e/sds-backup.agekey
 # or a specific object:
 ssh deploy@sds-pos '/opt/sds/run-restore-drill.sh daily/sds-20261001T220500Z-nightly.dump.age' < /e/sds-backup.agekey
 ```
-- The key travels over the tailnet into a throwaway container (`--rm`) and is never written to the VM's disk.
+- The key travels over the tailnet into a throwaway container (`--rm`) and stays in that process's memory: it is never stored at rest on the VM.
+- The container is the `drill` compose service (`run-restore-drill.sh` starts it). The decrypted dump and the throwaway Postgres live on a 256 MB RAM-backed tmpfs, not on disk. Under memory pressure the kernel may still swap those pages to the VM's swap file. The script refuses to run without the tmpfs.
+- If it stops with "No space left on device", the DB has outgrown the scratch space: raise `size=` for `/tmp/drill` in `docker-compose.yml` (`drill` service), and check `free -m`.
 - **Pass:**
   - `DRILL PASSED`;
   - restored tables = production tables;
   - `drizzle migrations: restored=N prod=N`;
   - row counts equal or slightly lower than prod, since prod has moved on.
 - `DRILL CHECK` means a table or migration differs. That is normal right after a migration; otherwise investigate.
+- `DRILL FAILED` with "restored table(s) EMPTY while production has rows" means the dump or restore lost data. One innocent cause: a table that got its first rows after that dump (for example the first order of the day). Re-run against a newer object (`daily/...` or the latest `hourly/...`) before treating it as data loss.
 - Record the date, object and result in `docs/PROGRESS.md`.
 
 ### Real restore into Supabase (data loss or corruption)
@@ -107,10 +110,24 @@ ssh deploy@sds-pos '/opt/sds/run-restore-drill.sh daily/sds-20261001T220500Z-nig
 5. `./dc start api`, then check `/readyz` and the POS.
 6. Key in any orders taken on paper since the dump time.
 
+## Deploys (what runs when)
+- A push to `main` runs **CI**. Only if CI is **green**, **Deploy API** and **Deploy web apps** start by themselves, for exactly the commit CI verified. Red CI ships nothing.
+- **Deploy API** first checks whether deploy-relevant files changed (`apps/api`, `packages`, `infra/compose`, `infra/backup`, `package.json`, `pnpm-lock.yaml`, its own workflow) since the last commit it really deployed (the newest run whose `deploy` job succeeded). If not (a docs-only commit), it ends with "no deploy" and the API is not restarted. A deploy that failed, was cancelled or was superseded is caught up by the next green push, because the comparison starts from the last real deploy. **Deploy web apps** redeploys on every green push (same files, harmless).
+- A newer commit on `main` supersedes an older one: re-running an old CI run does not deploy that old commit.
+- Every deploy takes a **pre-deploy backup** first (`predeploy/`, 14 days), through the running `backup` service or a one-shot container if the service is down. If it fails, the deploy stops before migrations. Only the very first deploy (no `.deploy-state` yet) skips it.
+- A changed **Caddyfile** is validated in a fresh container before migrations (a bad one stops the deploy with nothing changed), and caddy is **restarted** after the API is healthy. A bind-mounted file that was replaced is never seen by a running Caddy, so without the restart the change would silently not apply. `/opt/sds/.caddyfile.sha256` remembers what caddy loaded; if you edit the Caddyfile on the VM by hand, run `./dc restart caddy` yourself.
+- **CI is red for a reason that does not touch production** (for example `pnpm audit` found a new advisory) **and a fix must ship now:** fix or pin the cause first. If it cannot wait, Actions → **Deploy API** → Run workflow on `main`. Manual runs skip the CI check, so that is your explicit override.
+- **Refresh the backup image** (fresh base image and apt packages; see Routine): Actions → Deploy API → Run workflow → tick `rebuild_backup`.
+
+## Deploy trust model
+- The `deploy` user is in the `docker` group, which is **root-equivalent** on the VM. So anyone who can run a workflow that holds the Tailscale OAuth secret (GitHub write access to this repo), or who controls the `tag:ci` node, can act as root on the VM. That is the price of unattended, ฿0 deploys.
+- What limits it: the Tailscale policy lets `tag:ci` reach only SSH on `tag:server`, as `deploy`; automatic deploys run only after green CI on `main`; the third-party actions are pinned by commit SHA; the repo is private with a single owner and GitHub 2FA. On a paid GitHub plan, SETUP "H1" adds environment secrets limited to `main` and branch protection.
+- Not adopted: rootless Docker or a Docker-socket proxy. They add moving parts and memory on a 1 GB VM. Revisit if the repo ever gets more collaborators.
+
 ## Rollback
 The API image is `ghcr.io/omeieee/pos-api:<git sha>`. `/opt/sds/.deploy-state` holds `API_IMAGE` and `PREVIOUS_API_IMAGE`. **Migrations are never rolled back**: they are expand-only, so the previous API still works against the newer schema.
 
-- **Automatic:** `deploy-api.yml` rolls back by itself when the public `/healthz` smoke test fails after a deploy.
+- **Automatic:** `deploy-api.yml` rolls back by itself, but only once the new image was switched in: when `deploy.sh apply` exits 10 (failed after the switch, before the new API was verified healthy) or the public `/healthz` smoke test fails afterwards. A deploy that fails earlier (pull, pre-deploy backup, Caddyfile check, migration) or later (Caddy restart, image prune) is **not** rolled back, so redeploying the same sha can never downgrade a healthy API.
 - **A. Previous version, right now (on the VM):**
   ```bash
   ssh deploy@sds-pos '/opt/sds/deploy.sh status'
@@ -125,7 +142,7 @@ The API image is `ghcr.io/omeieee/pos-api:<git sha>`. `/opt/sds/.deploy-state` h
 - **Then:** fix forward on `main`. Don't leave production pinned to an old sha for long.
 
 ## Oracle instance lost (reclaimed, terminated, or region trouble). Target ≤ 2 h
-Nothing but the Caddy certificate lives only on the VM. Data is in Supabase, backups are in OCI Object Storage, and images are in GHCR.
+Only three things live only on the VM: the Caddy certificate, `/opt/sds/.env` (recreated in step 5 from your copy) and `/opt/sds/.deploy-state` (the current image tags; the next deploy rewrites it). Data is in Supabase, backups are in OCI Object Storage, and images are in GHCR.
 1. **(10 min)** OCI console → Compute → Create instance:
    - **VM.Standard.E2.1.Micro** (Always Free), Ubuntu 24.04;
    - same VCN/subnet (the security list already allows 80/443 only);
@@ -154,7 +171,7 @@ Nothing but the Caddy certificate lives only on the VM. Data is in Supabase, bac
 
 ### IP changed (the hostname follows the IP)
 The IP-derived hostname lives in these places; change them all:
-1. GitHub variable **`API_HOST`**. It also sets `VITE_API_BASE_URL` for the web apps, so **re-run Deploy web apps**.
+1. GitHub variable **`API_HOST`**. It also sets `VITE_API_BASE_URL` and the API host in the web apps' CSP `_headers`, so **re-run Deploy web apps**.
 2. `/opt/sds/.env` **`API_HOST`**, then `./dc up -d caddy`. Caddy gets a new certificate.
 3. UptimeRobot monitor URL.
 4. `~/.ssh/config` `pos-oracle` HostName (break-glass only).
@@ -194,5 +211,13 @@ A PromptPay ID change raises an owner alert and an `audit_log` entry (CLAUDE.md 
 | When | What |
 |---|---|
 | Weekly (5 min) | Review the alerts and the Sentry digest. External check run is green (it runs on its own every Monday) |
-| Monthly (30 min) | **Restore drill** (above) → record in PROGRESS. `ssh pos-ts 'df -h /; free -m'`. Check GHCR package sizes stay small |
-| Quarterly | Rotate the OCI Customer Secret Key and the Cloudflare token. Review the Tailscale machines and policy. Re-check free-tier terms (05 §3) |
+| Monthly (30 min) | **Restore drill** (above) → record in PROGRESS. `ssh pos-ts 'df -h /; free -m'`. Check GHCR package sizes stay small. Then the three patch steps below (outside opening hours) |
+| Quarterly | Rotate the OCI Customer Secret Key, the Cloudflare token and the **Tailscale OAuth client** (Tailscale admin → Trust credentials: generate a new one with the same scope and tag, replace `TS_OAUTH_CLIENT_ID` and `TS_OAUTH_SECRET` in GitHub, run Deploy API to prove it, then delete the old client). Review the Tailscale machines and policy. Re-check free-tier terms (05 §3). Bump `WRANGLER_VERSION` in `deploy-web.yml` if wanted |
+
+### Monthly patching (things `unattended-upgrades` and the deploys do not cover)
+Unattended-upgrades applies only Ubuntu security updates, and deploys pull only our own images. Do these outside opening hours:
+1. **Docker and Tailscale packages** (their apt repos are not covered): `ssh -t pos-ts 'sudo apt update && sudo apt upgrade'`, and read the list before you say yes.
+   - Docker runs with `live-restore`, so containers keep running while the daemon restarts, but do it when the shop is closed.
+   - Then `ssh deploy@sds-pos '/opt/sds/dc ps'`: api, caddy and backup healthy. A pending reboot happens by itself in the Monday 03:00–05:00 window.
+2. **Caddy image** (`caddy:2-alpine` is a floating tag that deploys never pull): `ssh deploy@sds-pos '/opt/sds/dc pull caddy && /opt/sds/dc up -d caddy'`. The certificate survives in the `sds_caddy_data` volume. Then `curl -sS https://138-2-67-89.sslip.io/healthz`.
+3. **Backup image** (postgres, age, rclone, curl are otherwise frozen at the last build): Actions → **Deploy API** → Run workflow on `main` → tick **rebuild_backup**. It rebuilds without cache on a fresh base image and redeploys. Then `dc ps` (backup healthy) and, once, `dc exec -T backup backup hourly` ending in `OK in Ns`.

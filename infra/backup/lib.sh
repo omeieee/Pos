@@ -27,9 +27,12 @@ export OBJECT_RE
 log() { printf '%s [%s] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${LOG_TAG:-backup}" "$*"; }
 
 # healthchecks.io ping; never fails the caller. $1 = "" | start | fail
+# The ping URL carries the check's UUID (anyone with it can send fake pings),
+# so a failure logs the host only, never the URL.
 hc_ping() {
   [[ -n "${HC_PING_URL:-}" ]] || return 0
-  local url="${HC_PING_URL%/}"
+  local url="${HC_PING_URL%/}" host
+  host="${HC_PING_URL#*://}"; host="${host%%/*}"
   [[ -n "${1:-}" ]] && url="${url}/$1"
-  curl -fsS -m 10 --retry 3 -o /dev/null --data-raw "${2:-}" "$url" || log "WARN: healthchecks ping failed ($url)"
+  curl -fsS -m 10 --retry 3 -o /dev/null --data-raw "${2:-}" "$url" || log "WARN: healthchecks ping failed (host ${host}${1:+, ping type $1})"
 }
