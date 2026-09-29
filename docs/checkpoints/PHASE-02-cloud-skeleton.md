@@ -1,6 +1,6 @@
 # Phase 2 — Cloud Walking Skeleton
 
-**Status:** 🟡 In progress (kickoff questions pending) · **Depends on:** P1, Q1, Q8 · **Agents:** devops-engineer, backend-engineer, qa-security-reviewer
+**Status:** 🟡 In progress (code complete; owner setup Round 1 pending) · **Depends on:** P1, Q1, Q8 · **Agents:** devops-engineer, backend-engineer, qa-security-reviewer
 
 ## Goal
 Put the 24/7 platform in place before features: a minimal API and app shells are deployed, monitored, backed up and restorable.
@@ -24,7 +24,12 @@ Put the 24/7 platform in place before features: a minimal API and app shells are
 - [ ] Free-tier usage checked (Oracle Free Tier, Supabase, Cloudflare Pages); idle-reclamation rebuild procedure tested
 
 ## As built
-_Fill in with `/checkpoint`: hosts, hostnames, services, where secrets live (not the secrets), backup targets._
+- **Host:** Oracle E2.1.Micro `omeie_pos`, 138.2.67.89 (ephemeral) → `138-2-67-89.sslip.io`. Admin + CI SSH via Tailscale (`tag:server` / `tag:ci`); port 22 closed after Round 2.
+- **Services (`/opt/sds`, compose):** `api` (ghcr.io/omeieee/pos-api:<sha>, internal only), `caddy` (80/443, Let's Encrypt), `backup` (postgres:17 + age + rclone → OCI bucket `sds-backups`, hourly/daily/monthly/predeploy prefixes, healthchecks.io).
+- **DB:** Supabase via session pooler :5432 (direct host is IPv6-only); role `postgres` (BYPASSRLS) for now.
+- **Secrets live in:** `/opt/sds/.env` on the VM (DATABASE_URL, OCI keys, HC_PING_URL, SENTRY_DSN) and GitHub secrets (TS_OAUTH_*, CLOUDFLARE_*). The age private key is only on USB + paper.
+- **Web:** Cloudflare Pages `sds-pos`, `sds-order` via `deploy-web.yml`.
+- **Owner steps:** `infra/SETUP.md`; incidents: `infra/RUNBOOK.md`.
 
 ## Log
-_Empty._
+- 2026-09-29 · Code complete; waiting on owner setup Round 1 ([PROGRESS](../PROGRESS.md))

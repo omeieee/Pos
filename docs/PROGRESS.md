@@ -4,16 +4,27 @@
 **Previous:** P1 — Foundation ✅ Done 2026-09-29 ([checkpoint](checkpoints/PHASE-01-foundation.md)).
 
 > **Handoff for the next session (read first):**
-> - **P1 is closed.** Packages: shared, promptpay, db, i18n, ui. `pnpm lint && pnpm build && pnpm test` pass locally and in CI.
-> - **Design direction:** [Claude Design canvas](https://claude.ai/artifact/3bpHFKf3KGsAH5EMN1CE3H). Polish and `packages/ui` token alignment happen at the P3 kickoff (Q14 deferred).
-> - **P2 next:** ask the owner every missing P2 input in one list (standing rule), then start.
-> - **Carry-forward for P2** (from the P1 QA review, see P1 checkpoint): sync excludes `pin_hash`/`token_hash`; `SET search_path` on SQL functions; run migrations on Supabase 17.6; link-table sync; esbuild dev advisory.
+> - **P2 code is done and pushed** (277642b api/db/web shells, a006f80 infra). Nothing is deployed yet.
+> - **Waiting on the owner: `infra/SETUP.md` Round 1** (browser only: accounts, Tailscale policy + OAuth client, OCI ports 80/443 + bucket + secret key, age key on USB, healthchecks.io, Cloudflare token, Supabase session-pooler URL, GitHub secrets/variables). The owner reports "Round 1 done" + OCI namespace (never secrets).
+> - **Then:** Round 2 (owner runs `bootstrap.sh`, joins Tailscale, closes port 22), Round 3 (first deploy, external check, restore drill, rollback test). Claude verifies with read-only SSH / port checks.
+> - **VM state checked 2026-09-29 (read-only):** Ubuntu 24.04.5, 954 MB RAM, 43 GB free, no swap/Docker/Tailscale; iptables allows only 22 then REJECT. Ports 80/443 closed from outside.
+> - **Open decision:** the rebuild-on-new-host test needs a second free Micro VM; ask the owner at Round 3.
+> - **Design:** [Claude Design canvas](https://claude.ai/artifact/3bpHFKf3KGsAH5EMN1CE3H); polish at P3 kickoff.
 > - **Local tools:** Node 24 + pnpm 12.6.0; no Docker; PGlite 0.4.x (PostgreSQL 17).
-> - **Still open, not blocking:** Q3 (tax status; ภ.ง.ด.94 due 30 Sep 2026), Q11, Q12, reserved IP, ไทยช่วยไทย on room delivery, room-delivery fee.
+> - **Still open, not blocking:** Q3 (tax status; ภ.ง.ด.94 due 30 Sep 2026), Q11, Q12, reserved IP (before P4), ไทยช่วยไทย on room delivery, room-delivery fee.
 
 Newest entries first. Add entries with `/checkpoint`. Each entry covers what changed, how it was verified, what was decided, and what comes next. State facts only, and never record tests as passed unless they were run.
 
 ---
+
+## 2026-09-29 · P2 · Code complete; waiting on owner setup (Round 1)
+- **Summary:** API skeleton, db client split, web shells, VM bootstrap, compose stack, OCI backups, deploy workflows, SETUP.md and RUNBOOK.md written by backend-engineer and devops-engineer agents, reviewed and committed.
+- **Changed:** `apps/api`, `apps/pos-web`, `apps/liff-web`, `packages/db` (postgres-js client, `@sds/db/pglite`, migration 0004), `infra/{oracle,compose,backup}`, `.github/workflows/{deploy-api,deploy-web,external-check}.yml`, `infra/SETUP.md` (+ step 2.0 SSH shortcut), `infra/RUNBOOK.md`, docs 05 §6/§7/§9, D-18.
+- **Verification:** `pnpm install --frozen-lockfile`, `pnpm lint` (91 files), `pnpm build --force` 11/11, `pnpm test --force` 8/8 (api 11, db 24, shared 466, promptpay 1276, ui 36, i18n 20, web 1+1), `pnpm audit --prod` clean. Agent: shellcheck + actionlint clean, deploy/backup scripts tested with stubs. Supabase host confirmed IPv6-only → session pooler. Not run: Docker builds, anything on the VM, deploy workflows.
+- **Decisions:** D-18 note (OCI-only backups). Deploy via Tailscale SSH, no deploy key in GitHub.
+- **Open issues:** owner Round 1–3; rebuild test needs a second Micro VM (owner decision); sslip.io shares Let's Encrypt limits (DuckDNS fallback in RUNBOOK).
+- **Next:** owner finishes SETUP.md Round 1 → Claude checks → Round 2.
+- **Commit:** 277642b, a006f80, this entry
 
 ## 2026-09-29 · P1 · Closed
 - **Summary:** the owner accepted the Claude Design redesign ([canvas](https://claude.ai/artifact/3bpHFKf3KGsAH5EMN1CE3H), 9 boards) as the P1 wireframes; visual polish is deferred to the P3 kickoff. All P1 exit criteria are met.
