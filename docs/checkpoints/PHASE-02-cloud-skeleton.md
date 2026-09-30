@@ -1,6 +1,6 @@
 # Phase 2 — Cloud Walking Skeleton
 
-**Status:** 🟡 In progress (deployed; alert test, rollback test and QA review pending) · **Depends on:** P1, Q1, Q8 · **Agents:** devops-engineer, backend-engineer, qa-security-reviewer
+**Status:** 🟡 In progress (deployed and rollback tried; alert test, rebuild test and free-tier check pending) · **Depends on:** P1, Q1, Q8 · **Agents:** devops-engineer, backend-engineer, qa-security-reviewer
 
 ## Goal
 Put the 24/7 platform in place before features: a minimal API and app shells are deployed, monitored, backed up and restorable.
@@ -17,7 +17,7 @@ Put the 24/7 platform in place before features: a minimal API and app shells are
 
 ## Exit criteria
 - [x] `https://<sslip-hostname>/healthz` is served by Caddy with a valid Let's Encrypt certificate; only 80/443 are reachable from the internet (SSH via Tailscale only), checked from outside — 2026-09-29: healthz/readyz OK, issuer Let's Encrypt, 22/3000/5432/2019 closed from the laptop
-- [ ] Merging to `main` deploys the API and web apps automatically; rollback procedure written and tried once
+- [ ] Merging to `main` deploys the API and web apps automatically; rollback procedure written and tried once — rollback option A tried 2026-09-30 (worked, reverted); a deploy of 2e76581 landed after the push but the `workflow_run` trigger is not yet confirmed by the owner
 - [ ] Hourly encrypted backup lands in **OCI Object Storage** (owner's choice 2026-09-29: no R2); a missed run raises an alert
 - [x] **Restore drill passed:** the dump restores into a fresh container and sanity queries match — 2026-09-29 `DRILL PASSED`, migrations 5=5 (business tables empty; repeat once real data exists)
 - [ ] Rebuild-on-new-host procedure documented (target ≤ 2 h)
@@ -36,3 +36,4 @@ Put the 24/7 platform in place before features: a minimal API and app shells are
 - 2026-09-29 · Setup Rounds 1–2 done; VM ready for first deploy ([PROGRESS](../PROGRESS.md))
 - 2026-09-29 · First deploy live; restore drill passed ([PROGRESS](../PROGRESS.md))
 - 2026-09-30 · QA review and fixes committed (25f0e62..5dfa646) ([PROGRESS](../PROGRESS.md))
+- 2026-09-30 · QA fixes deployed; rollback tried once ([PROGRESS](../PROGRESS.md))

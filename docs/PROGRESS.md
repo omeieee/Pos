@@ -1,14 +1,15 @@
 # Progress Log
 
-**Current phase:** P2 — Cloud skeleton ([checkpoint](checkpoints/PHASE-02-cloud-skeleton.md)), status **in progress: first deploy live; QA fixes committed, redeploy (first automatic deploy) pending**.
+**Current phase:** P2 — Cloud skeleton ([checkpoint](checkpoints/PHASE-02-cloud-skeleton.md)), status **in progress: QA fixes deployed and rollback tried; alert test, rebuild test, free-tier check remain**.
 **Previous:** P1 — Foundation ✅ Done 2026-09-29 ([checkpoint](checkpoints/PHASE-01-foundation.md)).
 
 > **Handoff for the next session (read first):**
-> - **P2 is deployed:** API live at `https://138-2-67-89.sslip.io` (Caddy + Let's Encrypt, `/healthz` and `/readyz` OK, image 33bfb96), web apps `sds-pos.pages.dev` and `sds-order.pages.dev` return 200, UptimeRobot monitor set (owner report). Backup hourly to OCI works; **restore drill passed 2026-09-29**.
-> - **Still to do in P2 (SETUP 3.5/3.7):** ghcr prune access (3.2) and External check (3.3) are green (owner report 2026-09-29). Prove the missed-backup alert (owner deferred it to another day) (stop `backup` outside opening hours before a slot, wait slot + 30 min grace, confirm the email, restart it); try the rollback once (RUNBOOK option B) and redeploy main; decide the second Micro VM for the rebuild test; then QA review (qa-security-reviewer) and close P2.
-> - **VM state (verified 2026-09-29):** Ubuntu 24.04, 2 GB swap, Docker 29.8.1, `deploy` user, Tailscale `sds-pos` (SSH on, tag:server, auto-update on), public port 22 closed, `/opt/sds/.env` complete (mode 600). Containers api, backup, caddy all healthy. Reach it with `ssh pos-ts` / `ssh deploy@sds-pos`. Owner approved write/exec on `pos-oracle` / `sds-pos` and piping the age key from `F:` into the restore drill.
-> - **Not verified:** GitHub secrets/variables (no `gh` on the laptop; owner reported them done), Tailscale key expiry on `sds-pos` (owner reported disabled), OCI Pay-As-You-Go upgrade (recommended in docs/05 §1).
-> - **Open decision:** the rebuild-on-new-host test needs a second free Micro VM; ask the owner at Round 3.
+> - **Resume here (saved 2026-09-30):** P2 is deployed and running. API `https://138-2-67-89.sslip.io` runs commit 2e76581 (CI-gated deploy pipeline, forced TLS to Supabase, security headers); web apps `sds-pos.pages.dev` and `sds-order.pages.dev` return 200; UptimeRobot monitor set (owner report). Hourly encrypted backups reach OCI; restore drill passed twice (2026-09-29 and 2026-09-30, the latter on tmpfs); rollback (RUNBOOK option A) tried once and reverted.
+> - **Still to do in P2 (in this order):** (1) owner confirms in the Actions tab that the Deploy API run for 2e76581 was triggered by `workflow_run`, not manually (repo is private; Claude cannot see runs, no `gh` on the laptop); (2) missed-backup alert test, owner deferred it (stop `backup` before a slot outside opening hours, wait slot + 30 min, confirm the email, restart it); (3) free-tier / idle-reclaim check; (4) rebuild-on-new-host test, needs a **second free Micro VM: owner decision**; (5) owner: add `?sslmode=require` to the live `DATABASE_URL` in `/opt/sds/.env`, then turn on Supabase "Enforce SSL"; then close P2.
+> - **Pending owner decisions:** keep Tailscale `accept` (owner wants no prompts; SETUP.md now suggests `check` for the `ubuntu`/`deploy` rule and the live policy is unchanged); GitHub plan for environment protection (paid on private repos; the four secrets stay repo-level for now); Actions-minutes cost of the extra plan/web jobs on every green push; `verify-full` against the Supabase CA (needs a `docs/decisions.md` entry); optional least-privilege OCI backup key (SETUP H2).
+> - **VM state (verified 2026-09-30):** Ubuntu 24.04, 2 GB swap, Docker 29.8.1, `deploy` user, Tailscale `sds-pos` (SSH on, tag:server, auto-update on), public port 22 closed, `/opt/sds/.env` complete (mode 600). Containers api, backup, caddy healthy on the current images. Reach it with `ssh pos-ts` / `ssh deploy@sds-pos`. The owner approved write/exec on `pos-oracle` / `sds-pos` and piping the age key from the USB drive (`F:` on the laptop, `/f/sds-backup.agekey` in Git Bash) into the restore drill.
+> - **Not verified:** GitHub secrets/variables and the `production` environment behaviour on a private free repo (if a deploy errors on it, remove the `environment: production` line in both deploy workflows), Tailscale key expiry on `sds-pos` (owner reported disabled), OCI Pay-As-You-Go upgrade (recommended in docs/05 §1).
+> - **Laptop notes:** `age` 1.3.1 installed via winget (call winget by full path in this shell); the `pos-ts` SSH shortcut exists in `~/.ssh/config`. shellcheck and actionlint are not installed (scratchpad copies vanish with the session).
 > - **Design:** [Claude Design canvas](https://claude.ai/artifact/3bpHFKf3KGsAH5EMN1CE3H); polish at P3 kickoff.
 > - **Local tools:** Node 24 + pnpm 12.6.0; no Docker; PGlite 0.4.x (PostgreSQL 17).
 > - **Still open, not blocking:** Q3 (tax status; ภ.ง.ด.94 due 30 Sep 2026), Q11, Q12, reserved IP (before P4), ไทยช่วยไทย on room delivery, room-delivery fee.
@@ -16,6 +17,16 @@
 Newest entries first. Add entries with `/checkpoint`. Each entry covers what changed, how it was verified, what was decided, and what comes next. State facts only, and never record tests as passed unless they were run.
 
 ---
+
+## 2026-09-30 · P2 · QA fixes deployed; rollback tried once
+- **Summary:** the pushed QA fixes (2e76581) reached production through the new CI-gated pipeline; the RUNBOOK rollback (option A, on the VM) was then run once and reverted.
+- **Changed:** production only (API image 2e76581; backup image src-49765dfc; Caddy config reloaded). No repo change.
+- **Verification (run this session):** `/healthz` version 2e76581; `/readyz` 200 (~94 ms) with TLS now forced (inferred: the client refuses a non-TLS server; not inspected on the wire); response headers `Cache-Control: no-store` and the API CSP live; `/opt/sds/.caddyfile.sha256` written; api/backup/caddy healthy; a `predeploy/` dump exists in the bucket (mandatory pre-deploy backup ran); both `*.pages.dev` return 200 with CSP/nosniff/referrer headers and no `__API_HOST__` left. Rollback: `deploy.sh rollback` → `/healthz` 33bfb96, `/readyz` 200; then state restored from a saved copy and the API recreated on 2e76581 (healthz 2e76581, readyz 200, `.deploy-state` identical to before).
+- **Decisions:** none.
+- **Open issues:** not confirmed that the deploy was started by the `workflow_run` trigger (repo is private; owner has not confirmed the Actions run) so "merge deploys automatically" stays unticked; rollback option B (workflow, older sha) not tried; missed-backup alert deferred; rebuild on a second Micro VM and free-tier/idle-reclaim check not done; live `DATABASE_URL` has no `sslmode` and Supabase "Enforce SSL" is off (owner); Tailscale `check` vs `accept` decision pending.
+- **Restore drill on tmpfs (2026-09-30 07:10, key piped from USB over stdin):** DRILL PASSED on `predeploy/sds-20260929T235536Z-predeploy.dump.age` (so the pre-deploy backup is restorable), migrations 5=5, tables all empty in both (no business data yet, so the empty-table check is untested); VM memory during the drill: peak used 581 MB, min available 372 MB, peak swap 76 MB, API stayed healthy. Repeat once real data exists.
+- **Next:** owner confirms the Actions runs; alert test; decide the second VM; then close P2.
+- **Commit:** uncommitted (docs only)
 
 ## 2026-09-30 · P2 · QA review and fixes (committed, deploy pending)
 - **Summary:** qa-security-reviewer reviewed P2: exit criteria not met, 1 High + 4 Medium. Fixed by backend-engineer (db/api) and devops-engineer (infra/CI/docs).
