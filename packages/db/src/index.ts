@@ -9,3 +9,4 @@ export * as paymentsRepo from './payments.ts';
 export * as peopleRepo from './people.ts';
 export * as schema from './schema.ts';
 export * from './settings.ts';
+export * as syncRepo from './sync.ts';
