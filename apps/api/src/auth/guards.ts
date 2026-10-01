@@ -50,21 +50,55 @@ export function isGuarded(route: RouteHooks): boolean {
 }
 
 /**
+ * Marks a hook that verifies a signed URL (an HMAC over what the URL names plus an expiry). It is
+ * for the few routes an `<img>` or a download link must reach: the browser cannot send an
+ * Authorization header there, so the signature in the query string is the only authentication.
+ */
+const SIGNED_URL = Symbol.for('sds.signed-url');
+
+export function markSignedUrlCheck(fn: Guard): Guard {
+  return Object.assign(fn, { [SIGNED_URL]: true });
+}
+
+/** True when the route runs a signed-URL verifier in its own `onRequest` hooks. */
+export function hasSignedUrlCheck(route: RouteHooks): boolean {
+  return [route.onRequest]
+    .flat(2)
+    .some(
+      (hook) =>
+        typeof hook === 'function' &&
+        (hook as unknown as Record<symbol, unknown>)[SIGNED_URL] === true,
+    );
+}
+
+/**
  * Makes "forgot the guard" a start-up failure (QA): every route declared under this scope whose
  * path starts with /v1 must be guarded, unless it is in `open` as "METHOD /path" (HEAD counts as
- * GET). Add the hook before declaring any route.
+ * GET). A route in `signedUrl` is the other exception: it needs no session, but it must run a
+ * signed-URL verifier (`markSignedUrlCheck`) in `onRequest`; listing it without the verifier
+ * fails the start too, so an exception cannot be public by accident. Add the hook before
+ * declaring any route.
  */
-export function enforceGuardedRoutes(scope: FastifyInstance, open: ReadonlySet<string>): void {
+export function enforceGuardedRoutes(
+  scope: FastifyInstance,
+  open: ReadonlySet<string>,
+  signedUrl: ReadonlySet<string> = new Set(),
+): void {
   scope.addHook('onRoute', (route) => {
     if (!route.url.startsWith('/v1')) return;
     if (isGuarded(route)) return;
     for (const method of [route.method].flat()) {
       const key = `${method === 'HEAD' ? 'GET' : method} ${route.url}`;
-      if (!open.has(key)) {
+      if (open.has(key)) continue;
+      if (signedUrl.has(key)) {
+        if (hasSignedUrlCheck(route)) continue;
         throw new Error(
-          `${key} has no auth guard: add guard() to the route, or list it as an open route in v1.ts`,
+          `${key} is listed as a signed-URL route but does not verify the signature: add markSignedUrlCheck() to its onRequest hooks`,
         );
       }
+      throw new Error(
+        `${key} has no auth guard: add guard() to the route, or list it as an open or signed-URL route in v1.ts`,
+      );
     }
   });
 }

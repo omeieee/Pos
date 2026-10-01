@@ -7,8 +7,13 @@ import Fastify from 'fastify';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 import { createEventBus } from '../events.ts';
 import { createHarness, type Harness } from '../test-support/harness.ts';
-import { OPEN_ROUTES, registerV1 } from '../v1.ts';
-import { enforceGuardedRoutes, isGuarded } from './guards.ts';
+import { OPEN_ROUTES, registerV1, SIGNED_URL_ROUTES } from '../v1.ts';
+import {
+  enforceGuardedRoutes,
+  hasSignedUrlCheck,
+  isGuarded,
+  markSignedUrlCheck,
+} from './guards.ts';
 
 let h: Harness;
 beforeAll(async () => {
@@ -20,16 +25,17 @@ afterAll(async () => {
 
 // The real list, not a copy: if someone adds an open route to v1.ts this test has to be looked at.
 const OPEN = [...OPEN_ROUTES];
+const SIGNED = [...SIGNED_URL_ROUTES];
 
 describe('the real /v1 routes', () => {
-  test('every one has the guard, except the sign-in routes and the public menu', () => {
+  test('every one has the guard, except the sign-in routes, the public menu and the signed-URL routes', () => {
     const v1 = h.routes.filter((r) => r.url.startsWith('/v1'));
     expect(v1.length).toBeGreaterThan(8);
     // Fastify adds a HEAD route next to every GET; it counts as the GET.
     const key = (r: { method: string; url: string }) =>
       `${r.method === 'HEAD' ? 'GET' : r.method} ${r.url}`;
     const open = [...new Set(v1.filter((r) => !r.guarded).map(key))];
-    expect(open.sort()).toEqual([...OPEN].sort());
+    expect(open.sort()).toEqual([...OPEN, ...SIGNED].sort());
     // ...and the list itself is exactly the sign-in routes and the public menu, so it cannot grow unnoticed.
     expect(OPEN.sort()).toEqual([
       'GET /v1/auth/staff',
@@ -37,6 +43,9 @@ describe('the real /v1 routes', () => {
       'POST /v1/auth/owner',
       'POST /v1/auth/pin',
     ]);
+    // The signed-URL routes are the other exception: an <img> cannot send a header, so the
+    // signature in the URL is the authentication. Adding to this list needs a decision, not a habit.
+    expect(SIGNED.sort()).toEqual(['GET /v1/payments/:id/qr.png']);
   });
 
   test('the inventory includes the routes we know about', () => {
@@ -52,6 +61,16 @@ describe('the real /v1 routes', () => {
       'PATCH /v1/orders/:id',
       'POST /v1/orders/:id/transition',
       'POST /v1/orders/:id/cancel',
+      'POST /v1/orders/:id/payments',
+      'GET /v1/orders/:id/payments',
+      'POST /v1/payments/:id/claim',
+      'POST /v1/payments/:id/confirm',
+      'POST /v1/payments/:id/cancel-claimed',
+      'POST /v1/payments/:id/change-method',
+      'POST /v1/payments/:id/void',
+      'POST /v1/payments/:id/refund',
+      'GET /v1/payments/:id/qr-url',
+      'GET /v1/payments/:id/qr.png',
     ]) {
       expect(all.has(route), route).toBe(true);
     }
@@ -67,10 +86,12 @@ describe('the real /v1 routes', () => {
 describe('enforceGuardedRoutes', () => {
   const guarded = Object.assign(async () => {}, { [Symbol.for('sds.guarded')]: true });
   const allow = new Set(['GET /v1/open']);
+  const signedAllow = new Set(['GET /v1/signed/:id']);
+  const verifier = markSignedUrlCheck(async () => {});
 
   async function appWith(register: (app: ReturnType<typeof Fastify>) => void): Promise<void> {
     const app = Fastify();
-    enforceGuardedRoutes(app, allow);
+    enforceGuardedRoutes(app, allow, signedAllow);
     register(app);
     try {
       await app.ready();
@@ -112,6 +133,41 @@ describe('enforceGuardedRoutes', () => {
       /POST \/v1\/open/,
     );
     await expect(appWith((app) => app.get('/v1/open/more', async () => ({})))).rejects.toThrow();
+  });
+
+  test('lets a listed signed-URL route through only when it runs the signature verifier', async () => {
+    await expect(
+      appWith((app) => app.get('/v1/signed/:id', { onRequest: verifier }, async () => ({}))),
+    ).resolves.toBeUndefined();
+    await expect(
+      appWith((app) =>
+        app.get('/v1/signed/:id', { onRequest: [async () => {}, verifier] }, async () => ({})),
+      ),
+    ).resolves.toBeUndefined();
+    // Listed, but nothing checks the signature: it would be a public route by accident.
+    await expect(appWith((app) => app.get('/v1/signed/:id', async () => ({})))).rejects.toThrow(
+      /GET \/v1\/signed\/:id.*does not verify the signature/,
+    );
+    await expect(
+      appWith((app) => app.get('/v1/signed/:id', { onRequest: async () => {} }, async () => ({}))),
+    ).rejects.toThrow(/does not verify the signature/);
+    // A verifier in preHandler is too late: the query and body are parsed before it runs.
+    await expect(
+      appWith((app) => app.get('/v1/signed/:id', { preHandler: verifier }, async () => ({}))),
+    ).rejects.toThrow(/does not verify the signature/);
+  });
+
+  test('a verifier alone does not open a route that is not on the signed-URL list', async () => {
+    await expect(
+      appWith((app) => app.get('/v1/other/:id', { onRequest: verifier }, async () => ({}))),
+    ).rejects.toThrow(/GET \/v1\/other\/:id has no auth guard/);
+    // ...and only the listed method counts.
+    await expect(
+      appWith((app) => app.post('/v1/signed/:id', { onRequest: verifier }, async () => ({}))),
+    ).rejects.toThrow(/POST \/v1\/signed\/:id has no auth guard/);
+    expect(isGuarded({ onRequest: verifier })).toBe(false);
+    expect(hasSignedUrlCheck({ onRequest: verifier })).toBe(true);
+    expect(hasSignedUrlCheck({ onRequest: guarded })).toBe(false);
   });
 
   test('does not look at routes outside /v1', async () => {

@@ -9,8 +9,8 @@
  * - Stored TOTP secrets: AES-256-GCM, with the staff id as associated data.
  * - Recovery codes: plain SHA-256 with NO key, so they still work when the master key is lost.
  *
- * One master key (AUTH_SECRET_KEY) feeds HKDF to give the TOTP encryption and the PIN pepper
- * their own keys.
+ * One master key (AUTH_SECRET_KEY) feeds HKDF to give the TOTP encryption, the PIN pepper and
+ * the QR link signing their own keys.
  */
 import {
   createCipheriv,
@@ -43,6 +43,8 @@ export interface AuthKeys {
   totpKey: Buffer;
   /** HMAC key mixed into PIN hashes. */
   pinPepper: Buffer;
+  /** HMAC key that signs the short-lived PromptPay QR image links. */
+  qrUrlKey: Buffer;
 }
 
 const HKDF_SALT = Buffer.from('sds-auth-v1');
@@ -56,6 +58,7 @@ export function deriveAuthKeys(master: Buffer): AuthKeys {
   return {
     totpKey: derive(master, 'totp-encryption'),
     pinPepper: derive(master, 'pin-pepper'),
+    qrUrlKey: derive(master, 'payment-qr-url'),
   };
 }
 

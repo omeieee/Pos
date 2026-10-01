@@ -47,6 +47,10 @@ describe('key derivation', () => {
     expect(again.totpKey.equals(keys.totpKey)).toBe(true);
     expect(keys.totpKey).toHaveLength(32);
     expect(keys.totpKey.equals(keys.pinPepper)).toBe(false);
+    expect(keys.qrUrlKey).toHaveLength(32);
+    expect(keys.qrUrlKey.equals(keys.totpKey)).toBe(false);
+    expect(keys.qrUrlKey.equals(keys.pinPepper)).toBe(false);
+    expect(otherKeys.qrUrlKey.equals(keys.qrUrlKey)).toBe(false);
     expect(otherKeys.totpKey.equals(keys.totpKey)).toBe(false);
   });
 

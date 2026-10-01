@@ -3,7 +3,7 @@
  * them only after it commits, so a subscriber never sees a change that was rolled back.
  * Events carry ids and facts, never secrets.
  */
-import type { OrderChannel, OrderDto, OrderStatus } from '@sds/shared';
+import type { OrderChannel, OrderDto, OrderStatus, PaymentDto } from '@sds/shared';
 
 /** A security-relevant fact the owner should hear about (CLAUDE.md rule 9). Delivery comes in P8 (ntfy). */
 export interface SecurityAlertEvent {
@@ -25,6 +25,17 @@ export interface OrderUpsertedEvent {
   id: string;
   rev: number;
   data: OrderDto;
+}
+
+/**
+ * A synced payment row changed (02 §5 `payment.upserted`). `data` is the payment DTO: it shows the
+ * masked PromptPay target only, never the ID or a QR payload.
+ */
+export interface PaymentUpsertedEvent {
+  type: 'payment.upserted';
+  id: string;
+  rev: number;
+  data: PaymentDto;
 }
 
 /** A new order exists: devices play the alert sound (02 §5). */
@@ -66,6 +77,7 @@ export interface MenuUpsertedEvent {
 export type AppEvent =
   | SecurityAlertEvent
   | OrderUpsertedEvent
+  | PaymentUpsertedEvent
   | NewOrderAlertEvent
   | SettingsUpdatedEvent
   | MenuUpsertedEvent;

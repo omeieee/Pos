@@ -9,6 +9,7 @@ import type { AuthContext } from './auth/service.ts';
 import type { EventBus } from './events.ts';
 import { registerMenuRoutes } from './menu/routes.ts';
 import { registerOrderRoutes } from './orders/routes.ts';
+import { registerPaymentRoutes } from './payments/routes.ts';
 import { registerSettingsRoutes } from './settings/routes.ts';
 
 export interface V1Deps {
@@ -34,6 +35,13 @@ export const OPEN_ROUTES: ReadonlySet<string> = new Set([
   'GET /v1/menu',
 ]);
 
+/**
+ * The one other exception: routes reached from an `<img>`, which cannot send an Authorization
+ * header. Each must verify an HMAC signature in `onRequest` (`markSignedUrlCheck`); the start-up
+ * check refuses one that does not. Today that is only the PromptPay QR picture.
+ */
+export const SIGNED_URL_ROUTES: ReadonlySet<string> = new Set(['GET /v1/payments/:id/qr.png']);
+
 /** What every /v1 module receives: the database, the clock, the event bus and the guard. */
 export interface ModuleContext {
   auth: AuthContext;
@@ -53,7 +61,7 @@ export async function registerV1(app: FastifyInstance, deps: V1Deps): Promise<vo
 
   await app.register(
     async (v1) => {
-      enforceGuardedRoutes(v1, OPEN_ROUTES);
+      enforceGuardedRoutes(v1, OPEN_ROUTES, SIGNED_URL_ROUTES);
       v1.decorateRequest('auth', null);
       await v1.register((scope) => registerAuthRoutes(scope, context.auth, context.guard), {
         prefix: '/auth',
@@ -67,6 +75,8 @@ export async function registerV1(app: FastifyInstance, deps: V1Deps): Promise<vo
       await v1.register((scope) => registerSettingsRoutes(scope, context.auth, context.guard), {
         prefix: '/settings',
       });
+      // Payments: /v1/orders/:id/payments and /v1/payments/... (no prefix of its own).
+      await v1.register((scope) => registerPaymentRoutes(scope, context.auth, context.guard));
       // Device and staff management: /v1/devices and /v1/staff (no prefix of its own).
       await v1.register((scope) => registerAdminRoutes(scope, context.auth, context.guard));
     },
