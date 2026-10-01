@@ -9,7 +9,7 @@ import {
 } from '@sds/shared';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { markSignedUrlCheck, type GuardFactory, principalOf } from '../auth/guards.ts';
+import { type GuardFactory, markSignedUrlCheck, principalOf } from '../auth/guards.ts';
 import type { AuthContext } from '../auth/service.ts';
 import { ApiError } from '../errors.ts';
 import { parse } from '../validate.ts';

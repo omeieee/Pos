@@ -15,6 +15,7 @@ import {
 } from '@sds/shared';
 import QRCode from 'qrcode';
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'vitest';
+import { deriveAuthKeys } from '../auth/crypto.ts';
 import type { AppEvent } from '../events.ts';
 import {
   createHarness,
@@ -22,7 +23,6 @@ import {
   type Menu,
   type OwnerFixture,
 } from '../test-support/harness.ts';
-import { deriveAuthKeys } from '../auth/crypto.ts';
 import { QR_PNG_OPTIONS, signQrLink } from './qr.ts';
 
 let h: Harness;
