@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { errorText, waitText } from '../api/errors.ts';
 import type { Principal } from '../auth/auth-store.ts';
-import { lockSecondsLeft } from '../auth/pin-pad.ts';
+import { hasActiveLock, lockSecondsLeft } from '../auth/pin-pad.ts';
 import { Brand } from './Brand.tsx';
 import { useAuthState, useAuthStore, useNow, useT } from './hooks.ts';
 import { Icon } from './Icon.tsx';
@@ -16,8 +16,11 @@ export function PinScreen() {
   const tr = useT();
   const [chosen, setChosen] = useState<Principal | null>(null);
   const [ownerMode, setOwnerMode] = useState(false);
-  const anyLock = Object.values(state.pinLockedUntil).some((until) => until > Date.now());
-  const now = useNow(anyLock ? 10_000 : null);
+  // The time is read at render, and the screen re-renders each second only while a lock runs.
+  const [ticking, setTicking] = useState(false);
+  const now = useNow(ticking ? 1_000 : null);
+  const anyLock = hasActiveLock(state.pinLockedUntil, now);
+  if (anyLock !== ticking) setTicking(anyLock);
 
   if (ownerMode) return <OwnerSignInScreen onBack={() => setOwnerMode(false)} />;
 

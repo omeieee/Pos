@@ -8,6 +8,7 @@ import {
   useSyncExternalStore,
 } from 'react';
 import type { AuthState, AuthStore } from '../auth/auth-store.ts';
+import { subscribeTicks } from '../lib/clock.ts';
 import type { ReadableStore } from '../lib/store.ts';
 import type { ViewportInfo } from '../theme/device.ts';
 
@@ -45,16 +46,18 @@ export function useT(): Tr {
 
 // ---------- Time and screen ----------
 
-/** The current time in epoch ms, refreshed every `intervalMs`. Pass null to stop the timer. */
+/**
+ * The current time in epoch ms, read fresh on every render. `intervalMs` re-renders the
+ * component that often; null stops the timer. Nothing is stored, so the value can never freeze
+ * at an old time when the timer stops (for example when a lock has just expired).
+ */
 export function useNow(intervalMs: number | null): number {
-  const [now, setNow] = useState(() => Date.now());
+  const [, wake] = useState(0);
   useEffect(() => {
     if (intervalMs === null) return;
-    setNow(Date.now());
-    const id = setInterval(() => setNow(Date.now()), intervalMs);
-    return () => clearInterval(id);
+    return subscribeTicks(intervalMs, () => wake((n) => n + 1));
   }, [intervalMs]);
-  return now;
+  return Date.now();
 }
 
 const COARSE = '(pointer: coarse)';

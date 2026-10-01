@@ -58,6 +58,11 @@ export function keyToAction(key: string): PinPadAction | 'submit' | null {
   return null;
 }
 
+/** True while any tile still has time left on its lock at `now` (the timer runs only then). */
+export function hasActiveLock(lockedUntil: Readonly<Record<string, number>>, now: number): boolean {
+  return Object.values(lockedUntil).some((until) => lockSecondsLeft(until, now) > 0);
+}
+
 /** Whole seconds left on a lock learned from a 423 answer; 0 when there is none or it ended. */
 export function lockSecondsLeft(lockedUntil: number | undefined, now: number): number {
   return lockedUntil === undefined ? 0 : Math.max(0, Math.ceil((lockedUntil - now) / 1000));
