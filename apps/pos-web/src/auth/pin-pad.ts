@@ -55,11 +55,18 @@ export const canSubmitPin = (state: PinPadState): boolean =>
 export const shouldAutoSubmit = (state: PinPadState): boolean =>
   state.digits.length === PIN_MAX_DIGITS;
 
-/** A hardware keyboard on a laptop or an iPad: digits type, Backspace deletes, Enter submits. */
+/**
+ * A hardware keyboard on a laptop or an iPad: digits type, Backspace deletes, Enter submits.
+ * Escape is left alone so it can still close a dialog.
+ */
 export function keyToAction(key: string): PinPadAction | 'submit' | null {
   if (/^\d$/.test(key)) return { type: 'digit', digit: key };
   if (key === 'Backspace') return { type: 'delete' };
-  if (key === 'Escape') return { type: 'clear' };
   if (key === 'Enter') return 'submit';
   return null;
+}
+
+/** Whole seconds left on a lock learned from a 423 answer; 0 when there is none or it ended. */
+export function lockSecondsLeft(lockedUntil: number | undefined, now: number): number {
+  return lockedUntil === undefined ? 0 : Math.max(0, Math.ceil((lockedUntil - now) / 1000));
 }

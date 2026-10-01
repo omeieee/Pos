@@ -3,6 +3,7 @@ import {
   canSubmitPin,
   emptyPin,
   keyToAction,
+  lockSecondsLeft,
   PIN_MAX_DIGITS,
   type PinPadAction,
   type PinPadState,
@@ -72,12 +73,22 @@ describe('dots', () => {
   });
 });
 
+describe('lock countdown', () => {
+  test('counts down whole seconds and never goes below zero', () => {
+    expect(lockSecondsLeft(undefined, 1000)).toBe(0);
+    expect(lockSecondsLeft(301_000, 1000)).toBe(300);
+    expect(lockSecondsLeft(1500, 1000)).toBe(1);
+    expect(lockSecondsLeft(1000, 1000)).toBe(0);
+    expect(lockSecondsLeft(500, 1000)).toBe(0);
+  });
+});
+
 describe('hardware keyboard', () => {
   test.each<[string, PinPadAction | 'submit' | null]>([
     ['7', { type: 'digit', digit: '7' }],
     ['Backspace', { type: 'delete' }],
-    ['Escape', { type: 'clear' }],
     ['Enter', 'submit'],
+    ['Escape', null],
     ['a', null],
     ['Tab', null],
     ['10', null],
