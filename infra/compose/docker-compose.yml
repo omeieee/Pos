@@ -23,6 +23,7 @@ services:
       PORT: "3000"
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL missing in .env}
       CORS_ORIGINS: ${CORS_ORIGINS:?CORS_ORIGINS missing in .env}
+      AUTH_SECRET_KEY: ${AUTH_SECRET_KEY:?AUTH_SECRET_KEY missing in .env - see .env.example}
       SENTRY_DSN: ${SENTRY_DSN:-}
       GIT_SHA: ${GIT_SHA:-unknown}
     # Reachable only by caddy on the internal network; nothing published.
