@@ -1,0 +1,392 @@
+/**
+ * Typed client for the /v1 API. The one place that talks HTTP to it.
+ *
+ * - Every success response is parsed with the shared Zod schema; a body that does not match is a
+ *   RESPONSE_INVALID error, never silently used. Every request body is parsed with the shared
+ *   input schema first, so an invalid call fails before it reaches the network.
+ * - Tokens go in headers only: `Authorization: Bearer <session>` and `X-Device-Token`. They are
+ *   never put in a URL, a log line or an error. The client reads them through getters so it
+ *   holds no copy.
+ * - `POST /v1/orders` carries `clientRequestId` (the idempotency key) in the body and the same
+ *   value in `Idempotency-Key`. The id belongs to the logical order, not to one HTTP attempt: a
+ *   caller that may retry (the offline outbox) creates it once with `newClientRequestId()` and
+ *   passes it on every attempt.
+ * - Only requests with a body send `Content-Type: application/json`; Fastify answers 400 to an
+ *   empty JSON body (for example on POST /v1/auth/logout).
+ */
+import {
+  authMeResponseSchema,
+  authStaffListResponseSchema,
+  cancelOrderInputSchema,
+  createOrderInputSchema,
+  listOrdersQuerySchema,
+  listOrdersResponseSchema,
+  orderDtoSchema,
+  orderIdParamSchema,
+  ownerLoginInputSchema,
+  ownerStepUpInputSchema,
+  patchOrderInputSchema,
+  pinLoginInputSchema,
+  registerDeviceInputSchema,
+  registerDeviceResponseSchema,
+  sessionResponseSchema,
+  staffStepUpInputSchema,
+  stepUpResponseSchema,
+  transitionOrderInputSchema,
+} from '@sds/shared';
+import type { z } from 'zod';
+import { newUuid } from '../platform/ids.ts';
+import { ApiClientError, AUTH_FAILURE_CODES, codeFromStatus } from './errors.ts';
+
+/** Structural slice of a Zod schema, so a failed parse can never leak its issues or the input. */
+export interface Schema<T> {
+  safeParse(data: unknown): { success: true; data: T } | { success: false };
+}
+
+export interface ApiClientOptions {
+  baseUrl: string;
+  fetch?: typeof fetch;
+  getSessionToken: () => string | null;
+  getDeviceToken: () => string | null;
+  /**
+   * Called when the API says the session or device is no longer valid (UNAUTHENTICATED on a
+   * request that carried a session, DEVICE_UNREGISTERED, DEVICE_MISMATCH). The auth store
+   * reacts here so every caller gets the same sign-out behaviour.
+   */
+  onAuthFailure?: (error: ApiClientError) => void;
+  /** Milliseconds before a request is abandoned. The counter flow must never hang. */
+  timeoutMs?: number;
+}
+
+type DeviceHeader = 'omit' | 'optional' | 'required';
+
+interface RequestSpec<T> {
+  method: 'GET' | 'POST' | 'PATCH';
+  path: string;
+  query?: Record<string, string | undefined>;
+  body?: unknown;
+  schema?: Schema<T>;
+  /** `true`: bearer from the store. A string: use this token (logout, after local clear). */
+  session?: boolean | string;
+  device?: DeviceHeader;
+  headers?: Record<string, string>;
+}
+
+interface Raw<T> {
+  data: T;
+  status: number;
+}
+
+const DEFAULT_TIMEOUT_MS = 15_000;
+const MAX_WAIT_SECONDS = 7 * 24 * 60 * 60;
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const positiveNumber = (value: unknown): number | null =>
+  typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null;
+
+function parseJson(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return undefined;
+  }
+}
+
+/** Builds the error from a non-2xx answer, keeping only the fields the UI uses. */
+function errorFromResponse(status: number, text: string): ApiClientError {
+  const body = parseJson(text);
+  const record = isRecord(body) ? body : {};
+  const details = isRecord(record.details) ? record.details : {};
+  const code =
+    typeof record.code === 'string' && record.code.length > 0 && record.code.length <= 64
+      ? record.code
+      : codeFromStatus(status);
+
+  const seconds = positiveNumber(details.retryAfterSeconds);
+  const millis = positiveNumber(details.retryAfterMs);
+  const wait = seconds ?? (millis === null ? null : millis / 1000);
+  const version = positiveNumber(details.currentVersion);
+  return new ApiClientError(code, {
+    status,
+    retryAfterSeconds: wait === null ? null : Math.min(MAX_WAIT_SECONDS, Math.ceil(wait)),
+    currentVersion: version === null ? null : Math.floor(version),
+  });
+}
+
+/** Parses request input with the shared schema, or fails before any network call. */
+function checked<T>(schema: Schema<T>, input: unknown): T {
+  const result = schema.safeParse(input);
+  if (!result.success) throw new ApiClientError('REQUEST_INVALID');
+  return result.data;
+}
+
+export function newClientRequestId(): string {
+  return newUuid();
+}
+
+export type NewOrderInput = Omit<z.input<typeof createOrderInputSchema>, 'clientRequestId'>;
+export type OwnerLoginRequest = z.input<typeof ownerLoginInputSchema>;
+export type OwnerStepUpRequest = z.input<typeof ownerStepUpInputSchema>;
+
+export function createApiClient(options: ApiClientOptions) {
+  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const doFetch: typeof fetch =
+    options.fetch ?? ((input, init) => globalThis.fetch(input, init as RequestInit));
+
+  function buildUrl(path: string, query?: Record<string, string | undefined>): string {
+    const base = options.baseUrl.replace(/\/+$/, '');
+    const search = new URLSearchParams();
+    for (const [key, value] of Object.entries(query ?? {})) {
+      if (value !== undefined) search.set(key, value);
+    }
+    const qs = search.toString();
+    return `${base}${path}${qs ? `?${qs}` : ''}`;
+  }
+
+  async function request<T>(spec: RequestSpec<T>): Promise<Raw<T>> {
+    const headers: Record<string, string> = { Accept: 'application/json', ...spec.headers };
+
+    let bearer: string | null = null;
+    if (spec.session) {
+      bearer = typeof spec.session === 'string' ? spec.session : options.getSessionToken();
+      // No session: say so without a round trip.
+      if (!bearer) throw new ApiClientError('UNAUTHENTICATED', { status: 401 });
+      headers.Authorization = `Bearer ${bearer}`;
+    }
+
+    const deviceMode = spec.device ?? 'omit';
+    if (deviceMode !== 'omit') {
+      const deviceToken = options.getDeviceToken();
+      if (deviceToken) headers['X-Device-Token'] = deviceToken;
+      else if (deviceMode === 'required') {
+        throw new ApiClientError('DEVICE_UNREGISTERED', { status: 401 });
+      }
+    }
+
+    let body: string | undefined;
+    if (spec.body !== undefined) {
+      headers['Content-Type'] = 'application/json';
+      body = JSON.stringify(spec.body);
+    }
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    let status: number;
+    let text: string;
+    try {
+      const init: RequestInit = {
+        method: spec.method,
+        headers,
+        signal: controller.signal,
+        credentials: 'omit',
+        cache: 'no-store',
+        referrerPolicy: 'no-referrer',
+      };
+      if (body !== undefined) init.body = body;
+      const response = await doFetch(buildUrl(spec.path, spec.query), init);
+      status = response.status;
+      text = status === 204 ? '' : await response.text();
+    } catch {
+      // Never keep the original error: its message can carry the URL.
+      throw new ApiClientError(controller.signal.aborted ? 'TIMEOUT' : 'NETWORK');
+    } finally {
+      clearTimeout(timer);
+    }
+
+    if (status < 200 || status >= 300) {
+      const error = errorFromResponse(status, text);
+      const authFailure =
+        AUTH_FAILURE_CODES.includes(error.code) &&
+        (error.code !== 'UNAUTHENTICATED' || bearer !== null);
+      if (authFailure) {
+        try {
+          options.onAuthFailure?.(error);
+        } catch {
+          // a failing listener must not hide the real error
+        }
+      }
+      throw error;
+    }
+
+    if (!spec.schema) return { data: undefined as T, status };
+    const parsed = spec.schema.safeParse(parseJson(text));
+    if (!parsed.success) throw new ApiClientError('RESPONSE_INVALID', { status });
+    return { data: parsed.data, status };
+  }
+
+  const get = <T>(spec: Omit<RequestSpec<T>, 'method'>) => request({ ...spec, method: 'GET' });
+  const post = <T>(spec: Omit<RequestSpec<T>, 'method'>) => request({ ...spec, method: 'POST' });
+  const patch = <T>(spec: Omit<RequestSpec<T>, 'method'>) => request({ ...spec, method: 'PATCH' });
+  const orderPath = (id: string) => `/v1/orders/${checked(orderIdParamSchema, { id }).id}`;
+
+  const auth = {
+    /** The PIN screen's tiles. Needs this device's token, no session. */
+    listStaff: async () =>
+      (
+        await get({
+          path: '/v1/auth/staff',
+          schema: authStaffListResponseSchema,
+          device: 'required',
+        })
+      ).data,
+
+    pinLogin: async (input: z.input<typeof pinLoginInputSchema>) =>
+      (
+        await post({
+          path: '/v1/auth/pin',
+          body: checked(pinLoginInputSchema, input),
+          schema: sessionResponseSchema,
+          device: 'required',
+        })
+      ).data,
+
+    /**
+     * Owner password sign-in. The device token is sent when there is one (the session is then
+     * recorded against the device) but the call also works on an unregistered device.
+     */
+    ownerLogin: async (input: OwnerLoginRequest) =>
+      (
+        await post({
+          path: '/v1/auth/owner',
+          body: checked(ownerLoginInputSchema, input),
+          schema: sessionResponseSchema,
+          device: 'optional',
+        })
+      ).data,
+
+    /** Owner + a fresh step-up. The one-time device token is in the answer; keep it. */
+    registerDevice: async (input: z.input<typeof registerDeviceInputSchema>) =>
+      (
+        await post({
+          path: '/v1/auth/device',
+          body: checked(registerDeviceInputSchema, input),
+          schema: registerDeviceResponseSchema,
+          session: true,
+          device: 'optional',
+        })
+      ).data,
+
+    /** The owner's step-up: password plus an app code or a recovery code. */
+    stepUpOwner: async (input: OwnerStepUpRequest) =>
+      (
+        await post({
+          path: '/v1/auth/step-up',
+          body: checked(ownerStepUpInputSchema, input),
+          schema: stepUpResponseSchema,
+          session: true,
+          device: 'optional',
+        })
+      ).data,
+
+    /** Any other role's step-up: the PIN again. */
+    stepUpStaff: async (input: z.input<typeof staffStepUpInputSchema>) =>
+      (
+        await post({
+          path: '/v1/auth/step-up',
+          body: checked(staffStepUpInputSchema, input),
+          schema: stepUpResponseSchema,
+          session: true,
+          device: 'optional',
+        })
+      ).data,
+
+    me: async () =>
+      (
+        await get({
+          path: '/v1/auth/me',
+          schema: authMeResponseSchema,
+          session: true,
+          device: 'optional',
+        })
+      ).data,
+
+    /** `sessionToken` lets the store clear its own copy first and still revoke this session. */
+    logout: async (sessionToken?: string) => {
+      await post<void>({
+        path: '/v1/auth/logout',
+        session: sessionToken ?? true,
+        device: 'optional',
+      });
+    },
+  };
+
+  const orders = {
+    /**
+     * Creates an order. Pass the same `clientRequestId` on every retry of the same order; the
+     * server then returns the original (`replay: true`). Without one, a fresh id is used.
+     */
+    create: async (input: NewOrderInput, options?: { clientRequestId?: string }) => {
+      const clientRequestId = options?.clientRequestId ?? newClientRequestId();
+      const { data, status } = await post({
+        path: '/v1/orders',
+        body: checked(createOrderInputSchema, { ...input, clientRequestId }),
+        schema: orderDtoSchema,
+        session: true,
+        device: 'optional',
+        headers: { 'Idempotency-Key': clientRequestId },
+      });
+      return { order: data, replay: status === 200, clientRequestId };
+    },
+
+    list: async (query: z.input<typeof listOrdersQuerySchema> = {}) =>
+      (
+        await get({
+          path: '/v1/orders',
+          query: checked(listOrdersQuerySchema, query),
+          schema: listOrdersResponseSchema,
+          session: true,
+          device: 'optional',
+        })
+      ).data,
+
+    get: async (id: string) =>
+      (
+        await get({
+          path: orderPath(id),
+          schema: orderDtoSchema,
+          session: true,
+          device: 'optional',
+        })
+      ).data,
+
+    /** Note and room only; `expectedVersion` is required (VERSION_CONFLICT on a stale one). */
+    patch: async (id: string, input: z.input<typeof patchOrderInputSchema>) =>
+      (
+        await patch({
+          path: orderPath(id),
+          body: checked(patchOrderInputSchema, input),
+          schema: orderDtoSchema,
+          session: true,
+          device: 'optional',
+        })
+      ).data,
+
+    transition: async (id: string, input: z.input<typeof transitionOrderInputSchema>) =>
+      (
+        await post({
+          path: `${orderPath(id)}/transition`,
+          body: checked(transitionOrderInputSchema, input),
+          schema: orderDtoSchema,
+          session: true,
+          device: 'optional',
+        })
+      ).data,
+
+    cancel: async (id: string, input: z.input<typeof cancelOrderInputSchema>) =>
+      (
+        await post({
+          path: `${orderPath(id)}/cancel`,
+          body: checked(cancelOrderInputSchema, input),
+          schema: orderDtoSchema,
+          session: true,
+          device: 'optional',
+        })
+      ).data,
+  };
+
+  return { auth, orders };
+}
+
+export type ApiClient = ReturnType<typeof createApiClient>;
