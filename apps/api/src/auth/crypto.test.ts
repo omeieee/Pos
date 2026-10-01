@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { describe, expect, test } from 'vitest';
 import {
   type AuthKeys,
@@ -46,7 +47,6 @@ describe('key derivation', () => {
     expect(again.totpKey.equals(keys.totpKey)).toBe(true);
     expect(keys.totpKey).toHaveLength(32);
     expect(keys.totpKey.equals(keys.pinPepper)).toBe(false);
-    expect(keys.pinPepper.equals(keys.recoveryPepper)).toBe(false);
     expect(otherKeys.totpKey.equals(keys.totpKey)).toBe(false);
   });
 
@@ -155,14 +155,20 @@ describe('recovery codes', () => {
 
   test('are compared after normalising case, spaces and dashes', () => {
     expect(normalizeRecoveryCode(' abcd-efgh jklm-npqr ')).toBe('ABCDEFGHJKLMNPQR');
-    expect(hashRecoveryCode('abcd-efgh-jklm-npqr', keys)).toBe(
-      hashRecoveryCode('ABCDEFGHJKLMNPQR', keys),
-    );
+    expect(hashRecoveryCode('abcd-efgh-jklm-npqr')).toBe(hashRecoveryCode('ABCDEFGHJKLMNPQR'));
   });
 
-  test('are stored as a peppered hash', () => {
-    const h = hashRecoveryCode('ABCD-EFGH-JKLM-NPQR', keys);
-    expect(h).toMatch(/^[0-9a-f]{64}$/);
-    expect(h).not.toBe(hashRecoveryCode('ABCD-EFGH-JKLM-NPQR', otherKeys));
+  test('carry 80 bits: 16 symbols from an alphabet of 32', () => {
+    const symbols = newRecoveryCodes(1)[0]?.replaceAll('-', '') ?? '';
+    expect(symbols).toHaveLength(16);
+    expect(16 * Math.log2(32)).toBe(80);
+  });
+
+  test('are stored as a plain SHA-256, so recovery still works when AUTH_SECRET_KEY is lost', () => {
+    const code = 'ABCD-EFGH-JKLM-NPQR';
+    const stored = hashRecoveryCode(code);
+    expect(stored).toBe(createHash('sha256').update('ABCDEFGHJKLMNPQR').digest('hex'));
+    // The function takes no key at all: nothing here can depend on AUTH_SECRET_KEY.
+    expect(hashRecoveryCode.length).toBe(1);
   });
 });

@@ -167,6 +167,44 @@ export async function lockOwnerByStaffId(
   return row as OwnerLoginRow | undefined;
 }
 
+/** The owner (the shop has exactly one), with the credentials row locked. For the owner:* commands. */
+export async function lockSoleOwner(db: Db): Promise<OwnerLoginRow | undefined> {
+  const [row] = await db
+    .select(ownerColumns)
+    .from(ownerCredentials)
+    .innerJoin(staff, eq(staff.id, ownerCredentials.staffId))
+    .where(eq(staff.role, 'owner'))
+    .orderBy(asc(staff.id))
+    .for('update', { of: ownerCredentials })
+    .limit(1);
+  return row as OwnerLoginRow | undefined;
+}
+
+/** Replaces the authenticator secret and the recovery codes, and clears the lock and replay marker. */
+export async function replaceOwnerSecondFactor(
+  db: Db,
+  staffId: string,
+  next: { totpSecretEnc: string; recoveryCodeHashes: string[] },
+): Promise<void> {
+  await db
+    .update(ownerCredentials)
+    .set({
+      totpSecretEnc: next.totpSecretEnc,
+      recoveryCodeHashes: next.recoveryCodeHashes,
+      totpLastStep: null,
+      failedLoginCount: 0,
+      lockedUntil: null,
+    })
+    .where(eq(ownerCredentials.staffId, staffId));
+}
+
+export async function clearOwnerLocks(db: Db, staffId: string): Promise<void> {
+  await db
+    .update(ownerCredentials)
+    .set({ failedLoginCount: 0, lockedUntil: null })
+    .where(eq(ownerCredentials.staffId, staffId));
+}
+
 export async function setOwnerLoginState(
   db: Db,
   staffId: string,
@@ -323,6 +361,14 @@ export async function touchSession(db: Db, sessionId: string, at: Date): Promise
 
 export async function setSessionStepUp(db: Db, sessionId: string, until: Date): Promise<void> {
   await db.update(sessions).set({ stepUpUntil: until }).where(eq(sessions.id, sessionId));
+}
+
+/** Ends every open session of a staff member (a PIN was reset, the authenticator was replaced). */
+export async function revokeSessionsForStaff(db: Db, staffId: string, at: Date): Promise<void> {
+  await db
+    .update(sessions)
+    .set({ revokedAt: at })
+    .where(and(eq(sessions.staffId, staffId), isNull(sessions.revokedAt)));
 }
 
 export async function revokeSession(db: Db, sessionId: string, at: Date): Promise<void> {

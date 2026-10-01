@@ -9,6 +9,8 @@
     "start": "node dist/server.js",
     "migrate": "node dist/migrate.js",
     "owner:create": "node build.ts && node dist/owner-create.js",
+    "owner:reset": "node build.ts && node dist/owner-reset.js",
+    "owner:unlock": "node build.ts && node dist/owner-unlock.js",
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run"
   },

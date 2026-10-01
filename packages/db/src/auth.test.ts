@@ -97,6 +97,64 @@ describe('owner credentials', () => {
   });
 });
 
+describe('owner administration queries', () => {
+  test('lockSoleOwner finds the owner, replaceOwnerSecondFactor swaps the secret and codes and clears the lock', async () => {
+    const { staffId, email } = await newOwner();
+    expect((await auth.lockSoleOwner(db))?.role).toBe('owner');
+
+    await auth.setOwnerLoginState(db, staffId, { failedLoginCount: 4, lockedUntil: new Date() });
+    await auth.claimTotpStep(db, staffId, 77);
+    await auth.replaceOwnerSecondFactor(db, staffId, {
+      totpSecretEnc: 'new-enc',
+      recoveryCodeHashes: ['n1', 'n2'],
+    });
+    expect(await auth.lockOwnerByEmail(db, email)).toMatchObject({
+      totpSecretEnc: 'new-enc',
+      recoveryCodeHashes: ['n1', 'n2'],
+      totpLastStep: null,
+      failedLoginCount: 0,
+      lockedUntil: null,
+    });
+  });
+
+  test('clearOwnerLocks resets the failure count and lock only', async () => {
+    const { staffId, email } = await newOwner();
+    await auth.setOwnerLoginState(db, staffId, { failedLoginCount: 5, lockedUntil: new Date() });
+    await auth.clearOwnerLocks(db, staffId);
+    expect(await auth.lockOwnerByEmail(db, email)).toMatchObject({
+      failedLoginCount: 0,
+      lockedUntil: null,
+      recoveryCodeHashes: ['h1', 'h2', 'h3'],
+    });
+  });
+
+  test('revokeSessionsForStaff ends every open session of that person and no other', async () => {
+    const a = await newOwner();
+    const b = await newOwner();
+    const at = new Date('2026-10-01T04:00:00Z');
+    const hashes = [unique(), unique()];
+    await auth.insertSession(db, {
+      tokenHash: hashes[0] ?? '',
+      staffId: a.staffId,
+      deviceId: null,
+      kind: 'owner',
+      expiresAt: at,
+      lastSeenAt: at,
+    });
+    await auth.insertSession(db, {
+      tokenHash: hashes[1] ?? '',
+      staffId: b.staffId,
+      deviceId: null,
+      kind: 'owner',
+      expiresAt: at,
+      lastSeenAt: at,
+    });
+    await auth.revokeSessionsForStaff(db, a.staffId, at);
+    expect((await auth.findSessionByTokenHash(db, hashes[0] ?? ''))?.revokedAt).toEqual(at);
+    expect((await auth.findSessionByTokenHash(db, hashes[1] ?? ''))?.revokedAt).toBeNull();
+  });
+});
+
 describe('staff PINs', () => {
   async function newStaff(role: 'cashier' | 'kitchen', pinHash: string | null, active = true) {
     const [row] = await db

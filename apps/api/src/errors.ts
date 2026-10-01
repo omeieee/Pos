@@ -37,6 +37,14 @@ export const accountLocked = (until: Date, now: Date) =>
     retryAfterSeconds: Math.max(1, Math.ceil((until.getTime() - now.getTime()) / 1000)),
   });
 
+/** The TOTP secret cannot be read (AUTH_SECRET_KEY lost or changed). Only shown after the password was right. */
+export const secondFactorUnavailable = () =>
+  new ApiError(
+    503,
+    'SECOND_FACTOR_UNAVAILABLE',
+    'The authenticator code cannot be checked right now. Sign in with a recovery code',
+  );
+
 export const forbidden = () => new ApiError(403, 'FORBIDDEN', 'Your role may not do this');
 
 export const stepUpRequired = () =>

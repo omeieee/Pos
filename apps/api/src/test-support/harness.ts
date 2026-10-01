@@ -189,7 +189,7 @@ export async function createHarness(
       passwordHash: await hashPassword(password),
       pinHash: overrides.pin === undefined ? null : await hashPin(overrides.pin, keys),
       encryptTotpSecret: (id) => encryptSecret(totpSecret, keys.totpKey, id),
-      recoveryCodeHashes: recoveryCodes.map((code) => hashRecoveryCode(code, keys)),
+      recoveryCodeHashes: recoveryCodes.map((code) => hashRecoveryCode(code)),
     });
     return {
       staffId,

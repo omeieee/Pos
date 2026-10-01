@@ -7,8 +7,10 @@
  *   brute-forced from a stolen database copy whatever the hash. Online guessing is stopped by
  *   the lockout (policy.ts), offline guessing by the pepper.
  * - Stored TOTP secrets: AES-256-GCM, with the staff id as associated data.
+ * - Recovery codes: plain SHA-256 with NO key, so they still work when the master key is lost.
  *
- * One master key (AUTH_SECRET_KEY) feeds HKDF to give every purpose its own key.
+ * One master key (AUTH_SECRET_KEY) feeds HKDF to give the TOTP encryption and the PIN pepper
+ * their own keys.
  */
 import {
   createCipheriv,
@@ -41,8 +43,6 @@ export interface AuthKeys {
   totpKey: Buffer;
   /** HMAC key mixed into PIN hashes. */
   pinPepper: Buffer;
-  /** HMAC key for recovery-code hashes. */
-  recoveryPepper: Buffer;
 }
 
 const HKDF_SALT = Buffer.from('sds-auth-v1');
@@ -56,7 +56,6 @@ export function deriveAuthKeys(master: Buffer): AuthKeys {
   return {
     totpKey: derive(master, 'totp-encryption'),
     pinPepper: derive(master, 'pin-pepper'),
-    recoveryPepper: derive(master, 'recovery-code-pepper'),
   };
 }
 
@@ -211,8 +210,11 @@ export function normalizeRecoveryCode(code: string): string {
   return code.toUpperCase().replaceAll(/[^A-Z0-9]/g, '');
 }
 
-export function hashRecoveryCode(code: string, keys: AuthKeys): string {
-  return createHmac('sha256', keys.recoveryPepper)
-    .update(normalizeRecoveryCode(code))
-    .digest('hex');
+/**
+ * A plain SHA-256 on purpose, with no key. A code has 80 random bits, so a fast hash cannot be
+ * brute-forced, and recovery must keep working when AUTH_SECRET_KEY is lost or changed: that is
+ * exactly when the owner needs it.
+ */
+export function hashRecoveryCode(code: string): string {
+  return createHash('sha256').update(normalizeRecoveryCode(code)).digest('hex');
 }

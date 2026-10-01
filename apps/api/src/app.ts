@@ -2,6 +2,7 @@ import cors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
 import Fastify, { type FastifyInstance, type FastifyServerOptions } from 'fastify';
 import type { Config } from './config.ts';
+import { ApiError } from './errors.ts';
 import { LOG_REDACT_PATHS, scrubLogArgs, serializeErr } from './redact.ts';
 
 export type AppOptions = {
@@ -64,7 +65,9 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
 
   app.setErrorHandler<AppError>((error, request, reply) => {
     const status = error.statusCode && error.statusCode >= 400 ? error.statusCode : 500;
-    if (status >= 500) {
+    // An ApiError is an expected failure with a code the app chose (details carry no secrets), even
+    // when it is a 5xx such as SECOND_FACTOR_UNAVAILABLE; anything else 5xx stays generic.
+    if (status >= 500 && !(error instanceof ApiError)) {
       request.log.error({ err: error }, 'request failed');
       return reply.status(status).send(errorBody('INTERNAL', 'Internal server error'));
     }

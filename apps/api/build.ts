@@ -1,5 +1,5 @@
 /**
- * Bundles the API into dist/ (server.js, migrate.js, owner-create.js) with every dependency inlined, so the
+ * Bundles the API into dist/ (server.js, migrate.js, owner-create.js, owner-reset.js, owner-unlock.js) with every dependency inlined, so the
  * runtime image needs only dist/. Workspace packages are TypeScript source; esbuild compiles them.
  *   node build.ts          one-off build
  *   node build.ts --watch  rebuild on change and restart the server (reads apps/api/.env if present)
@@ -19,6 +19,8 @@ const options: BuildOptions = {
     server: 'src/server.ts',
     migrate: 'src/migrate.ts',
     'owner-create': 'src/cli/owner-create.ts',
+    'owner-reset': 'src/cli/owner-reset.ts',
+    'owner-unlock': 'src/cli/owner-unlock.ts',
   },
   outdir,
   bundle: true,

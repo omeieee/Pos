@@ -63,7 +63,7 @@ export async function createOwner(
       passwordHash,
       pinHash,
       encryptTotpSecret: (id) => encryptSecret(input.totpSecret, ctx.keys.totpKey, id),
-      recoveryCodeHashes: recoveryCodes.map((code) => hashRecoveryCode(code, ctx.keys)),
+      recoveryCodeHashes: recoveryCodes.map((code) => hashRecoveryCode(code)),
     });
     await insertAudit(tx, {
       actorType: 'system',

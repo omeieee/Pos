@@ -22,7 +22,13 @@ import {
   type StepUpResponse,
   staffStepUpInputSchema,
 } from '@sds/shared';
-import { accountLocked, deviceUnregistered, forbidden, invalidCredentials } from '../errors.ts';
+import {
+  accountLocked,
+  deviceUnregistered,
+  forbidden,
+  invalidCredentials,
+  secondFactorUnavailable,
+} from '../errors.ts';
 import type { AppEvent, SecurityAlertEvent } from '../events.ts';
 import { type CoreContext, type Emit, withTransaction } from '../tx.ts';
 import { parse } from '../validate.ts';
@@ -332,17 +338,25 @@ interface OwnerFactors {
 type OwnerAttempt =
   | { kind: 'ok'; usedRecoveryCode: boolean; recoveryCodesLeft: number }
   | { kind: 'invalid'; unknownAccount?: true }
-  | { kind: 'locked'; until: Date };
+  | { kind: 'locked'; until: Date }
+  /** The password was right but the stored TOTP secret cannot be decrypted. */
+  | { kind: 'unavailable' };
 
 async function secondFactorAccepted(
   tx: Db,
   ctx: AuthContext,
   row: authRepo.OwnerLoginRow,
   factors: OwnerFactors,
-): Promise<{ ok: boolean; usedRecoveryCode: boolean }> {
+): Promise<{ ok: boolean; usedRecoveryCode: boolean; unreadable?: true }> {
   if (factors.totp !== undefined) {
     if (!row.totpSecretEnc) return { ok: false, usedRecoveryCode: false };
-    const secret = decryptSecret(row.totpSecretEnc, ctx.keys.totpKey, row.staffId);
+    let secret: Buffer;
+    try {
+      secret = decryptSecret(row.totpSecretEnc, ctx.keys.totpKey, row.staffId);
+    } catch {
+      // Wrong or lost key. Not a guess, so it is reported but never counted against the owner.
+      return { ok: false, usedRecoveryCode: false, unreadable: true };
+    }
     const matched = verifyTotp(secret, factors.totp, ctx.now().getTime());
     const ok = matched.ok && (await authRepo.claimTotpStep(tx, row.staffId, matched.step));
     return { ok, usedRecoveryCode: false };
@@ -351,7 +365,7 @@ async function secondFactorAccepted(
     const ok = await authRepo.consumeRecoveryCode(
       tx,
       row.staffId,
-      hashRecoveryCode(factors.recoveryCode, ctx.keys),
+      hashRecoveryCode(factors.recoveryCode),
     );
     return { ok, usedRecoveryCode: ok };
   }
@@ -372,9 +386,32 @@ async function attemptOwner(
   if (row.lockedUntil && row.lockedUntil > now) return { kind: 'locked', until: row.lockedUntil };
 
   const earlier = row.lockedUntil ? 0 : row.failedLoginCount;
-  let second = { ok: false, usedRecoveryCode: false };
+  let second: Awaited<ReturnType<typeof secondFactorAccepted>> = {
+    ok: false,
+    usedRecoveryCode: false,
+  };
   if (await verifyPassword(row.passwordHash, factors.password)) {
     second = await secondFactorAccepted(tx, ctx, row, factors);
+  }
+  if (second.unreadable) {
+    await insertAudit(tx, {
+      actorType: 'system',
+      deviceId: where.deviceId,
+      action: 'auth.totp_unreadable',
+      entity: 'staff',
+      entityId: row.staffId,
+      after: {
+        hint: 'the stored TOTP secret does not decrypt; use a recovery code, then owner:reset',
+      },
+      ip: where.ip,
+    });
+    emit(
+      securityAlert(ctx, 'owner.totp_unreadable', 'critical', {
+        staffId: row.staffId,
+        deviceId: where.deviceId,
+      }),
+    );
+    return { kind: 'unavailable' };
   }
   if (second.ok) {
     if (row.failedLoginCount !== 0 || row.lockedUntil) {
@@ -480,6 +517,7 @@ export async function ownerLogin(
     return { kind: 'signed_in' as const, response: sessionResponse(ctx, issued, staff, 'owner') };
   });
   if (outcome.kind === 'locked') throw accountLocked(outcome.until, ctx.now());
+  if (outcome.kind === 'unavailable') throw secondFactorUnavailable();
   if (outcome.kind === 'invalid') {
     // Same cost as a real check, so response time does not reveal which e-mails exist.
     if (outcome.unknownAccount) await burnPasswordCheck(input.password);
@@ -554,6 +592,7 @@ export async function stepUp(
     return { kind: 'stepped_up' as const, stepUpUntil: until };
   });
   if (outcome.kind === 'locked') throw accountLocked(outcome.until, ctx.now());
+  if (outcome.kind === 'unavailable') throw secondFactorUnavailable();
   if (outcome.kind === 'invalid') {
     if (outcome.unknownAccount) await burnDecoy();
     throw invalidCredentials();

@@ -1,83 +1,28 @@
 /**
- * Creates the first owner. Interactive, so it needs a terminal:
- *   local:  DATABASE_URL=... AUTH_SECRET_KEY=... pnpm --filter @sds/api owner:create
- *   VM:     cd /opt/sds && ./dc run --rm --no-deps -e NODE_OPTIONS=--max-old-space-size=384 \
- *             api node dist/owner-create.js
- *           (through compose, which reads /opt/sds/.env and strips its quotes; a plain
- *           `docker run --env-file` would keep the quotes and fail the checks below)
- *
- * Secrets are never taken from argv or from the environment except the two settings above,
- * and never read from a file in the repo. The password and PIN are typed without echo. The
- * one-time recovery codes and the authenticator secret are printed once, to the terminal only.
+ * Creates the first owner. Interactive, so it needs a terminal (see ./common.ts for how to run
+ * it locally and on the VM). The authenticator is enrolled and confirmed before anything is saved.
  */
-import { createInterface } from 'node:readline/promises';
-import { Writable } from 'node:stream';
 import { authRepo, createDb } from '@sds/db';
 import { ownerPasswordSchema, pinSchema } from '@sds/shared';
 import { deriveAuthKeys } from '../auth/crypto.ts';
 import { createOwner, OwnerExistsError } from '../auth/owner-setup.ts';
-import { base32Encode, generateTotpSecret, otpauthUri, verifyTotp } from '../auth/totp.ts';
-import { authSecretKeySchema, databaseUrlSchema } from '../config.ts';
-import { redactQueryParams } from '../redact.ts';
-
-const ISSUER = 'Saap Don Sen POS';
-const MAX_CODE_TRIES = 3;
-
-function fail(message: string): never {
-  console.error(message);
-  process.exit(1);
-}
-
-function createPrompter() {
-  let muted = false;
-  const output = new Writable({
-    write(chunk, _encoding, done) {
-      if (!muted) process.stdout.write(chunk);
-      done();
-    },
-  });
-  const rl = createInterface({ input: process.stdin, output, terminal: true });
-  return {
-    async ask(question: string): Promise<string> {
-      muted = false;
-      return (await rl.question(question)).trim();
-    },
-    /** Typed characters are not echoed. */
-    async askHidden(question: string): Promise<string> {
-      process.stdout.write(question);
-      muted = true;
-      const answer = await rl.question('');
-      muted = false;
-      process.stdout.write('\n');
-      return answer;
-    },
-    close: () => rl.close(),
-  };
-}
-
-async function askUntilValid<T>(
-  read: () => Promise<string>,
-  check: (value: string) => T | undefined,
-  hint: string,
-): Promise<T> {
-  for (;;) {
-    const value = check(await read());
-    if (value !== undefined) return value;
-    console.error(hint);
-  }
-}
+import {
+  askUntilValid,
+  createPrompter,
+  describeError,
+  enrolAuthenticator,
+  fail,
+  loadCliEnv,
+  printRecoveryCodes,
+  requireTerminal,
+} from './common.ts';
 
 async function main() {
-  const url = databaseUrlSchema.safeParse(process.env.DATABASE_URL);
-  const key = authSecretKeySchema.safeParse(process.env.AUTH_SECRET_KEY);
-  if (!url.success) fail(`DATABASE_URL: ${url.error.issues[0]?.message ?? 'invalid'}`);
-  if (!key.success) fail(`AUTH_SECRET_KEY: ${key.error.issues[0]?.message ?? 'invalid'}`);
-  if (!process.stdin.isTTY) {
-    fail('This command types secrets, so it needs a terminal (run it in an interactive shell).');
-  }
+  const env = loadCliEnv({ needsKey: true });
+  requireTerminal();
 
-  const keys = deriveAuthKeys(key.data);
-  const { db, close } = createDb(url.data, { max: 1 });
+  const keys = deriveAuthKeys(env.authKey as Buffer);
+  const { db, close } = createDb(env.databaseUrl, { max: 1 });
   const prompt = createPrompter();
   try {
     // Refuse early; createOwner checks again inside its transaction.
@@ -114,37 +59,16 @@ async function main() {
       console.error('Use 4 to 6 digits, or leave it empty.');
     }
 
-    // Enrol the authenticator before saving anything: no owner is created that cannot sign in.
-    const totpSecret = generateTotpSecret();
-    console.log('\nAdd the account to an authenticator app (any RFC 6238 app).');
-    console.log('This is shown once and is not stored in clear.');
-    console.log(`  Secret (type it in): ${base32Encode(totpSecret)}`);
-    console.log(
-      `  Or the otpauth URI:  ${otpauthUri({ secret: totpSecret, account: email, issuer: ISSUER })}\n`,
-    );
-
-    let confirmed = false;
-    for (let tries = 0; tries < MAX_CODE_TRIES && !confirmed; tries++) {
-      const code = await prompt.ask('Enter the 6-digit code now shown in the app: ');
-      confirmed = verifyTotp(totpSecret, code, Date.now()).ok;
-      if (!confirmed) console.error('That code is not right.');
-    }
-    if (!confirmed) fail('The code was not confirmed. Nothing was saved. Run the command again.');
-
+    const totpSecret = await enrolAuthenticator(prompt, email);
     const { recoveryCodes } = await createOwner(
       { db, keys },
       { email, displayName, password, pin, totpSecret },
     );
-    console.log('\nOwner created. RECOVERY CODES (shown once, each works one time):');
-    for (const code of recoveryCodes) console.log(`  ${code}`);
-    console.log(
-      '\nWrite them on paper and keep them with the age backup key. They cannot be shown again.',
-    );
+    console.log('\nOwner created.');
+    printRecoveryCodes(recoveryCodes);
   } catch (error) {
     if (error instanceof OwnerExistsError) fail('An owner already exists. Nothing was changed.');
-    // Messages only: no query parameters, no connection string.
-    const message = error instanceof Error ? redactQueryParams(error.message) : 'unknown error';
-    fail(`Could not create the owner: ${message}`);
+    fail(`Could not create the owner: ${describeError(error)}`);
   } finally {
     prompt.close();
     await close();
