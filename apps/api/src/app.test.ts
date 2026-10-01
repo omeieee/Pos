@@ -175,6 +175,20 @@ describe('other routes and CORS', () => {
     }
   });
 
+  test('preflight answers are cacheable for 10 minutes, so iPads do not preflight every request', async () => {
+    const res = await (await make()).inject({
+      method: 'OPTIONS',
+      url: '/v1/orders',
+      headers: {
+        origin: 'https://pos.example.pages.dev',
+        'access-control-request-method': 'POST',
+        'access-control-request-headers': 'authorization,content-type',
+      },
+    });
+    expect(res.statusCode).toBe(204);
+    expect(res.headers['access-control-max-age']).toBe('600');
+  });
+
   test('allows only configured origins', async () => {
     const a = await make();
     const allowed = await a.inject({

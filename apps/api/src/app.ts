@@ -83,6 +83,8 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
     origin: options.config.corsOrigins.length > 0 ? options.config.corsOrigins : false,
     // v11 defaults to GET, HEAD and POST only; PATCH (expectedVersion) must pass the preflight.
     methods: ['GET', 'HEAD', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
+    // Browsers may reuse a preflight answer for 10 minutes (Safari caps it lower on its own).
+    maxAge: 600,
   });
   await app.register(rateLimit, {
     global: false,
