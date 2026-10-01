@@ -29,6 +29,7 @@ import {
   stepUpRequired,
   versionConflict,
 } from '../errors.ts';
+import { settlePaymentsForOrderCancel } from '../payments/service.ts';
 import { type CoreContext, type Emit, withTransaction } from '../tx.ts';
 import { currentBusinessDate, loadBusinessDay } from './business-day.ts';
 import { toOrderDto } from './dto.ts';
@@ -257,7 +258,8 @@ function stampsFor(to: OrderStatus, now: Date, reason: string | undefined): orde
 /**
  * Moves an order to another status. The state machine decides whether the move exists, whether
  * this role may make it, and whether it needs a reason or a step-up. `cancel` is the same move
- * to `cancelled`.
+ * to `cancelled`, and it also settles the order's payments (see `settlePaymentsForOrderCancel`):
+ * pending ones are cancelled with it, and a claimed or confirmed one refuses the cancel.
  */
 export async function transitionOrder(
   ctx: CoreContext,
@@ -280,12 +282,11 @@ export async function transitionOrder(
     if (!result.ok) throw transitionFailure(result.error, row.status, input.to);
     if (result.stepUp && !hasFreshStepUp(actor, ctx.now())) throw stepUpRequired();
 
-    const updated = await ordersRepo.updateOrderIfVersion(
-      tx,
-      id,
-      row.version,
-      stampsFor(input.to, ctx.now(), reason),
-    );
+    const patch = stampsFor(input.to, ctx.now(), reason);
+    if (input.to === 'cancelled') {
+      patch.paymentStatus = await settlePaymentsForOrderCancel(tx, row, emit);
+    }
+    const updated = await ordersRepo.updateOrderIfVersion(tx, id, row.version, patch);
     if (!updated) throw versionConflict(row.version); // cannot happen under the row lock
     const dto = await withItems(tx, updated);
     emitUpserted(emit, updated, dto);

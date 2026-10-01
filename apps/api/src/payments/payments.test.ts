@@ -1305,6 +1305,100 @@ describe('GET /v1/orders/:id/payments', () => {
   });
 });
 
+// ---------- Cancelling an order that has payments (rule 4 of this task) ----------
+
+describe.each([
+  [
+    'POST /cancel',
+    (token: string, id: string) =>
+      call('POST', `/v1/orders/${id}/cancel`, token, { reason: 'ลูกค้ายกเลิก' }),
+  ],
+  [
+    'POST /transition',
+    (token: string, id: string) =>
+      call('POST', `/v1/orders/${id}/transition`, token, { to: 'cancelled', reason: 'ลูกค้ายกเลิก' }),
+  ],
+])('order cancel through %s', (_name, cancel) => {
+  test('cancels the pending payments through the machine, in the same transaction, with events', async () => {
+    const cashier = await sign('cashier');
+    const order = await place(cashier);
+    const payment = await startPayment(cashier, order.id, 'promptpay');
+    const before = h.events.length;
+    const res = await cancel(await sign('manager'), order.id);
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ status: 'cancelled', paymentStatus: 'unpaid' });
+    expect(await row('select status from payments where id = $1', [payment.id])).toEqual({
+      status: 'cancelled',
+    });
+    expect(typesOf(eventsSince(before))).toEqual(['payment.upserted', 'order.upserted']);
+    const paymentEvent = eventsSince(before)[0];
+    expect(paymentEvent?.type === 'payment.upserted' && paymentEvent.data.status).toBe('cancelled');
+    // The QR link of the cancelled payment is dead.
+    expect((await call('GET', `/v1/payments/${payment.id}/qr-url`, cashier)).statusCode).toBe(409);
+  });
+
+  test('refuses while a payment is claimed: cancel-claimed comes first', async () => {
+    const cashier = await sign('cashier');
+    const order = await place(cashier);
+    const payment = await startPayment(cashier, order.id, 'promptpay');
+    await move(cashier, payment.id, 'claim');
+    const before = h.events.length;
+    const res = await cancel(await sign('manager'), order.id);
+    expect(res.statusCode).toBe(409);
+    expect(res.json()).toMatchObject({
+      code: 'ORDER_HAS_PAYMENT',
+      details: { paymentId: payment.id, status: 'claimed' },
+    });
+    expect(await row('select status from payments where id = $1', [payment.id])).toEqual({
+      status: 'claimed',
+    });
+    expect((await orderNow(cashier, order.id)).status).toBe('preparing');
+    expect(h.events.length).toBe(before);
+
+    await move(cashier, payment.id, 'cancel-claimed', { reason: 'ไม่พบยอด' });
+    expect((await cancel(await sign('manager'), order.id)).statusCode).toBe(200);
+  });
+
+  test('refuses while a payment is confirmed: a manager void comes first', async () => {
+    const cashier = await sign('cashier');
+    const order = await place(cashier);
+    const payment = await startPayment(cashier, order.id, 'cash');
+    const manager = await steppedManager();
+    const res = await cancel(manager, order.id);
+    expect(res.statusCode).toBe(409);
+    expect(res.json()).toMatchObject({
+      code: 'ORDER_HAS_PAYMENT',
+      details: { status: 'confirmed' },
+    });
+    expect((await orderNow(cashier, order.id)).status).toBe('preparing');
+
+    await move(manager, payment.id, 'void', { reason: 'คิดเงินผิด' });
+    const done = await cancel(manager, order.id);
+    expect(done.statusCode).toBe(200);
+    expect(done.json()).toMatchObject({ status: 'cancelled', paymentStatus: 'unpaid' });
+  });
+
+  test('an order with no payments cancels as before, and a cancelled payment does not block', async () => {
+    const cashier = await sign('cashier');
+    const plain = await place(cashier);
+    expect((await cancel(await sign('manager'), plain.id)).statusCode).toBe(200);
+
+    const withHistory = await place(cashier);
+    const p = await startPayment(cashier, withHistory.id, 'promptpay');
+    await call('POST', `/v1/payments/${p.id}/change-method`, cashier, payBody('platform'));
+    await setMethods({ cash: true, promptpay: true, platform: true, other: true });
+    // platform is pending, the promptpay one is cancelled: both end cancelled.
+    const res = await cancel(await sign('manager'), withHistory.id);
+    expect(res.statusCode).toBe(200);
+    expect(
+      await count(
+        "select count(*)::int as n from payments where order_id = $1 and status = 'cancelled'",
+        [withHistory.id],
+      ),
+    ).toBe(2);
+  });
+});
+
 // ---------- Nothing secret leaves the server ----------
 
 describe('no PromptPay ID in anything that leaves the server', () => {
