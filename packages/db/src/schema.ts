@@ -449,6 +449,10 @@ export const payments = pgTable(
     index('payments_confirmed_by_staff_id_idx').on(t.confirmedByStaffId),
     index('payments_scheme_id_idx').on(t.schemeId),
     index('payments_open_status_idx').on(t.status).where(sql`status in ('pending', 'claimed')`),
+    // DB backstop for "one open payment per order" (the order row lock is the first line).
+    uniqueIndex('payments_one_open_per_order')
+      .on(t.orderId)
+      .where(sql`status in ('pending', 'claimed')`),
     index('payments_rev_idx').on(t.rev),
     check('payments_method', oneOf('method', PAYMENT_METHODS)),
     check('payments_status', oneOf('status', PAYMENT_STATUSES)),

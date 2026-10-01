@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "payments_one_open_per_order" ON "payments" USING btree ("order_id") WHERE status in ('pending', 'claimed');

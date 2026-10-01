@@ -14,6 +14,36 @@ import { payments } from './schema.ts';
 
 export type PaymentRow = typeof payments.$inferSelect;
 
+/** The partial unique index that allows one open (pending or claimed) payment per order. */
+export const OPEN_PAYMENT_INDEX = 'payments_one_open_per_order';
+
+/**
+ * True when `error` is a unique violation of {@link OPEN_PAYMENT_INDEX}: a second open payment for
+ * an order that got past the order lock. Drizzle wraps the driver error as `cause`; PGlite names
+ * the index `constraint`, postgres-js `constraint_name`, and the server message names it too.
+ */
+export function isOpenPaymentConflict(error: unknown): boolean {
+  let current: unknown = error;
+  for (let depth = 0; depth < 3 && typeof current === 'object' && current !== null; depth += 1) {
+    const e = current as {
+      code?: unknown;
+      constraint?: unknown;
+      constraint_name?: unknown;
+      message?: unknown;
+      cause?: unknown;
+    };
+    if (e.code === '23505') {
+      const name = e.constraint ?? e.constraint_name;
+      if (name === OPEN_PAYMENT_INDEX) return true;
+      if (typeof e.message === 'string' && e.message.includes(`"${OPEN_PAYMENT_INDEX}"`)) {
+        return true;
+      }
+    }
+    current = e.cause;
+  }
+  return false;
+}
+
 /**
  * A new payment. There is no qr_payload here on purpose: the payload holds the PromptPay ID in
  * clear, so it is rebuilt from the current setting whenever the QR is shown and never stored

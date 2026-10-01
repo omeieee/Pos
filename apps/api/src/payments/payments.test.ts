@@ -554,6 +554,81 @@ describe('one open payment per order', () => {
     expect(none.json()).toMatchObject({ code: 'NOTHING_TO_PAY' });
   });
 
+  describe('the database index is the backstop when a second open payment slips past the lock', () => {
+    // PGlite cannot interleave two requests, so a trigger plays the request that "won the race":
+    // as our INSERT of an `other` payment starts, it first adds an open `platform` payment for the
+    // same order (in the same transaction, so it is rolled back with the failure).
+    const install = () =>
+      h.client.exec(`
+        create function test_open_race() returns trigger language plpgsql as $$
+        begin
+          insert into payments (order_id, method, status, amount_satang, client_request_id)
+          values (new.order_id, 'platform', 'pending', new.amount_satang, gen_random_uuid());
+          return new;
+        end $$;
+        create trigger test_open_race before insert on payments
+          for each row when (new.method = 'other') execute function test_open_race();
+      `);
+    const remove = () =>
+      h.client.exec(`
+        drop trigger if exists test_open_race on payments;
+        drop function if exists test_open_race();
+      `);
+
+    test('creating a payment answers PAYMENT_ALREADY_OPEN, not a 500, and writes nothing', async () => {
+      await setMethods({ cash: true, promptpay: true, platform: true, other: true });
+      const cashier = await sign('cashier');
+      const order = await place(cashier);
+      await install();
+      try {
+        const before = h.events.length;
+        const res = await pay(cashier, order.id, payBody('other'));
+        expect(res.statusCode).toBe(409);
+        expect(res.json()).toMatchObject({ code: 'PAYMENT_ALREADY_OPEN' });
+        expect(await paymentCount(order.id)).toBe(0);
+        expect(eventsSince(before)).toEqual([]);
+      } finally {
+        await remove();
+      }
+    });
+
+    test('changing the method answers the same, and the old payment stays pending', async () => {
+      await setMethods({ cash: true, promptpay: true, platform: true, other: true });
+      const cashier = await sign('cashier');
+      const order = await place(cashier);
+      const first = await startPayment(cashier, order.id, 'promptpay');
+      await install();
+      try {
+        const res = await call('POST', `/v1/payments/${first.id}/change-method`, cashier, {
+          clientRequestId: crypto.randomUUID(),
+          method: 'other',
+        });
+        expect(res.statusCode).toBe(409);
+        expect(res.json()).toMatchObject({ code: 'PAYMENT_ALREADY_OPEN' });
+        expect(await paymentCount(order.id)).toBe(1);
+        expect(
+          (await row<{ status: string }>('select status from payments where id = $1', [first.id]))
+            ?.status,
+        ).toBe('pending');
+      } finally {
+        await remove();
+      }
+    });
+  });
+
+  test('changing the method still works: the cancel and the new payment share one transaction', async () => {
+    const cashier = await sign('cashier');
+    const order = await place(cashier);
+    const first = await startPayment(cashier, order.id, 'promptpay');
+    const res = await call('POST', `/v1/payments/${first.id}/change-method`, cashier, {
+      clientRequestId: crypto.randomUUID(),
+      method: 'cash',
+      tendered: 10000,
+    });
+    expect(res.statusCode).toBe(201);
+    expect(await paymentCount(order.id)).toBe(2);
+  });
+
   test('two simultaneous requests for one order leave one payment (serialised by PGlite, not proof of Postgres)', async () => {
     const cashier = await sign('cashier');
     const order = await place(cashier);

@@ -78,6 +78,13 @@
       "when": 1790888606320,
       "tag": "0010_payments_request_hash",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1790891271314,
+      "tag": "0011_payments_one_open_per_order",
+      "breakpoints": true
     }
   ]
 }

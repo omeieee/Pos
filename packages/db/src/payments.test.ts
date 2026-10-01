@@ -130,6 +130,77 @@ describe('payments repo', () => {
     expect(await repo.findPaymentById(db, unique())).toBeUndefined();
   });
 
+  test('the database allows only one open (pending or claimed) payment per order', async () => {
+    const order = await newOrder();
+    const first = await repo.insertPayment(db, pending(order.id));
+    const clash = await repo.insertPayment(db, pending(order.id, { method: 'platform' })).then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+    expect(clash).toBeDefined();
+    expect(repo.isOpenPaymentConflict(clash)).toBe(true);
+    expect(await repo.listPaymentsForOrder(db, order.id)).toHaveLength(1);
+
+    // A claimed payment is still open, so it blocks a new one too.
+    await repo.updatePaymentIfVersion(db, first?.id ?? '', 1, { status: 'claimed' });
+    const claimedClash = await repo.insertPayment(db, pending(order.id)).then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+    expect(repo.isOpenPaymentConflict(claimedClash)).toBe(true);
+  });
+
+  test('closed payments never block: cancelled, voided and refunded sit beside a new open one', async () => {
+    const order = await newOrder();
+    const old = await repo.insertPayment(db, pending(order.id));
+    await repo.updatePaymentIfVersion(db, old?.id ?? '', 1, { status: 'cancelled' });
+    const next = await repo.insertPayment(db, pending(order.id));
+    expect(next?.status).toBe('pending');
+    // Another order is a different key.
+    const other = await newOrder();
+    expect(await repo.insertPayment(db, pending(other.id))).toBeDefined();
+    expect(await repo.listPaymentsForOrder(db, order.id)).toHaveLength(2);
+  });
+
+  test('cancelling the open payment and inserting the new one in one transaction works (change-method)', async () => {
+    const order = await newOrder();
+    const old = await repo.insertPayment(db, pending(order.id));
+    const made = await db.transaction(async (tx) => {
+      await repo.updatePaymentIfVersion(tx, old?.id ?? '', 1, { status: 'cancelled' });
+      return repo.insertPayment(tx, pending(order.id, { method: 'platform' }));
+    });
+    expect(made?.method).toBe('platform');
+  });
+
+  test('isOpenPaymentConflict recognises both driver shapes and nothing else', () => {
+    const name = repo.OPEN_PAYMENT_INDEX;
+    // PGlite: `constraint`; postgres-js: `constraint_name`; Drizzle wraps either as `cause`.
+    expect(repo.isOpenPaymentConflict({ cause: { code: '23505', constraint: name } })).toBe(true);
+    expect(repo.isOpenPaymentConflict({ cause: { code: '23505', constraint_name: name } })).toBe(
+      true,
+    );
+    expect(repo.isOpenPaymentConflict({ code: '23505', constraint_name: name })).toBe(true);
+    // Last resort: the server's message names the index.
+    expect(
+      repo.isOpenPaymentConflict({
+        cause: {
+          code: '23505',
+          message: `duplicate key value violates unique constraint "${name}"`,
+        },
+      }),
+    ).toBe(true);
+    // Another unique index, another error class, junk.
+    expect(
+      repo.isOpenPaymentConflict({
+        cause: { code: '23505', constraint: 'payments_client_request_id_key' },
+      }),
+    ).toBe(false);
+    expect(repo.isOpenPaymentConflict({ cause: { code: '23503', constraint: name } })).toBe(false);
+    expect(repo.isOpenPaymentConflict(new Error('boom'))).toBe(false);
+    expect(repo.isOpenPaymentConflict(null)).toBe(false);
+    expect(repo.isOpenPaymentConflict('23505')).toBe(false);
+  });
+
   test('an order takes a payment status through its own update, bumping its version and rev', async () => {
     const order = await newOrder();
     const updated = await ordersRepo.updateOrderIfVersion(db, order.id, order.version, {

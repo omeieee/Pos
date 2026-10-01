@@ -95,6 +95,29 @@ function transitionFailure(error: TransitionError, from: string, to: string): Ap
   }
 }
 
+/**
+ * The unique index on open payments fired: another request's payment got past the order lock.
+ * Postgres has aborted our transaction, so this runs on the plain connection afterwards and
+ * reports the payment that won (if it has committed by now).
+ */
+async function openPaymentRace(
+  db: Db,
+  orderId: string | undefined,
+  error: unknown,
+): Promise<ApiError | undefined> {
+  if (!paymentsRepo.isOpenPaymentConflict(error)) return undefined;
+  const open = orderId
+    ? (await paymentsRepo.listPaymentsForOrder(db, orderId)).find(
+        (p) => p.status === 'pending' || p.status === 'claimed',
+      )
+    : undefined;
+  return conflict(
+    'PAYMENT_ALREADY_OPEN',
+    'This order already has a payment in progress',
+    open ? { paymentId: open.id, status: open.status } : {},
+  );
+}
+
 const promptpayNotConfigured = () =>
   conflict('PROMPTPAY_NOT_CONFIGURED', 'No PromptPay ID is set. The owner sets it in settings');
 
@@ -368,7 +391,9 @@ export async function createPayment(
       return { result: { payment, order: await settleOrder(tx, order, emit) }, replay: false };
     });
   } catch (error) {
-    if (!(error instanceof DuplicateRequest)) throw error;
+    if (!(error instanceof DuplicateRequest)) {
+      throw (await openPaymentRace(ctx.db, orderId, error)) ?? error;
+    }
     // The transaction was rolled back; the request that won is committed.
     const winner = await paymentsRepo.findPaymentByClientRequestId(ctx.db, input.clientRequestId);
     if (!winner) throw error;
@@ -466,9 +491,11 @@ export async function changePaymentMethod(
       };
     });
   } catch (error) {
-    if (!(error instanceof DuplicateRequest)) throw error;
-    const winner = await paymentsRepo.findPaymentByClientRequestId(ctx.db, input.clientRequestId);
     const source = await paymentsRepo.findPaymentById(ctx.db, paymentId);
+    if (!(error instanceof DuplicateRequest)) {
+      throw (await openPaymentRace(ctx.db, source?.orderId, error)) ?? error;
+    }
+    const winner = await paymentsRepo.findPaymentByClientRequestId(ctx.db, input.clientRequestId);
     if (!winner || !source) throw error;
     return replayResult(ctx.db, winner, source);
   }
