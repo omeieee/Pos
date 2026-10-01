@@ -84,7 +84,11 @@ export function securityAlert(
   ctx: AuthContext,
   kind: string,
   severity: SecurityAlertEvent['severity'],
-  who: { staffId?: string | null; deviceId?: string | null },
+  who: {
+    staffId?: string | null;
+    deviceId?: string | null;
+    subject?: SecurityAlertEvent['subject'];
+  },
 ): AppEvent {
   return {
     type: 'alert.security',
@@ -93,6 +97,7 @@ export function securityAlert(
     at: ctx.now().toISOString(),
     staffId: who.staffId ?? null,
     deviceId: who.deviceId ?? null,
+    ...(who.subject ? { subject: who.subject } : {}),
   };
 }
 

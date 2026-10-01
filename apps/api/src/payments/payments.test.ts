@@ -323,6 +323,53 @@ describe('cash (02 §4.2)', () => {
   });
 });
 
+describe('creating a payment is audited', () => {
+  test.each(['promptpay', 'gov_copay', 'platform'])(
+    'a %s payment writes payment.create with who, what and how much',
+    async (method) => {
+      await setMethods({ cash: true, promptpay: true, platform: true, other: true });
+      const cashier = await sign('cashier');
+      const order = await place(cashier);
+      const payment = await startPayment(cashier, order.id, method);
+      const audits = (await h.auditRows(payment.id)).filter((a) => a.action === 'payment.create');
+      expect(audits).toHaveLength(1);
+      expect(audits[0]).toMatchObject({
+        actorType: 'staff',
+        actorId: staff.cashier.id,
+        entity: 'payments',
+        before: null,
+        after: { status: 'pending', method, amountSatang: 5000, created: true },
+      });
+      // No PromptPay ID, not even masked, in the row: the id and the method are enough.
+      expect(JSON.stringify(audits[0])).not.toContain(PHONE);
+    },
+  );
+
+  test('cash keeps its single payment.confirm row, and a replay writes nothing more', async () => {
+    const cashier = await sign('cashier');
+    const order = await place(cashier);
+    const body = payBody('cash');
+    const first = await pay(cashier, order.id, body);
+    const id = first.json().payment.id as string;
+    expect(await auditActions(id)).toEqual(['payment.confirm']);
+    await pay(cashier, order.id, body);
+    expect(await auditActions(id)).toEqual(['payment.confirm']);
+  });
+
+  test('a method change audits the new payment too', async () => {
+    const cashier = await sign('cashier');
+    const order = await place(cashier);
+    const first = await startPayment(cashier, order.id, 'promptpay');
+    const res = await call('POST', `/v1/payments/${first.id}/change-method`, cashier, {
+      clientRequestId: crypto.randomUUID(),
+      method: 'gov_copay',
+    });
+    expect(res.statusCode).toBe(201);
+    expect(await auditActions(first.id)).toEqual(['payment.create', 'payment.change_method']);
+    expect(await auditActions(res.json().payment.id)).toEqual(['payment.create']);
+  });
+});
+
 describe('PromptPay', () => {
   test('is pending, shows the masked target only, and stores no payload', async () => {
     const cashier = await sign('cashier');
@@ -856,7 +903,7 @@ describe('confirm', () => {
       referenceNote: 'K PLUS 0042',
     });
     expect(res.json().order.paymentStatus).toBe('paid');
-    expect(await auditActions(payment.id)).toEqual(['payment.confirm']);
+    expect(await auditActions(payment.id)).toEqual(['payment.create', 'payment.confirm']);
     expect(typesOf(eventsSince(before))).toEqual(['payment.upserted', 'order.upserted']);
   });
 
@@ -884,7 +931,7 @@ describe('confirm', () => {
     expect(again.statusCode).toBe(200);
     expect(again.json().payment).toEqual(first.json().payment);
     expect(h.events.length).toBe(before);
-    expect(await auditActions(payment.id)).toEqual(['payment.confirm']);
+    expect(await auditActions(payment.id)).toEqual(['payment.create', 'payment.confirm']);
   });
 
   test('refuses a cancelled payment and a stale expectedVersion', async () => {
@@ -1020,7 +1067,7 @@ describe('change-method (02 §4.4)', () => {
     expect(kept).toEqual({ status: 'pending', version: old.version });
     expect(await paymentCount(room.id)).toBe(1);
     expect(h.events.length).toBe(before);
-    expect(await auditActions(old.id)).toEqual([]);
+    expect(await auditActions(old.id)).toEqual(['payment.create']); // created, but never changed;
   });
 
   test('is refused once the payment is claimed or confirmed, and for the same method', async () => {
@@ -1170,6 +1217,8 @@ describe.each(['void', 'refund'] as const)('%s (rule 9)', (action) => {
         kind: `payment.${target}`,
         severity: 'critical',
         staffId: staff.manager.id,
+        // So the owner can tell which payment, without a log search.
+        subject: { paymentId: payment.id, orderId: order.id },
       }),
     ]);
     expect(typesOf(eventsSince(events)).filter((t) => t !== 'alert.security')).toEqual([

@@ -359,6 +359,13 @@ async function insertPaymentFor(
       break;
   }
   if (!row) throw new DuplicateRequest();
+  // Cash already wrote its payment.confirm row above; every other method is audited at creation.
+  if (input.method !== 'cash') {
+    await auditPayment(tx, actor, meta, 'payment.create', row.id, null, {
+      ...snapshot(row),
+      created: true,
+    });
+  }
   return row;
 }
 
@@ -601,6 +608,7 @@ export async function movePayment(
         securityAlert(ctx, `payment.${spec.to}`, 'critical', {
           staffId: actor.staffId,
           deviceId: actor.deviceId,
+          subject: { paymentId: row.id, orderId: order.id },
         }),
       );
     }

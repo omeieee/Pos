@@ -14,6 +14,8 @@ export interface SecurityAlertEvent {
   at: string;
   staffId: string | null;
   deviceId: string | null;
+  /** The payment and order a payment alert is about (ids only), so the owner can find it. */
+  subject?: { paymentId: string; orderId: string };
 }
 
 /**

@@ -58,6 +58,21 @@ describe('forwardAlerts (security alerts to Sentry)', () => {
     });
   });
 
+  test('a payment alert adds the payment and order ids, and nothing else', () => {
+    const report = alertReport(
+      alert({
+        kind: 'payment.voided',
+        subject: { paymentId: 'pay-1', orderId: 'ord-1', amountSatang: 5000 } as never,
+      }),
+    );
+    expect(report.extra).toEqual({
+      staffId: '0192f3a0-0000-7000-8000-000000000001',
+      deviceId: '0192f3a0-0000-7000-8000-000000000002',
+      paymentId: 'pay-1',
+      orderId: 'ord-1',
+    });
+  });
+
   test('missing ids stay null', () => {
     expect(alertReport(alert({ staffId: null, deviceId: null })).extra).toEqual({
       staffId: null,

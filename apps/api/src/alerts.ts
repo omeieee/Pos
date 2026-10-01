@@ -8,7 +8,12 @@ export interface AlertReport {
   message: string;
   level: 'warning' | 'error';
   tags: { alert: string; severity: SecurityAlertEvent['severity'] };
-  extra: { staffId: string | null; deviceId: string | null };
+  extra: {
+    staffId: string | null;
+    deviceId: string | null;
+    paymentId?: string;
+    orderId?: string;
+  };
 }
 
 export function alertReport(event: SecurityAlertEvent): AlertReport {
@@ -16,7 +21,14 @@ export function alertReport(event: SecurityAlertEvent): AlertReport {
     message: `security alert: ${event.kind}`,
     level: event.severity === 'critical' ? 'error' : 'warning',
     tags: { alert: event.kind, severity: event.severity },
-    extra: { staffId: event.staffId, deviceId: event.deviceId },
+    extra: {
+      staffId: event.staffId,
+      deviceId: event.deviceId,
+      // Picked field by field: nothing else of `subject` can ride along.
+      ...(event.subject
+        ? { paymentId: event.subject.paymentId, orderId: event.subject.orderId }
+        : {}),
+    },
   };
 }
 
