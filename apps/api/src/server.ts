@@ -1,5 +1,6 @@
 import { createDb, pingDb } from '@sds/db';
 import type { FastifyInstance } from 'fastify';
+import { type AlertReport, forwardAlerts } from './alerts.ts';
 import { buildApp } from './app.ts';
 import { ConfigError, loadConfig } from './config.ts';
 import { createEventBus } from './events.ts';
@@ -21,6 +22,7 @@ function loadConfigOrExit() {
 const config = loadConfigOrExit();
 
 let setup: ((app: FastifyInstance) => void) | undefined;
+let reportAlert: ((report: AlertReport) => void) | undefined;
 if (config.sentryDsn) {
   // Loaded only when configured. Inside the bundle Sentry reports errors but cannot
   // auto-instrument libraries (that needs `--import` before the app loads).
@@ -29,6 +31,8 @@ if (config.sentryDsn) {
     sentryOptions({ dsn: config.sentryDsn, environment: config.nodeEnv, release: config.version }),
   );
   setup = (app) => Sentry.setupFastifyErrorHandler(app);
+  reportAlert = (r) =>
+    Sentry.captureMessage(r.message, { level: r.level, tags: r.tags, extra: r.extra });
 }
 
 // postgres-js connects lazily: the server starts, and /healthz answers, even while the DB is down.
@@ -42,7 +46,8 @@ const app = await buildApp({
 });
 
 // In-process events (D-04). Until the realtime and ntfy modules subscribe (P3 task 6, P8),
-// security alerts reach the owner through the log and Sentry only. Events hold ids, not secrets.
+// security alerts reach the owner through the log and, for warn and critical ones, Sentry's
+// e-mail alerts (ids and event names only). Events hold ids, not secrets.
 const events = createEventBus((error) => app.log.error({ err: error }, 'event subscriber failed'));
 events.subscribe((event) => {
   if (event.type === 'alert.security') {
@@ -57,6 +62,7 @@ events.subscribe((event) => {
     );
   }
 });
+if (reportAlert) forwardAlerts(events, reportAlert);
 await registerV1(app, { db, authSecretKey: config.authSecretKey, events });
 
 async function shutdown(signal: string) {
