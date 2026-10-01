@@ -41,6 +41,9 @@ export function checkQrLink(
   const given = Buffer.from(signature, 'base64url');
   const expected = mac(key, paymentId, expiresAt);
   if (given.length !== expected.length || !timingSafeEqual(given, expected)) return 'invalid';
+  // Only the canonical encoding: the last base64url character holds 4 spare bits, so a
+  // one-character change there can decode to the same MAC.
+  if (given.toString('base64url') !== signature) return 'invalid';
   return nowSeconds > expiresAt ? 'expired' : 'ok';
 }
 

@@ -1252,6 +1252,21 @@ describe('PromptPay QR (signed link)', () => {
     }
   });
 
+  test('a non-canonical encoding of the genuine signature is refused', async () => {
+    const { cashier, payment } = await pendingPromptpay();
+    const u = new URL((await urlOf(cashier, payment.id)).url, 'http://x');
+    const exp = u.searchParams.get('exp') ?? '';
+    const sig = u.searchParams.get('sig') ?? '';
+    // The last base64url character carries 4 spare bits: flipping its low bit decodes to the same MAC.
+    const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+    const i = alphabet.indexOf(sig.slice(-1));
+    const twin = alphabet[(i & ~3) | ((i & 3) ^ 1)];
+    const res = await fetchPng(
+      `/v1/payments/${payment.id}/qr.png?exp=${exp}&sig=${sig.slice(0, -1)}${twin}`,
+    );
+    expect(res.statusCode).toBe(403);
+  });
+
   test('a link is dead after five minutes, and only a genuine one is called expired', async () => {
     const { cashier, payment } = await pendingPromptpay();
     const { url } = await urlOf(cashier, payment.id);
