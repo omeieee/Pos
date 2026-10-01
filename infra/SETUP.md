@@ -271,7 +271,7 @@ This needs the backend agent's `apps/pos-web` and `apps/liff-web` to exist.
 - **healthchecks.io:** after the next hh:05 during opening hours (or 05:05), the `sds-backup` check turns green.
 - **Prove the missed-backup alert (exit criterion):**
   1. healthchecks.io → `sds-backup` → **Integrations** → email → **Test**, and confirm the email arrives;
-  2. once, outside opening hours, run `ssh deploy@sds-pos '/opt/sds/dc stop backup'` before a scheduled slot and wait until the check goes **Down** (slot + 30 min grace) and the email arrives;
+  2. once, outside opening hours, run `ssh deploy@sds-pos '/opt/sds/dc stop backup'` before a scheduled slot and wait until the check goes **Down** (slot + 30 min grace) and the email arrives. Don't restart before **slot + 55 min**: the Down fires at slot + grace, and a ping that lands near that moment (as happened on 2026-10-01 with a 45-min grace) leaves no Down email to prove anything. Check the Down in the check's **Log** tab as well as the inbox. Make sure the check is the one `HC_PING_URL` points at (it is named `sds-backup`, not the default "My First Check") and that the grace is really 30 min;
   3. then `ssh deploy@sds-pos '/opt/sds/dc up -d backup'`.
 - **Sentry:** trigger nothing yet. The DSN in `.env` is enough; the API reports errors.
 
