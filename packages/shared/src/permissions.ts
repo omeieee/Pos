@@ -15,8 +15,10 @@ export const PERMISSIONS = [
   'customer.view',
   'report.view',
   'expense.edit',
+  'settings.view',
   'settings.edit',
   'settings.promptpay',
+  'settings.gov_copay',
   'staff.manage',
   'device.manage',
   'data.export',
@@ -32,6 +34,7 @@ const CASHIER: readonly Permission[] = [
   'payment.confirm',
   'payment.cancel_claimed',
   'customer.view',
+  'settings.view',
 ];
 
 const MANAGER: readonly Permission[] = [
@@ -54,6 +57,7 @@ export const ROLE_PERMISSIONS: Record<StaffRole, ReadonlySet<Permission>> = {
 /** Sensitive actions: re-authentication (step-up) plus an audit_log row (CLAUDE.md rule 9). */
 export const STEP_UP_PERMISSIONS: ReadonlySet<Permission> = new Set<Permission>([
   'settings.promptpay',
+  'settings.gov_copay',
   'payment.void_refund',
   'staff.manage',
   'device.manage',

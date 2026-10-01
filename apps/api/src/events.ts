@@ -37,7 +37,24 @@ export interface NewOrderAlertEvent {
   createdOnDeviceId: string | null;
 }
 
-export type AppEvent = SecurityAlertEvent | OrderUpsertedEvent | NewOrderAlertEvent;
+/**
+ * A setting changed (02 §5 `settings.updated`). `key` is the stored key (`shop`, `promptpay`,
+ * `gov_copay` ...); `data` is the new value, which devices need (the PromptPay QR reads the ID).
+ * Subscribers must not log `data`.
+ */
+export interface SettingsUpdatedEvent {
+  type: 'settings.updated';
+  key: string;
+  rev: number;
+  version: number;
+  data: unknown;
+}
+
+export type AppEvent =
+  | SecurityAlertEvent
+  | OrderUpsertedEvent
+  | NewOrderAlertEvent
+  | SettingsUpdatedEvent;
 
 export type EventHandler = (event: AppEvent) => void | Promise<void>;
 

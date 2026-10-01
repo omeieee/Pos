@@ -201,6 +201,7 @@ describe('log redaction of credentials', () => {
       deviceToken: 'sds_dev_secret-value',
       authorization: 'Bearer sds_ses_secret-value',
       'x-device-token': 'sds_dev_secret-value',
+      idValue: '0987654321',
     };
     app.log.info({ body: secrets }, 'top');
     app.log.info({ req: { headers: secrets } }, 'request');

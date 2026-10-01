@@ -11,4 +11,5 @@ export * from './payment-machine.ts';
 export * from './permissions.ts';
 export * from './pricing.ts';
 export * from './schemas.ts';
+export * from './settings.ts';
 export * from './state-machine.ts';

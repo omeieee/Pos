@@ -27,6 +27,7 @@ const CREDENTIAL_KEYS = [
   'authorization',
   'x-device-token',
   'cookie',
+  'idvalue',
 ];
 const CREDENTIAL_FIELDS = [
   'password',
@@ -38,6 +39,7 @@ const CREDENTIAL_FIELDS = [
   'authorization',
   'x-device-token',
   'cookie',
+  'idValue',
 ];
 
 /**

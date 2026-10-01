@@ -8,6 +8,7 @@ import { registerAuthRoutes } from './auth/routes.ts';
 import type { AuthContext } from './auth/service.ts';
 import type { EventBus } from './events.ts';
 import { registerOrderRoutes } from './orders/routes.ts';
+import { registerSettingsRoutes } from './settings/routes.ts';
 
 export interface V1Deps {
   db: Db;
@@ -55,6 +56,9 @@ export async function registerV1(app: FastifyInstance, deps: V1Deps): Promise<vo
       });
       await v1.register((scope) => registerOrderRoutes(scope, context.auth, context.guard), {
         prefix: '/orders',
+      });
+      await v1.register((scope) => registerSettingsRoutes(scope, context.auth, context.guard), {
+        prefix: '/settings',
       });
       // Device and staff management: /v1/devices and /v1/staff (no prefix of its own).
       await v1.register((scope) => registerAdminRoutes(scope, context.auth, context.guard));

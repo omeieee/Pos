@@ -209,7 +209,7 @@ The pending payment is cancelled and a new pending payment is created for the ne
 | Customers | `GET /v1/customers` · `GET /v1/customers/{id}` · `POST /v1/customers/{id}/anonymize` |
 | Reports | `GET /v1/reports/{summary,items,heatmap,customers,pnl}?from=&to=&granularity=` · `GET /v1/reports/tax?year=` · `GET /v1/exports/{kind}` |
 | Expenses | CRUD `/v1/expenses` |
-| Settings | `GET/PATCH /v1/settings/{shop,payments,promptpay,gov-copay,line,numbering}` (PromptPay: owner + step-up) · CRUD `/v1/staff`, `/v1/devices` |
+| Settings | `GET/PATCH /v1/settings/{shop,opening-hours,numbering,payments,promptpay,gov-copay}` (`line` comes with P4). Read: `settings.view` (not the kitchen). Write: `settings.edit` (manager, owner); PromptPay ID and the co-pay scheme: owner + step-up + audit + alert (`settings.promptpay`, `settings.gov_copay`). `numbering` is the business-day cutoff the order numbers reset at. A PATCH carries `expectedVersion` (0 = never saved; GET then returns the default) · `/v1/staff`, `/v1/devices` (list, create staff, revoke, PIN) |
 | Sync | `GET /v1/sync?since=` · `WS /v1/ws` |
 | LINE | `POST /line/webhook` (signature-verified, raw body) |
 | Ops | `GET /healthz` · `GET /readyz` · (P8) `WS /v1/agents/print` |
