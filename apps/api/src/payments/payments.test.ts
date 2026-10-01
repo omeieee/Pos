@@ -1125,6 +1125,7 @@ describe('PromptPay QR (signed link)', () => {
     (await call('GET', `/v1/payments/${id}/qr-url`, token)).json() as {
       url: string;
       expiresAt: string;
+      promptpayTargetMasked: string;
     };
   const fetchPng = (url: string, headers: Record<string, string> = {}) =>
     h.app.inject({ method: 'GET', url, headers, remoteAddress: h.nextIp() });
@@ -1147,6 +1148,8 @@ describe('PromptPay QR (signed link)', () => {
       new RegExp(`^/v1/payments/${payment.id}/qr\\.png\\?exp=\\d+&sig=[A-Za-z0-9_-]{43}$`),
     );
     expect(ok.json().expiresAt).toBe(new Date(h.clock.now().getTime() + 300_000).toISOString());
+    expect(ok.json().promptpayTargetMasked).toBe('******4321');
+    expect(JSON.stringify(ok.json())).not.toContain(PHONE);
     expect(ok.headers['cache-control']).toBe('no-store');
     expect(
       (await call('GET', `/v1/payments/${crypto.randomUUID()}/qr-url`, cashier)).statusCode,
@@ -1167,6 +1170,10 @@ describe('PromptPay QR (signed link)', () => {
     expect(res.rawPayload.equals(await expectedPng(PHONE, 5000))).toBe(true);
     // A junk bearer does not matter either way.
     expect((await fetchPng(url, { authorization: 'Bearer junk' })).statusCode).toBe(200);
+    // The signature is a working credential for five minutes: it must not reach the request log.
+    const sig = new URL(url, 'http://x').searchParams.get('sig') ?? '';
+    expect(sig).toHaveLength(43);
+    expect(h.logs()).not.toContain(sig);
   });
 
   test('the picture is rebuilt from the CURRENT PromptPay ID on every serve', async () => {
@@ -1174,6 +1181,12 @@ describe('PromptPay QR (signed link)', () => {
     const { url } = await urlOf(cashier, payment.id);
     const first = await fetchPng(url);
     await setPromptpayId(OTHER_PHONE);
+    // The link answer names the CURRENT target; the payment still shows the one it was made with.
+    expect((await urlOf(cashier, payment.id)).promptpayTargetMasked).toBe('******5555');
+    expect(
+      (await call('GET', `/v1/orders/${payment.orderId}/payments`, cashier)).json().payments[0]
+        .promptpayTargetMasked,
+    ).toBe('******4321');
     const second = await fetchPng(url);
     expect(second.statusCode).toBe(200);
     expect(second.rawPayload.equals(first.rawPayload)).toBe(false);

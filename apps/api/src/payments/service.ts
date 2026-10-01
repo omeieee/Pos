@@ -608,11 +608,14 @@ export async function paymentQrUrl(
       status: row.status,
     });
   }
+  const target = await currentPromptpayId(ctx.db);
+  if (!target) throw promptpayNotConfigured();
   const expiresAt = Math.floor(ctx.now().getTime() / 1000) + QR_URL_TTL_SECONDS;
   const signature = signQrLink(ctx.keys.qrUrlKey, row.id, expiresAt);
   return {
     url: `/v1/payments/${row.id}/qr.png?exp=${expiresAt}&sig=${signature}`,
     expiresAt: new Date(expiresAt * 1000).toISOString(),
+    promptpayTargetMasked: maskPromptpayId(target.idValue),
   };
 }
 

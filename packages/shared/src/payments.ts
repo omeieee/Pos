@@ -133,5 +133,11 @@ export const paymentQrUrlResponseSchema = z.object({
   /** Path and query on the API origin, e.g. `/v1/payments/<id>/qr.png?exp=…&sig=…`. */
   url: z.string(),
   expiresAt: isoInstant,
+  /**
+   * The PromptPay target the picture will pay to RIGHT NOW (last characters only). The payment's
+   * own `promptpayTargetMasked` is what it was when the payment was made; if the owner has changed
+   * the ID since, this is the one staff should compare with their bank app.
+   */
+  promptpayTargetMasked: z.string(),
 });
 export type PaymentQrUrlResponse = z.infer<typeof paymentQrUrlResponseSchema>;

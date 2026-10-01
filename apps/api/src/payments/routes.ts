@@ -181,6 +181,9 @@ export async function registerPaymentRoutes(
   app.get(
     '/payments/:id/qr.png',
     {
+      // The query string holds the signature, a working credential for five minutes, and Fastify's
+      // access log line prints the whole URL. Only warnings and errors are logged for this route.
+      logLevel: 'warn',
       onRequest: [
         qrLimit,
         markSignedUrlCheck(async (request) => {
