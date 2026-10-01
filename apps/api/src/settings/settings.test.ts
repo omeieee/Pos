@@ -446,6 +446,10 @@ describe('PromptPay ID', () => {
     expect(JSON.stringify(await h.auditRows('promptpay'))).not.toContain(PHONE);
     expect(h.logs()).not.toContain(PHONE);
     expect(JSON.stringify(h.alerts)).not.toContain(PHONE);
+    // ...and no settings.updated event: the realtime fan-out must not carry the ID to every device.
+    const event = h.events.findLast((e) => e.type === 'settings.updated' && e.key === 'promptpay');
+    expect(event).toMatchObject({ data: { idType: 'phone', idMasked: '******4321' } });
+    expect(JSON.stringify(h.events)).not.toContain(PHONE);
     const bad = await call('PATCH', '/v1/settings/promptpay', token, {
       expectedVersion: 1,
       idType: 'phone',

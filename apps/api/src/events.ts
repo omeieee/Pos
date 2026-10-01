@@ -39,8 +39,9 @@ export interface NewOrderAlertEvent {
 
 /**
  * A setting changed (02 §5 `settings.updated`). `key` is the stored key (`shop`, `promptpay`,
- * `gov_copay` ...); `data` is the new value, which devices need (the PromptPay QR reads the ID).
- * Subscribers must not log `data`.
+ * `gov_copay` ...); `data` is the new value, except for `promptpay`, where it is only the masked
+ * form (`{idType, idMasked}`): the ID itself never rides an event, and a device that needs it
+ * refetches `GET /v1/settings/promptpay`. Subscribers must not log `data`.
  */
 export interface SettingsUpdatedEvent {
   type: 'settings.updated';

@@ -225,7 +225,9 @@ export async function patchSetting(
       key: resource.key,
       rev: saved.rev,
       version: saved.version,
-      data: next,
+      // The ID itself never rides an event (the fan-out would carry it to every device); a device
+      // that needs it reads GET /v1/settings/promptpay, which needs `settings.view`.
+      data: resource.promptpay ? maskedPromptpay(next as PromptpaySettings) : next,
     });
     return toResponse(resource, saved);
   });
