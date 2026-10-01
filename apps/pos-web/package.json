@@ -12,8 +12,11 @@
   },
   "dependencies": {
     "@sds/i18n": "workspace:*",
+    "@sds/shared": "workspace:*",
+    "@sds/ui": "workspace:*",
     "react": "^19.3.0",
-    "react-dom": "^19.3.0"
+    "react-dom": "^19.3.0",
+    "zod": "4.6.5"
   },
   "devDependencies": {
     "@sds/config": "workspace:*",

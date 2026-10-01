@@ -246,12 +246,21 @@ importers:
       '@sds/i18n':
         specifier: workspace:*
         version: link:../../packages/i18n
+      '@sds/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
+      '@sds/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
       react:
         specifier: ^19.3.0
         version: 19.3.0
       react-dom:
         specifier: ^19.3.0
         version: 19.3.0(react@19.3.0)
+      zod:
+        specifier: 4.6.5
+        version: 4.6.5
     devDependencies:
       '@sds/config':
         specifier: workspace:*
