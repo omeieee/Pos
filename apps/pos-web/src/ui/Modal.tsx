@@ -1,4 +1,5 @@
 import { type KeyboardEvent, type ReactNode, useEffect, useRef } from 'react';
+import { isolateSiblings } from '../lib/isolate.ts';
 
 const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), a[href], [tabindex="0"]';
 
@@ -17,11 +18,20 @@ export function Modal({
   children: ReactNode;
 }) {
   const sheet = useRef<HTMLDivElement>(null);
+  const overlay = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const before = document.activeElement;
+    // The page behind the dialog cannot be focused, tapped or read out while it is open, so a
+    // tap on the dimmed area (focus falls to the body) cannot let Tab reach it.
+    const parent = overlay.current?.parentElement;
+    const siblings = parent
+      ? Array.from(parent.children).filter((el): el is HTMLElement => el instanceof HTMLElement)
+      : [];
+    const release = overlay.current ? isolateSiblings(siblings, overlay.current) : undefined;
     sheet.current?.querySelector<HTMLElement>(FOCUSABLE)?.focus();
     return () => {
+      release?.();
       if (before instanceof HTMLElement) before.focus();
     };
   }, []);
@@ -47,7 +57,7 @@ export function Modal({
   }
 
   return (
-    <div className="overlay">
+    <div ref={overlay} className="overlay">
       <div
         ref={sheet}
         role="dialog"

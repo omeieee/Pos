@@ -440,7 +440,10 @@ p {
   z-index: 10;
   display: grid;
   place-items: center;
-  padding: var(--sds-layout-gutter);
+  padding: max(var(--sds-layout-gutter), var(--safe-top))
+    max(var(--sds-layout-gutter), var(--safe-right))
+    max(var(--sds-layout-gutter), var(--safe-bottom))
+    max(var(--sds-layout-gutter), var(--safe-left));
   background: var(--sds-color-overlay);
 }
 .sheet {
