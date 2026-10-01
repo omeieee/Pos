@@ -31,6 +31,7 @@ import {
   type EventBus,
   type SecurityAlertEvent,
 } from '../events.ts';
+import type { RealtimeOptions } from '../realtime/routes.ts';
 import { registerV1 } from '../v1.ts';
 
 // Test-only key, not a secret.
@@ -125,7 +126,7 @@ export interface Harness {
 export const START_TIME = '2026-10-01T03:00:00.000Z';
 
 export async function createHarness(
-  options: { policy?: Partial<AuthPolicy> } = {},
+  options: { policy?: Partial<AuthPolicy>; realtime?: RealtimeOptions } = {},
 ): Promise<Harness> {
   const { db, client } = await createPgliteDb();
   const clock = createClock(START_TIME);
@@ -176,6 +177,7 @@ export async function createHarness(
     events: bus,
     now: clock.now,
     policy,
+    ...(options.realtime ? { realtime: options.realtime } : {}),
   });
 
   // One probe route per permission, behind the real guard, to test the RBAC matrix.

@@ -19,6 +19,7 @@ import {
   lockGovCopayRow,
   lockSettingRow,
   type SettingRow,
+  type syncRepo,
   updateGovCopayRowIfVersion,
   updateSettingRowIfVersion,
 } from '@sds/db';
@@ -258,7 +259,7 @@ const enablingSchemeSchema = govCopaySchemeSchema.superRefine((scheme, ctx) => {
   }
 });
 
-function toDto(row: GovCopayRow): GovCopayDto {
+export function toDto(row: syncRepo.SyncSchemeRow): GovCopayDto {
   return govCopayDtoSchema.parse(row);
 }
 

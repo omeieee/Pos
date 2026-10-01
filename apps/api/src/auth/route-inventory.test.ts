@@ -7,11 +7,13 @@ import Fastify from 'fastify';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 import { createEventBus } from '../events.ts';
 import { createHarness, type Harness } from '../test-support/harness.ts';
-import { OPEN_ROUTES, registerV1, SIGNED_URL_ROUTES } from '../v1.ts';
+import { FIRST_MESSAGE_AUTH_ROUTES, OPEN_ROUTES, registerV1, SIGNED_URL_ROUTES } from '../v1.ts';
 import {
   enforceGuardedRoutes,
+  hasFirstMessageAuth,
   hasSignedUrlCheck,
   isGuarded,
+  markFirstMessageAuth,
   markSignedUrlCheck,
 } from './guards.ts';
 
@@ -26,16 +28,17 @@ afterAll(async () => {
 // The real list, not a copy: if someone adds an open route to v1.ts this test has to be looked at.
 const OPEN = [...OPEN_ROUTES];
 const SIGNED = [...SIGNED_URL_ROUTES];
+const WS = [...FIRST_MESSAGE_AUTH_ROUTES];
 
 describe('the real /v1 routes', () => {
-  test('every one has the guard, except the sign-in routes, the public menu and the signed-URL routes', () => {
+  test('every one has the guard, except the sign-in routes, the public menu, the signed-URL routes and the socket', () => {
     const v1 = h.routes.filter((r) => r.url.startsWith('/v1'));
     expect(v1.length).toBeGreaterThan(8);
     // Fastify adds a HEAD route next to every GET; it counts as the GET.
     const key = (r: { method: string; url: string }) =>
       `${r.method === 'HEAD' ? 'GET' : r.method} ${r.url}`;
     const open = [...new Set(v1.filter((r) => !r.guarded).map(key))];
-    expect(open.sort()).toEqual([...OPEN, ...SIGNED].sort());
+    expect(open.sort()).toEqual([...OPEN, ...SIGNED, ...WS].sort());
     // ...and the list itself is exactly the sign-in routes and the public menu, so it cannot grow unnoticed.
     expect(OPEN.sort()).toEqual([
       'GET /v1/auth/staff',
@@ -46,6 +49,9 @@ describe('the real /v1 routes', () => {
     // The signed-URL routes are the other exception: an <img> cannot send a header, so the
     // signature in the URL is the authentication. Adding to this list needs a decision, not a habit.
     expect(SIGNED.sort()).toEqual(['GET /v1/payments/:id/qr.png']);
+    // The third exception: a browser WebSocket cannot send headers, so the socket authenticates
+    // its first message (hub.ts). Only that one route, and only as a marked WebSocket handler.
+    expect(WS.sort()).toEqual(['GET /v1/ws']);
   });
 
   test('the inventory includes the routes we know about', () => {
@@ -71,6 +77,8 @@ describe('the real /v1 routes', () => {
       'POST /v1/payments/:id/refund',
       'GET /v1/payments/:id/qr-url',
       'GET /v1/payments/:id/qr.png',
+      'GET /v1/sync',
+      'GET /v1/ws',
     ]) {
       expect(all.has(route), route).toBe(true);
     }
@@ -179,6 +187,51 @@ describe('enforceGuardedRoutes', () => {
     expect(isGuarded({ onRequest: guarded })).toBe(true);
     expect(isGuarded({ onRequest: [async () => {}, guarded] })).toBe(true);
     expect(isGuarded({ preHandler: guarded })).toBe(false);
+  });
+});
+
+describe('the first-message-auth exception', () => {
+  const wsAllow = new Set(['GET /v1/socket']);
+  const marked = markFirstMessageAuth(() => {});
+
+  test('hasFirstMessageAuth needs both the WebSocket flag and a marked handler', () => {
+    expect(hasFirstMessageAuth({ websocket: true, handler: marked })).toBe(true);
+    expect(hasFirstMessageAuth({ wsHandler: marked })).toBe(true);
+    expect(hasFirstMessageAuth({ wsHandler: () => {} })).toBe(false);
+    expect(hasFirstMessageAuth({ websocket: true, handler: () => {} })).toBe(false);
+    expect(hasFirstMessageAuth({ handler: marked })).toBe(false);
+    expect(hasFirstMessageAuth({})).toBe(false);
+  });
+
+  async function appWith(register: (app: ReturnType<typeof Fastify>) => void): Promise<void> {
+    const app = Fastify();
+    enforceGuardedRoutes(app, new Set(), new Set(), wsAllow);
+    register(app);
+    try {
+      await app.ready();
+    } finally {
+      await app.close();
+    }
+  }
+
+  test('lets the listed route through only when it is a WebSocket route with a marked handler', async () => {
+    await expect(
+      appWith((app) => app.get('/v1/socket', { websocket: true }, marked)),
+    ).resolves.toBeUndefined();
+    // Listed, but a plain HTTP handler: it would be a public route by accident.
+    await expect(appWith((app) => app.get('/v1/socket', marked))).rejects.toThrow(
+      /GET \/v1\/socket.*first-message-auth/,
+    );
+    // A WebSocket route whose handler does not authenticate.
+    await expect(
+      appWith((app) => app.get('/v1/socket', { websocket: true }, () => {})),
+    ).rejects.toThrow(/first-message-auth/);
+  });
+
+  test('a marked WebSocket route that is not listed is refused', async () => {
+    await expect(
+      appWith((app) => app.get('/v1/other', { websocket: true }, marked)),
+    ).rejects.toThrow(/GET \/v1\/other has no auth guard/);
   });
 });
 

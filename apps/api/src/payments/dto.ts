@@ -1,12 +1,13 @@
-import type { paymentsRepo } from '@sds/db';
+import type { syncRepo } from '@sds/db';
 import { type PaymentDto, paymentDtoSchema } from '@sds/shared';
 
 /**
  * Database row to API shape. Parsing through the shared schema keeps the contract in one place
  * and drops everything a device must not see: the stored QR payload (it holds the PromptPay ID
- * in clear), the slip fields and the request fingerprint.
+ * in clear), the slip fields and the request fingerprint. The parameter is the feed's allow-listed
+ * row (`syncRepo`): a full row fits it, and this function cannot read a column that is not on it.
  */
-export function toPaymentDto(row: paymentsRepo.PaymentRow): PaymentDto {
+export function toPaymentDto(row: syncRepo.SyncPaymentRow): PaymentDto {
   const iso = (date: Date | null) => (date ? date.toISOString() : null);
   return paymentDtoSchema.parse({
     id: row.id,

@@ -76,8 +76,35 @@ export interface MenuUpsertedEvent {
   data: unknown;
 }
 
+/**
+ * Sessions were ended on purpose (a logout, a revoked device, a deactivated person, a new PIN):
+ * the realtime hub closes the matching sockets at once. Ids only; it is never sent to a device.
+ * At least one id is set.
+ */
+export interface SessionEndedEvent {
+  type: 'session.ended';
+  reason: 'logout' | 'device_revoked' | 'staff_deactivated' | 'pin_changed';
+  sessionId?: string;
+  staffId?: string;
+  deviceId?: string;
+}
+
+/**
+ * A customer row changed (02 §5 `customer.upserted`). `data` is parsed through the shared
+ * customer schema before it reaches a device, so it need not be trusted to be small. Nothing
+ * publishes it until the customer module exists (P4).
+ */
+export interface CustomerUpsertedEvent {
+  type: 'customer.upserted';
+  id: string;
+  rev: number;
+  data: unknown;
+}
+
 export type AppEvent =
   | SecurityAlertEvent
+  | SessionEndedEvent
+  | CustomerUpsertedEvent
   | OrderUpsertedEvent
   | PaymentUpsertedEvent
   | NewOrderAlertEvent

@@ -209,12 +209,17 @@ function sameDevice(storedHash: string | null, deviceToken: string | undefined):
   return given.length === stored.length && timingSafeEqual(given, stored);
 }
 
-/** Resolves a bearer token to a principal, or null if it is unknown, revoked, expired or idle. */
-export async function authenticateSession(
+/**
+ * The one set of rules for "is this session alive": unknown, revoked, expired, idle, a deactivated
+ * person or a revoked device all give null, and a PIN session without its device's token throws
+ * DEVICE_MISMATCH. It writes nothing. The REST guard adds the activity touches on top of it
+ * (`authenticateSession`); the WebSocket re-checks with it as it is (`peekSession`).
+ */
+async function liveSession(
   ctx: AuthContext,
   token: string,
   deviceToken: string | undefined,
-): Promise<Principal | null> {
+): Promise<authRepo.SessionRow | null> {
   const row = await authRepo.findSessionByTokenHash(ctx.db, hashToken(token));
   if (!row) return null;
   const now = ctx.now();
@@ -232,12 +237,10 @@ export async function authenticateSession(
   if (row.kind === 'pin' && !sameDevice(row.deviceTokenHash, deviceToken)) {
     throw deviceMismatch();
   }
+  return row;
+}
 
-  if (now.getTime() - row.lastSeenAt.getTime() > seconds(ctx.policy.sessionTouchIntervalSeconds)) {
-    await authRepo.touchSession(ctx.db, row.id, now);
-  }
-  if (row.deviceId) await touchDevice(ctx, row.deviceId, row.deviceLastSeenAt);
-
+function principalOfSession(row: authRepo.SessionRow): Principal {
   return {
     sessionId: row.id,
     staffId: row.staffId,
@@ -248,6 +251,37 @@ export async function authenticateSession(
     expiresAt: row.expiresAt,
     stepUpUntil: row.stepUpUntil,
   };
+}
+
+/** Resolves a bearer token to a principal, or null if it is unknown, revoked, expired or idle. */
+export async function authenticateSession(
+  ctx: AuthContext,
+  token: string,
+  deviceToken: string | undefined,
+): Promise<Principal | null> {
+  const row = await liveSession(ctx, token, deviceToken);
+  if (!row) return null;
+  const now = ctx.now();
+  if (now.getTime() - row.lastSeenAt.getTime() > seconds(ctx.policy.sessionTouchIntervalSeconds)) {
+    await authRepo.touchSession(ctx.db, row.id, now);
+  }
+  if (row.deviceId) await touchDevice(ctx, row.deviceId, row.deviceLastSeenAt);
+  return principalOfSession(row);
+}
+
+/**
+ * The same check as `authenticateSession` with no writes: it does not extend the idle clock and
+ * does not touch the device (which would also burn a sync rev). The WebSocket uses it, so an open
+ * socket never keeps a session alive: logout, expiry, idleness, revocation and a deactivated
+ * account all end it.
+ */
+export async function peekSession(
+  ctx: AuthContext,
+  token: string,
+  deviceToken: string | undefined,
+): Promise<Principal | null> {
+  const row = await liveSession(ctx, token, deviceToken);
+  return row ? principalOfSession(row) : null;
 }
 
 export function describeSession(principal: Principal): AuthMeResponse {
@@ -262,6 +296,8 @@ export function describeSession(principal: Principal): AuthMeResponse {
 
 export async function logout(ctx: AuthContext, principal: Principal): Promise<void> {
   await authRepo.revokeSession(ctx.db, principal.sessionId, ctx.now());
+  // After the write: an open WebSocket on this session closes at once instead of at its next check.
+  ctx.events.publish({ type: 'session.ended', sessionId: principal.sessionId, reason: 'logout' });
 }
 
 // ---------- PIN attempts ----------

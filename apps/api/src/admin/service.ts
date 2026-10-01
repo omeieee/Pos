@@ -87,6 +87,7 @@ export async function revokeDevice(
       after: { name: row.name, kind: row.kind },
     });
     emit(securityAlert(ctx, 'device.revoked', 'warn', { staffId: actor.staffId, deviceId: id }));
+    emit({ type: 'session.ended', deviceId: id, reason: 'device_revoked' });
     return toDeviceDto(revoked);
   });
 }
@@ -170,6 +171,7 @@ export async function patchStaffMember(
       emit(
         securityAlert(ctx, 'staff.deactivated', 'warn', { staffId: id, deviceId: actor.deviceId }),
       );
+      emit({ type: 'session.ended', staffId: id, reason: 'staff_deactivated' });
     }
     return toStaffDto(updated);
   });
@@ -202,6 +204,7 @@ export async function setStaffPin(
       after: { role: row.role },
     });
     emit(securityAlert(ctx, 'staff.pin_set', 'warn', { staffId: id, deviceId: actor.deviceId }));
+    emit({ type: 'session.ended', staffId: id, reason: 'pin_changed' });
     const updated = await peopleRepo.findStaff(tx, id);
     return toStaffDto(updated ?? row);
   });

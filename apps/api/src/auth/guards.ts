@@ -33,7 +33,13 @@ function markGuard(fn: Guard): Guard {
   return Object.assign(fn, { [GUARDED]: true });
 }
 
-type RouteHooks = { onRequest?: unknown; preHandler?: unknown };
+type RouteHooks = {
+  onRequest?: unknown;
+  preHandler?: unknown;
+  handler?: unknown;
+  wsHandler?: unknown;
+  websocket?: boolean | undefined;
+};
 
 /**
  * True when the route runs a `guard()` in its own `onRequest` hooks. A guard in `preHandler`
@@ -72,17 +78,41 @@ export function hasSignedUrlCheck(route: RouteHooks): boolean {
 }
 
 /**
+ * Marks the handler of a WebSocket route that authenticates its sockets itself: a browser
+ * WebSocket cannot send an Authorization header, so the socket proves who it is with its first
+ * message. The marked handler is what enforces that (`realtime/hub.ts`).
+ */
+const FIRST_MESSAGE_AUTH = Symbol.for('sds.first-message-auth');
+
+export function markFirstMessageAuth<T extends (...args: never[]) => unknown>(fn: T): T {
+  return Object.assign(fn, { [FIRST_MESSAGE_AUTH]: true });
+}
+
+const isMarked = (h: unknown): boolean =>
+  typeof h === 'function' && (h as unknown as Record<symbol, unknown>)[FIRST_MESSAGE_AUTH] === true;
+
+/**
+ * True when the route upgrades to a WebSocket through a marked handler: `wsHandler` (what
+ * @fastify/websocket calls with the socket), or the handler of a `websocket: true` route.
+ */
+export function hasFirstMessageAuth(route: RouteHooks): boolean {
+  return isMarked(route.wsHandler) || (route.websocket === true && isMarked(route.handler));
+}
+
+/**
  * Makes "forgot the guard" a start-up failure (QA): every route declared under this scope whose
  * path starts with /v1 must be guarded, unless it is in `open` as "METHOD /path" (HEAD counts as
  * GET). A route in `signedUrl` is the other exception: it needs no session, but it must run a
  * signed-URL verifier (`markSignedUrlCheck`) in `onRequest`; listing it without the verifier
- * fails the start too, so an exception cannot be public by accident. Add the hook before
- * declaring any route.
+ * fails the start too, so an exception cannot be public by accident. The third exception is a
+ * WebSocket route in `firstMessageAuth`: it must be a `websocket` route with a handler marked
+ * `markFirstMessageAuth`. Add the hook before declaring any route.
  */
 export function enforceGuardedRoutes(
   scope: FastifyInstance,
   open: ReadonlySet<string>,
   signedUrl: ReadonlySet<string> = new Set(),
+  firstMessageAuth: ReadonlySet<string> = new Set(),
 ): void {
   scope.addHook('onRoute', (route) => {
     if (!route.url.startsWith('/v1')) return;
@@ -90,6 +120,12 @@ export function enforceGuardedRoutes(
     for (const method of [route.method].flat()) {
       const key = `${method === 'HEAD' ? 'GET' : method} ${route.url}`;
       if (open.has(key)) continue;
+      if (firstMessageAuth.has(key)) {
+        if (hasFirstMessageAuth(route)) continue;
+        throw new Error(
+          `${key} is listed as a first-message-auth route but is not a WebSocket route with a handler that authenticates: use markFirstMessageAuth()`,
+        );
+      }
       if (signedUrl.has(key)) {
         if (hasSignedUrlCheck(route)) continue;
         throw new Error(

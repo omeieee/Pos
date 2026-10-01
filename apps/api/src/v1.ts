@@ -10,6 +10,7 @@ import type { EventBus } from './events.ts';
 import { registerMenuRoutes } from './menu/routes.ts';
 import { registerOrderRoutes } from './orders/routes.ts';
 import { registerPaymentRoutes } from './payments/routes.ts';
+import { type RealtimeOptions, registerRealtimeRoutes, setupRealtime } from './realtime/routes.ts';
 import { registerSettingsRoutes } from './settings/routes.ts';
 
 export interface V1Deps {
@@ -20,6 +21,8 @@ export interface V1Deps {
   /** Tests inject a clock and shorter limits. */
   now?: () => Date;
   policy?: AuthPolicy;
+  /** Tests shorten the socket deadlines and lower the limits. */
+  realtime?: RealtimeOptions;
 }
 
 /**
@@ -42,6 +45,13 @@ export const OPEN_ROUTES: ReadonlySet<string> = new Set([
  */
 export const SIGNED_URL_ROUTES: ReadonlySet<string> = new Set(['GET /v1/payments/:id/qr.png']);
 
+/**
+ * The third exception: a browser WebSocket cannot send headers, so `WS /v1/ws` authenticates its
+ * first message instead of a request header. The start-up check lets it through only as a
+ * WebSocket route whose handler is marked `markFirstMessageAuth`.
+ */
+export const FIRST_MESSAGE_AUTH_ROUTES: ReadonlySet<string> = new Set(['GET /v1/ws']);
+
 /** What every /v1 module receives: the database, the clock, the event bus and the guard. */
 export interface ModuleContext {
   auth: AuthContext;
@@ -58,10 +68,12 @@ export async function registerV1(app: FastifyInstance, deps: V1Deps): Promise<vo
     events: deps.events,
   };
   const context: ModuleContext = { auth, guard: createGuard(auth) };
+  // The WebSocket plugin lives on the root instance, ahead of the /v1 scope that declares /v1/ws.
+  const realtime = await setupRealtime(app, auth, deps.realtime);
 
   await app.register(
     async (v1) => {
-      enforceGuardedRoutes(v1, OPEN_ROUTES, SIGNED_URL_ROUTES);
+      enforceGuardedRoutes(v1, OPEN_ROUTES, SIGNED_URL_ROUTES, FIRST_MESSAGE_AUTH_ROUTES);
       v1.decorateRequest('auth', null);
       await v1.register((scope) => registerAuthRoutes(scope, context.auth, context.guard), {
         prefix: '/auth',
@@ -79,6 +91,10 @@ export async function registerV1(app: FastifyInstance, deps: V1Deps): Promise<vo
       await v1.register((scope) => registerPaymentRoutes(scope, context.auth, context.guard));
       // Device and staff management: /v1/devices and /v1/staff (no prefix of its own).
       await v1.register((scope) => registerAdminRoutes(scope, context.auth, context.guard));
+      // Catch-up sync and the WebSocket: /v1/sync and /v1/ws (no prefix of its own).
+      await v1.register((scope) =>
+        registerRealtimeRoutes(scope, context.auth, context.guard, realtime),
+      );
     },
     { prefix: '/v1' },
   );

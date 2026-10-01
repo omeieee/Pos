@@ -7,7 +7,7 @@
  * Nothing is ever hard-deleted: DELETE archives (or deactivates a category), so past orders keep
  * pointing at a real row and keep the names and prices they were sold with.
  */
-import { type Db, insertAudit, menuRepo } from '@sds/db';
+import { type Db, insertAudit, menuRepo, type syncRepo } from '@sds/db';
 import {
   type AvailabilityInput,
   type CategoryDto,
@@ -66,7 +66,7 @@ function diff(before: Record<string, unknown>, after: Record<string, unknown>) {
 
 // ---------- Mapping rows to the API shapes (no cost anywhere) ----------
 
-const toCategory = (r: menuRepo.CategoryRow): CategoryDto =>
+export const toCategory = (r: syncRepo.SyncCategoryRow): CategoryDto =>
   categoryDtoSchema.parse({
     id: r.id,
     nameTh: r.nameTh,
@@ -77,7 +77,7 @@ const toCategory = (r: menuRepo.CategoryRow): CategoryDto =>
     rev: r.rev,
   });
 
-const toOption = (r: menuRepo.OptionRow): OptionDto =>
+export const toOption = (r: syncRepo.SyncOptionRow): OptionDto =>
   optionDtoSchema.parse({
     id: r.id,
     groupId: r.groupId,
@@ -91,7 +91,10 @@ const toOption = (r: menuRepo.OptionRow): OptionDto =>
     rev: r.rev,
   });
 
-const toGroup = (r: menuRepo.GroupRow, options: readonly menuRepo.OptionRow[]): GroupDto =>
+export const toGroup = (
+  r: syncRepo.SyncGroupRow,
+  options: readonly syncRepo.SyncOptionRow[],
+): GroupDto =>
   groupDtoSchema.parse({
     id: r.id,
     nameTh: r.nameTh,
@@ -105,7 +108,7 @@ const toGroup = (r: menuRepo.GroupRow, options: readonly menuRepo.OptionRow[]): 
     rev: r.rev,
   });
 
-function toItem(r: menuRepo.ItemRow, extras: menuRepo.ItemExtras): ItemDto {
+export function toItem(r: syncRepo.SyncItemRow, extras: menuRepo.ItemExtras): ItemDto {
   return itemDtoSchema.parse({
     id: r.id,
     categoryId: r.categoryId,

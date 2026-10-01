@@ -1,14 +1,15 @@
-import type { ordersRepo } from '@sds/db';
+import type { syncRepo } from '@sds/db';
 import { type OrderDto, orderDtoSchema } from '@sds/shared';
 
 /**
  * Database rows to the API shape. Parsing through the shared schema keeps the contract in one
  * place and drops the cost snapshot that is stored with each line and modifier: devices never
- * see what a bowl costs.
+ * see what a bowl costs. The parameters are the feed's allow-listed rows (`syncRepo`): a full row
+ * fits them, and this function cannot read a column that is not on the list.
  */
 export function toOrderDto(
-  order: ordersRepo.OrderRow,
-  items: readonly ordersRepo.OrderItemRow[],
+  order: syncRepo.SyncOrderRow,
+  items: readonly syncRepo.SyncOrderItemRow[],
 ): OrderDto {
   const iso = (date: Date | null) => (date ? date.toISOString() : null);
   return orderDtoSchema.parse({
