@@ -79,15 +79,19 @@ export async function registerAuthRoutes(
     return pinLogin(ctx, device, input, meta(request));
   });
 
-  app.post('/owner', { onRequest: ownerBucket, ...limit(10) }, async (request) => {
+  // The global buckets run as preHandler, after the per-IP limiter and the guard: a request they
+  // refuse never spends a global token, so one address cannot use the shared allowance up (QA N1).
+  app.post('/owner', { preHandler: ownerBucket, ...limit(10) }, async (request) => {
     const token = deviceToken(request);
     const device = token === undefined ? null : await authenticateDevice(ctx, token);
     const input = parse(ownerLoginInputSchema, request.body);
     return ownerLogin(ctx, device, input, meta(request));
   });
 
-  app.post('/step-up', { onRequest: [stepUpBucket, guard()], ...limit(10) }, async (request) =>
-    stepUp(ctx, principalOf(request), request.body, meta(request)),
+  app.post(
+    '/step-up',
+    { onRequest: guard(), preHandler: stepUpBucket, ...limit(10) },
+    async (request) => stepUp(ctx, principalOf(request), request.body, meta(request)),
   );
 
   app.get('/me', { onRequest: guard() }, async (request) => describeSession(principalOf(request)));
