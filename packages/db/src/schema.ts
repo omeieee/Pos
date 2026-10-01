@@ -91,6 +91,7 @@ export const menuItems = pgTable(
   },
   (t) => [
     index('menu_items_rev_idx').on(t.rev),
+    index('menu_items_category_id_idx').on(t.categoryId),
     check('menu_items_price_nonneg', sql`${t.priceSatang} >= 0 and ${t.estCostSatang} >= 0`),
     check(
       'menu_items_channels_valid',
@@ -149,7 +150,10 @@ export const modifierOptions = pgTable(
     archivedAt: ts('archived_at'),
     ...sync,
   },
-  (t) => [index('modifier_options_rev_idx').on(t.rev)],
+  (t) => [
+    index('modifier_options_rev_idx').on(t.rev),
+    index('modifier_options_group_id_idx').on(t.groupId),
+  ],
 );
 
 export const menuItemModifierGroups = pgTable(
@@ -163,7 +167,10 @@ export const menuItemModifierGroups = pgTable(
       .references(() => modifierGroups.id),
     sort: integer('sort').notNull().default(0),
   },
-  (t) => [primaryKey({ columns: [t.itemId, t.groupId] })],
+  (t) => [
+    primaryKey({ columns: [t.itemId, t.groupId] }),
+    index('menu_item_modifier_groups_group_id_idx').on(t.groupId),
+  ],
 );
 
 // ---------- People and devices ----------
@@ -331,6 +338,8 @@ export const orders = pgTable(
       .on(t.status)
       .where(sql`status in ('new', 'preparing', 'ready')`),
     index('orders_customer_id_idx').on(t.customerId),
+    index('orders_created_by_staff_id_idx').on(t.createdByStaffId),
+    index('orders_created_on_device_id_idx').on(t.createdOnDeviceId),
     index('orders_rev_idx').on(t.rev),
     check('orders_channel', oneOf('channel', ORDER_CHANNELS)),
     check('orders_fulfillment', oneOf('fulfillment', FULFILLMENTS)),
@@ -366,6 +375,7 @@ export const orderItems = pgTable(
   },
   (t) => [
     index('order_items_order_id_idx').on(t.orderId),
+    index('order_items_menu_item_id_idx').on(t.menuItemId),
     check('order_items_qty', sql`qty >= 1`),
     check('order_items_line_total_nonneg', sql`line_total_satang >= 0`),
   ],
@@ -434,6 +444,8 @@ export const payments = pgTable(
   (t) => [
     uniqueIndex('payments_client_request_id_key').on(t.clientRequestId),
     index('payments_order_id_idx').on(t.orderId),
+    index('payments_confirmed_by_staff_id_idx').on(t.confirmedByStaffId),
+    index('payments_scheme_id_idx').on(t.schemeId),
     index('payments_open_status_idx').on(t.status).where(sql`status in ('pending', 'claimed')`),
     index('payments_rev_idx').on(t.rev),
     check('payments_method', oneOf('method', PAYMENT_METHODS)),
@@ -468,6 +480,7 @@ export const expenses = pgTable(
   },
   (t) => [
     index('expenses_business_date_idx').on(t.businessDate),
+    index('expenses_created_by_staff_id_idx').on(t.createdByStaffId),
     index('expenses_rev_idx').on(t.rev),
     check('expenses_category', oneOf('category', EXPENSE_CATEGORIES)),
     check('expenses_amount_nonneg', sql`amount_satang >= 0`),
@@ -491,7 +504,7 @@ export const settings = pgTable(
     updatedBy: uuid('updated_by').references(() => staff.id),
     ...sync,
   },
-  (t) => [index('settings_rev_idx').on(t.rev)],
+  (t) => [index('settings_rev_idx').on(t.rev), index('settings_updated_by_idx').on(t.updatedBy)],
 );
 
 export const lineEvents = pgTable('line_events', {
@@ -517,6 +530,8 @@ export const lineMessageLog = pgTable(
   },
   (t) => [
     index('line_message_log_sent_at_idx').on(t.sentAt),
+    index('line_message_log_customer_id_idx').on(t.customerId),
+    index('line_message_log_order_id_idx').on(t.orderId),
     check('line_message_log_kind', sql`kind in ('reply', 'push')`),
   ],
 );
@@ -538,6 +553,7 @@ export const auditLog = pgTable(
   },
   (t) => [
     index('audit_log_at_idx').on(t.at),
+    index('audit_log_device_id_idx').on(t.deviceId),
     index('audit_log_entity_idx').on(t.entity, t.entityId),
     check('audit_log_actor_type', oneOf('actor_type', AUDIT_ACTOR_TYPES)),
   ],

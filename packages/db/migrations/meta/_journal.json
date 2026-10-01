@@ -64,6 +64,13 @@
       "when": 1790852835935,
       "tag": "0008_orders_request_hash",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1790871456665,
+      "tag": "0009_fk_covering_indexes",
+      "breakpoints": true
     }
   ]
 }
