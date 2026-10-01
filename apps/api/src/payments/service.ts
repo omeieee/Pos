@@ -502,10 +502,13 @@ export async function changePaymentMethod(
       };
     });
   } catch (error) {
-    const source = await paymentsRepo.findPaymentById(ctx.db, paymentId);
     if (!(error instanceof DuplicateRequest)) {
-      throw (await openPaymentRace(ctx.db, source?.orderId, error)) ?? error;
+      // Only the index race needs the extra read; any other error is thrown as it is.
+      if (!paymentsRepo.isOpenPaymentConflict(error)) throw error;
+      const probe = await paymentsRepo.findPaymentById(ctx.db, paymentId);
+      throw (await openPaymentRace(ctx.db, probe?.orderId, error)) ?? error;
     }
+    const source = await paymentsRepo.findPaymentById(ctx.db, paymentId);
     const winner = await paymentsRepo.findPaymentByClientRequestId(ctx.db, input.clientRequestId);
     if (!winner || !source) throw error;
     return replayResult(ctx.db, winner, source);
