@@ -118,7 +118,7 @@ Thai name: ไทยช่วยไทย พลัส 60/40.
 
 ### 3.1 Facts (checked Sept 2026)
 - **Split:** the government pays 60% and the customer 40%. The government pays at most **฿200 per person per day**.
-- **Additional round:** runs **1 Oct – 30 Nov 2026**, with a government cap of **฿1,000 per person** for the whole round. Merchants confirm their participation in ถุงเงิน. (The first round ran 1 Jun – 30 Sep 2026.)
+- **Additional round:** runs **1 Oct – 30 Nov 2026**, with a government cap of **฿1,000 per person** for the whole round. Merchants confirm their participation in ถุงเงิน. **Owner-provided parameters (2026-10-01):** government 60% / customer 40%; government subsidy capped at ฿200 per person per day and ฿1,000 per person for the round; active 06:00–23:00 Asia/Bangkok; ends 2026-11-30 23:59:59. (The first round ran 1 Jun – 30 Sep 2026.)
 - **Hours:** 06:00–23:00 at shops. 06:00–21:00 through food-delivery platforms.
 - **Apps:** merchants use **ถุงเงิน**; customers use **เป๋าตัง**.
 - **Merchant flow:** in ถุงเงิน, tap ไทยช่วยไทยพลัส, enter the **full price** (the app splits it), create the QR, and show it to the customer. The **QR has a limited lifetime and is used once per transaction.** Don't print it.
