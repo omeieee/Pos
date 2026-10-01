@@ -28,6 +28,10 @@ export const unauthenticated = () => new ApiError(401, 'UNAUTHENTICATED', 'Sign 
 export const deviceUnregistered = () =>
   new ApiError(401, 'DEVICE_UNREGISTERED', 'This device is not registered');
 
+/** A PIN session presented without the device token it was opened on (or with another one). */
+export const deviceMismatch = () =>
+  new ApiError(401, 'DEVICE_MISMATCH', 'This session belongs to another device');
+
 /** Wrong PIN, password or code. One answer for every cause, so it does not reveal which part failed. */
 export const invalidCredentials = () =>
   new ApiError(401, 'INVALID_CREDENTIALS', 'Those details are not correct');

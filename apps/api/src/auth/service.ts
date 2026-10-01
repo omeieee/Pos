@@ -6,6 +6,7 @@
  * parallel guesses are counted one at a time. A wrong guess is returned as a value (not thrown)
  * so its counter and audit row commit, then the caller turns it into the HTTP error.
  */
+import { timingSafeEqual } from 'node:crypto';
 import { authRepo, type Db, insertAudit } from '@sds/db';
 import {
   type AuthMeResponse,
@@ -24,6 +25,7 @@ import {
 } from '@sds/shared';
 import {
   accountLocked,
+  deviceMismatch,
   deviceUnregistered,
   forbidden,
   invalidCredentials,
@@ -195,10 +197,18 @@ function sessionResponse(
   };
 }
 
+function sameDevice(storedHash: string | null, deviceToken: string | undefined): boolean {
+  if (!storedHash || !deviceToken) return false;
+  const given = Buffer.from(hashToken(deviceToken));
+  const stored = Buffer.from(storedHash);
+  return given.length === stored.length && timingSafeEqual(given, stored);
+}
+
 /** Resolves a bearer token to a principal, or null if it is unknown, revoked, expired or idle. */
 export async function authenticateSession(
   ctx: AuthContext,
   token: string,
+  deviceToken: string | undefined,
 ): Promise<Principal | null> {
   const row = await authRepo.findSessionByTokenHash(ctx.db, hashToken(token));
   if (!row) return null;
@@ -211,6 +221,12 @@ export async function authenticateSession(
     !row.staffActive ||
     (row.deviceId !== null && row.deviceRevokedAt !== null);
   if (dead) return null;
+
+  // A PIN session is bound to the device it was opened on: it only works together with that
+  // device's token, so a stolen session token is no use on its own. Owner sessions are not bound.
+  if (row.kind === 'pin' && !sameDevice(row.deviceTokenHash, deviceToken)) {
+    throw deviceMismatch();
+  }
 
   if (now.getTime() - row.lastSeenAt.getTime() > seconds(ctx.policy.sessionTouchIntervalSeconds)) {
     await authRepo.touchSession(ctx.db, row.id, now);

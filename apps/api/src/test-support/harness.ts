@@ -137,12 +137,25 @@ export async function createHarness(
   });
   const lines: string[] = [];
 
+  // A PIN session only works with its device's token. So existing tests need not add the header
+  // to every call, requests that carry a known PIN session get it filled in; a test that wants
+  // the raw behaviour sends x-test-no-device-autofill.
+  const deviceBySession = new Map<string, string>();
+
   const app = await buildApp({
     config: { corsOrigins: [], version: 'test' },
     checkDb: async () => {},
     logger: { level: 'trace', stream: { write: (line: string) => void lines.push(line) } },
   });
   // The global buckets are effectively off here; their own test turns them down.
+  app.addHook('onRequest', async (request) => {
+    if (request.headers['x-test-no-device-autofill'] !== undefined) return;
+    if (request.headers['x-device-token'] !== undefined) return;
+    const bearer = /^Bearer (\S+)$/i.exec(request.headers.authorization ?? '')?.[1];
+    const device = bearer ? deviceBySession.get(bearer) : undefined;
+    if (device) request.headers['x-device-token'] = device;
+  });
+
   const policy = {
     ...DEFAULT_AUTH_POLICY,
     ownerGlobalRatePerMinute: 100_000,
@@ -257,7 +270,9 @@ export async function createHarness(
       payload: { staffId, pin },
     });
     if (res.statusCode !== 200) throw new Error(`pin login failed: ${res.statusCode}`);
-    return (res.json() as { sessionToken: string }).sessionToken;
+    const sessionToken = (res.json() as { sessionToken: string }).sessionToken;
+    deviceBySession.set(sessionToken, deviceToken);
+    return sessionToken;
   }
 
   async function steppedUpOwner(owner: OwnerFixture) {

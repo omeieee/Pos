@@ -348,6 +348,8 @@ export interface SessionRow {
   staffActive: boolean;
   deviceRevokedAt: Date | null;
   deviceLastSeenAt: Date | null;
+  /** SHA-256 of the device's token: a PIN session is only valid together with that token. */
+  deviceTokenHash: string | null;
 }
 
 export async function insertSession(
@@ -386,6 +388,7 @@ export async function findSessionByTokenHash(
       staffActive: staff.active,
       deviceRevokedAt: devices.revokedAt,
       deviceLastSeenAt: devices.lastSeenAt,
+      deviceTokenHash: devices.tokenHash,
     })
     .from(sessions)
     .innerJoin(staff, eq(staff.id, sessions.staffId))

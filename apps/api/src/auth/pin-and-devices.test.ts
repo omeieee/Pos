@@ -206,7 +206,12 @@ describe('POST /v1/auth/pin', () => {
     expect(body.idleTimeoutSeconds).toBe(2 * 60 * 60);
     expect(new Date(body.expiresAt).getTime()).toBe(h.clock.now().getTime() + 12 * 3600 * 1000);
 
-    const who = await me(body.sessionToken);
+    // The session works with the device it was opened on (and, see device-binding.test.ts, only then).
+    const who = await h.app.inject({
+      method: 'GET',
+      url: '/v1/auth/me',
+      headers: { ...bearer(body.sessionToken), 'x-device-token': device.token },
+    });
     expect(who.json()).toMatchObject({ deviceId: device.id, staff: { id: staff.id } });
   });
 

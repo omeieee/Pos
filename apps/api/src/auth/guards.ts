@@ -34,7 +34,12 @@ export function createGuard(ctx: AuthContext): GuardFactory {
     return async (request) => {
       const token = BEARER.exec(request.headers.authorization ?? '')?.[1];
       if (!token) throw unauthenticated();
-      const principal = await authenticateSession(ctx, token);
+      const deviceToken = request.headers['x-device-token'];
+      const principal = await authenticateSession(
+        ctx,
+        token,
+        typeof deviceToken === 'string' ? deviceToken : undefined,
+      );
       if (!principal) throw unauthenticated();
       request.auth = principal;
 
