@@ -442,6 +442,31 @@ describe('government co-pay (rule 4)', () => {
     expect(await paymentCount(order.id)).toBe(0);
   });
 
+  test.each(['grab', 'lineman'])(
+    'is refused for a %s order whatever its fulfillment says (the platform took the payment)',
+    async (channel) => {
+      const cashier = await sign('cashier');
+      const order = await place(cashier, { channel, fulfillment: 'platform_delivery' });
+      // Even if a row somehow said "takeaway", the channel alone rules co-pay out.
+      await h.client.query("update orders set fulfillment = 'takeaway' where id = $1", [order.id]);
+      const res = await pay(cashier, order.id, payBody('gov_copay'));
+      expect(res.statusCode).toBe(422);
+      expect(res.json()).toMatchObject({ code: 'GOV_COPAY_UNAVAILABLE' });
+      expect(await paymentCount(order.id)).toBe(0);
+
+      // Changing a pending payment to co-pay goes through the same checks.
+      await setMethods({ cash: true, promptpay: true, platform: true, other: true });
+      const first = await startPayment(cashier, order.id, 'platform');
+      const change = await call('POST', `/v1/payments/${first.id}/change-method`, cashier, {
+        clientRequestId: crypto.randomUUID(),
+        method: 'gov_copay',
+      });
+      expect(change.statusCode).toBe(422);
+      expect(change.json()).toMatchObject({ code: 'GOV_COPAY_UNAVAILABLE' });
+      expect(await paymentCount(order.id)).toBe(1);
+    },
+  );
+
   test('is refused for room delivery and platform delivery (not face to face)', async () => {
     const cashier = await sign('cashier');
     const room = await place(cashier, { fulfillment: 'room_delivery', roomNo: '1204' });

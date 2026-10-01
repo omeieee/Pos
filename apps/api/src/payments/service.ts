@@ -322,10 +322,14 @@ async function insertPaymentFor(
     case 'gov_copay': {
       const schemeRow = await getGovCopayRow(tx);
       const scheme = schemeRow ? govCopaySchemeSchema.parse(schemeRow) : null;
-      // Counter payments are face to face at the storefront whatever channel the order came by.
+      // Counter payments are face to face at the storefront whatever channel the order came by
+      // (a LINE pickup order paid at the counter qualifies), but Grab and LINE MAN orders are paid
+      // on the platform, never at the counter, so co-pay does not apply to them (D-08).
       if (
         !schemeRow ||
         !scheme ||
+        order.channel === 'grab' ||
+        order.channel === 'lineman' ||
         !isCopayAvailable(scheme, now, 'storefront', order.fulfillment as Fulfillment)
       ) {
         throw unprocessable(
