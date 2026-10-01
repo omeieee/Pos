@@ -3,7 +3,7 @@
  * it locally and on the VM). The authenticator is enrolled and confirmed before anything is saved.
  */
 import { authRepo, createDb } from '@sds/db';
-import { ownerPasswordSchema, pinSchema } from '@sds/shared';
+import { ownerPasswordSchema, pinSchemaFor } from '@sds/shared';
 import { deriveAuthKeys } from '../auth/crypto.ts';
 import { createOwner, OwnerExistsError } from '../auth/owner-setup.ts';
 import {
@@ -49,14 +49,14 @@ async function main() {
     let pin: string | undefined;
     for (;;) {
       const answer = await prompt.askHidden(
-        'Daily PIN for your own devices (4-6 digits, empty to skip): ',
+        'Daily PIN for your own devices (6 digits, empty to skip): ',
       );
       if (answer === '') break;
-      if (pinSchema.safeParse(answer).success) {
+      if (pinSchemaFor('owner').safeParse(answer).success) {
         pin = answer;
         break;
       }
-      console.error('Use 4 to 6 digits, or leave it empty.');
+      console.error('The owner PIN is 6 digits, or leave it empty.');
     }
 
     const totpSecret = await enrolAuthenticator(prompt, email);

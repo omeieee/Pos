@@ -67,6 +67,8 @@ export interface StaffPinRow extends StaffPrincipalRow {
   lockedUntil: Date | null;
   stepUpFailedCount: number;
   stepUpLockedUntil: Date | null;
+  pinLockLevel: number;
+  stepUpLockLevel: number;
 }
 
 /** Active staff who have a PIN: the tiles on the PIN screen. */
@@ -92,6 +94,8 @@ export async function lockStaffForPin(db: Db, staffId: string): Promise<StaffPin
       lockedUntil: staff.lockedUntil,
       stepUpFailedCount: staff.stepUpFailedCount,
       stepUpLockedUntil: staff.stepUpLockedUntil,
+      pinLockLevel: staff.pinLockLevel,
+      stepUpLockLevel: staff.stepUpLockLevel,
     })
     .from(staff)
     .where(eq(staff.id, staffId))
@@ -103,7 +107,7 @@ export async function lockStaffForPin(db: Db, staffId: string): Promise<StaffPin
 export async function setStaffPinState(
   db: Db,
   staffId: string,
-  state: { failedPinCount: number; lockedUntil: Date | null },
+  state: { failedPinCount: number; lockedUntil: Date | null; pinLockLevel: number },
 ): Promise<void> {
   await db.update(staff).set(state).where(eq(staff.id, staffId));
 }
@@ -112,7 +116,7 @@ export async function setStaffPinState(
 export async function setStaffStepUpState(
   db: Db,
   staffId: string,
-  state: { stepUpFailedCount: number; stepUpLockedUntil: Date | null },
+  state: { stepUpFailedCount: number; stepUpLockedUntil: Date | null; stepUpLockLevel: number },
 ): Promise<void> {
   await db.update(staff).set(state).where(eq(staff.id, staffId));
 }
@@ -126,6 +130,8 @@ export async function setStaffPinHash(db: Db, staffId: string, pinHash: string):
       lockedUntil: null,
       stepUpFailedCount: 0,
       stepUpLockedUntil: null,
+      pinLockLevel: 0,
+      stepUpLockLevel: 0,
     })
     .where(eq(staff.id, staffId));
 }

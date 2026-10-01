@@ -11,9 +11,13 @@ export interface AuthPolicy {
   ownerIdleSeconds: number;
   /** How long a successful step-up stays valid. */
   stepUpSeconds: number;
-  /** 5 wrong PINs, then a 5-minute lock (02 §7). */
+  /**
+   * 5 wrong PINs lock the account (02 §7). Each repeated lock cycle lasts longer, one rung of this
+   * ladder at a time and then the last rung for good: 5 min, 1 h, 24 h. A successful sign-in
+   * puts the ladder back at the bottom.
+   */
   pinMaxFailures: number;
-  pinLockSeconds: number;
+  pinLockLadderSeconds: readonly number[];
   /** The owner's password login faces the internet, so its lock is longer. */
   ownerMaxFailures: number;
   ownerLockSeconds: number;
@@ -36,7 +40,7 @@ export const DEFAULT_AUTH_POLICY: AuthPolicy = {
   ownerIdleSeconds: 30 * 60,
   stepUpSeconds: 5 * 60,
   pinMaxFailures: 5,
-  pinLockSeconds: 5 * 60,
+  pinLockLadderSeconds: [5 * 60, 60 * 60, 24 * 60 * 60],
   ownerMaxFailures: 5,
   ownerLockSeconds: 15 * 60,
   ownerGlobalRatePerMinute: 30,

@@ -3,11 +3,28 @@
  * Secrets (PIN, password, codes) are only ever validated here, never logged or echoed.
  */
 import { z } from 'zod';
-import { DEVICE_KINDS, STAFF_ROLES } from './enums.ts';
+import { DEVICE_KINDS, STAFF_ROLES, type StaffRole } from './enums.ts';
 import { PERMISSIONS } from './permissions.ts';
 
 /** Staff PIN: 4–6 digits (D-17). */
 export const pinSchema = z.string().regex(/^\d{4,6}$/, 'must be 4 to 6 digits');
+
+/**
+ * Shortest PIN a role may have. The owner and managers can void payments and change settings
+ * once stepped up, so they need all 6 digits; counter and kitchen staff keep 4 (QA, P3).
+ */
+export const PIN_MIN_DIGITS: Record<StaffRole, number> = {
+  owner: 6,
+  manager: 6,
+  cashier: 4,
+  kitchen: 4,
+};
+
+/** The PIN rule to apply when a PIN is set for someone in this role. Sign-in accepts 4–6. */
+export function pinSchemaFor(role: StaffRole) {
+  const min = PIN_MIN_DIGITS[role];
+  return z.string().regex(new RegExp(`^\\d{${min},6}$`), `must be ${min} to 6 digits`);
+}
 
 /** Applied only when a password is chosen; login accepts any non-empty value (up to the cap). */
 export const ownerPasswordSchema = z.string().min(12).max(256);

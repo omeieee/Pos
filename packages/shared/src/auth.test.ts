@@ -3,11 +3,14 @@ import {
   ownerLoginInputSchema,
   ownerPasswordSchema,
   ownerStepUpInputSchema,
+  PIN_MIN_DIGITS,
   pinLoginInputSchema,
   pinSchema,
+  pinSchemaFor,
   registerDeviceInputSchema,
   staffStepUpInputSchema,
 } from './auth.ts';
+import { STAFF_ROLES } from './enums.ts';
 
 const staffId = '0192f3a0-0000-7000-8000-000000000001';
 
@@ -17,6 +20,21 @@ describe('pinSchema', () => {
   });
   test.each(['123', '1234567', '12a4', '12 4', '', 1234])('rejects %j', (pin) => {
     expect(pinSchema.safeParse(pin).success).toBe(false);
+  });
+});
+
+describe('pinSchemaFor: the owner and managers need 6 digits (QA: a 4-digit PIN guards too much)', () => {
+  test('minimums by role', () => {
+    expect(PIN_MIN_DIGITS).toEqual({ owner: 6, manager: 6, cashier: 4, kitchen: 4 });
+  });
+
+  test.each(STAFF_ROLES)('%s', (role) => {
+    const min = PIN_MIN_DIGITS[role];
+    expect(pinSchemaFor(role).safeParse('1'.repeat(min)).success).toBe(true);
+    expect(pinSchemaFor(role).safeParse('1'.repeat(6)).success).toBe(true);
+    expect(pinSchemaFor(role).safeParse('1'.repeat(min - 1)).success).toBe(false);
+    expect(pinSchemaFor(role).safeParse('1'.repeat(7)).success).toBe(false);
+    expect(pinSchemaFor(role).safeParse('12a456').success).toBe(false);
   });
 });
 

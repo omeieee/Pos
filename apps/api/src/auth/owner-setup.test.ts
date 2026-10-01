@@ -19,7 +19,7 @@ const input = {
   email: 'Owner@Example.test',
   displayName: 'Shop Owner',
   password: 'a long made-up password',
-  pin: '2468',
+  pin: '246810',
   totpSecret: secret,
 };
 
@@ -130,7 +130,8 @@ describe('createOwner input checks', () => {
   test.each([
     ['a short password', { password: 'too short' }],
     ['a malformed e-mail', { email: 'not-an-email' }],
-    ['a PIN that is not 4 to 6 digits', { pin: '12' }],
+    ['a PIN that is not 6 digits (the owner needs all 6)', { pin: '2468' }],
+    ['a PIN that is too short', { pin: '12' }],
     ['an empty name', { displayName: '  ' }],
   ])('rejects %s before touching the database', async (_label, override) => {
     const error = await createOwner({ db: h.db, keys: h.keys }, { ...input, ...override }).then(

@@ -7,7 +7,7 @@
  * secret and the recovery codes to the owner once and keeps nothing.
  */
 import { authRepo, type Db, insertAudit } from '@sds/db';
-import { ownerPasswordSchema, pinSchema } from '@sds/shared';
+import { ownerPasswordSchema, pinSchemaFor } from '@sds/shared';
 import { z } from 'zod';
 import { parse } from '../validate.ts';
 import {
@@ -32,7 +32,7 @@ const newOwnerSchema = z.object({
   email: z.string().trim().toLowerCase().pipe(z.email().max(254)),
   displayName: z.string().trim().min(1).max(60),
   password: ownerPasswordSchema,
-  pin: pinSchema.optional(),
+  pin: pinSchemaFor('owner').optional(),
 });
 
 export interface NewOwnerInput {

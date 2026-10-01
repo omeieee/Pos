@@ -50,6 +50,13 @@
       "when": 1790847734932,
       "tag": "0006_auth_stepup_counters",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1790848142032,
+      "tag": "0007_staff_pin_lock_level",
+      "breakpoints": true
     }
   ]
 }

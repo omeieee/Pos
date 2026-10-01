@@ -208,6 +208,9 @@ export const staff = pgTable(
     /** Step-up (a signed-in session re-entering the PIN) counts and locks apart from sign-in. */
     stepUpFailedCount: integer('step_up_failed_count').notNull().default(0),
     stepUpLockedUntil: ts('step_up_locked_until'),
+    /** Lock cycles since the last success: 5 min, then 1 h, then 24 h. Reset on a successful sign-in. */
+    pinLockLevel: integer('pin_lock_level').notNull().default(0),
+    stepUpLockLevel: integer('step_up_lock_level').notNull().default(0),
     ...sync,
   },
   (t) => [index('staff_rev_idx').on(t.rev), check('staff_role', oneOf('role', STAFF_ROLES))],

@@ -262,24 +262,30 @@ type Track = 'signin' | 'step_up';
 
 function pinCounters(row: authRepo.StaffPinRow, track: Track) {
   return track === 'signin'
-    ? { failed: row.failedPinCount, lockedUntil: row.lockedUntil }
-    : { failed: row.stepUpFailedCount, lockedUntil: row.stepUpLockedUntil };
+    ? { failed: row.failedPinCount, lockedUntil: row.lockedUntil, level: row.pinLockLevel }
+    : {
+        failed: row.stepUpFailedCount,
+        lockedUntil: row.stepUpLockedUntil,
+        level: row.stepUpLockLevel,
+      };
 }
 
 function savePinCounters(
   tx: Db,
   staffId: string,
   track: Track,
-  next: { failed: number; lockedUntil: Date | null },
+  next: { failed: number; lockedUntil: Date | null; level: number },
 ) {
   return track === 'signin'
     ? authRepo.setStaffPinState(tx, staffId, {
         failedPinCount: next.failed,
         lockedUntil: next.lockedUntil,
+        pinLockLevel: next.level,
       })
     : authRepo.setStaffStepUpState(tx, staffId, {
         stepUpFailedCount: next.failed,
         stepUpLockedUntil: next.lockedUntil,
+        stepUpLockLevel: next.level,
       });
 }
 
@@ -302,23 +308,26 @@ async function attemptPin(
   // An expired lock starts the count again.
   const earlier = current.lockedUntil ? 0 : current.failed;
   if (await verifyPin(row.pinHash, pin, ctx.keys)) {
-    if (current.failed !== 0 || current.lockedUntil) {
-      await savePinCounters(tx, row.id, track, { failed: 0, lockedUntil: null });
+    if (current.failed !== 0 || current.lockedUntil || current.level !== 0) {
+      await savePinCounters(tx, row.id, track, { failed: 0, lockedUntil: null, level: 0 });
     }
     return { kind: 'ok' };
   }
 
   const failures = earlier + 1;
   if (failures >= ctx.policy.pinMaxFailures) {
-    const until = new Date(now.getTime() + seconds(ctx.policy.pinLockSeconds));
-    await savePinCounters(tx, row.id, track, { failed: failures, lockedUntil: until });
+    // Each lock cycle since the last success climbs one rung; the top rung repeats.
+    const ladder = ctx.policy.pinLockLadderSeconds;
+    const level = Math.min(current.level + 1, ladder.length);
+    const until = new Date(now.getTime() + seconds(ladder[level - 1] ?? 0));
+    await savePinCounters(tx, row.id, track, { failed: failures, lockedUntil: until, level });
     await insertAudit(tx, {
       actorType: 'system',
       deviceId: where.deviceId,
       action: track === 'signin' ? 'auth.pin_locked' : 'auth.pin_step_up_locked',
       entity: 'staff',
       entityId: row.id,
-      after: { failedAttempts: failures, lockedUntil: until.toISOString() },
+      after: { failedAttempts: failures, lockedUntil: until.toISOString(), lockLevel: level },
       ip: where.ip,
     });
     emit(
@@ -329,7 +338,11 @@ async function attemptPin(
     );
     return { kind: 'locked', until };
   }
-  await savePinCounters(tx, row.id, track, { failed: failures, lockedUntil: null });
+  await savePinCounters(tx, row.id, track, {
+    failed: failures,
+    lockedUntil: null,
+    level: current.level,
+  });
   return { kind: 'invalid' };
 }
 

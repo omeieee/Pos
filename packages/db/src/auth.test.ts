@@ -182,19 +182,27 @@ describe('step-up counters are kept apart from sign-in counters', () => {
       .returning({ id: staff.id });
     const id = row?.id ?? '';
     const until = new Date('2026-10-01T10:05:00Z');
-    await auth.setStaffPinState(db, id, { failedPinCount: 1, lockedUntil: null });
-    await auth.setStaffStepUpState(db, id, { stepUpFailedCount: 5, stepUpLockedUntil: until });
+    await auth.setStaffPinState(db, id, { failedPinCount: 1, lockedUntil: null, pinLockLevel: 2 });
+    await auth.setStaffStepUpState(db, id, {
+      stepUpFailedCount: 5,
+      stepUpLockedUntil: until,
+      stepUpLockLevel: 1,
+    });
     expect(await auth.lockStaffForPin(db, id)).toMatchObject({
       failedPinCount: 1,
       lockedUntil: null,
       stepUpFailedCount: 5,
       stepUpLockedUntil: until,
+      pinLockLevel: 2,
+      stepUpLockLevel: 1,
     });
     await auth.setStaffPinHash(db, id, 'new');
     expect(await auth.lockStaffForPin(db, id)).toMatchObject({
       failedPinCount: 0,
       stepUpFailedCount: 0,
       stepUpLockedUntil: null,
+      pinLockLevel: 0,
+      stepUpLockLevel: 0,
     });
   });
 });
@@ -228,7 +236,7 @@ describe('staff PINs', () => {
       lockedUntil: null,
     });
     const until = new Date('2026-10-01T10:05:00Z');
-    await auth.setStaffPinState(db, id, { failedPinCount: 5, lockedUntil: until });
+    await auth.setStaffPinState(db, id, { failedPinCount: 5, lockedUntil: until, pinLockLevel: 1 });
     expect(await auth.lockStaffForPin(db, id)).toMatchObject({
       failedPinCount: 5,
       lockedUntil: until,
