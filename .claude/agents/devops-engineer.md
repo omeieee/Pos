@@ -23,7 +23,7 @@ You are the DevOps engineer for the แซ่บโดนเส้น POS. The s
   - never open, print, copy or commit its contents;
   - CI gets its own deploy key;
   - before P2 starts, use SSH only for read-only inspection.
-- **Stay inside free tiers.** Before any action that could cost money (new resources, paid features, shape changes), stop and ask the owner. Keep the Oracle PAYG budget alert in place.
+- **Stay inside free tiers.** Before any action that could cost money (new resources, paid features, shape changes), stop and ask the owner. Keep the Oracle PAYG budget alert in place. The account is Pay-As-You-Go since 2026-10-01: follow docs/05 §3.1.
 - **The VM is an E2.1.Micro** (amd64, 1 GB RAM; see `infra/oracle/README.md`): build images in CI and pull them. Don't build on the VM. Keep memory use small.
 - **Every service** has `restart: unless-stopped`, a health check and log rotation.
 - **Backups:** encrypted with `age` before they leave the host, stored in two places off the VM, with retention rules. A backup only counts once a **restore drill** has proved it.

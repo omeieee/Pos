@@ -8,7 +8,7 @@ Decisions: [D-03](decisions.md#d-03--database--open-q1), [D-10](decisions.md#d-1
 - Pages for the two web apps;
 - R2 for backups and images.
 
-**Upgrade the Oracle account to Pay-As-You-Go**, with a budget alert of about US$1. Always Free resources stay free, and idle instances are no longer reclaimed.
+**Upgrade the Oracle account to Pay-As-You-Go**, with a budget alert of about US$1. Always Free resources stay free: Oracle "only charge[s] you for resource usage above the Always Free limits". Oracle's page does **not** say that Pay-As-You-Go stops idle reclamation (⚠️ unverified), so the rebuild procedure in the RUNBOOK still matters. The operating rules are in [§3.1](#31-operating-rules-on-pay-as-you-go).
 
 The only purchase is a **domain** (≈ US$10 a year ⚠️). The stack is ordinary containers, so the same `docker compose up` works on the future Mini PC or on any VPS if Oracle ever fails us.
 
@@ -32,7 +32,7 @@ The layout depends on the VM shape (**Q1**):
 ## 3. Free tiers relied on
 | Service | What we use | Free allowance | Status |
 |---|---|---|---|
-| Oracle Cloud Always Free | VM, block storage, object storage | A1: 1,500 OCPU-h and 9,000 GB-h a month (≈ **2 OCPU / 12 GB**) for Always Free tenancies. Up to 2× E2.1.Micro (1/8 OCPU, 1 GB). 200 GB block storage + 5 volume backups. 20 GB object storage. 10 TB outbound a month. **Idle reclamation:** over 7 days, CPU p95 < 20% **and** network < 20% **and** (A1) memory < 20%. PAYG keeps idle instances from being reclaimed | ✅ [Oracle docs](https://docs.oracle.com/en-us/iaas/Content/FreeTier/freetier_topic-Always_Free_Resources.htm) |
+| Oracle Cloud Always Free | VM, block storage, object storage | A1: 1,500 OCPU-h and 9,000 GB-h a month (≈ **2 OCPU / 12 GB**) for Always Free tenancies. Up to 2× E2.1.Micro (1/8 OCPU, 1 GB). 200 GB block storage (boot volumes included) + 5 volume backups. **Object storage: 20 GB combined on Always-Free-only accounts, but 10 GB Standard + 10 GB Infrequent Access + 10 GB Archive on paid (PAYG) accounts**, 50,000 API requests a month. 10 TB outbound a month. **Idle reclamation:** over 7 days, CPU p95 < 20% **and** network < 20% **and** (A1 only) memory < 20%. The page states no PAYG exemption (⚠️ unverified) | ✅ [Oracle docs](https://docs.oracle.com/en-us/iaas/Content/FreeTier/freetier_topic-Always_Free_Resources.htm) |
 | Cloudflare | DNS, TLS, Tunnel, Pages, R2, (Access) | Tunnel free; Pages free static hosting; R2 about 10 GB storage a month with free egress; Zero Trust Access free for a small team | ⚠️ check the current limits |
 | Supabase (Path B only) | Postgres | 500 MB DB, 1 GB storage, 5 GB egress, 2 projects, **pauses after 1 week without DB activity**, **no backups** | ✅ [pricing](https://supabase.com/pricing) |
 | LINE Official Account | Chat, webhooks, messages | 300 counted messages a month; replies free | ✅ see [04 §1.2](04-integrations.md#12-message-budget-the-main-line-constraint) |
@@ -40,6 +40,21 @@ The layout depends on the VM shape (**Q1**):
 | Sentry | Error tracking | Free developer plan | ⚠️ check |
 | healthchecks.io / UptimeRobot / Better Stack | Cron and uptime checks | Free tiers exist | ⚠️ check terms for commercial use |
 | ntfy.sh (P8, testing) | Push to phones | About 250 messages a day, 2 MB attachments. Self-hosted: no limits | ✅ [issue #1167](https://github.com/binwiederhier/ntfy/issues/1167) |
+
+### 3.1 Operating rules on Pay-As-You-Go
+The owner reports (2026-10-01) that the Oracle account is **Pay-As-You-Go**. From now on a mistake in the console costs real money. ✅ = from [Oracle's Always Free page](https://docs.oracle.com/en-us/iaas/Content/FreeTier/freetier_topic-Always_Free_Resources.htm) read on 2026-10-01; ⚠️ = general knowledge, confirm in the console or with Oracle.
+
+| Rule | Why |
+|---|---|
+| ✅ Oracle charges only for usage **above** the Always Free limits; Always Free resources stay free after the upgrade | The VM and bucket cost ฿0 as long as we stay inside the limits |
+| ✅ Stay inside: up to **2× VM.Standard.E2.1.Micro** (1/8 OCPU, 1 GB), **200 GB** block + boot volumes in total (a default boot volume is 50 GB, minimum 47 GB), **5** volume backups, **10 TB** outbound a month | Anything else (another shape, a bigger or extra volume, a 6th backup) is billed |
+| ✅ Object storage on a paid account is **10 GB Standard** (plus 10 GB Infrequent and 10 GB Archive), not 20 GB; 50,000 requests a month | Our backups go to the Standard tier: keep the bucket **below 10 GB** (alarm at 8 GB). Retention today: 48 h hourly, 31 d daily, 370 d monthly, 14 d pre-deploy, about 100 objects; dumps are about 70 KB now. At roughly 100 MB per compressed dump the bucket would be near 10 GB, so check its size monthly and shorten retention in `infra/backup/backup.sh` before it gets there |
+| ⚠️ Create nothing new in the console without checking the shape is Always Free: no A1 beyond 2 OCPU / 12 GB in total, no load balancer, no NAT gateway, no extra reserved IPs, no Autonomous or other databases, no paid regions | These are common sources of surprise charges |
+| ⚠️ A **stopped** instance keeps its boot volume (it still counts towards the 200 GB) and its public IP; a free Micro shape is not billed for compute while stopped. **Terminating** frees the volume but destroys the machine: the RUNBOOK rebuild procedure then applies, and the ephemeral public IP changes (so does the sslip.io hostname) | Don't leave a forgotten second VM or volume behind after a rebuild test |
+| ⚠️ A **reserved** public IP is free only while attached to a running instance's VNIC; an unattached one is billed | Relevant if we reserve the IP before P4 |
+| ✅ Idle reclamation (7 days, CPU p95 < 20% and network < 20%) is described only for Always Free instances and the page states **no PAYG exemption** (⚠️ unverified) | Our API is mostly idle, so the VM may count as idle. Mitigations: backups are off the VM, the rebuild procedure is written (not yet tested), UptimeRobot alerts if it vanishes, and Oracle usually emails a notice first (⚠️) |
+| Set a **budget** (Billing → Budgets, about US$1 a month, alert at 50% and 100% to the owner's email) and look at **Cost Analysis** monthly. Zero spend is the expected value | PAYG has no spending cap: the budget only alerts |
+| The second Micro VM for the deferred rebuild test is inside the free allowance (2 allowed) **only if** its boot volume keeps the total at or below 200 GB; **terminate it and its volume right after the test** | Avoids a forgotten, billable leftover |
 
 ## 4. Environments
 | Environment | Where | LINE | Data |
@@ -78,7 +93,7 @@ The layout depends on the VM shape (**Q1**):
 
 Status as of 2026-09-29 (VM state verified by the P2 sessions; ✅ = done, the unticked items say what is missing):
 - [ ] Record public IP, login user, shape, OCPU/RAM, region, availability domain and OCID in `infra/oracle/README.md`. These are not secrets; the key is. *All recorded except the full OCID: the README has only its tail.*
-- [ ] Upgrade the account to PAYG and add a budget alert (recommended; the owner currently stays on **Free Tier**). Confirm the shapes stay Always Free. *Not done: still Free Tier, no budget alert; idle-reclamation risk stays (05 §3).*
+- [ ] Upgrade the account to PAYG and add a budget alert (recommended). Confirm the shapes stay Always Free. *Owner reports on 2026-10-01 that the account status is **Pay-As-You-Go** (Oracle's "order processed" email also arrived); not seen by Claude. Still open: the budget alert (about US$1) and a look at Billing → Cost Analysis. Idle reclamation may still apply (see §3.1).*
 - [x] Path B on 1 GB: 2 GB swap file; Node heap capped (384 MB, `apps/api/Dockerfile`); images built in CI (amd64) and pulled from GHCR.
 - [x] Ubuntu LTS image, SSH keys only, root login and password auth disabled (`bootstrap.sh` `sshd_config.d/01-sds.conf`, applied 2026-09-29).
 - [x] Admin access: Tailscale, no public SSH at all (OCI port 22 rule deleted; public :22 times out, tailnet SSH works).

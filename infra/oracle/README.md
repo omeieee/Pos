@@ -26,7 +26,7 @@ Recorded 2026-09-29 from the owner's OCI console screenshots.
 | Public IP type | **Ephemeral** (`publicip20260928193828`), confirmed 2026-09-29. It survives reboot and stop/start, and is **lost if the instance is terminated** (e.g. rebuilt after reclamation) or if the public IP is removed. The sslip.io hostname and the LINE URLs would then change |
 | Capacity type | On-demand |
 | Instance metadata service | Version 2 only |
-| Account type | **Free Tier (Always Free), not Pay-As-You-Go** |
+| Account type | **Pay-As-You-Go** (owner-reported 2026-10-01; it was Free Tier before). Stay inside the Always Free limits: docs/05 §3.1 |
 | OCID | `ocid1.instance…zwsljrj6nkjiycfphxdw7z24gicvhozic2rzzly7eime5dsxgltm6cwoka` (tail as shown in the console) |
 | SSH key | `%USERPROFILE%\.ssh\ssh-key-2026-09-28.key` (+ `.pub`), moved out of the repo on 2026-09-29. Permissions: owner read-only. RSA 2048 |
 
@@ -36,7 +36,7 @@ Recorded 2026-09-29 from the owner's OCI console screenshots.
   - add a 2 GB swap file;
   - cap the Node heap (e.g. `--max-old-space-size=384`);
   - build Docker images in GitHub Actions (amd64) and pull them from GHCR. Don't build on the VM.
-- **Free Tier idle reclamation:** a Micro VM counts as idle if, over 7 days, CPU p95 < 20% and network < 20%. A light POS load may meet that. With Path B the VM holds **no data** (the database is on Supabase and backups are in OCI Object Storage), so if the VM is reclaimed, rebuilding it is a short scripted job (`infra/oracle/bootstrap.sh`, see `infra/RUNBOOK.md`) rather than a data loss. The clean fix is still upgrading to PAYG, which costs ฿0 within Always Free; that is the owner's decision.
+- **Free Tier idle reclamation:** a Micro VM counts as idle if, over 7 days, CPU p95 < 20% and network < 20%. A light POS load may meet that. With Path B the VM holds **no data** (the database is on Supabase and backups are in OCI Object Storage), so if the VM is reclaimed, rebuilding it is a short scripted job (`infra/oracle/bootstrap.sh`, see `infra/RUNBOOK.md`) rather than a data loss. The account is now Pay-As-You-Go (owner-reported 2026-10-01), which costs ฿0 within Always Free, but Oracle's page states no PAYG exemption from idle reclamation, so the rebuild procedure stays important (docs/05 §3.1).
 
 ## SSH config entry (optional; add to `~/.ssh/config`)
 ```

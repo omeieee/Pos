@@ -23,7 +23,7 @@ L = likelihood, I = impact (H/M/L). The phase column says where the mitigation i
 ## 2. Risk register
 | # | Risk | L | I | Mitigation | Owner |
 |---|---|---|---|---|---|
-| R1 | Oracle reclaims an "idle" VM (Free Tier account; Micro is idle if CPU p95 < 20% and network < 20% for 7 days) | M | M | **Upgrade to PAYG** (budget alert US$1; owner staying on Free Tier for now). Path B keeps the VM stateless (DB on Supabase, backups in R2) → rebuild from scripts; uptime monitoring | Owner, P2 |
+| R1 | Oracle reclaims an "idle" VM (Free Tier account; Micro is idle if CPU p95 < 20% and network < 20% for 7 days) | M | M | **Upgraded to PAYG** (owner-reported 2026-10-01; Oracle's page states no exemption from reclamation, ⚠️ unverified; budget alert US$1 still to set; rules in docs/05 §3.1). Path B keeps the VM stateless (DB on Supabase, backups in OCI Object Storage) → rebuild from scripts (written, untested); uptime monitoring | Owner, P2 |
 | R2 | Oracle account suspended, or region out of capacity | L–M | H | Off-site encrypted backups (R2); rebuild scripts; tested restore to the Mini PC or a VPS in ≤ 2 h | P2 |
 | R3 | Shop internet (AIS) outage at peak | M | M | Storefront offline outbox; phone hotspot; LINE orders unaffected in the cloud | P3 |
 | R4 | Someone changes the PromptPay ID to theirs | L | H | Owner-only with step-up, audit, instant alert; staff SOP to check the recipient name | P3 |
