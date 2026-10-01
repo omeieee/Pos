@@ -38,6 +38,15 @@
 	reverse_proxy api:3000
 	log {
 		output stdout
-		format json
+		# The signed PromptPay QR link (GET /v1/payments/:id/qr.png?exp=&sig=) carries a
+		# 5-minute credential in the query string; keep it out of the access log.
+		format filter {
+			wrap json
+			fields {
+				request>uri query {
+					replace sig REDACTED
+				}
+			}
+		}
 	}
 }
