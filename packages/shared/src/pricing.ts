@@ -44,6 +44,8 @@ export interface CatalogItem {
   estCostSatang: Satang;
   isAvailable: boolean;
   archived: boolean;
+  /** False when the item's category is deactivated: the item leaves the menu with it. */
+  categoryActive: boolean;
   channels: readonly MenuChannel[];
   /** Price overrides per channel (Grab / LINE MAN). */
   channelPrices: Partial<Record<MenuChannel, Satang>>;
@@ -130,7 +132,7 @@ export function priceOrder(
       fail('UNKNOWN_ITEM');
       continue;
     }
-    if (item.archived || !item.isAvailable) {
+    if (item.archived || !item.isAvailable || !item.categoryActive) {
       fail('ITEM_UNAVAILABLE');
       continue;
     }

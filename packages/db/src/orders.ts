@@ -21,6 +21,7 @@ import type { Db } from './client.ts';
 import {
   customers,
   dailyCounters,
+  menuCategories,
   menuItemChannelPrices,
   menuItemModifierGroups,
   menuItems,
@@ -213,7 +214,11 @@ export async function loadCatalog(
   if (itemIds.length === 0) return catalog;
   const ids = [...itemIds];
 
-  const items = await db.select().from(menuItems).where(inArray(menuItems.id, ids));
+  const items = await db
+    .select({ item: menuItems, categoryActive: menuCategories.active })
+    .from(menuItems)
+    .innerJoin(menuCategories, eq(menuCategories.id, menuItems.categoryId))
+    .where(inArray(menuItems.id, ids));
   const prices = await db
     .select()
     .from(menuItemChannelPrices)
@@ -269,7 +274,7 @@ export async function loadCatalog(
     pricesByItem.set(p.itemId, channelPrices);
   }
 
-  for (const item of items) {
+  for (const { item, categoryActive } of items) {
     catalog.set(item.id, {
       id: item.id,
       nameTh: item.nameTh,
@@ -278,6 +283,7 @@ export async function loadCatalog(
       estCostSatang: satang(item.estCostSatang),
       isAvailable: item.isAvailable,
       archived: item.archivedAt !== null,
+      categoryActive,
       channels: item.channels as MenuChannel[],
       channelPrices: pricesByItem.get(item.id) ?? {},
       groups: groupsByItem.get(item.id) ?? [],

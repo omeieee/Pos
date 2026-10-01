@@ -336,6 +336,29 @@ describe('POST /v1/orders', () => {
     ]);
   });
 
+  test('an item in a deactivated category cannot be ordered, and works again when the category is back', async () => {
+    newDay();
+    const cashier = await sign('cashier');
+    const own = await h.newMenu();
+    const body = () =>
+      orderBody({ items: [{ menuItemId: own.water, qty: 1, modifierOptionIds: [] }] });
+    await h.client.query(
+      'update menu_categories set active = false where id = (select category_id from menu_items where id = $1)',
+      [own.water],
+    );
+    const res = await post(cashier, body());
+    expect(res.statusCode).toBe(422);
+    expect(res.json()).toMatchObject({
+      code: 'ORDER_INVALID',
+      details: { errors: [expect.objectContaining({ code: 'ITEM_UNAVAILABLE', lineIndex: 0 })] },
+    });
+    await h.client.query(
+      'update menu_categories set active = true where id = (select category_id from menu_items where id = $1)',
+      [own.water],
+    );
+    expect((await post(cashier, body())).statusCode).toBe(201);
+  });
+
   test('a refused order creates nothing and uses no order number', async () => {
     newDay();
     const cashier = await sign('cashier');

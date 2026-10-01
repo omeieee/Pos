@@ -252,6 +252,7 @@ describe('loadCatalog', () => {
       estCostSatang: 2200,
       isAvailable: true,
       archived: false,
+      categoryActive: true,
       channels: ['storefront', 'grab'],
       channelPrices: { grab: satang(6500) },
     });
@@ -277,6 +278,23 @@ describe('loadCatalog', () => {
       channelPrices: {},
     });
     expect((await repo.loadCatalog(db, [])).size).toBe(0);
+  });
+
+  test('says whether the item category is active, so a deactivated category cannot be sold from', async () => {
+    const [live, dead] = await db
+      .insert(menuCategories)
+      .values([{ nameTh: 'เปิด' }, { nameTh: 'ปิด', active: false }])
+      .returning();
+    const [a, b] = await db
+      .insert(menuItems)
+      .values([
+        { categoryId: live?.id ?? '', nameTh: 'a', priceSatang: 100 },
+        { categoryId: dead?.id ?? '', nameTh: 'b', priceSatang: 100 },
+      ])
+      .returning();
+    const catalog = await repo.loadCatalog(db, [a?.id ?? '', b?.id ?? '']);
+    expect(catalog.get(a?.id ?? '')?.categoryActive).toBe(true);
+    expect(catalog.get(b?.id ?? '')?.categoryActive).toBe(false);
   });
 });
 

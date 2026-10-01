@@ -58,6 +58,7 @@ function noodles(over: Partial<CatalogItem> = {}): CatalogItem {
     estCostSatang: s(2200),
     isAvailable: true,
     archived: false,
+    categoryActive: true,
     channels: ['storefront', 'line', 'grab'],
     channelPrices: { grab: s(6500) },
     groups: [
@@ -77,6 +78,7 @@ const water: CatalogItem = {
   estCostSatang: s(400),
   isAvailable: true,
   archived: false,
+  categoryActive: true,
   channels: ['storefront', 'line', 'grab', 'lineman'],
   channelPrices: {},
   groups: [],
@@ -245,6 +247,7 @@ describe('priceOrder: the menu item', () => {
   test.each([
     ['archived', { archived: true }],
     ['sold out', { isAvailable: false }],
+    ['in a deactivated category', { categoryActive: false }],
   ])('refuses an item that is %s', (_label, over) => {
     expect(
       errors(
