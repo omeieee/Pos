@@ -130,6 +130,12 @@ This is the **single source of truth for technology and design choices**. Other 
 
 ## D-17 · Staff authentication — Proposed
 - **Decision:** the owner registers each device once, which issues a long-lived device token that can be revoked. Staff unlock with a personal 4–6 digit PIN (hashed, rate-limited, locked after repeated failures). Roles are owner, manager, cashier and kitchen. The owner's back-office login uses a password plus TOTP. Sensitive actions (**changing the PromptPay ID**, managing staff, voiding a paid order, exporting data) ask for the password again.
+- **Proposed amendments from the first build slice (2026-10-01, status stays Proposed; some items are in review):**
+  - **Tokens and sessions:** opaque 256-bit random bearer tokens stored only as SHA-256; sessions are database rows, so a revoke or a role change takes effect at once. PIN sessions last 12 h (idle 2 h), owner sessions 8 h (idle 30 min), and PIN sessions are bound to the registered device.
+  - **Step-up follows the role, not how the session was opened:** the owner gives password plus a TOTP or recovery code, even on a device unlocked with a PIN; other roles re-enter their PIN. Signing in does not count as step-up. A step-up lasts 5 minutes.
+  - **Secrets at rest:** passwords and PINs use scrypt (PINs also peppered with a key derived from `AUTH_SECRET_KEY`); the TOTP secret is AES-256-GCM encrypted under that key; recovery codes are single-use. TOTP is RFC 6238 with a plus/minus one step window and replay protection.
+  - **Locks:** 5 wrong PINs lock for 5 minutes, escalating to 1 hour and 24 hours on repeated lock cycles; PINs for the owner and managers are 6 digits; the owner account locks for 15 minutes after 5 wrong tries, with separate counters for public sign-in and step-up so a stranger cannot keep the owner out of sensitive actions.
+  - **Master key:** `AUTH_SECRET_KEY` lives only in the VM `.env` plus an offline copy; the API refuses to start without it; it must never be regenerated on a rebuild or rotated to sign devices out.
 
 ## D-18 · Backups and monitoring — Proposed
 - **Decision:**

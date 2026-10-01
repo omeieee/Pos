@@ -202,7 +202,7 @@ The pending payment is cancelled and a new pending payment is created for the ne
 ## 6. API surface (v1, summary)
 | Area | Endpoints |
 |---|---|
-| Auth | `POST /v1/auth/device` (owner registers device) · `POST /v1/auth/pin` · `POST /v1/auth/owner` (password + TOTP) · `POST /v1/auth/step-up` · `POST /v1/auth/line` (LINE ID token → customer session) |
+| Auth | `POST /v1/auth/device` (owner registers device) · `POST /v1/auth/pin` · `POST /v1/auth/owner` (password + TOTP) · `POST /v1/auth/step-up` · `GET /v1/auth/staff` (tiles for the PIN screen, device token) · `GET /v1/auth/me` · `POST /v1/auth/logout` · `POST /v1/auth/line` (LINE ID token → customer session) |
 | Menu | `GET /v1/menu` (public: available items per channel) · CRUD `/v1/menu/{categories,items,modifier-groups}` · `PATCH /v1/menu/items/{id}/availability` |
 | Orders | `POST /v1/orders` · `GET /v1/orders?day=&status=&channel=` · `GET/PATCH /v1/orders/{id}` · `POST /v1/orders/{id}/transition` · `POST /v1/orders/{id}/cancel` |
 | Payments | `POST /v1/orders/{id}/payments` · `POST /v1/payments/{id}/{claim,confirm,change-method,void,refund}` · `GET /v1/payments/{id}/qr.png` (signed, short-lived) |
