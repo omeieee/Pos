@@ -83,6 +83,16 @@ describe('lock countdown', () => {
   });
 });
 
+describe('Enter on a focused button', () => {
+  test('is the button own click, not a submit, so a digit key still types its digit', () => {
+    expect(keyToAction('Enter', true)).toBeNull();
+    expect(keyToAction('Enter', false)).toBe('submit');
+    // Digits and Backspace behave the same wherever the focus is.
+    expect(keyToAction('5', true)).toEqual({ type: 'digit', digit: '5' });
+    expect(keyToAction('Backspace', true)).toEqual({ type: 'delete' });
+  });
+});
+
 describe('hardware keyboard', () => {
   test.each<[string, PinPadAction | 'submit' | null]>([
     ['7', { type: 'digit', digit: '7' }],

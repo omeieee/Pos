@@ -56,7 +56,7 @@ export function PinPad({
   }
 
   function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    const action = keyToAction(event.key);
+    const action = keyToAction(event.key, event.target instanceof HTMLButtonElement);
     if (action === null) return;
     event.preventDefault();
     if (action === 'submit') submit();

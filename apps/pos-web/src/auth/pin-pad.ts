@@ -49,12 +49,13 @@ export const shouldAutoSubmit = (state: PinPadState): boolean =>
 
 /**
  * A hardware keyboard on a laptop or an iPad: digits type, Backspace deletes, Enter submits.
- * Escape is left alone so it can still close a dialog.
+ * Escape is left alone so it can still close a dialog. On a focused button Enter is that
+ * button's own click (a digit key types its digit, OK submits), so it is not taken as submit.
  */
-export function keyToAction(key: string): PinPadAction | 'submit' | null {
+export function keyToAction(key: string, onButton = false): PinPadAction | 'submit' | null {
   if (/^\d$/.test(key)) return { type: 'digit', digit: key };
   if (key === 'Backspace') return { type: 'delete' };
-  if (key === 'Enter') return 'submit';
+  if (key === 'Enter' && !onButton) return 'submit';
   return null;
 }
 
