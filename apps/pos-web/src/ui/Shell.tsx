@@ -18,12 +18,16 @@ export function Shell() {
   const hash = useHash();
   const session = state.session;
   const routes = allowedRoutes(session?.permissions ?? []);
-  const route = resolveRoute(hash, routes);
+  const resolved = resolveRoute(hash, routes);
+  const route = resolved?.route ?? null;
 
   // A page this role may not open (or an unknown address) is replaced by the first allowed one.
+  // A page with a parameter keeps its own address, so it is compared as a whole.
   useEffect(() => {
-    if (route && pathFromHash(hash) !== route.path) window.location.replace(`#${route.path}`);
-  }, [hash, route]);
+    if (resolved && pathFromHash(hash) !== resolved.path) {
+      window.location.replace(`#${resolved.path}`);
+    }
+  }, [hash, resolved]);
 
   if (!session) return null;
   const signOutLabel = tr('shell.signOut');

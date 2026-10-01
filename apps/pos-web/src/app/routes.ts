@@ -7,9 +7,33 @@
 import type { MessageKey } from '@sds/i18n';
 import type { Permission } from '@sds/shared';
 
-export type IconName = 'list' | 'bowl' | 'gear' | 'door' | 'back' | 'backspace' | 'alert' | 'user';
+export type IconName =
+  | 'list'
+  | 'bowl'
+  | 'gear'
+  | 'door'
+  | 'back'
+  | 'backspace'
+  | 'alert'
+  | 'user'
+  | 'grid'
+  | 'search'
+  | 'plus'
+  | 'minus'
+  | 'x'
+  | 'check'
+  | 'cart'
+  | 'note'
+  | 'wifi-off'
+  | 'sync'
+  | 'circle'
+  | 'clock';
 
-export type RouteId = 'orders' | 'menu' | 'settings';
+/** The entries of the navigation: one per top-level page. */
+export type RouteId = 'new' | 'orders' | 'menu' | 'settings';
+
+/** Everything the address bar can show; `order` is a page inside `orders`. */
+export type PageId = RouteId | 'order';
 
 export interface RouteDef {
   id: RouteId;
@@ -21,6 +45,7 @@ export interface RouteDef {
 }
 
 export const ROUTES: readonly RouteDef[] = [
+  { id: 'new', path: '/new', labelKey: 'nav.new', icon: 'grid', permission: 'order.create' },
   { id: 'orders', path: '/orders', labelKey: 'nav.orders', icon: 'list', permission: null },
   { id: 'menu', path: '/menu', labelKey: 'nav.menu', icon: 'bowl', permission: 'menu.edit' },
   {
@@ -32,22 +57,76 @@ export const ROUTES: readonly RouteDef[] = [
   },
 ];
 
+/** Pages with a parameter in the address. They open when their parent page is allowed. */
+interface ParamRouteDef {
+  page: PageId;
+  pattern: string;
+  parent: RouteId;
+}
+
+const PARAM_ROUTES: readonly ParamRouteDef[] = [
+  { page: 'order', pattern: '/orders/:id', parent: 'orders' },
+];
+
+/** The navigation entries a person may open. */
 export function allowedRoutes(permissions: readonly Permission[]): RouteDef[] {
   return ROUTES.filter((r) => r.permission === null || permissions.includes(r.permission));
 }
 
-/** `#/menu` -> `/menu`; anything else -> ''. */
+/**
+ * `/orders/:id` against `/orders/abc` -> `{id: 'abc'}`; null when the path does not match. A
+ * `:name` segment matches exactly one non-empty segment.
+ */
+export function matchPath(pattern: string, path: string): Record<string, string> | null {
+  const want = pattern.split('/');
+  const have = path.split('/');
+  if (want.length !== have.length) return null;
+  const params: Record<string, string> = {};
+  for (const [index, part] of want.entries()) {
+    const actual = have[index] ?? '';
+    if (part.startsWith(':')) {
+      if (actual === '') return null;
+      params[part.slice(1)] = actual;
+    } else if (part !== actual) {
+      return null;
+    }
+  }
+  return params;
+}
+
+/**
+ * `#/menu` -> `/menu`, `#/orders/abc?x=1` -> `/orders/abc`; anything else -> ''. Segments are
+ * plain URL-safe characters, so an odd address (`%00`, spaces) never reaches a page.
+ */
 export function pathFromHash(hash: string): string {
-  const match = /^#(\/[a-z-]*)/.exec(hash);
+  const match = /^#((?:\/[A-Za-z0-9._~-]+)+)\/?(?:[?#]|$)/.exec(hash);
   return match?.[1] ?? '';
+}
+
+export interface ResolvedRoute {
+  page: PageId;
+  /** The navigation entry to highlight. */
+  route: RouteDef;
+  params: Record<string, string>;
+  /** The concrete address of this page; the shell rewrites the hash to it when it differs. */
+  path: string;
 }
 
 /**
  * The page to show for the address bar's hash: the matching page if this person may open it,
  * otherwise the first page they may open (so a forbidden or unknown address lands somewhere
- * useful). null only if the person may open nothing.
+ * useful). null only if the person may open nothing. A parameter is not checked here: a page
+ * with a malformed one shows its own "not found".
  */
-export function resolveRoute(hash: string, allowed: readonly RouteDef[]): RouteDef | null {
+export function resolveRoute(hash: string, allowed: readonly RouteDef[]): ResolvedRoute | null {
   const path = pathFromHash(hash);
-  return allowed.find((r) => r.path === path) ?? allowed[0] ?? null;
+  const own = allowed.find((r) => r.path === path);
+  if (own) return { page: own.id, route: own, params: {}, path: own.path };
+  for (const candidate of PARAM_ROUTES) {
+    const params = matchPath(candidate.pattern, path);
+    const parent = allowed.find((r) => r.id === candidate.parent);
+    if (params && parent) return { page: candidate.page, route: parent, params, path };
+  }
+  const first = allowed[0];
+  return first ? { page: first.id, route: first, params: {}, path: first.path } : null;
 }

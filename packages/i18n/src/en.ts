@@ -83,6 +83,7 @@ export const en = {
 
   // Staff app shell and navigation (apps/pos-web)
   'nav.label': 'Main menu',
+  'nav.new': 'New order',
   'nav.orders': 'Orders',
   'nav.menu': 'Menu',
   'nav.settings': 'Settings',

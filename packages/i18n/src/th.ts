@@ -89,6 +89,7 @@ export const th = {
 
   // Staff app shell and navigation (apps/pos-web)
   'nav.label': 'เมนูหลัก',
+  'nav.new': 'รับออเดอร์',
   'nav.orders': 'ออเดอร์',
   'nav.menu': 'เมนู',
   'nav.settings': 'ตั้งค่า',
