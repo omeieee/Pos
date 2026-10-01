@@ -1,7 +1,10 @@
 /**
  * Creates the first owner. Interactive, so it needs a terminal:
  *   local:  DATABASE_URL=... AUTH_SECRET_KEY=... pnpm --filter @sds/api owner:create
- *   VM:     docker run --rm -it --env-file /opt/sds/.env <api image> node dist/owner-create.js
+ *   VM:     cd /opt/sds && ./dc run --rm --no-deps -e NODE_OPTIONS=--max-old-space-size=384 \
+ *             api node dist/owner-create.js
+ *           (through compose, which reads /opt/sds/.env and strips its quotes; a plain
+ *           `docker run --env-file` would keep the quotes and fail the checks below)
  *
  * Secrets are never taken from argv or from the environment except the two settings above,
  * and never read from a file in the repo. The password and PIN are typed without echo. The
@@ -70,7 +73,7 @@ async function main() {
   if (!url.success) fail(`DATABASE_URL: ${url.error.issues[0]?.message ?? 'invalid'}`);
   if (!key.success) fail(`AUTH_SECRET_KEY: ${key.error.issues[0]?.message ?? 'invalid'}`);
   if (!process.stdin.isTTY) {
-    fail('This command types secrets, so it needs a terminal (docker run -it ...).');
+    fail('This command types secrets, so it needs a terminal (run it in an interactive shell).');
   }
 
   const keys = deriveAuthKeys(key.data);
