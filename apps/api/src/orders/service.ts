@@ -32,6 +32,7 @@ import {
 import { type CoreContext, type Emit, withTransaction } from '../tx.ts';
 import { currentBusinessDate, loadBusinessDay } from './business-day.ts';
 import { toOrderDto } from './dto.ts';
+import { orderRequestHash } from './request-hash.ts';
 
 /** Another request with the same client request id committed first. Thrown to undo our counter step. */
 class DuplicateRequest extends Error {}
@@ -39,6 +40,25 @@ class DuplicateRequest extends Error {}
 async function withItems(db: Db, order: ordersRepo.OrderRow): Promise<OrderDto> {
   const items = await ordersRepo.loadOrderItems(db, [order.id]);
   return toOrderDto(order, items.get(order.id) ?? []);
+}
+
+/**
+ * A request id that was seen before: the same content gets the original order back; different
+ * content is refused (a client bug or a clash must not look like success). An order saved
+ * before the fingerprint existed has none, and counts as a plain retry.
+ */
+async function replayOf(
+  db: Db,
+  existing: ordersRepo.OrderRow,
+  requestHash: string,
+): Promise<{ order: OrderDto; replay: true }> {
+  if (existing.requestHash !== null && existing.requestHash !== requestHash) {
+    throw conflict(
+      'IDEMPOTENCY_KEY_REUSED',
+      'This request id was already used for a different order. Make a new request id for a new order',
+    );
+  }
+  return { order: await withItems(db, existing), replay: true };
 }
 
 function emitUpserted(emit: Emit, order: ordersRepo.OrderRow, dto: OrderDto) {
@@ -67,8 +87,9 @@ export async function createOrder(
   actor: Principal,
   input: CreateOrderInput,
 ): Promise<{ order: OrderDto; replay: boolean }> {
+  const requestHash = orderRequestHash(input);
   const existing = await ordersRepo.findOrderByClientRequestId(ctx.db, input.clientRequestId);
-  if (existing) return { order: await withItems(ctx.db, existing), replay: true };
+  if (existing) return replayOf(ctx.db, existing, requestHash);
 
   const now = ctx.now();
   const day = await loadBusinessDay(ctx.db);
@@ -102,6 +123,7 @@ export async function createOrder(
         createdByStaffId: actor.staffId,
         createdOnDeviceId: actor.deviceId,
         clientRequestId: input.clientRequestId,
+        requestHash,
         placedAt: now,
         acceptedAt: status === 'preparing' ? now : null,
       });
@@ -140,7 +162,7 @@ export async function createOrder(
     // The transaction was rolled back (no number used); the request that won is committed.
     const winner = await ordersRepo.findOrderByClientRequestId(ctx.db, input.clientRequestId);
     if (!winner) throw error;
-    return { order: await withItems(ctx.db, winner), replay: true };
+    return replayOf(ctx.db, winner, requestHash);
   }
 }
 

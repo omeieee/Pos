@@ -432,6 +432,105 @@ describe('POST /v1/orders is idempotent', () => {
   });
 });
 
+describe('POST /v1/orders with a request id that was already used', () => {
+  const noodles = (extra: Record<string, unknown> = {}) => ({
+    menuItemId: menu.noodles,
+    qty: 1,
+    modifierOptionIds: [menu.thin],
+    ...extra,
+  });
+
+  test('a different order under the same id is refused, not answered with the first order', async () => {
+    newDay();
+    const cashier = await sign('cashier');
+    const first = orderBody();
+    const created = await post(cashier, first);
+    expect(created.statusCode).toBe(201);
+
+    const different = { ...first, items: [noodles({ qty: 2 })] };
+    const res = await post(cashier, different);
+    expect(res.statusCode).toBe(409);
+    expect(res.json()).toMatchObject({ code: 'IDEMPOTENCY_KEY_REUSED' });
+    // It says nothing about the first order, and changes nothing.
+    expect(res.body).not.toContain(created.json().id);
+    expect(res.body).not.toContain(created.json().orderNo);
+    expect(await orderCount(first.clientRequestId)).toBe(1);
+    expect((await get(cashier, `/v1/orders/${created.json().id}`)).json()).toEqual(created.json());
+  });
+
+  // (Thunks: the menu ids exist only after beforeAll has run.)
+  test.each([
+    ['the channel', () => ({ channel: 'phone' })],
+    ['the order note', () => ({ note: 'อีกอย่าง' })],
+    ['an item note', () => ({ items: [noodles({ note: 'ไม่เผ็ด' })] })],
+    ['the options', () => ({ items: [noodles({ modifierOptionIds: [menu.wide] })] })],
+    [
+      'an extra line',
+      () => ({
+        items: [noodles(), { menuItemId: menu.water, qty: 1, modifierOptionIds: [] }],
+      }),
+    ],
+  ])('refuses a change of %s', async (_label, change) => {
+    newDay();
+    const cashier = await sign('cashier');
+    const first = orderBody();
+    await post(cashier, first);
+    const res = await post(cashier, { ...first, ...change() });
+    expect(res.statusCode).toBe(409);
+    expect(res.json()).toMatchObject({ code: 'IDEMPOTENCY_KEY_REUSED' });
+  });
+
+  test('the same order with its options listed in another order is still a retry', async () => {
+    newDay();
+    const cashier = await sign('cashier');
+    const first = orderBody({ items: [noodles({ modifierOptionIds: [menu.thin, menu.egg] })] });
+    const created = await post(cashier, first);
+    const retry = await post(cashier, {
+      ...first,
+      items: [noodles({ modifierOptionIds: [menu.egg, menu.thin] })],
+    });
+    expect(retry.statusCode).toBe(200);
+    expect(retry.json()).toEqual(created.json());
+  });
+
+  test('an identical retry keeps working, and prices or totals sent in the body change nothing', async () => {
+    newDay();
+    const cashier = await sign('cashier');
+    const first = orderBody();
+    const created = await post(cashier, first);
+    const retry = await post(cashier, { ...first, totalSatang: 1, discountSatang: 4000 });
+    expect(retry.statusCode).toBe(200);
+    expect(retry.json()).toEqual(created.json());
+  });
+
+  test('two requests at the same moment with one id but different content: one order, one refusal', async () => {
+    newDay();
+    const cashier = await sign('cashier');
+    const id = crypto.randomUUID();
+    const [a, b] = await Promise.all([
+      post(cashier, orderBody({ clientRequestId: id })),
+      post(cashier, orderBody({ clientRequestId: id, items: [noodles({ qty: 3 })] })),
+    ]);
+    expect([a.statusCode, b.statusCode].sort()).toEqual([201, 409]);
+    expect(await orderCount(id)).toBe(1);
+    expect((await place(cashier)).orderNo).toBe('S-002');
+  });
+
+  test('an order saved before the fingerprint existed is treated as a plain retry', async () => {
+    newDay();
+    const cashier = await sign('cashier');
+    const first = orderBody();
+    const created = await post(cashier, first);
+    await h.client.query('update orders set request_hash = null where id = $1', [
+      created.json().id,
+    ]);
+    const res = await post(cashier, { ...first, items: [noodles({ qty: 2 })] });
+    expect(res.statusCode).toBe(200);
+    // (The UPDATE above bumped version and rev, so compare who it is, not every field.)
+    expect(res.json()).toMatchObject({ id: created.json().id, orderNo: created.json().orderNo });
+  });
+});
+
 describe('order numbers', () => {
   test('one daily sequence across channels, with the channel letter', async () => {
     newDay();

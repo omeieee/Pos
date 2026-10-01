@@ -309,6 +309,12 @@ export const orders = pgTable(
     createdByStaffId: uuid('created_by_staff_id').references(() => staff.id),
     createdOnDeviceId: uuid('created_on_device_id').references(() => devices.id),
     clientRequestId: uuid('client_request_id').notNull(),
+    /**
+     * Fingerprint of the request that created the order. A second POST with the same client request
+     * id and a different fingerprint is refused instead of returning this order. Null on orders
+     * saved before the column existed, which are treated as plain retries.
+     */
+    requestHash: text('request_hash'),
     placedAt: ts('placed_at').notNull().defaultNow(),
     acceptedAt: ts('accepted_at'),
     readyAt: ts('ready_at'),

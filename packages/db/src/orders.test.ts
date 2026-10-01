@@ -42,6 +42,7 @@ function newOrder(over: Partial<repo.NewOrder> = {}): repo.NewOrder {
     createdByStaffId: null,
     createdOnDeviceId: null,
     clientRequestId: unique(),
+    requestHash: unique(),
     placedAt,
     acceptedAt: placedAt,
     ...over,
@@ -101,6 +102,13 @@ describe('orders', () => {
     expect((await repo.findOrderByClientRequestId(db, first.clientRequestId))?.id).toBe(
       created?.id,
     );
+  });
+
+  test('the request fingerprint is saved with the order', async () => {
+    const hash = 'a'.repeat(64);
+    const row = await repo.insertOrder(db, newOrder({ requestHash: hash }));
+    expect(row?.requestHash).toBe(hash);
+    expect((await repo.findOrderById(db, row?.id ?? ''))?.requestHash).toBe(hash);
   });
 
   test('money columns come back as plain integers and times as dates', async () => {

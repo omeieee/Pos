@@ -59,6 +59,7 @@ export interface NewOrder {
   createdByStaffId: string | null;
   createdOnDeviceId: string | null;
   clientRequestId: string;
+  requestHash: string;
   placedAt: Date;
   acceptedAt: Date | null;
 }
