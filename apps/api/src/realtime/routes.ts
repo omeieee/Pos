@@ -39,6 +39,15 @@ export async function setupRealtime(
       );
     },
   });
+  // The plugin upgrades a request for ANY route it covers, then closes it ("no handler") and logs
+  // the URL at info level. A signed QR link (`?exp=&sig=`, a 5-minute credential) must never reach
+  // a log, so every upgrade except the one to /v1/ws is refused before anything else runs. This
+  // hook runs ahead of each route's own hooks, and after routing, so the route's log level holds.
+  app.addHook('onRequest', async (request, reply) => {
+    if (request.ws && request.routeOptions.url !== '/v1/ws') {
+      return reply.status(404).send({ code: 'NOT_FOUND', message: 'Route not found', details: {} });
+    }
+  });
   return { hub, connectsPerMinute: options.connectsPerMinute ?? 60 };
 }
 

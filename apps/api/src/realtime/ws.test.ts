@@ -8,6 +8,7 @@
  */
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from 'vitest';
 import { peekSession } from '../auth/service.ts';
+import { signQrLink } from '../payments/qr.ts';
 import { createHarness, type Harness, type OwnerFixture } from '../test-support/harness.ts';
 import {
   connect,
@@ -287,6 +288,28 @@ describe('bad messages close 4400 and are never echoed', () => {
 
   test('nothing from a refused message reaches the logs', () => {
     expect(h.logs()).not.toContain(secret);
+  });
+});
+
+describe('only /v1/ws speaks WebSocket', () => {
+  test('an upgrade to any other route is refused, and a signed QR link in its URL is never logged', async () => {
+    // The plugin would otherwise upgrade it, say "closed incoming websocket connection for path
+    // ..." at info level, and print the URL: the 5-minute credential of the QR picture.
+    const id = crypto.randomUUID();
+    const exp = Math.floor(h.clock.now().getTime() / 1000) + 300;
+    const sig = signQrLink(h.keys.qrUrlKey, id, exp);
+    const upgrade = (path: string) =>
+      h.app.injectWS(path, { socket: { remoteAddress: freshIp() } } as never);
+    await expect(upgrade(`/v1/payments/${id}/qr.png?exp=${exp}&sig=${sig}`)).rejects.toThrow(/404/);
+    await expect(upgrade('/v1/orders')).rejects.toThrow(/404/);
+    expect(h.logs()).not.toContain(sig);
+    expect(h.logs()).not.toContain('closed incoming websocket connection');
+  });
+
+  test('a plain GET to the socket address says the address speaks WebSocket (426)', async () => {
+    const res = await h.app.inject({ method: 'GET', url: '/v1/ws' });
+    expect(res.statusCode).toBe(426);
+    expect(res.json()).toMatchObject({ code: 'UPGRADE_REQUIRED', details: {} });
   });
 });
 
