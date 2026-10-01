@@ -35,9 +35,12 @@ function markGuard(fn: Guard): Guard {
 
 type RouteHooks = { onRequest?: unknown; preHandler?: unknown };
 
-/** True when the route runs a `guard()` in its own `onRequest` or `preHandler` hooks. */
+/**
+ * True when the route runs a `guard()` in its own `onRequest` hooks. A guard in `preHandler`
+ * does not count: by then Fastify has already parsed the body of someone who is not signed in.
+ */
 export function isGuarded(route: RouteHooks): boolean {
-  return [route.onRequest, route.preHandler]
+  return [route.onRequest]
     .flat(2)
     .some(
       (hook) =>

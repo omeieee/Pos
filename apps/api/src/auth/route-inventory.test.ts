@@ -5,7 +5,9 @@
  */
 import Fastify from 'fastify';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
+import { createEventBus } from '../events.ts';
 import { createHarness, type Harness } from '../test-support/harness.ts';
+import { OPEN_ROUTES, registerV1 } from '../v1.ts';
 import { enforceGuardedRoutes, isGuarded } from './guards.ts';
 
 let h: Harness;
@@ -16,8 +18,8 @@ afterAll(async () => {
   await h.close();
 });
 
-/** Routes that are allowed to be open: they ARE the sign-in, or run on the device token alone. */
-const OPEN = ['GET /v1/auth/staff', 'POST /v1/auth/pin', 'POST /v1/auth/owner'];
+// The real list, not a copy: if someone adds an open route to v1.ts this test has to be looked at.
+const OPEN = [...OPEN_ROUTES];
 
 describe('the real /v1 routes', () => {
   test('every one has the guard, except the three sign-in routes', () => {
@@ -28,6 +30,8 @@ describe('the real /v1 routes', () => {
       `${r.method === 'HEAD' ? 'GET' : r.method} ${r.url}`;
     const open = [...new Set(v1.filter((r) => !r.guarded).map(key))];
     expect(open.sort()).toEqual([...OPEN].sort());
+    // ...and the list itself is exactly the three sign-in routes, so it cannot grow unnoticed.
+    expect(OPEN.sort()).toEqual(['GET /v1/auth/staff', 'POST /v1/auth/owner', 'POST /v1/auth/pin']);
   });
 
   test('the inventory includes the routes we know about', () => {
@@ -70,14 +74,22 @@ describe('enforceGuardedRoutes', () => {
     }
   }
 
-  test('lets a guarded route through, as onRequest or as preHandler', async () => {
+  test('lets a route through that runs the guard in onRequest', async () => {
     await expect(
       appWith((app) => {
         app.get('/v1/a', { onRequest: guarded }, async () => ({}));
-        app.get('/v1/b', { preHandler: [guarded] }, async () => ({}));
         app.post('/v1/c', { onRequest: [async () => {}, guarded] }, async () => ({}));
       }),
     ).resolves.toBeUndefined();
+  });
+
+  test('refuses a route whose guard is only in preHandler: the body would be parsed first', async () => {
+    await expect(
+      appWith((app) => app.get('/v1/b', { preHandler: guarded }, async () => ({}))),
+    ).rejects.toThrow(/GET \/v1\/b/);
+    await expect(
+      appWith((app) => app.get('/v1/b', { preHandler: [guarded] }, async () => ({}))),
+    ).rejects.toThrow(/GET \/v1\/b/);
   });
 
   test('refuses a /v1 route without the guard, naming it', async () => {
@@ -104,5 +116,31 @@ describe('enforceGuardedRoutes', () => {
   test('isGuarded sees nothing in an empty route', () => {
     expect(isGuarded({})).toBe(false);
     expect(isGuarded({ onRequest: guarded })).toBe(true);
+    expect(isGuarded({ onRequest: [async () => {}, guarded] })).toBe(true);
+    expect(isGuarded({ preHandler: guarded })).toBe(false);
+  });
+});
+
+describe('registerV1 itself', () => {
+  test('refuses to start when an unguarded route appears under /v1 through its own scopes', async () => {
+    const app = Fastify();
+    // Slip an unguarded route into the real /orders scope as soon as it is created, i.e. the way a
+    // careless new module would. If registerV1 did not install the check, this would start fine.
+    app.addHook('onRegister', (instance, opts) => {
+      if ((opts as { prefix?: string }).prefix === '/orders') {
+        instance.get('/sneaky', async () => ({}));
+      }
+    });
+    try {
+      await expect(
+        registerV1(app, {
+          db: h.db,
+          authSecretKey: Buffer.alloc(32, 1),
+          events: createEventBus(),
+        }).then(() => app.ready()),
+      ).rejects.toThrow(/GET \/v1\/orders\/sneaky has no auth guard/);
+    } finally {
+      await app.close().catch(() => {});
+    }
   });
 });
