@@ -2,7 +2,7 @@ import cors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
 import Fastify, { type FastifyInstance, type FastifyServerOptions } from 'fastify';
 import type { Config } from './config.ts';
-import { scrubLogArgs, serializeErr } from './redact.ts';
+import { LOG_REDACT_PATHS, scrubLogArgs, serializeErr } from './redact.ts';
 
 export type AppOptions = {
   config: Pick<Config, 'corsOrigins' | 'version'>;
@@ -42,6 +42,7 @@ function withErrRedaction(logger: AppOptions['logger'] = true): NonNullable<AppO
   const base = logger === true ? {} : logger;
   return {
     ...base,
+    redact: { paths: LOG_REDACT_PATHS, censor: '[redacted]' },
     serializers: { ...base.serializers, err: serializeErr },
     hooks: {
       ...base.hooks,

@@ -18,6 +18,7 @@ import {
   ORDER_STATUSES,
   PAYMENT_METHODS,
   PAYMENT_STATUSES,
+  SESSION_KINDS,
   STAFF_ROLES,
 } from '@sds/shared';
 import { type SQL, sql } from 'drizzle-orm';
@@ -216,6 +217,12 @@ export const ownerCredentials = pgTable('owner_credentials', {
   email: text('email').notNull().unique(),
   passwordHash: text('password_hash').notNull(),
   totpSecretEnc: text('totp_secret_enc'),
+  failedLoginCount: integer('failed_login_count').notNull().default(0),
+  lockedUntil: ts('locked_until'),
+  /** Highest TOTP time step already accepted: a code is single use (RFC 6238 §5.2). */
+  totpLastStep: bigint('totp_last_step', { mode: 'number' }),
+  /** HMAC hashes of the unused one-time recovery codes. */
+  recoveryCodeHashes: text('recovery_code_hashes').array().notNull().default(sql`'{}'::text[]`),
 });
 
 export const devices = pgTable(
@@ -230,6 +237,38 @@ export const devices = pgTable(
     ...sync,
   },
   (t) => [index('devices_rev_idx').on(t.rev), check('devices_kind', oneOf('kind', DEVICE_KINDS))],
+);
+
+/**
+ * Login sessions (02 §7): opaque bearer tokens kept as a SHA-256 hash. Not synced to
+ * clients, so there is no rev/version. Expiry is compared in application code.
+ */
+export const sessions = pgTable(
+  'sessions',
+  {
+    id: id(),
+    tokenHash: text('token_hash').notNull().unique(),
+    staffId: uuid('staff_id')
+      .notNull()
+      .references(() => staff.id),
+    /** The registered device a PIN session is bound to; null for an owner login without one. */
+    deviceId: uuid('device_id').references(() => devices.id),
+    /** Decides the idle timeout: a PIN session at the counter lives longer than an owner login. */
+    kind: text('kind').notNull(),
+    createdAt: ts('created_at').notNull().defaultNow(),
+    /** Absolute end of the session. */
+    expiresAt: ts('expires_at').notNull(),
+    /** Idle timeout is measured from here. */
+    lastSeenAt: ts('last_seen_at').notNull().defaultNow(),
+    /** Step-up (re-authentication) is valid until this instant. */
+    stepUpUntil: ts('step_up_until'),
+    revokedAt: ts('revoked_at'),
+  },
+  (t) => [
+    index('sessions_staff_id_idx').on(t.staffId),
+    index('sessions_device_id_idx').on(t.deviceId),
+    check('sessions_kind', oneOf('kind', SESSION_KINDS)),
+  ],
 );
 
 // ---------- Orders ----------

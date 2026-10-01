@@ -1,0 +1,45 @@
+/**
+ * In-process event bus (D-04, D-16). Services collect events inside a transaction and publish
+ * them only after it commits, so a subscriber never sees a change that was rolled back.
+ * Events carry ids and facts, never secrets.
+ */
+
+/** A security-relevant fact the owner should hear about (CLAUDE.md rule 9). Delivery comes in P8 (ntfy). */
+export interface SecurityAlertEvent {
+  type: 'alert.security';
+  /** e.g. `device.registered`, `staff.pin_locked`, `owner.login_locked`, `owner.recovery_code_used`. */
+  kind: string;
+  severity: 'info' | 'warn' | 'critical';
+  at: string;
+  staffId: string | null;
+  deviceId: string | null;
+}
+
+export type AppEvent = SecurityAlertEvent;
+
+export type EventHandler = (event: AppEvent) => void | Promise<void>;
+
+export interface EventBus {
+  publish(event: AppEvent): void;
+  subscribe(handler: EventHandler): () => void;
+}
+
+/** A failing subscriber never breaks the request that published, or the other subscribers. */
+export function createEventBus(onError: (error: unknown) => void = () => {}): EventBus {
+  const handlers = new Set<EventHandler>();
+  return {
+    publish(event) {
+      for (const handler of handlers) {
+        try {
+          void Promise.resolve(handler(event)).catch(onError);
+        } catch (error) {
+          onError(error);
+        }
+      }
+    },
+    subscribe(handler) {
+      handlers.add(handler);
+      return () => handlers.delete(handler);
+    },
+  };
+}

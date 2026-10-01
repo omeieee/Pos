@@ -59,6 +59,10 @@ export const EXPENSE_CATEGORIES = [
 ] as const;
 export type ExpenseCategory = (typeof EXPENSE_CATEGORIES)[number];
 
+/** How a session was opened: a staff PIN on a registered device, or the owner's password + TOTP. */
+export const SESSION_KINDS = ['pin', 'owner'] as const;
+export type SessionKind = (typeof SESSION_KINDS)[number];
+
 export const AUDIT_ACTOR_TYPES = ['staff', 'customer', 'system'] as const;
 export type AuditActorType = (typeof AUDIT_ACTOR_TYPES)[number];
 

@@ -158,6 +158,23 @@ describe('other routes and CORS', () => {
     }
   });
 
+  test('preflight allows the credential headers the staff app sends', async () => {
+    const res = await (await make()).inject({
+      method: 'OPTIONS',
+      url: '/v1/auth/pin',
+      headers: {
+        origin: 'https://pos.example.pages.dev',
+        'access-control-request-method': 'POST',
+        'access-control-request-headers': 'authorization,x-device-token,content-type',
+      },
+    });
+    expect(res.statusCode).toBe(204);
+    const allowed = String(res.headers['access-control-allow-headers']).toLowerCase();
+    for (const header of ['authorization', 'x-device-token', 'content-type']) {
+      expect(allowed).toContain(header);
+    }
+  });
+
   test('allows only configured origins', async () => {
     const a = await make();
     const allowed = await a.inject({

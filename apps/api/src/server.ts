@@ -2,7 +2,9 @@ import { createDb, pingDb } from '@sds/db';
 import type { FastifyInstance } from 'fastify';
 import { buildApp } from './app.ts';
 import { ConfigError, loadConfig } from './config.ts';
+import { createEventBus } from './events.ts';
 import { sentryOptions } from './redact.ts';
+import { registerV1 } from './v1.ts';
 
 function loadConfigOrExit() {
   try {
@@ -38,6 +40,24 @@ const app = await buildApp({
   logger: { level: config.nodeEnv === 'production' ? 'info' : 'debug' },
   ...(setup ? { setup } : {}),
 });
+
+// In-process events (D-04). Until the realtime and ntfy modules subscribe (P3 task 6, P8),
+// security alerts reach the owner through the log and Sentry only. Events hold ids, not secrets.
+const events = createEventBus((error) => app.log.error({ err: error }, 'event subscriber failed'));
+events.subscribe((event) => {
+  if (event.type === 'alert.security') {
+    app.log.warn(
+      {
+        alert: event.kind,
+        severity: event.severity,
+        staffId: event.staffId,
+        deviceId: event.deviceId,
+      },
+      'security alert',
+    );
+  }
+});
+await registerV1(app, { db, authSecretKey: config.authSecretKey, events });
 
 async function shutdown(signal: string) {
   app.log.info({ signal }, 'shutting down');

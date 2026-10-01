@@ -80,6 +80,7 @@ describe('migrations on an empty Postgres', () => {
         'orders',
         'owner_credentials',
         'payments',
+        'sessions',
         'settings',
         'staff',
         'tax_profiles',

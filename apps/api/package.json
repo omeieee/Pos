@@ -8,6 +8,7 @@
     "dev": "node build.ts --watch",
     "start": "node dist/server.js",
     "migrate": "node dist/migrate.js",
+    "owner:create": "node build.ts && node dist/owner-create.js",
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run"
   },
@@ -15,6 +16,7 @@
     "@fastify/cors": "^11.3.0",
     "@fastify/rate-limit": "^11.2.0",
     "@sds/db": "workspace:*",
+    "@sds/shared": "workspace:*",
     "@sentry/node": "^10.75.3",
     "fastify": "^5.12.5",
     "zod": "4.6.5"

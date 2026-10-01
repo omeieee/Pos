@@ -1,6 +1,8 @@
 import { createDb, schema } from '@sds/db';
 import { describe, expect, test } from 'vitest';
+import { buildApp } from './app.ts';
 import {
+  LOG_REDACT_PATHS,
   redactQueryParams,
   scrubLogArgs,
   scrubSentryEvent,
@@ -148,5 +150,75 @@ describe('Sentry', () => {
 
   test('scrubSentryEvent copes with events that have no exception', () => {
     expect(scrubSentryEvent({})).toEqual({});
+  });
+});
+
+describe('Sentry requests', () => {
+  test('scrubSentryEvent drops the body and cookies and hides credential headers', () => {
+    const event = scrubSentryEvent({
+      request: {
+        url: 'https://api.example.test/v1/auth/pin',
+        data: { staffId: 'x', pin: '4821' },
+        cookies: { a: 'b' },
+        headers: {
+          authorization: 'Bearer sds_ses_secret',
+          'x-device-token': 'sds_dev_secret',
+          'user-agent': 'iPad',
+        },
+      },
+    });
+    const json = JSON.stringify(event);
+    expect(json).not.toContain('4821');
+    expect(json).not.toContain('sds_ses_secret');
+    expect(json).not.toContain('sds_dev_secret');
+    expect(event.request?.data).toBeUndefined();
+    expect(event.request?.cookies).toBeUndefined();
+    expect(event.request?.headers).toMatchObject({ 'user-agent': 'iPad' });
+    expect(event.request?.url).toBe('https://api.example.test/v1/auth/pin');
+  });
+});
+
+describe('log redaction of credentials', () => {
+  function capture() {
+    const lines: string[] = [];
+    const ready = buildApp({
+      config: { corsOrigins: [], version: 't' },
+      checkDb: async () => {},
+      logger: { level: 'trace', stream: { write: (l: string) => void lines.push(l) } },
+    });
+    return { lines, ready };
+  }
+
+  test('hides credential fields wherever a handler might log them', async () => {
+    const { lines, ready } = capture();
+    const app = await ready;
+    const secrets = {
+      password: 'pw-secret-value',
+      pin: '4821',
+      totp: '123456',
+      recoveryCode: 'ABCD-EFGH-JKLM-NPQR',
+      sessionToken: 'sds_ses_secret-value',
+      deviceToken: 'sds_dev_secret-value',
+      authorization: 'Bearer sds_ses_secret-value',
+      'x-device-token': 'sds_dev_secret-value',
+    };
+    app.log.info({ body: secrets }, 'top');
+    app.log.info({ req: { headers: secrets } }, 'request');
+    app.log.info({ res: { body: { nested: secrets } } }, 'nested');
+    app.log.info({ ...secrets }, 'flat');
+    await app.close();
+
+    const out = lines.join('');
+    for (const value of Object.values(secrets)) expect(out).not.toContain(value);
+    expect(out).toContain('[redacted]');
+    expect(LOG_REDACT_PATHS.length).toBeGreaterThan(0);
+  });
+
+  test('keeps non-secret fields', async () => {
+    const { lines, ready } = capture();
+    const app = await ready;
+    app.log.info({ body: { staffId: 'abc', pin: '4821' } }, 'x');
+    await app.close();
+    expect(lines.join('')).toContain('"staffId":"abc"');
   });
 });

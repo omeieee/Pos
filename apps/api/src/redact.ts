@@ -13,6 +13,44 @@ export function redactQueryParams(text: string): string {
   return cut < 0 ? text : `${text.slice(0, cut)}\nparams: [redacted]`;
 }
 
+/**
+ * Names of fields that carry credentials: the PIN and password a client posts, the codes, the
+ * tokens we hand out, and the headers they travel in.
+ */
+const CREDENTIAL_KEYS = [
+  'password',
+  'pin',
+  'totp',
+  'recoverycode',
+  'sessiontoken',
+  'devicetoken',
+  'authorization',
+  'x-device-token',
+  'cookie',
+];
+const CREDENTIAL_FIELDS = [
+  'password',
+  'pin',
+  'totp',
+  'recoveryCode',
+  'sessionToken',
+  'deviceToken',
+  'authorization',
+  'x-device-token',
+  'cookie',
+];
+
+/**
+ * Pino `redact` paths. A handler that logs a body or a headers object by mistake still prints
+ * `[redacted]`: each field is covered at the top level and up to three levels down (req.headers,
+ * res.body.nested ...). Fastify does not log bodies or headers by default; this is the safety net.
+ */
+export const LOG_REDACT_PATHS: string[] = CREDENTIAL_FIELDS.flatMap((field) => {
+  const key = field.includes('-') ? `["${field}"]` : `.${field}`;
+  const root = field.includes('-') ? `["${field}"]` : field;
+  return [root, `*${key}`, `*.*${key}`, `*.*.*${key}`];
+});
+
 export type SerializedErr = {
   type: string;
   message: string;
@@ -76,17 +114,32 @@ export function scrubLogArgs(args: unknown[]): unknown[] {
   return out;
 }
 
-/** The parts of a Sentry event that can carry an error message (structural: no SDK import). */
+/** The parts of a Sentry event that can carry an error message or a request (structural: no SDK import). */
 type SentryEventLike = {
   message?: string | undefined;
   exception?: { values?: { value?: string | undefined }[] | undefined } | undefined;
+  request?:
+    | { data?: unknown; cookies?: unknown; headers?: Record<string, string> | undefined }
+    | undefined;
 };
 
-/** Sentry `beforeSend`. `linkedErrors` adds each `cause` as another exception value. */
+/**
+ * Sentry `beforeSend`. `linkedErrors` adds each `cause` as another exception value. The request
+ * body (PINs, passwords) and cookies are dropped and credential headers hidden, whatever the SDK
+ * attached.
+ */
 export function scrubSentryEvent<T extends SentryEventLike>(event: T): T {
   if (typeof event.message === 'string') event.message = redactQueryParams(event.message);
   for (const ex of event.exception?.values ?? []) {
     if (typeof ex.value === 'string') ex.value = redactQueryParams(ex.value);
+  }
+  const request = event.request;
+  if (request) {
+    delete request.data;
+    delete request.cookies;
+    for (const name of Object.keys(request.headers ?? {})) {
+      if (CREDENTIAL_KEYS.includes(name.toLowerCase())) delete request.headers?.[name];
+    }
   }
   return event;
 }

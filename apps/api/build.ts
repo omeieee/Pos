@@ -1,5 +1,5 @@
 /**
- * Bundles the API into dist/ (server.js, migrate.js) with every dependency inlined, so the
+ * Bundles the API into dist/ (server.js, migrate.js, owner-create.js) with every dependency inlined, so the
  * runtime image needs only dist/. Workspace packages are TypeScript source; esbuild compiles them.
  *   node build.ts          one-off build
  *   node build.ts --watch  rebuild on change and restart the server (reads apps/api/.env if present)
@@ -15,7 +15,11 @@ rmSync(outdir, { recursive: true, force: true });
 mkdirSync(outdir, { recursive: true });
 
 const options: BuildOptions = {
-  entryPoints: { server: 'src/server.ts', migrate: 'src/migrate.ts' },
+  entryPoints: {
+    server: 'src/server.ts',
+    migrate: 'src/migrate.ts',
+    'owner-create': 'src/cli/owner-create.ts',
+  },
   outdir,
   bundle: true,
   platform: 'node',
