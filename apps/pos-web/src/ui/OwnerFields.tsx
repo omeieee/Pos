@@ -100,6 +100,8 @@ export function OwnerSignInForm({
     setBusy(true);
     setError(null);
     const result = await onSubmit(request);
+    // A swallowed duplicate leaves the busy state to the attempt that is still running.
+    if (!result.ok && result.duplicate) return;
     setBusy(false);
     if (!result.ok && result.error) {
       setError(errorText(tr, result.error, 'ownerSignIn'));

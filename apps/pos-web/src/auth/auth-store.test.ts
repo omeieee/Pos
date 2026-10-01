@@ -255,7 +255,7 @@ describe('PIN sign-in', () => {
       store.signInWithPin(cashier.id, '0000'),
     ]);
     expect(first.ok).toBe(false);
-    expect(second).toEqual({ ok: false, error: null });
+    expect(second).toEqual({ ok: false, error: null, duplicate: true });
     expect(pinCalls() - before).toBe(1);
   });
 });
@@ -307,6 +307,19 @@ describe('owner sign-in and device registration', () => {
     const saved = await tokens.loadDevice();
     expect(saved?.device.name).toBe('iPad เคาน์เตอร์');
     expect(store.deviceToken()).toBe(saved?.deviceToken);
+    expect(server.calls.filter((c) => c.path === '/v1/auth/device')).toHaveLength(1);
+  });
+
+  test('a second tap on Register while the first is waiting registers once', async () => {
+    const { store, server } = setup();
+    await store.boot();
+    await store.signInOwner(ownerCredentials('111111'));
+    const first = store.registerDevice({ name: 'iPad', kind: 'ipad' });
+    await tick();
+    const second = await store.registerDevice({ name: 'iPad', kind: 'ipad' });
+    expect(second).toEqual({ ok: false, error: null, duplicate: true });
+    await store.submitStepUp(ownerStepUp('222222'));
+    expect((await first).ok).toBe(true);
     expect(server.calls.filter((c) => c.path === '/v1/auth/device')).toHaveLength(1);
   });
 

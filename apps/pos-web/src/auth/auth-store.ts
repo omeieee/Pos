@@ -63,10 +63,16 @@ export interface AuthState {
   stepUpOpen: boolean;
 }
 
-/** `error: null` on a failure means the person cancelled (or a duplicate tap was ignored). */
+/**
+ * `error: null` on a failure means the person cancelled. `duplicate: true` means this call was
+ * ignored because the same kind of attempt is still running: the caller must leave its busy
+ * state to the first call and not report anything.
+ */
 export type Result<T = undefined> =
   | { ok: true; value: T }
-  | { ok: false; error: ApiClientError | null };
+  | { ok: false; error: ApiClientError | null; duplicate?: true };
+
+const duplicate: Result = { ok: false, error: null, duplicate: true };
 
 export type StepUpSubmission =
   | { method: 'owner'; factors: OwnerStepUpRequest }
@@ -98,6 +104,7 @@ export function createAuthStore({ api, tokens, now = Date.now }: AuthStoreDeps) 
   let sessionTokenValue: string | null = null;
   let booting = true;
   let attemptInFlight = false;
+  let registering = false;
   let staffRequest: Promise<void> | null = null;
   let stepUpWaiter: { promise: Promise<boolean>; resolve: (ok: boolean) => void } | null = null;
   const signOutListeners = new Set<() => void>();
@@ -167,7 +174,7 @@ export function createAuthStore({ api, tokens, now = Date.now }: AuthStoreDeps) 
     if (input.method !== stepUpMethodFor(role)) {
       return { ok: false, error: new ApiClientError('REQUEST_INVALID') };
     }
-    if (attemptInFlight) return { ok: false, error: null };
+    if (attemptInFlight) return duplicate;
     attemptInFlight = true;
     try {
       const answer =
@@ -336,7 +343,7 @@ export function createAuthStore({ api, tokens, now = Date.now }: AuthStoreDeps) 
   // ---------- Sign-in ----------
 
   async function signInWithPin(staffId: string, pin: string): Promise<Result> {
-    if (attemptInFlight) return { ok: false, error: null };
+    if (attemptInFlight) return duplicate;
     attemptInFlight = true;
     try {
       await adoptSession(await api.auth.pinLogin({ staffId, pin }), 'pin');
@@ -354,7 +361,7 @@ export function createAuthStore({ api, tokens, now = Date.now }: AuthStoreDeps) 
   }
 
   async function signInOwner(input: OwnerLoginRequest): Promise<Result> {
-    if (attemptInFlight) return { ok: false, error: null };
+    if (attemptInFlight) return duplicate;
     attemptInFlight = true;
     try {
       const hadDevice = deviceTokenValue !== null;
@@ -387,12 +394,19 @@ export function createAuthStore({ api, tokens, now = Date.now }: AuthStoreDeps) 
   ): Promise<Result> {
     const { session, device } = store.getState();
     if (!session || device) return { ok: false, error: new ApiClientError('FORBIDDEN') };
-    const outcome = await runSensitive(() => api.auth.registerDevice(input));
-    if (!outcome.ok) return outcome;
-    deviceTokenValue = outcome.value.deviceToken;
-    await tokens.saveDevice(outcome.value);
-    set({ device: outcome.value.device });
-    return success;
+    // A second tap while the step-up dialog or the request is open must not register twice.
+    if (registering) return duplicate;
+    registering = true;
+    try {
+      const outcome = await runSensitive(() => api.auth.registerDevice(input));
+      if (!outcome.ok) return outcome;
+      deviceTokenValue = outcome.value.deviceToken;
+      await tokens.saveDevice(outcome.value);
+      set({ device: outcome.value.device });
+      return success;
+    } finally {
+      registering = false;
+    }
   }
 
   // ---------- Sign-out ----------

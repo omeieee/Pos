@@ -45,6 +45,8 @@ function StepUpForm({
     setBusy(true);
     setError(null);
     const result = await auth.submitStepUp({ method: 'owner', factors });
+    // A swallowed duplicate leaves the busy state to the attempt that is still running.
+    if (!result.ok && result.duplicate) return;
     setBusy(false);
     if (!result.ok && result.error) {
       setError(errorText(tr, result.error, 'stepUp'));
@@ -56,6 +58,8 @@ function StepUpForm({
     setBusy(true);
     setError(null);
     const result = await auth.submitStepUp({ method: 'pin', pin });
+    // A swallowed duplicate leaves the busy state to the attempt that is still running.
+    if (!result.ok && result.duplicate) return;
     setBusy(false);
     if (!result.ok && result.error) {
       setError(errorText(tr, result.error, 'stepUp'));

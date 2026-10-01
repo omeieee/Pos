@@ -111,6 +111,8 @@ function PinEntry({
     setBusy(true);
     setError(null);
     const result = await auth.signInWithPin(person.id, pin);
+    // A swallowed duplicate leaves the busy state to the attempt that is still running.
+    if (!result.ok && result.duplicate) return;
     setBusy(false);
     if (!result.ok && result.error) {
       setError(errorText(tr, result.error, 'pin'));
