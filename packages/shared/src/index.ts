@@ -9,6 +9,7 @@ export * from './money.ts';
 export * from './order-machine.ts';
 export * from './orders.ts';
 export * from './payment-machine.ts';
+export * from './payments.ts';
 export * from './permissions.ts';
 export * from './pricing.ts';
 export * from './schemas.ts';
