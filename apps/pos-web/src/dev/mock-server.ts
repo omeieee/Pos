@@ -354,9 +354,8 @@ export function createMockServer(options: MockServerOptions = {}) {
   }
 
   const mockFetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = new URL(
-      typeof input === 'string' ? input : input instanceof URL ? input.href : input.url,
-    );
+    const raw = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+    const url = new URL(raw, 'http://mock.local');
     const method = (init?.method ?? 'GET').toUpperCase();
     const body = typeof init?.body === 'string' ? JSON.parse(init.body) : undefined;
     calls.push({ method, path: url.pathname });

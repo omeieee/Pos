@@ -1,0 +1,12 @@
+{
+  "name": "แซ่บโดนเส้น POS",
+  "short_name": "แซ่บโดนเส้น",
+  "lang": "th",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#FAF7F2",
+  "theme_color": "#C62828",
+  "icons": [{ "src": "/icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

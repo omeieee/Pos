@@ -3,25 +3,17 @@
  * `pinSchema`), and a wrong PIN counts toward a lock, so the pad never submits on its own below
  * the maximum length: a person with a 5 or 6 digit PIN must not burn an attempt at digit 4.
  */
-import { pinSchema, type StaffRole } from '@sds/shared';
+import { PIN_MIN_DIGITS, pinSchema, type StaffRole } from '@sds/shared';
 
 export const PIN_MAX_DIGITS = 6;
 
 /**
- * How many dots to show before anything is typed. The owner and managers have 6-digit PINs.
- * Mirror of `PIN_MIN_DIGITS` in `@sds/shared` (packages/shared/src/auth.ts on the backend
- * branch worktree-agent-a3e2deaaa70ac603a); replace this table with that import once it is
- * merged. It only sizes the dots: the server decides whether a PIN is right.
+ * How many dots to show before anything is typed: the shortest PIN the role may have (the
+ * owner and managers have 6 digits). It only sizes the dots; the server decides whether a PIN
+ * is right, and sign-in accepts 4 to 6 digits for everyone.
  */
-const PIN_DOTS_BY_ROLE: Record<StaffRole, number> = {
-  owner: 6,
-  manager: 6,
-  cashier: 4,
-  kitchen: 4,
-};
-
 export function pinSlots(role: StaffRole, entered: number): number {
-  return Math.min(PIN_MAX_DIGITS, Math.max(PIN_DOTS_BY_ROLE[role], entered));
+  return Math.min(PIN_MAX_DIGITS, Math.max(PIN_MIN_DIGITS[role], entered));
 }
 
 export interface PinPadState {

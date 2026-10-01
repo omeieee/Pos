@@ -1,6 +1,12 @@
 import { baseTokens, deviceDefaults } from '@sds/ui';
 import { describe, expect, test } from 'vitest';
-import { LAPTOP_MIN_WIDTH, PHONE_MAX_WIDTH, pickDevice, suggestedKind, tokensCss } from './device.ts';
+import {
+  LAPTOP_MIN_WIDTH,
+  PHONE_MAX_WIDTH,
+  pickDevice,
+  suggestedKind,
+  tokensCss,
+} from './device.ts';
 
 const view = (width: number, coarsePointer: boolean) => ({ width, coarsePointer });
 

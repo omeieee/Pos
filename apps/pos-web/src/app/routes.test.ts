@@ -1,6 +1,6 @@
 import { hasPermission, PERMISSIONS } from '@sds/shared';
 import { describe, expect, test } from 'vitest';
-import { allowedRoutes, pathFromHash, resolveRoute, ROUTES } from './routes.ts';
+import { allowedRoutes, pathFromHash, ROUTES, resolveRoute } from './routes.ts';
 
 const permissionsOf = (role: Parameters<typeof hasPermission>[0]) =>
   PERMISSIONS.filter((p) => hasPermission(role, p));

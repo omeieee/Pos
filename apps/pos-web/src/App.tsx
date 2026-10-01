@@ -1,42 +1,60 @@
-import { translator } from '@sds/i18n';
-import { useEffect, useState } from 'react';
-import { apiUrl } from './platform/config.ts';
+import { useEffect } from 'react';
+import type { AuthStore } from './auth/auth-store.ts';
+import { pickDevice, tokensCss } from './theme/device.ts';
+import { Brand } from './ui/Brand.tsx';
+import { AuthContext, useAuthState, useT, useViewport } from './ui/hooks.ts';
+import { PinScreen } from './ui/PinScreen.tsx';
+import { RegisterDeviceScreen } from './ui/RegisterDeviceScreen.tsx';
+import { Shell } from './ui/Shell.tsx';
+import { StepUpDialog } from './ui/StepUpDialog.tsx';
 
-const tr = translator('th');
-
-/** Shop name (a brand, not a translatable message). */
-const APP_NAME = 'แซ่บโดนเส้น POS';
-
-type Health = { state: 'loading' } | { state: 'ok'; version: string } | { state: 'error' };
-
-export function App() {
-  const [health, setHealth] = useState<Health>({ state: 'loading' });
-
+/** Writes the design tokens for this device (A4) onto the page. */
+function useApplyTokens() {
+  const viewport = useViewport();
+  const kind = useAuthState().device?.kind ?? null;
+  const device = pickDevice(kind, viewport);
   useEffect(() => {
-    const controller = new AbortController();
-    fetch(apiUrl('/healthz'), { signal: controller.signal })
-      .then(async (res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const body = (await res.json()) as { version?: unknown };
-        setHealth({ state: 'ok', version: String(body.version ?? '') });
-      })
-      .catch(() => {
-        if (!controller.signal.aborted) setHealth({ state: 'error' });
-      });
-    return () => controller.abort();
-  }, []);
+    let style = document.getElementById('sds-tokens');
+    if (!style) {
+      style = document.createElement('style');
+      style.id = 'sds-tokens';
+      document.head.append(style);
+    }
+    style.textContent = tokensCss(device);
+    document.documentElement.dataset.device = device;
+  }, [device]);
+}
 
+function Screen() {
+  useApplyTokens();
+  const tr = useT();
+  const { phase } = useAuthState();
+  switch (phase) {
+    case 'booting':
+      return (
+        <main className="auth">
+          <div className="card card--splash">
+            <Brand />
+            <p className="muted" role="status">
+              {tr('common.loading')}
+            </p>
+          </div>
+        </main>
+      );
+    case 'unregistered':
+      return <RegisterDeviceScreen />;
+    case 'locked':
+      return <PinScreen />;
+    case 'signedIn':
+      return <Shell />;
+  }
+}
+
+export function App({ auth }: { auth: AuthStore }) {
   return (
-    <main>
-      <h1>{APP_NAME}</h1>
-      <p>
-        API:{' '}
-        {health.state === 'loading'
-          ? tr('common.loading')
-          : health.state === 'ok'
-            ? `ok (${health.version})`
-            : tr('common.error')}
-      </p>
-    </main>
+    <AuthContext.Provider value={auth}>
+      <Screen />
+      <StepUpDialog />
+    </AuthContext.Provider>
   );
 }
