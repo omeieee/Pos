@@ -11,6 +11,7 @@ import {
   type Fulfillment,
   type MenuChannel,
   type OrderChannel,
+  type OrderPaymentStatus,
   type OrderStatus,
   type PricedModifier,
   satang,
@@ -42,6 +43,8 @@ export interface OrderPatch {
   cancelReason?: string;
   note?: string | null;
   roomNo?: string | null;
+  /** Derived from the order's payments by the payment service, in the payment's transaction. */
+  paymentStatus?: OrderPaymentStatus;
 }
 
 export interface NewOrder {

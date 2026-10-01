@@ -1,0 +1,1 @@
+ALTER TABLE "payments" ADD COLUMN "request_hash" text;

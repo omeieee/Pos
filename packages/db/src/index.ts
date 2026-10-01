@@ -5,6 +5,7 @@ export * as authRepo from './auth.ts';
 export * from './client.ts';
 export * as menuRepo from './menu.ts';
 export * as ordersRepo from './orders.ts';
+export * as paymentsRepo from './payments.ts';
 export * as peopleRepo from './people.ts';
 export * as schema from './schema.ts';
 export * from './settings.ts';

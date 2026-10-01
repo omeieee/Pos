@@ -439,6 +439,8 @@ export const payments = pgTable(
     confirmedAt: ts('confirmed_at'),
     voidReason: text('void_reason'),
     clientRequestId: uuid('client_request_id').notNull(),
+    /** Fingerprint of the request that made this payment; null on rows saved before it existed. */
+    requestHash: text('request_hash'),
     ...sync,
   },
   (t) => [

@@ -71,6 +71,13 @@
       "when": 1790871456665,
       "tag": "0009_fk_covering_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1790888606320,
+      "tag": "0010_payments_request_hash",
+      "breakpoints": true
     }
   ]
 }
