@@ -3,6 +3,7 @@
  * them only after it commits, so a subscriber never sees a change that was rolled back.
  * Events carry ids and facts, never secrets.
  */
+import type { OrderChannel, OrderDto, OrderStatus } from '@sds/shared';
 
 /** A security-relevant fact the owner should hear about (CLAUDE.md rule 9). Delivery comes in P8 (ntfy). */
 export interface SecurityAlertEvent {
@@ -15,7 +16,28 @@ export interface SecurityAlertEvent {
   deviceId: string | null;
 }
 
-export type AppEvent = SecurityAlertEvent;
+/**
+ * A synced order row changed (D-04, 02 §5). `rev` is the row's position in the global sync
+ * sequence, so a client applies the event only if it is newer than what it holds.
+ */
+export interface OrderUpsertedEvent {
+  type: 'order.upserted';
+  id: string;
+  rev: number;
+  data: OrderDto;
+}
+
+/** A new order exists: devices play the alert sound (02 §5). */
+export interface NewOrderAlertEvent {
+  type: 'alert.new_order';
+  orderId: string;
+  orderNo: string;
+  channel: OrderChannel;
+  status: OrderStatus;
+  createdOnDeviceId: string | null;
+}
+
+export type AppEvent = SecurityAlertEvent | OrderUpsertedEvent | NewOrderAlertEvent;
 
 export type EventHandler = (event: AppEvent) => void | Promise<void>;
 

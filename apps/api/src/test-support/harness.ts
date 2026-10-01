@@ -25,7 +25,12 @@ import { createGuard } from '../auth/guards.ts';
 import { type AuthPolicy, DEFAULT_AUTH_POLICY } from '../auth/policy.ts';
 import type { AuthContext } from '../auth/service.ts';
 import { generateTotpSecret, hotp, timeStep } from '../auth/totp.ts';
-import { type AppEvent, createEventBus } from '../events.ts';
+import {
+  type AppEvent,
+  createEventBus,
+  type EventBus,
+  type SecurityAlertEvent,
+} from '../events.ts';
 import { registerV1 } from '../v1.ts';
 
 // Test-only key, not a secret.
@@ -61,6 +66,22 @@ export interface OwnerFixture {
   totp(stepsAhead?: number): string;
 }
 
+export interface Menu {
+  /** ก๋วยเตี๋ยว ฿50, Grab ฿65. Needs one noodle type; extras are optional (max 3). */
+  noodles: string;
+  /** น้ำเปล่า ฿10, storefront and LINE only. */
+  water: string;
+  /** Marked sold out. */
+  soldOut: string;
+  thin: string;
+  wide: string;
+  /** +฿5 */
+  egg: string;
+  /** +฿10 */
+  large: string;
+  typeGroup: string;
+}
+
 export interface Harness {
   app: FastifyInstance;
   db: PgliteDb;
@@ -68,8 +89,14 @@ export interface Harness {
   client: Awaited<ReturnType<typeof createPgliteDb>>['client'];
   clock: Clock;
   keys: AuthKeys;
-  /** Alerts and other events published after commit. */
+  /** Everything published after commit, in order. */
   events: AppEvent[];
+  /** The security alerts among them. */
+  alerts: SecurityAlertEvent[];
+  /** For tests that subscribe their own handler. */
+  bus: EventBus;
+  /** Menu rows for order tests (built by hand: seed() holds the test PromptPay ID). */
+  newMenu(): Promise<Menu>;
   /** Everything the logger wrote, as one string. */
   logs(): string;
   newOwner(overrides?: { pin?: string }): Promise<OwnerFixture>;
@@ -102,9 +129,11 @@ export async function createHarness(
   const clock = createClock(START_TIME);
   const keys = deriveAuthKeys(TEST_MASTER_KEY);
   const events: AppEvent[] = [];
+  const alerts: SecurityAlertEvent[] = [];
   const bus = createEventBus();
   bus.subscribe((event) => {
     events.push(event);
+    if (event.type === 'alert.security') alerts.push(event);
   });
   const lines: string[] = [];
 
@@ -239,6 +268,87 @@ export async function createHarness(
     return token;
   }
 
+  async function newMenu(): Promise<Menu> {
+    const [category] = await db
+      .insert(schema.menuCategories)
+      .values({ nameTh: `หมวด ${unique()}` })
+      .returning();
+    const categoryId = category?.id ?? '';
+    const [noodles, water, soldOut] = await db
+      .insert(schema.menuItems)
+      .values([
+        {
+          categoryId,
+          nameTh: 'ก๋วยเตี๋ยวต้มยำ',
+          nameEn: 'Tom yum noodles',
+          priceSatang: 5000,
+          estCostSatang: 2200,
+          channels: ['storefront', 'line', 'grab', 'lineman'],
+        },
+        {
+          categoryId,
+          nameTh: 'น้ำเปล่า',
+          nameEn: 'Water',
+          priceSatang: 1000,
+          estCostSatang: 400,
+          channels: ['storefront', 'line'],
+        },
+        {
+          categoryId,
+          nameTh: 'หมด',
+          priceSatang: 2500,
+          isAvailable: false,
+          channels: ['storefront'],
+        },
+      ])
+      .returning();
+    await db
+      .insert(schema.menuItemChannelPrices)
+      .values({ itemId: noodles?.id ?? '', channel: 'grab', priceSatang: 6500 });
+    const [typeGroup, extrasGroup] = await db
+      .insert(schema.modifierGroups)
+      .values([
+        { nameTh: 'เส้น', nameEn: 'Noodle', minSelect: 1, maxSelect: 1 },
+        { nameTh: 'เพิ่มพิเศษ', nameEn: 'Extras', minSelect: 0, maxSelect: 3 },
+      ])
+      .returning();
+    const [thin, wide, egg, large] = await db
+      .insert(schema.modifierOptions)
+      .values([
+        { groupId: typeGroup?.id ?? '', nameTh: 'เส้นเล็ก', nameEn: 'Thin' },
+        { groupId: typeGroup?.id ?? '', nameTh: 'เส้นใหญ่', nameEn: 'Wide' },
+        {
+          groupId: extrasGroup?.id ?? '',
+          nameTh: 'ไข่',
+          nameEn: 'Egg',
+          priceDeltaSatang: 500,
+          costDeltaSatang: 300,
+        },
+        {
+          groupId: extrasGroup?.id ?? '',
+          nameTh: 'พิเศษ',
+          nameEn: 'Large',
+          priceDeltaSatang: 1000,
+          costDeltaSatang: 500,
+        },
+      ])
+      .returning();
+    await db.insert(schema.menuItemModifierGroups).values([
+      { itemId: noodles?.id ?? '', groupId: typeGroup?.id ?? '', sort: 1 },
+      { itemId: noodles?.id ?? '', groupId: extrasGroup?.id ?? '', sort: 2 },
+    ]);
+    return {
+      noodles: noodles?.id ?? '',
+      water: water?.id ?? '',
+      soldOut: soldOut?.id ?? '',
+      thin: thin?.id ?? '',
+      wide: wide?.id ?? '',
+      egg: egg?.id ?? '',
+      large: large?.id ?? '',
+      typeGroup: typeGroup?.id ?? '',
+    };
+  }
+
   return {
     app,
     db,
@@ -246,6 +356,9 @@ export async function createHarness(
     clock,
     keys,
     events,
+    alerts,
+    bus,
+    newMenu,
     logs: () => lines.join(''),
     newOwner,
     newStaff,

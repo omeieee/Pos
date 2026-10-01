@@ -23,8 +23,8 @@ import {
   staffStepUpInputSchema,
 } from '@sds/shared';
 import { accountLocked, deviceUnregistered, forbidden, invalidCredentials } from '../errors.ts';
-import type { AppEvent, EventBus, SecurityAlertEvent } from '../events.ts';
-import { type Emit, withTransaction } from '../tx.ts';
+import type { AppEvent, SecurityAlertEvent } from '../events.ts';
+import { type CoreContext, type Emit, withTransaction } from '../tx.ts';
 import { parse } from '../validate.ts';
 import {
   type AuthKeys,
@@ -40,12 +40,9 @@ import {
 import type { AuthPolicy } from './policy.ts';
 import { verifyTotp } from './totp.ts';
 
-export interface AuthContext {
-  db: Db;
+export interface AuthContext extends CoreContext {
   keys: AuthKeys;
   policy: AuthPolicy;
-  now: () => Date;
-  events: EventBus;
 }
 
 /** Where a request came from. The IP goes to audit_log only. */

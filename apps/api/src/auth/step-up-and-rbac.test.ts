@@ -203,7 +203,7 @@ describe('POST /v1/auth/step-up', () => {
     expect((await stepUp(token, body)).statusCode).toBe(200);
     expect((await stepUp(token, body)).statusCode).toBe(401);
     expect(
-      h.events.some((e) => e.kind === 'owner.recovery_code_used' && e.staffId === owner.staffId),
+      h.alerts.some((e) => e.kind === 'owner.recovery_code_used' && e.staffId === owner.staffId),
     ).toBe(true);
     // Step-up audits the break-glass code just like signing in does.
     const used = (await h.auditRows(owner.staffId)).filter(

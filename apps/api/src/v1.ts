@@ -6,6 +6,7 @@ import { type AuthPolicy, DEFAULT_AUTH_POLICY } from './auth/policy.ts';
 import { registerAuthRoutes } from './auth/routes.ts';
 import type { AuthContext } from './auth/service.ts';
 import type { EventBus } from './events.ts';
+import { registerOrderRoutes } from './orders/routes.ts';
 
 export interface V1Deps {
   db: Db;
@@ -39,6 +40,9 @@ export async function registerV1(app: FastifyInstance, deps: V1Deps): Promise<vo
       v1.decorateRequest('auth', null);
       await v1.register((scope) => registerAuthRoutes(scope, context.auth, context.guard), {
         prefix: '/auth',
+      });
+      await v1.register((scope) => registerOrderRoutes(scope, context.auth, context.guard), {
+        prefix: '/orders',
       });
     },
     { prefix: '/v1' },

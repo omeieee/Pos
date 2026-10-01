@@ -185,7 +185,7 @@ describe('POST /v1/auth/owner', () => {
 
     const actions = (await h.auditRows(owner.staffId)).map((a) => a.action);
     expect(actions.filter((a) => a === 'auth.recovery_code_used')).toHaveLength(2);
-    expect(h.events.filter((e) => e.kind === 'owner.recovery_code_used')).toHaveLength(2);
+    expect(h.alerts.filter((e) => e.kind === 'owner.recovery_code_used')).toHaveLength(2);
   });
 
   test('a recovery code needs the password too', async () => {

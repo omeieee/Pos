@@ -47,6 +47,11 @@ export const notFound = (what: string) => new ApiError(404, 'NOT_FOUND', `${what
 export const conflict = (code: string, message: string, details: Record<string, unknown> = {}) =>
   new ApiError(409, code, message, details);
 
+export const versionConflict = (currentVersion: number) =>
+  conflict('VERSION_CONFLICT', 'This was changed on another device. Reload and try again', {
+    currentVersion,
+  });
+
 /** Field paths and codes only: Zod messages and received values stay out of the response. */
 export function validationError(error: z.ZodError): ApiError {
   return new ApiError(400, 'VALIDATION_ERROR', 'The request is not valid', {
