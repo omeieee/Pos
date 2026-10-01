@@ -139,6 +139,7 @@ export const th = {
   'auth.pin.enterFor': 'ใส่ PIN ของ {name}',
   'auth.pin.changePerson': 'เลือกคนอื่น',
   'auth.pin.delete': 'ลบตัวเลขล่าสุด',
+  'auth.pin.clear': 'ล้าง',
   'auth.pin.submit': 'เข้าสู่ระบบ',
   'auth.pin.progress': 'ใส่แล้ว {count} หลัก',
   'auth.pin.empty': 'ยังไม่มีพนักงานที่ตั้ง PIN ไว้',
@@ -159,7 +160,7 @@ export const th = {
   'auth.stepUp.lockedFor': 'ลองผิดหลายครั้ง กรุณารอ {wait} แล้วลองอีกครั้ง',
 
   // Notices shown once on the PIN screen
-  'auth.notice.sessionExpired': 'เซสชันหมดอายุ กรุณาใส่ PIN อีกครั้ง',
+  'auth.notice.sessionExpired': 'เซสชันหมดอายุ กรุณาเข้าสู่ระบบอีกครั้ง',
   'auth.notice.deviceRemoved': 'เครื่องนี้ถูกถอดออกจากร้านแล้ว ต้องลงทะเบียนใหม่',
   'auth.notice.deviceMismatch': 'เซสชันนี้เป็นของเครื่องอื่น กรุณาเข้าสู่ระบบใหม่',
 

@@ -134,6 +134,7 @@ export const en = {
   'auth.pin.enterFor': 'Enter PIN for {name}',
   'auth.pin.changePerson': 'Choose someone else',
   'auth.pin.delete': 'Delete last digit',
+  'auth.pin.clear': 'Clear',
   'auth.pin.submit': 'Sign in',
   'auth.pin.progress': '{count} digits entered',
   'auth.pin.empty': 'No staff have a PIN yet',
@@ -154,7 +155,7 @@ export const en = {
   'auth.stepUp.lockedFor': 'Too many wrong tries. Please wait {wait} and try again.',
 
   // Notices shown once on the PIN screen
-  'auth.notice.sessionExpired': 'Your session ended. Enter your PIN again.',
+  'auth.notice.sessionExpired': 'Your session ended. Please sign in again.',
   'auth.notice.deviceRemoved': 'This device was removed from the shop. Register it again.',
   'auth.notice.deviceMismatch': 'That session belongs to another device. Please sign in again.',
 
