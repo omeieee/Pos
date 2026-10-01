@@ -20,11 +20,19 @@ test('only the owner can change the PromptPay ID, the co-pay scheme, staff or de
   }
 });
 
-test('kitchen can only accept and advance orders', () => {
+test('kitchen can accept and advance orders and mark menu items sold out, nothing else', () => {
   expect(PERMISSIONS.filter((p) => hasPermission('kitchen', p))).toEqual([
     'order.accept',
     'order.advance',
+    'menu.availability',
   ]);
+});
+
+test('every role may mark an item sold out, but only managers and the owner edit the menu', () => {
+  for (const role of STAFF_ROLES) expect(hasPermission(role, 'menu.availability'), role).toBe(true);
+  expect(hasPermission('manager', 'menu.edit')).toBe(true);
+  expect(hasPermission('cashier', 'menu.edit')).toBe(false);
+  expect(hasPermission('kitchen', 'menu.edit')).toBe(false);
 });
 
 test('cashier confirms payments but cannot void, refund or cancel in-progress orders', () => {

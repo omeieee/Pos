@@ -1,0 +1,387 @@
+/**
+ * Queries for the menu: categories, items (with channel prices and attached modifier groups),
+ * modifier groups and their options. Costs are read only where a writer needs the old value for
+ * the audit row; apps/api never puts them in a response.
+ */
+import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm';
+import type { Db } from './client.ts';
+import {
+  menuCategories,
+  menuItemChannelPrices,
+  menuItemModifierGroups,
+  menuItems,
+  modifierGroups,
+  modifierOptions,
+} from './schema.ts';
+
+export type CategoryRow = typeof menuCategories.$inferSelect;
+export type ItemRow = typeof menuItems.$inferSelect;
+export type GroupRow = typeof modifierGroups.$inferSelect;
+export type OptionRow = typeof modifierOptions.$inferSelect;
+
+// ---------- Categories ----------
+
+export async function listCategories(db: Db): Promise<CategoryRow[]> {
+  return db.select().from(menuCategories).orderBy(asc(menuCategories.sort), asc(menuCategories.id));
+}
+
+export async function lockCategory(db: Db, id: string): Promise<CategoryRow | undefined> {
+  const [row] = await db
+    .select()
+    .from(menuCategories)
+    .where(eq(menuCategories.id, id))
+    .for('update')
+    .limit(1);
+  return row;
+}
+
+export async function findCategory(db: Db, id: string): Promise<CategoryRow | undefined> {
+  const [row] = await db.select().from(menuCategories).where(eq(menuCategories.id, id)).limit(1);
+  return row;
+}
+
+export async function insertCategory(
+  db: Db,
+  input: { nameTh: string; nameEn: string | null; sort: number },
+): Promise<CategoryRow> {
+  const [row] = await db.insert(menuCategories).values(input).returning();
+  if (!row) throw new Error('category insert returned no row');
+  return row;
+}
+
+export async function updateCategoryIfVersion(
+  db: Db,
+  id: string,
+  expectedVersion: number,
+  patch: Partial<Pick<CategoryRow, 'nameTh' | 'nameEn' | 'sort' | 'active'>>,
+): Promise<CategoryRow | undefined> {
+  const [row] = await db
+    .update(menuCategories)
+    .set(patch)
+    .where(and(eq(menuCategories.id, id), eq(menuCategories.version, expectedVersion)))
+    .returning();
+  return row;
+}
+
+// ---------- Items ----------
+
+export interface ItemExtras {
+  channelPrices: Map<string, Record<string, number>>;
+  groupIds: Map<string, string[]>;
+}
+
+export async function listItems(db: Db, options: { includeArchived: boolean }): Promise<ItemRow[]> {
+  const query = db.select().from(menuItems);
+  return (options.includeArchived ? query : query.where(isNull(menuItems.archivedAt))).orderBy(
+    asc(menuItems.sort),
+    asc(menuItems.id),
+  );
+}
+
+export async function findItem(db: Db, id: string): Promise<ItemRow | undefined> {
+  const [row] = await db.select().from(menuItems).where(eq(menuItems.id, id)).limit(1);
+  return row;
+}
+
+export async function lockItem(db: Db, id: string): Promise<ItemRow | undefined> {
+  const [row] = await db
+    .select()
+    .from(menuItems)
+    .where(eq(menuItems.id, id))
+    .for('update')
+    .limit(1);
+  return row;
+}
+
+/** Channel price overrides and attached group ids (in display order) for these items. */
+export async function loadItemExtras(db: Db, itemIds: readonly string[]): Promise<ItemExtras> {
+  const extras: ItemExtras = { channelPrices: new Map(), groupIds: new Map() };
+  if (itemIds.length === 0) return extras;
+  const ids = [...itemIds];
+  const prices = await db
+    .select()
+    .from(menuItemChannelPrices)
+    .where(inArray(menuItemChannelPrices.itemId, ids));
+  for (const p of prices) {
+    const map = extras.channelPrices.get(p.itemId) ?? {};
+    map[p.channel] = p.priceSatang;
+    extras.channelPrices.set(p.itemId, map);
+  }
+  const links = await db
+    .select()
+    .from(menuItemModifierGroups)
+    .where(inArray(menuItemModifierGroups.itemId, ids))
+    .orderBy(asc(menuItemModifierGroups.sort), asc(menuItemModifierGroups.groupId));
+  for (const l of links) {
+    const list = extras.groupIds.get(l.itemId) ?? [];
+    list.push(l.groupId);
+    extras.groupIds.set(l.itemId, list);
+  }
+  return extras;
+}
+
+export interface NewItem {
+  categoryId: string;
+  nameTh: string;
+  nameEn: string | null;
+  descriptionTh: string | null;
+  descriptionEn: string | null;
+  priceSatang: number;
+  estCostSatang: number;
+  /** The photo URL (stored in the image_key column until photos have their own store). */
+  imageKey: string | null;
+  channels: string[];
+  sort: number;
+  isAvailable: boolean;
+}
+
+export async function insertItem(db: Db, input: NewItem): Promise<ItemRow> {
+  const [row] = await db.insert(menuItems).values(input).returning();
+  if (!row) throw new Error('item insert returned no row');
+  return row;
+}
+
+export type ItemPatch = Partial<NewItem> & { archivedAt?: Date | null; updatedAt?: Date };
+
+/** One UPDATE guarded by the version the caller saw; the sync trigger bumps version and rev. */
+export async function updateItemIfVersion(
+  db: Db,
+  id: string,
+  expectedVersion: number,
+  patch: ItemPatch,
+): Promise<ItemRow | undefined> {
+  const [row] = await db
+    .update(menuItems)
+    .set(patch)
+    .where(and(eq(menuItems.id, id), eq(menuItems.version, expectedVersion)))
+    .returning();
+  return row;
+}
+
+export async function replaceItemChannelPrices(
+  db: Db,
+  itemId: string,
+  prices: Record<string, number>,
+): Promise<void> {
+  await db.delete(menuItemChannelPrices).where(eq(menuItemChannelPrices.itemId, itemId));
+  const rows = Object.entries(prices).map(([channel, priceSatang]) => ({
+    itemId,
+    channel,
+    priceSatang,
+  }));
+  if (rows.length > 0) await db.insert(menuItemChannelPrices).values(rows);
+}
+
+export async function replaceItemGroups(
+  db: Db,
+  itemId: string,
+  groupIds: readonly string[],
+): Promise<void> {
+  await db.delete(menuItemModifierGroups).where(eq(menuItemModifierGroups.itemId, itemId));
+  if (groupIds.length > 0) {
+    await db
+      .insert(menuItemModifierGroups)
+      .values(groupIds.map((groupId, index) => ({ itemId, groupId, sort: index + 1 })));
+  }
+}
+
+// ---------- Modifier groups and options ----------
+
+export async function listGroups(
+  db: Db,
+  options: { includeArchived: boolean },
+): Promise<GroupRow[]> {
+  const query = db.select().from(modifierGroups);
+  return (options.includeArchived ? query : query.where(isNull(modifierGroups.archivedAt))).orderBy(
+    asc(modifierGroups.sort),
+    asc(modifierGroups.id),
+  );
+}
+
+export async function findGroups(db: Db, ids: readonly string[]): Promise<GroupRow[]> {
+  if (ids.length === 0) return [];
+  return db
+    .select()
+    .from(modifierGroups)
+    .where(inArray(modifierGroups.id, [...ids]));
+}
+
+export async function lockGroup(db: Db, id: string): Promise<GroupRow | undefined> {
+  const [row] = await db
+    .select()
+    .from(modifierGroups)
+    .where(eq(modifierGroups.id, id))
+    .for('update')
+    .limit(1);
+  return row;
+}
+
+export async function insertGroup(
+  db: Db,
+  input: {
+    nameTh: string;
+    nameEn: string | null;
+    minSelect: number;
+    maxSelect: number;
+    sort: number;
+  },
+): Promise<GroupRow> {
+  const [row] = await db.insert(modifierGroups).values(input).returning();
+  if (!row) throw new Error('group insert returned no row');
+  return row;
+}
+
+export async function updateGroupIfVersion(
+  db: Db,
+  id: string,
+  expectedVersion: number,
+  patch: Partial<
+    Pick<GroupRow, 'nameTh' | 'nameEn' | 'minSelect' | 'maxSelect' | 'sort' | 'archivedAt'>
+  >,
+): Promise<GroupRow | undefined> {
+  const [row] = await db
+    .update(modifierGroups)
+    .set(patch)
+    .where(and(eq(modifierGroups.id, id), eq(modifierGroups.version, expectedVersion)))
+    .returning();
+  return row;
+}
+
+export async function listOptions(
+  db: Db,
+  groupIds: readonly string[],
+  options: { includeArchived: boolean },
+): Promise<OptionRow[]> {
+  if (groupIds.length === 0) return [];
+  const where = options.includeArchived
+    ? inArray(modifierOptions.groupId, [...groupIds])
+    : and(inArray(modifierOptions.groupId, [...groupIds]), isNull(modifierOptions.archivedAt));
+  return db
+    .select()
+    .from(modifierOptions)
+    .where(where)
+    .orderBy(asc(modifierOptions.sort), asc(modifierOptions.id));
+}
+
+export interface NewOption {
+  groupId: string;
+  nameTh: string;
+  nameEn: string | null;
+  priceDeltaSatang: number;
+  costDeltaSatang: number;
+  isAvailable: boolean;
+  sort: number;
+}
+
+export async function insertOptions(db: Db, rows: readonly NewOption[]): Promise<OptionRow[]> {
+  if (rows.length === 0) return [];
+  return db
+    .insert(modifierOptions)
+    .values([...rows])
+    .returning();
+}
+
+export async function lockOption(db: Db, id: string): Promise<OptionRow | undefined> {
+  const [row] = await db
+    .select()
+    .from(modifierOptions)
+    .where(eq(modifierOptions.id, id))
+    .for('update')
+    .limit(1);
+  return row;
+}
+
+export async function updateOptionIfVersion(
+  db: Db,
+  id: string,
+  expectedVersion: number,
+  patch: Partial<Omit<NewOption, 'groupId'>> & { archivedAt?: Date | null },
+): Promise<OptionRow | undefined> {
+  const [row] = await db
+    .update(modifierOptions)
+    .set(patch)
+    .where(and(eq(modifierOptions.id, id), eq(modifierOptions.version, expectedVersion)))
+    .returning();
+  return row;
+}
+
+// ---------- The public menu ----------
+
+export interface PublicMenuRows {
+  categories: CategoryRow[];
+  items: ItemRow[];
+  prices: { itemId: string; channel: string; priceSatang: number }[];
+  links: { itemId: string; groupId: string }[];
+  groups: GroupRow[];
+  options: OptionRow[];
+}
+
+/**
+ * What a customer or a till may order on a channel: active categories, items that are available,
+ * not archived and offered on the channel, with their live groups and available options.
+ */
+export async function loadPublicMenu(db: Db, channel: string): Promise<PublicMenuRows> {
+  const categories = await db
+    .select()
+    .from(menuCategories)
+    .where(eq(menuCategories.active, true))
+    .orderBy(asc(menuCategories.sort), asc(menuCategories.id));
+  const items = await db
+    .select()
+    .from(menuItems)
+    .where(
+      and(
+        eq(menuItems.isAvailable, true),
+        isNull(menuItems.archivedAt),
+        sql`${channel} = any(${menuItems.channels})`,
+      ),
+    )
+    .orderBy(asc(menuItems.sort), asc(menuItems.id));
+  const itemIds = items.map((i) => i.id);
+  const prices =
+    itemIds.length === 0
+      ? []
+      : await db
+          .select()
+          .from(menuItemChannelPrices)
+          .where(
+            and(
+              inArray(menuItemChannelPrices.itemId, itemIds),
+              eq(menuItemChannelPrices.channel, channel),
+            ),
+          );
+  const links =
+    itemIds.length === 0
+      ? []
+      : await db
+          .select()
+          .from(menuItemModifierGroups)
+          .where(inArray(menuItemModifierGroups.itemId, itemIds))
+          .orderBy(asc(menuItemModifierGroups.sort), asc(menuItemModifierGroups.groupId));
+  const groupIds = [...new Set(links.map((l) => l.groupId))];
+  const groups =
+    groupIds.length === 0
+      ? []
+      : await db
+          .select()
+          .from(modifierGroups)
+          .where(and(inArray(modifierGroups.id, groupIds), isNull(modifierGroups.archivedAt)));
+  const options =
+    groups.length === 0
+      ? []
+      : await db
+          .select()
+          .from(modifierOptions)
+          .where(
+            and(
+              inArray(
+                modifierOptions.groupId,
+                groups.map((g) => g.id),
+              ),
+              eq(modifierOptions.isAvailable, true),
+              isNull(modifierOptions.archivedAt),
+            ),
+          )
+          .orderBy(asc(modifierOptions.sort), asc(modifierOptions.id));
+  return { categories, items, prices, links, groups, options };
+}

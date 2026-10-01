@@ -50,11 +50,24 @@ export interface SettingsUpdatedEvent {
   data: unknown;
 }
 
+/**
+ * A menu row changed (02 §5 `menu.upserted`): a category, item, modifier group or option.
+ * `data` is the same shape the staff API returns for it (no costs).
+ */
+export interface MenuUpsertedEvent {
+  type: 'menu.upserted';
+  kind: 'category' | 'item' | 'group' | 'option';
+  id: string;
+  rev: number;
+  data: unknown;
+}
+
 export type AppEvent =
   | SecurityAlertEvent
   | OrderUpsertedEvent
   | NewOrderAlertEvent
-  | SettingsUpdatedEvent;
+  | SettingsUpdatedEvent
+  | MenuUpsertedEvent;
 
 export type EventHandler = (event: AppEvent) => void | Promise<void>;
 

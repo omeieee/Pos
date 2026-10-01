@@ -139,9 +139,34 @@ describe('seed', () => {
     expect(pp?.value).toEqual({ idType: 'phone', idValue: '0642230924' });
 
     const [price] = await rows<{ price_satang: string | number }>(
-      sql`select price_satang from menu_items where name_th = 'ก๋วยเตี๋ยวต้มยำ'`,
+      sql`select price_satang from menu_items where name_th = 'ก๋วยเตี๋ยวต้มยำ (ตัวอย่าง)'`,
     );
     expect(Number(price?.price_satang)).toBe(5000);
+  });
+});
+
+describe('seed: the menu is an obvious placeholder', () => {
+  test('every seeded item and category says it is a sample the owner will replace', async () => {
+    const items = await rows<{ name_th: string; name_en: string; description_th: string }>(
+      sql`select name_th, name_en, description_th from menu_items`,
+    );
+    expect(items.length).toBeGreaterThan(0);
+    for (const i of items) {
+      expect(i.name_th, i.name_th).toContain('(ตัวอย่าง)');
+      expect(i.name_en, i.name_en).toContain('(sample)');
+      expect(i.description_th).toMatch(/เมนูตัวอย่าง/);
+    }
+    const categories = await rows<{ name_th: string }>(sql`select name_th from menu_categories`);
+    for (const c of categories) expect(c.name_th).toContain('(ตัวอย่าง)');
+  });
+
+  test('the noodles are also offered on the delivery channels, with a Grab price', async () => {
+    const noodles = await rows<{ channels: string[]; grab: number | null }>(
+      sql`select i.channels, (select price_satang from menu_item_channel_prices p where p.item_id = i.id and p.channel = 'grab') as grab
+          from menu_items i where i.name_th like 'ก๋วยเตี๋ยวต้มยำ%'`,
+    );
+    expect(noodles[0]?.channels).toEqual(['storefront', 'line', 'grab', 'lineman']);
+    expect(Number(noodles[0]?.grab)).toBe(6500);
   });
 });
 

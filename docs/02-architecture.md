@@ -203,7 +203,7 @@ The pending payment is cancelled and a new pending payment is created for the ne
 | Area | Endpoints |
 |---|---|
 | Auth | `POST /v1/auth/device` (owner registers device) · `POST /v1/auth/pin` · `POST /v1/auth/owner` (password + TOTP) · `POST /v1/auth/step-up` · `GET /v1/auth/staff` (tiles for the PIN screen, device token) · `GET /v1/auth/me` · `POST /v1/auth/logout` · `POST /v1/auth/line` (LINE ID token → customer session) |
-| Menu | `GET /v1/menu` (public: available items per channel) · CRUD `/v1/menu/{categories,items,modifier-groups}` · `PATCH /v1/menu/items/{id}/availability` |
+| Menu | `GET /v1/menu?channel=` (public, no session: available items with the channel price, groups and options; never a cost) · staff lists `GET /v1/menu/{categories,items,modifier-groups}` (`menu.availability`, every role) · CRUD (`menu.edit`: managers, owner) on `/v1/menu/{categories,items,modifier-groups}` and options at `/v1/menu/modifier-groups/{id}/options`, `/v1/menu/modifier-options/{id}`; `DELETE` archives (past orders keep their snapshots); photos are an https URL · `PATCH /v1/menu/items/{id}/availability` and `/v1/menu/modifier-options/{id}/availability` (`menu.availability`: the kitchen's "หมด" toggle; `expectedVersion` optional there) |
 | Orders | `POST /v1/orders` · `GET /v1/orders?day=&status=&channel=` · `GET/PATCH /v1/orders/{id}` · `POST /v1/orders/{id}/transition` · `POST /v1/orders/{id}/cancel` |
 | Payments | `POST /v1/orders/{id}/payments` · `POST /v1/payments/{id}/{claim,confirm,change-method,void,refund}` · `GET /v1/payments/{id}/qr.png` (signed, short-lived) |
 | Customers | `GET /v1/customers` · `GET /v1/customers/{id}` · `POST /v1/customers/{id}/anonymize` |

@@ -7,6 +7,7 @@ import { type AuthPolicy, DEFAULT_AUTH_POLICY } from './auth/policy.ts';
 import { registerAuthRoutes } from './auth/routes.ts';
 import type { AuthContext } from './auth/service.ts';
 import type { EventBus } from './events.ts';
+import { registerMenuRoutes } from './menu/routes.ts';
 import { registerOrderRoutes } from './orders/routes.ts';
 import { registerSettingsRoutes } from './settings/routes.ts';
 
@@ -21,13 +22,16 @@ export interface V1Deps {
 }
 
 /**
- * The only /v1 routes that may run without `guard()`: the sign-ins. /auth/staff and /auth/pin
- * authenticate with the registered device's token; /auth/owner is the password + TOTP login.
+ * The only /v1 routes that may run without `guard()`: the sign-ins (/auth/staff and /auth/pin
+ * authenticate with the registered device's token; /auth/owner is the password + TOTP login) and
+ * the public menu.
  */
 export const OPEN_ROUTES: ReadonlySet<string> = new Set([
   'GET /v1/auth/staff',
   'POST /v1/auth/pin',
   'POST /v1/auth/owner',
+  // The menu a customer or a till reads before signing in: prices of what is on sale, no costs.
+  'GET /v1/menu',
 ]);
 
 /** What every /v1 module receives: the database, the clock, the event bus and the guard. */
@@ -56,6 +60,9 @@ export async function registerV1(app: FastifyInstance, deps: V1Deps): Promise<vo
       });
       await v1.register((scope) => registerOrderRoutes(scope, context.auth, context.guard), {
         prefix: '/orders',
+      });
+      await v1.register((scope) => registerMenuRoutes(scope, context.auth, context.guard), {
+        prefix: '/menu',
       });
       await v1.register((scope) => registerSettingsRoutes(scope, context.auth, context.guard), {
         prefix: '/settings',

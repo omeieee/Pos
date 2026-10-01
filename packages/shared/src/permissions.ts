@@ -12,6 +12,7 @@ export const PERMISSIONS = [
   'payment.cancel_claimed',
   'payment.void_refund',
   'menu.edit',
+  'menu.availability',
   'customer.view',
   'report.view',
   'expense.edit',
@@ -33,6 +34,7 @@ const CASHIER: readonly Permission[] = [
   'payment.record',
   'payment.confirm',
   'payment.cancel_claimed',
+  'menu.availability',
   'customer.view',
   'settings.view',
 ];
@@ -51,7 +53,7 @@ export const ROLE_PERMISSIONS: Record<StaffRole, ReadonlySet<Permission>> = {
   owner: new Set(PERMISSIONS),
   manager: new Set(MANAGER),
   cashier: new Set(CASHIER),
-  kitchen: new Set<Permission>(['order.accept', 'order.advance']),
+  kitchen: new Set<Permission>(['order.accept', 'order.advance', 'menu.availability']),
 };
 
 /** Sensitive actions: re-authentication (step-up) plus an audit_log row (CLAUDE.md rule 9). */

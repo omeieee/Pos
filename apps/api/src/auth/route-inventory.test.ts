@@ -22,7 +22,7 @@ afterAll(async () => {
 const OPEN = [...OPEN_ROUTES];
 
 describe('the real /v1 routes', () => {
-  test('every one has the guard, except the three sign-in routes', () => {
+  test('every one has the guard, except the sign-in routes and the public menu', () => {
     const v1 = h.routes.filter((r) => r.url.startsWith('/v1'));
     expect(v1.length).toBeGreaterThan(8);
     // Fastify adds a HEAD route next to every GET; it counts as the GET.
@@ -30,8 +30,13 @@ describe('the real /v1 routes', () => {
       `${r.method === 'HEAD' ? 'GET' : r.method} ${r.url}`;
     const open = [...new Set(v1.filter((r) => !r.guarded).map(key))];
     expect(open.sort()).toEqual([...OPEN].sort());
-    // ...and the list itself is exactly the three sign-in routes, so it cannot grow unnoticed.
-    expect(OPEN.sort()).toEqual(['GET /v1/auth/staff', 'POST /v1/auth/owner', 'POST /v1/auth/pin']);
+    // ...and the list itself is exactly the sign-in routes and the public menu, so it cannot grow unnoticed.
+    expect(OPEN.sort()).toEqual([
+      'GET /v1/auth/staff',
+      'GET /v1/menu',
+      'POST /v1/auth/owner',
+      'POST /v1/auth/pin',
+    ]);
   });
 
   test('the inventory includes the routes we know about', () => {
