@@ -220,6 +220,7 @@ ssh -t pos-ts 'sudo -u deploy cp -n /opt/sds/.env.example /opt/sds/.env; sudo ch
 - `API_HOST='138-2-67-89.sslip.io'`.
 - `ACME_EMAIL` is your email.
 - `SENTRY_DSN`: Sentry → create project (platform Node.js) → Client Keys → DSN. It may stay empty for now.
+- `AUTH_SECRET_KEY` (from P3): the master key for sign-in secrets. Generate it **once** on the VM with `openssl rand -base64 32` (43 characters and a final `=`), and keep a copy with the age backup key (USB and paper). The API refuses to start without it. If it is lost or changed, every PIN, the owner's TOTP secret and the recovery codes stop working and the owner is locked out until a reset tool exists (planned, not built yet). **Never regenerate it on a rebuild.** Claude generated the first one on the VM on 2026-10-01 and never printed it; read it yourself with `ssh deploy@sds-pos 'grep ^AUTH_SECRET_KEY /opt/sds/.env'` when you store the copy.
 
 Check, without printing values:
 ```bash
