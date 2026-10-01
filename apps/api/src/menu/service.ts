@@ -232,15 +232,8 @@ export async function publicMenu(
       nameEn: category.nameEn,
       items: rows.items
         .filter((item) => item.categoryId === category.id)
-        .map((item) => ({
-          id: item.id,
-          nameTh: item.nameTh,
-          nameEn: item.nameEn,
-          descriptionTh: item.descriptionTh,
-          descriptionEn: item.descriptionEn,
-          priceSatang: priceOf.get(item.id) ?? item.priceSatang,
-          imageUrl: item.imageKey,
-          modifierGroups: (groupIdsByItem.get(item.id) ?? []).flatMap((groupId) => {
+        .flatMap((item) => {
+          const modifierGroups = (groupIdsByItem.get(item.id) ?? []).flatMap((groupId) => {
             const group = groupsById.get(groupId);
             if (!group) return [];
             return [
@@ -258,8 +251,23 @@ export async function publicMenu(
                 })),
               },
             ];
-          }),
-        })),
+          });
+          // A required group with fewer available options than it needs (every option sold out)
+          // makes the item impossible to order (GROUP_TOO_FEW), so it is not offered.
+          if (modifierGroups.some((g) => g.options.length < g.minSelect)) return [];
+          return [
+            {
+              id: item.id,
+              nameTh: item.nameTh,
+              nameEn: item.nameEn,
+              descriptionTh: item.descriptionTh,
+              descriptionEn: item.descriptionEn,
+              priceSatang: priceOf.get(item.id) ?? item.priceSatang,
+              imageUrl: item.imageKey,
+              modifierGroups,
+            },
+          ];
+        }),
     })),
   });
 }

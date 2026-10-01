@@ -726,6 +726,50 @@ describe('GET /v1/menu', () => {
     expect(found?.modifierGroups[0]?.options.map((o) => o.id)).toEqual([g.options[0]?.id]);
   });
 
+  test('drops an item whose required group cannot be filled (it could never be ordered)', async () => {
+    const manager = await as('manager');
+    const cat = await newCategory(manager);
+    // Needs one of two options.
+    const required = await newGroup(manager);
+    // Needs two choices but only two exist: one sold out leaves too few.
+    const pair = await newGroup(manager, { minSelect: 2, maxSelect: 2 });
+    // Optional: sold-out options never block the item.
+    const optional = await newGroup(manager, { minSelect: 0, maxSelect: 2 });
+    const ok = await newItem(manager, cat.id, { modifierGroupIds: [required.id] });
+    const needsAll = await newItem(manager, cat.id, { modifierGroupIds: [pair.id] });
+    const soft = await newItem(manager, cat.id, { modifierGroupIds: [optional.id] });
+    expect(await publicItemIds()).toEqual(expect.arrayContaining([ok.id, needsAll.id, soft.id]));
+
+    const soldOut = (id: string | undefined) =>
+      call('PATCH', `/v1/menu/modifier-options/${id}/availability`, manager, {
+        isAvailable: false,
+      });
+    // One of two sold out: `required` still has one (enough), `pair` has too few, `optional` is fine.
+    for (const g of [required, pair, optional]) await soldOut(g.options[1]?.id);
+    let ids = await publicItemIds();
+    expect(ids).toContain(ok.id);
+    expect(ids).not.toContain(needsAll.id);
+    expect(ids).toContain(soft.id);
+
+    // Every option of the required group sold out: that item goes too; the optional one stays.
+    await soldOut(required.options[0]?.id);
+    await soldOut(optional.options[0]?.id);
+    ids = await publicItemIds();
+    expect(ids).not.toContain(ok.id);
+    expect(ids).toContain(soft.id);
+
+    // Bring one back: orderable again.
+    await call(
+      'PATCH',
+      `/v1/menu/modifier-options/${required.options[0]?.id}/availability`,
+      manager,
+      {
+        isAvailable: true,
+      },
+    );
+    expect(await publicItemIds()).toContain(ok.id);
+  });
+
   test('an unknown channel, or "phone", is a validation error', async () => {
     for (const channel of ['fax', 'phone']) {
       const res = await call('GET', `/v1/menu?channel=${channel}`, undefined);
