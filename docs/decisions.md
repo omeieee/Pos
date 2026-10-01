@@ -13,7 +13,7 @@ This is the **single source of truth for technology and design choices**. Other 
 | D-01 | TypeScript monorepo (pnpm workspaces + Turborepo, Biome) | **Accepted** | 2026-09-29 |
 | D-02 | Backend: Node.js 24 LTS + Fastify 5 | **Accepted** | 2026-09-29 |
 | D-03 | PostgreSQL 17+ with Drizzle ORM; **Path B**: Supabase free (Singapore); PGlite (embedded Postgres) for local dev/tests, no Docker needed | **Accepted** | 2026-09-29 |
-| D-04 | Realtime: server-authoritative WebSocket + revision-based catch-up sync | Proposed | 2026-09-29 |
+| D-04 | Realtime: server-authoritative WebSocket + revision-based catch-up sync | **Accepted** | 2026-10-02 |
 | D-05 | Frontends: React + Vite PWA; one staff app, one customer app | **Accepted** | 2026-09-29 |
 | D-06 | Customer channel: LINE OA + unverified LINE MINI App (LIFF SDK), one LINE provider | Proposed | 2026-09-29 |
 | D-07 | Every payment is confirmed manually by staff; no gateway, no paid slip API | **Accepted** | 2026-09-29 |
@@ -54,11 +54,12 @@ This is the **single source of truth for technology and design choices**. Other 
 - **PGlite version (2026-09-29, P1):** pinned to **0.4.x, which embeds PostgreSQL 17**, the same major as Supabase (17.6). PGlite 0.5.x embeds PostgreSQL 18, where migrations could use PG18-only features that then fail on Supabase. Upgrade PGlite only together with the Supabase major version. Migrations are plain SQL/plpgsql with no extensions, so the same set runs on both.
 - **Status note (2026-09-29):** the VM is a **VM.Standard.E2.1.Micro (1 GB RAM) in ap-singapore-1**, so **Path B** applies. Postgres runs on Supabase free, created in the Singapore region next to the VM. Record: [infra/oracle/README.md](../infra/oracle/README.md).
 
-## D-04 · Realtime sync — Proposed
+## D-04 · Realtime sync — Accepted (built and deployed 2026-10-02)
 - **Decision:** the server is the only source of truth. Every write goes through the API in a DB transaction. Each synced row has a `rev` taken from one global Postgres sequence. After commit the API broadcasts `{type, id, rev, data}` over WebSocket. A reconnecting client calls `GET /v1/sync?since=<rev>` to catch up. Creates carry an idempotency key, and updates carry `expectedVersion` (HTTP 409 on conflict).
 - **Why:** it is simple, stays correct after disconnects, and does not depend on Supabase Realtime or Firebase.
 - **Alternatives:** Supabase Realtime (lock-in; not available on Path A); CRDT/local-first sync (overkill for one shop).
 - **Revisit if:** we run more than one API instance. Then add Postgres `LISTEN/NOTIFY` for fan-out.
+- **Status note (2026-10-02, as built):** the WebSocket authenticates with a first message (a browser cannot send headers) and the server re-checks the session on every 25 s beat without extending it, so a listen-only device gets 4401 at its idle limit and the client must keep the session alive or re-sign-in. The feed uses column allow-lists per table and role permission (payments `payment.record`, settings `settings.view`, customers `customer.view`); costs, staff, devices, sessions, audit and expenses never travel and the PromptPay ID is masked. Clients apply a frame only if its `rev` is higher and rewind 200 revs once per catch-up, because a transaction that commits late can carry a lower `rev` than one already sent.
 
 ## D-05 · Frontends — Proposed
 - **Decision:** React 19 + Vite + TypeScript, TanStack Router and Query, Tailwind CSS v4 + shadcn/ui (Radix), Apache ECharts for charts, i18next, `vite-plugin-pwa`, and Dexie (IndexedDB) for the offline outbox. Two apps:
