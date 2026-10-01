@@ -321,6 +321,23 @@ describe('limits', () => {
     expect(sockets.every((c) => !c.isClosed())).toBe(true);
   });
 
+  test('upgrade requests are rate limited per address before the upgrade, as a plain 429', async () => {
+    const limited = await createHarness({ realtime: { connectsPerMinute: 3 } });
+    try {
+      const ip = freshIp();
+      for (let i = 0; i < 3; i += 1) {
+        const c = await connect(limited.app, { ip });
+        c.raw.close();
+      }
+      await expect(connect(limited.app, { ip })).rejects.toThrow(/429/);
+      // Another address is untouched.
+      const other = await connect(limited.app, { ip: freshIp() });
+      other.raw.close();
+    } finally {
+      await limited.close();
+    }
+  });
+
   test('overall: the cap on all sockets refuses the next one', async () => {
     const small = await createHarness({
       realtime: { hub: { maxTotal: 3, maxPerIp: 50, shutdownGraceMs: 200 } },

@@ -254,6 +254,26 @@ describe('GET /v1/sync: who and how', () => {
     expect(res.json()).toMatchObject({ code: 'VALIDATION_ERROR', details: expect.any(Object) });
   });
 
+  test('is rate limited per address (120 a minute), with the standard error shape', async () => {
+    const ip = '10.99.0.1';
+    const statuses: number[] = [];
+    for (let i = 0; i < 125; i += 1) {
+      const res = await h.app.inject({
+        method: 'GET',
+        url: '/v1/sync?limit=1',
+        headers: { authorization: `Bearer ${tokens.kitchen}` },
+        remoteAddress: ip,
+      });
+      statuses.push(res.statusCode);
+      if (res.statusCode === 429) {
+        expect(res.json()).toMatchObject({ code: 'RATE_LIMITED' });
+        break;
+      }
+    }
+    expect(statuses.filter((s) => s === 200)).toHaveLength(120);
+    expect(statuses[statuses.length - 1]).toBe(429);
+  });
+
   test('answers are never cached', async () => {
     const res = await call('GET', '/v1/sync', tokens.owner);
     expect(res.headers['cache-control']).toBe('no-store');

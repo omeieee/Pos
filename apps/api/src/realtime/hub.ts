@@ -251,7 +251,11 @@ export function createHub(
         shut(conn, WS_CLOSE.BAD_MESSAGE, 'bad_message');
         return;
       }
-      void authenticate(conn, message);
+      authenticate(conn, message).catch((error) => {
+        // Nothing here may escape as an unhandled rejection: it would take the process down.
+        log.error({ err: error }, 'websocket auth crashed');
+        shut(conn, WS_CLOSE.INTERNAL, 'internal_error');
+      });
       return;
     }
     // A pong is the client's answer to an app-level ping; it counts as being alive.
@@ -390,7 +394,9 @@ export function createHub(
       ticking = false;
     }
   }
-  const timer = setInterval(() => void tick(), options.heartbeatMs);
+  const timer = setInterval(() => {
+    tick().catch((error) => log.error({ err: error }, 'websocket heartbeat crashed'));
+  }, options.heartbeatMs);
   timer.unref();
 
   async function shutdown(): Promise<void> {
