@@ -312,7 +312,7 @@ describe('server messages and close codes', () => {
     expect(new Set(codes).size).toBe(codes.length);
     expect(WS_CLOSE.GOING_AWAY).toBe(1001);
     for (const [name, code] of Object.entries(WS_CLOSE)) {
-      if (name === 'GOING_AWAY' || name === 'MESSAGE_TOO_BIG') continue;
+      if (['GOING_AWAY', 'MESSAGE_TOO_BIG', 'INTERNAL'].includes(name)) continue;
       expect(code, name).toBeGreaterThanOrEqual(4000);
       expect(code, name).toBeLessThan(5000);
     }

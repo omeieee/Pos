@@ -41,6 +41,8 @@ import {
 export const WS_CLOSE = {
   /** The server is shutting down or restarting. */
   GOING_AWAY: 1001,
+  /** Something broke on the server while handling the connection. Retry with backoff. */
+  INTERNAL: 1011,
   /** A message above the size cap (sent by the protocol layer itself). */
   MESSAGE_TOO_BIG: 1009,
   /** Not JSON, not a known message, or a message at the wrong time. */
