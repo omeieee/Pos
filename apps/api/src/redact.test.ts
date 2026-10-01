@@ -176,6 +176,60 @@ describe('Sentry requests', () => {
     expect(event.request?.headers).toMatchObject({ 'user-agent': 'iPad' });
     expect(event.request?.url).toBe('https://api.example.test/v1/auth/pin');
   });
+
+  // A 5xx on GET /v1/payments/:id/qr.png would otherwise ship the 5-minute QR credential.
+  const SIG = 'AbCdEfGhIjKlMnOpQrStUvWxYz0123456789_-AbCdE';
+
+  test('scrubSentryEvent strips the query string (the QR sig) from the request URL', () => {
+    for (const url of [
+      `https://api.example.test/v1/payments/p1/qr.png?exp=1790000000&sig=${SIG}`,
+      `https://api.example.test/v1/payments/p1/qr.png?sig=${SIG}#frag`,
+      `/v1/payments/p1/qr.png?exp=1&sig=${SIG}`,
+    ]) {
+      const event = scrubSentryEvent({ request: { url } });
+      expect(event.request?.url).not.toContain('?');
+      expect(event.request?.url).not.toContain('sig');
+      expect(event.request?.url).toContain('/v1/payments/p1/qr.png');
+      expect(JSON.stringify(event)).not.toContain(SIG);
+    }
+  });
+
+  test('scrubSentryEvent drops query_string whatever its shape', () => {
+    for (const query_string of [
+      `exp=1&sig=${SIG}`,
+      { exp: '1', sig: SIG },
+      [
+        ['exp', '1'],
+        ['sig', SIG],
+      ],
+    ]) {
+      const event = scrubSentryEvent({
+        request: { url: 'https://x.test/a', query_string },
+      });
+      expect(event.request?.query_string).toBeUndefined();
+      expect(JSON.stringify(event)).not.toContain(SIG);
+    }
+  });
+
+  test('scrubSentryEvent cleans the sig out of breadcrumbs and messages too', () => {
+    const event = scrubSentryEvent({
+      message: `Route GET:/v1/payments/p1/qr.png?exp=1&sig=${SIG} failed`,
+      exception: { values: [{ value: `bad link /qr.png?exp=1&sig=${SIG}` }] },
+      breadcrumbs: [
+        { data: { url: `https://x.test/qr.png?exp=1&sig=${SIG}`, method: 'GET' } },
+        { message: `GET /qr.png?sig=${SIG}` },
+        {},
+      ],
+    });
+    expect(JSON.stringify(event)).not.toContain(SIG);
+    expect(event.breadcrumbs?.[0]?.data).toMatchObject({ method: 'GET' });
+    expect(String(event.breadcrumbs?.[0]?.data?.url)).toBe('https://x.test/qr.png');
+  });
+
+  test('scrubSentryEvent leaves a URL without a query alone', () => {
+    const event = scrubSentryEvent({ request: { url: 'https://x.test/v1/menu' } });
+    expect(event.request?.url).toBe('https://x.test/v1/menu');
+  });
 });
 
 describe('log redaction of credentials', () => {
