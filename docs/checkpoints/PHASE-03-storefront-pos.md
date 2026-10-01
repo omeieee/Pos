@@ -48,8 +48,12 @@ Starting point (read from the repo): `packages/shared` already has the order/pay
 
 Tasks 1 (except the TOTP app choice) and 4 need no owner answers. Tasks 1–6 are backend and can run in parallel with the UI shell (7) in separate directories once the questions in [10-open-questions.md](../10-open-questions.md) are answered. The standing rule still applies: no P3 code until the blocking kickoff questions are answered and P2 is closed, unless the owner waives it for named tasks.
 
-## As built
-_Fill in with `/checkpoint`._
+## As built (slice 1, deployed 2026-10-01 as fadca14; inert: no owner, no orders yet)
+- **Auth (`apps/api/src/auth/`, `packages/db/src/auth.ts`, `packages/shared/src/auth.ts`):** `POST /v1/auth/device`, `/pin`, `/owner`, `/step-up`, plus `GET /v1/auth/staff`, `/me` and `POST /v1/auth/logout`. Opaque 256-bit tokens stored as SHA-256; sessions are database rows (migration 0005, additive: `sessions` table and four `owner_credentials` columns). scrypt for passwords (N=2^15, p=3, about 0.4–0.7 s on the VM) and PINs (N=2^14, about 0.1 s, peppered). RFC 6238 TOTP on `node:crypto`, secret AES-256-GCM encrypted under `AUTH_SECRET_KEY`, replay-protected; single-use recovery codes. Timings: PIN session 12 h (idle 2 h), owner session 8 h (idle 30 min), step-up 5 min, PIN lock 5 tries then 5 min, owner lock 5 tries then 15 min. Audit rows for device registration, step-up, lockouts and failed owner logins. First owner via `owner:create` (RUNBOOK).
+- **Orders (`apps/api/src/orders/`, `packages/db/src/orders.ts`, `packages/shared/src/{orders,pricing}.ts`):** `POST /v1/orders` (idempotent by `clientRequestId`), `GET /v1/orders`, `GET`/`PATCH /v1/orders/{id}` (PATCH changes only note and room, needs `expectedVersion`), `POST /v1/orders/{id}/transition` and `/cancel` through the shared state machine. Server-side integer-satang pricing with availability, channel prices and modifier min/max; daily `order_no` per channel letter, reset at the business-day cutoff.
+- **Tests:** api 233, db 67, shared 527 (PGlite; real-Postgres concurrency unproven).
+- **Env:** `AUTH_SECRET_KEY` (32 random bytes, base64) in `/opt/sds/.env`; the API refuses to start without it.
+- **Open (QA must-fix before the real owner exists):** see the PROGRESS handoff, items A–I. Not started: settings API and seed (task 2), menu CRUD (3), payments (5), realtime (6), staff UI (7), offline outbox (8), Grab/LINE MAN entry (9), E2E (10).
 
 ## Log
-_Empty._
+- 2026-10-01 · Started under the owner's blanket authorization; slice 1 (auth and orders) QA-reviewed, pushed and deployed ([PROGRESS](../PROGRESS.md))
