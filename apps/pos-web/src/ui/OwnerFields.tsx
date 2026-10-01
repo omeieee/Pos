@@ -44,7 +44,9 @@ export function OwnerFields({
       <TextField
         label={tr('auth.owner.password')}
         type="password"
-        autoComplete="current-password"
+        // The step-up form can run on a shared iPad: never offer to fill (or save) the owner's
+        // password there. Only the sign-in form, which has the e-mail field, may.
+        autoComplete={withEmail ? 'current-password' : 'off'}
         value={draft.password}
         disabled={disabled}
         onChange={(password) => onChange({ ...draft, password })}

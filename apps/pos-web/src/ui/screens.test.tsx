@@ -140,7 +140,20 @@ describe('screens (server-rendered, Thai first)', () => {
     const ownerPage = html(auth);
     expect(ownerPage).toContain(th['auth.stepUp.ownerHint']);
     expect(ownerPage).toContain('type="password"');
+    // A shared iPad must not offer to fill or save the owner's password in the step-up form.
+    expect(ownerPage).toContain('autoComplete="off"');
+    expect(ownerPage).not.toContain('autoComplete="current-password"');
+    // The code fields are not autocorrected, capitalised or spell-checked.
+    expect(ownerPage).toContain('autoCapitalize="none"');
+    expect(ownerPage).toContain('autoCorrect="off"');
+    expect(ownerPage).toContain('spellCheck="false"');
     auth.cancelStepUp();
+  });
+
+  test('the sign-in form (with the e-mail field) still lets the password manager fill', async () => {
+    const { auth } = build();
+    await auth.boot();
+    expect(html(auth)).toContain('autoComplete="current-password"');
   });
 
   test('English is complete: the same screens render in English', async () => {
