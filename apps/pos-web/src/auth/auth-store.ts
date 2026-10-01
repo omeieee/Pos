@@ -3,12 +3,13 @@
  * permissions, and whether a recent step-up is still valid. No React in here.
  *
  * What is held and where:
- * - The device token and the session token live in this module's closure only. They are not in
- *   `AuthState`, so a component cannot render, log or serialize them; only the API client reads
- *   them, through `deviceToken()` and `sessionToken()`.
- * - The device registration is stored through the platform tokenStore (long-lived). A PIN
- *   session is stored for the tab (an accidental reload does not ask for the PIN again). The
- *   owner's password session is memory only.
+ * - The device token and the session token are held in this module's closure while the app
+ *   runs. They are not in `AuthState`, so a component cannot render, log or serialize them; only
+ *   the API client reads them, through `deviceToken()` and `sessionToken()`.
+ * - They are also written to browser storage through the platform tokenStore, so they survive a
+ *   reload: the device token in localStorage, and a PIN session token in sessionStorage for the
+ *   tab. Both are therefore readable by script running on the page (the CSP restricts scripts to
+ *   our own); the owner's password session is never written anywhere.
  * - Sign-out clears the session, the role, the step-up state and the stored session. It keeps
  *   the device registration: the device stays registered and shows the PIN screen. The device
  *   is forgotten only when the server says it is gone (DEVICE_UNREGISTERED).
