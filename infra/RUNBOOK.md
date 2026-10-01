@@ -157,7 +157,7 @@ Only three things live only on the VM: the Caddy certificate, `/opt/sds/.env` (r
    3. check key expiry is disabled;
    4. `ssh pos-ts true`;
    5. remove the temporary port 22 rule.
-5. **(10 min)** Recreate `/opt/sds/.env` (SETUP 2.7) with **`API_HOST` = the new sslip name** (`a-b-c-d.sslip.io`). The other values come from your USB/text copy or are regenerated, **except `AUTH_SECRET_KEY`, which must come from the offline copy and is never regenerated** (a new key locks the owner out):
+5. **(10 min)** Recreate `/opt/sds/.env` (SETUP 2.7) with **`API_HOST` = the new sslip name** (`a-b-c-d.sslip.io`). The other values come from your USB/text copy or are regenerated, **except `AUTH_SECRET_KEY`, which must come from the offline copy and is never regenerated** (a new key breaks every staff PIN and the stored authenticator secret; see "Lost or changed AUTH_SECRET_KEY" below):
    - a new OCI Customer Secret Key is fine;
    - the DB password is unchanged.
 6. **(15 min)** Do "IP changed" below, then run **Actions → Deploy API** and **Deploy web apps**.
@@ -186,8 +186,18 @@ ssh -t deploy@sds-pos 'cd /opt/sds && ./dc run --rm --no-deps -e NODE_OPTIONS=--
 ```
 - It asks for the owner's name and password (not echoed), shows the authenticator secret and `otpauth://` link as text (add it to any authenticator app by typing the secret), and asks for a first 6-digit code **before** saving anything.
 - It then prints the one-time **recovery codes** once. Write them on paper next to the age key; they are stored only as hashes.
-- A second run is refused while an owner exists. There is no re-enrolment or reset tool yet (planned: `owner:reset`), so **do not create the real owner account until that tool exists**; after that, keep the recovery codes and the authenticator safe.
-- Needs `AUTH_SECRET_KEY` in `/opt/sds/.env` (SETUP 2.7) and the `api` image from a deploy that includes migration 0005.
+- A second run is refused while an owner exists. The owner must be 6-digit-PIN capable; keep the recovery codes and the authenticator safe.
+- Needs `AUTH_SECRET_KEY` in `/opt/sds/.env` (SETUP 2.7) and an `api` image from a deploy that includes migrations 0005-0008.
+- **Rollback floor:** recovery codes made by this version are plain SHA-256 hashes, which older images cannot verify. Once an owner exists, do not roll back below the image that introduced this (commit f766d3b or the deploy that carries the N1 rate-limit fix).
+- **Authenticator lost or replaced:** `ssh -t deploy@sds-pos 'cd /opt/sds && ./dc run --rm --no-deps -e NODE_OPTIONS=--max-old-space-size=384 api node dist/owner-reset.js'`. It asks for proof (the password, or a recovery code), re-enrols the authenticator, and prints new recovery codes once.
+- **Owner locked out** (the sign-in answers 401 even with the right password after 5 wrong tries, for 15 minutes; this is never shown on screen): wait, or run `... api node dist/owner-unlock.js` the same way. It clears only the owner's sign-in and step-up locks, not staff PIN locks.
+
+## Lost or changed AUTH_SECRET_KEY
+The key peppers every staff PIN and encrypts the owner's authenticator secret. Recovery codes do not depend on it.
+1. Symptoms: every staff PIN is refused (and climbs the lock ladder: 5 minutes, 1 hour, 24 hours), and the owner password sign-in answers 503 `SECOND_FACTOR_UNAVAILABLE` after a correct password.
+2. Put the right key back from the offline copy if you can; that fixes everything at once.
+3. If the key is truly lost: set a new key in `/opt/sds/.env` and `./dc up -d api`; run `owner-reset.js` (above) with a **recovery code** as proof; then set a new PIN for every staff member (owner, with step-up: `POST /v1/staff/{id}/pin`, which also clears their locks).
+4. Staff PIN locks are not cleared by `owner:unlock`; setting a new PIN is the remedy.
 
 ## Suspicious PromptPay ID change
 A PromptPay ID change raises an owner alert and an `audit_log` entry (CLAUDE.md rule 3). Treat any change you didn't make as an incident: **money may be going to someone else's account.**
@@ -201,7 +211,7 @@ A PromptPay ID change raises an owner alert and an `audit_log` entry (CLAUDE.md 
 5. Sign out everything: revoke all sessions and devices (sessions are database rows; ask Claude for the exact statement). **Do not rotate `AUTH_SECRET_KEY` for this**: it signs nobody out and it locks the owner out.
 
 ## Lost or stolen iPad or iPhone
-1. Owner → Settings → Devices → **Revoke** the device (step-up). (The device routes are not built yet: until they are, ask Claude to revoke it in the database.) Its token stops working immediately.
+1. Owner → Settings → Devices → **Revoke** the device (step-up; API: `GET /v1/devices`, `POST /v1/devices/{id}/revoke`; the Settings screen comes with the staff app). Its token and every session on it stop working immediately.
 2. If a staff member's PIN may be known, reset that PIN.
 3. Apple: Find My → Mark as lost / Erase.
 4. Register a replacement device from the owner account.
