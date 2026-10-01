@@ -220,14 +220,14 @@ Errors use one JSON shape: `{code, message, details}`, with Thai and English mes
 - **Transport:** HTTPS/WSS only, terminated at Cloudflare. The VM exposes no public HTTP ports; SSH is key-only and restricted (see infra doc). CORS allows only our own domains. The web apps set a strict CSP.
 - **Identities:**
   - devices: owner-registered, revocable token;
-  - staff: PIN, giving a short-lived session bound to the device;
-  - owner: password + TOTP, with step-up re-auth;
+  - staff: PIN, giving a session bound to the device (every request carries the device token; 12 h, idle 2 h);
+  - owner: password + TOTP (or a one-time recovery code), with step-up re-auth that lasts 5 minutes; owner sessions last 8 h, idle 30 min;
   - customers: LINE ID token checked with LINE's verify endpoint, giving a customer session;
   - print agent: its own device token.
 - **Roles:** owner > manager > cashier > kitchen. The permission matrix lives in `packages/shared`, and the API checks it on every route.
 - **Sensitive actions:** changing the PromptPay ID, voids and refunds after confirmation, staff or device changes, and exports all require step-up auth, are written to `audit_log`, and alert the owner.
 - **LINE webhook:** the HMAC-SHA256 signature is checked over the raw body. `webhookEventId` removes duplicates, because redelivery is on.
-- **Abuse limits:** PIN attempts (5, then a 5-minute lock); customer orders (rate limit, and at most 3 unpaid open orders per customer); webhook body size.
+- **Abuse limits:** PIN attempts (5 wrong tries lock the account for 5 minutes, then 1 hour, then 24 hours; reset by a good sign-in; the owner password sign-in locks for 15 minutes and the lock is never revealed to the caller, who sees the same 401 as for an unknown e-mail); rate buckets on the owner sign-in and step-up routes; customer orders (rate limit, and at most 3 unpaid open orders per customer); webhook body size.
 - **Data:**
   - Postgres is reachable only on the private Docker network, with a least-privilege app user;
   - backups are encrypted before upload;
