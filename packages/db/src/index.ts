@@ -4,5 +4,6 @@ export * from './audit.ts';
 export * as authRepo from './auth.ts';
 export * from './client.ts';
 export * as ordersRepo from './orders.ts';
+export * as peopleRepo from './people.ts';
 export * as schema from './schema.ts';
 export * from './settings.ts';

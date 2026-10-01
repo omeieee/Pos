@@ -80,7 +80,7 @@ export function hasFreshStepUp(principal: Principal, now: Date): boolean {
   return principal.stepUpUntil !== null && principal.stepUpUntil > now;
 }
 
-function securityAlert(
+export function securityAlert(
   ctx: AuthContext,
   kind: string,
   severity: SecurityAlertEvent['severity'],

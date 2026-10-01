@@ -1,5 +1,6 @@
 import type { Db } from '@sds/db';
 import type { FastifyInstance } from 'fastify';
+import { registerAdminRoutes } from './admin/routes.ts';
 import { deriveAuthKeys } from './auth/crypto.ts';
 import { createGuard, enforceGuardedRoutes, type GuardFactory } from './auth/guards.ts';
 import { type AuthPolicy, DEFAULT_AUTH_POLICY } from './auth/policy.ts';
@@ -55,6 +56,8 @@ export async function registerV1(app: FastifyInstance, deps: V1Deps): Promise<vo
       await v1.register((scope) => registerOrderRoutes(scope, context.auth, context.guard), {
         prefix: '/orders',
       });
+      // Device and staff management: /v1/devices and /v1/staff (no prefix of its own).
+      await v1.register((scope) => registerAdminRoutes(scope, context.auth, context.guard));
     },
     { prefix: '/v1' },
   );
