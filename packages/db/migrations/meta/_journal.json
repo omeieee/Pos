@@ -43,6 +43,13 @@
       "when": 1790843841148,
       "tag": "0005_auth_sessions",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1790847734932,
+      "tag": "0006_auth_stepup_counters",
+      "breakpoints": true
     }
   ]
 }

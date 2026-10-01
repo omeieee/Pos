@@ -254,6 +254,35 @@ type PinAttempt =
   | { kind: 'invalid'; unknownAccount?: true }
   | { kind: 'locked'; until: Date };
 
+/**
+ * Public sign-in and step-up are counted and locked apart (QA: guessing at one must not lock the
+ * other). `signin` is open to anyone with a registered device, `step_up` needs a signed-in session.
+ */
+type Track = 'signin' | 'step_up';
+
+function pinCounters(row: authRepo.StaffPinRow, track: Track) {
+  return track === 'signin'
+    ? { failed: row.failedPinCount, lockedUntil: row.lockedUntil }
+    : { failed: row.stepUpFailedCount, lockedUntil: row.stepUpLockedUntil };
+}
+
+function savePinCounters(
+  tx: Db,
+  staffId: string,
+  track: Track,
+  next: { failed: number; lockedUntil: Date | null },
+) {
+  return track === 'signin'
+    ? authRepo.setStaffPinState(tx, staffId, {
+        failedPinCount: next.failed,
+        lockedUntil: next.lockedUntil,
+      })
+    : authRepo.setStaffStepUpState(tx, staffId, {
+        stepUpFailedCount: next.failed,
+        stepUpLockedUntil: next.lockedUntil,
+      });
+}
+
 async function attemptPin(
   tx: Db,
   ctx: AuthContext,
@@ -261,16 +290,20 @@ async function attemptPin(
   row: authRepo.StaffPinRow | undefined,
   pin: string,
   where: { deviceId: string | null; ip: string | null },
+  track: Track,
 ): Promise<PinAttempt> {
   if (!row?.active || !row.pinHash) return { kind: 'invalid', unknownAccount: true };
   const now = ctx.now();
-  if (row.lockedUntil && row.lockedUntil > now) return { kind: 'locked', until: row.lockedUntil };
+  const current = pinCounters(row, track);
+  if (current.lockedUntil && current.lockedUntil > now) {
+    return { kind: 'locked', until: current.lockedUntil };
+  }
 
   // An expired lock starts the count again.
-  const earlier = row.lockedUntil ? 0 : row.failedPinCount;
+  const earlier = current.lockedUntil ? 0 : current.failed;
   if (await verifyPin(row.pinHash, pin, ctx.keys)) {
-    if (row.failedPinCount !== 0 || row.lockedUntil) {
-      await authRepo.setStaffPinState(tx, row.id, { failedPinCount: 0, lockedUntil: null });
+    if (current.failed !== 0 || current.lockedUntil) {
+      await savePinCounters(tx, row.id, track, { failed: 0, lockedUntil: null });
     }
     return { kind: 'ok' };
   }
@@ -278,22 +311,25 @@ async function attemptPin(
   const failures = earlier + 1;
   if (failures >= ctx.policy.pinMaxFailures) {
     const until = new Date(now.getTime() + seconds(ctx.policy.pinLockSeconds));
-    await authRepo.setStaffPinState(tx, row.id, { failedPinCount: failures, lockedUntil: until });
+    await savePinCounters(tx, row.id, track, { failed: failures, lockedUntil: until });
     await insertAudit(tx, {
       actorType: 'system',
       deviceId: where.deviceId,
-      action: 'auth.pin_locked',
+      action: track === 'signin' ? 'auth.pin_locked' : 'auth.pin_step_up_locked',
       entity: 'staff',
       entityId: row.id,
       after: { failedAttempts: failures, lockedUntil: until.toISOString() },
       ip: where.ip,
     });
     emit(
-      securityAlert(ctx, 'staff.pin_locked', 'warn', { staffId: row.id, deviceId: where.deviceId }),
+      securityAlert(ctx, track === 'signin' ? 'staff.pin_locked' : 'staff.step_up_locked', 'warn', {
+        staffId: row.id,
+        deviceId: where.deviceId,
+      }),
     );
     return { kind: 'locked', until };
   }
-  await authRepo.setStaffPinState(tx, row.id, { failedPinCount: failures, lockedUntil: null });
+  await savePinCounters(tx, row.id, track, { failed: failures, lockedUntil: null });
   return { kind: 'invalid' };
 }
 
@@ -305,10 +341,15 @@ export async function pinLogin(
 ): Promise<SessionResponse> {
   const outcome = await withTransaction(ctx, async (tx, emit) => {
     const row = await authRepo.lockStaffForPin(tx, input.staffId);
-    const attempt = await attemptPin(tx, ctx, emit, row, input.pin, {
-      deviceId: device.id,
-      ip: meta.ip,
-    });
+    const attempt = await attemptPin(
+      tx,
+      ctx,
+      emit,
+      row,
+      input.pin,
+      { deviceId: device.id, ip: meta.ip },
+      'signin',
+    );
     if (attempt.kind !== 'ok') return attempt;
     if (!row) throw new Error('an attempt cannot succeed without an account');
     const issued = await issueSession(tx, ctx, {
@@ -372,20 +413,54 @@ async function secondFactorAccepted(
   return { ok: false, usedRecoveryCode: false };
 }
 
+function ownerCounters(row: authRepo.OwnerLoginRow, track: Track) {
+  return track === 'signin'
+    ? { failed: row.failedLoginCount, lockedUntil: row.lockedUntil }
+    : { failed: row.stepUpFailedCount, lockedUntil: row.stepUpLockedUntil };
+}
+
+function saveOwnerCounters(
+  tx: Db,
+  staffId: string,
+  track: Track,
+  next: { failed: number; lockedUntil: Date | null },
+) {
+  return track === 'signin'
+    ? authRepo.setOwnerLoginState(tx, staffId, {
+        failedLoginCount: next.failed,
+        lockedUntil: next.lockedUntil,
+      })
+    : authRepo.setOwnerStepUpState(tx, staffId, {
+        stepUpFailedCount: next.failed,
+        stepUpLockedUntil: next.lockedUntil,
+      });
+}
+
+/**
+ * The public sign-in never reveals a lock: an e-mail that does not exist, an account that is
+ * locked and the attempt that locks it all answer "invalid" (the locked-from-the-start case also
+ * pays for a decoy hash). Step-up needs a session, so its caller may be told.
+ */
 async function attemptOwner(
   tx: Db,
   ctx: AuthContext,
   emit: Emit,
   row: authRepo.OwnerLoginRow | undefined,
   factors: OwnerFactors,
-  where: { deviceId: string | null; ip: string | null; failureAction: string },
+  where: { deviceId: string | null; ip: string | null },
+  track: Track,
 ): Promise<OwnerAttempt> {
   // Nothing to count or audit against an unknown account; the per-IP rate limit covers it.
   if (!row?.active) return { kind: 'invalid', unknownAccount: true };
   const now = ctx.now();
-  if (row.lockedUntil && row.lockedUntil > now) return { kind: 'locked', until: row.lockedUntil };
+  const current = ownerCounters(row, track);
+  if (current.lockedUntil && current.lockedUntil > now) {
+    return track === 'signin'
+      ? { kind: 'invalid', unknownAccount: true }
+      : { kind: 'locked', until: current.lockedUntil };
+  }
 
-  const earlier = row.lockedUntil ? 0 : row.failedLoginCount;
+  const earlier = current.lockedUntil ? 0 : current.failed;
   let second: Awaited<ReturnType<typeof secondFactorAccepted>> = {
     ok: false,
     usedRecoveryCode: false,
@@ -414,11 +489,8 @@ async function attemptOwner(
     return { kind: 'unavailable' };
   }
   if (second.ok) {
-    if (row.failedLoginCount !== 0 || row.lockedUntil) {
-      await authRepo.setOwnerLoginState(tx, row.staffId, {
-        failedLoginCount: 0,
-        lockedUntil: null,
-      });
+    if (current.failed !== 0 || current.lockedUntil) {
+      await saveOwnerCounters(tx, row.staffId, track, { failed: 0, lockedUntil: null });
     }
     return {
       kind: 'ok',
@@ -430,14 +502,17 @@ async function attemptOwner(
   const failures = earlier + 1;
   const locks = failures >= ctx.policy.ownerMaxFailures;
   const until = locks ? new Date(now.getTime() + seconds(ctx.policy.ownerLockSeconds)) : null;
-  await authRepo.setOwnerLoginState(tx, row.staffId, {
-    failedLoginCount: failures,
-    lockedUntil: until,
-  });
+  await saveOwnerCounters(tx, row.staffId, track, { failed: failures, lockedUntil: until });
   await insertAudit(tx, {
     actorType: 'system',
     deviceId: where.deviceId,
-    action: locks ? 'auth.owner_locked' : where.failureAction,
+    action: locks
+      ? track === 'signin'
+        ? 'auth.owner_locked'
+        : 'auth.step_up_locked'
+      : track === 'signin'
+        ? 'auth.owner_login_failed'
+        : 'auth.step_up_failed',
     entity: 'staff',
     entityId: row.staffId,
     after: { failedAttempts: failures, ...(until ? { lockedUntil: until.toISOString() } : {}) },
@@ -445,12 +520,14 @@ async function attemptOwner(
   });
   if (until) {
     emit(
-      securityAlert(ctx, 'owner.login_locked', 'critical', {
-        staffId: row.staffId,
-        deviceId: where.deviceId,
-      }),
+      securityAlert(
+        ctx,
+        track === 'signin' ? 'owner.login_locked' : 'owner.step_up_locked',
+        'critical',
+        { staffId: row.staffId, deviceId: where.deviceId },
+      ),
     );
-    return { kind: 'locked', until };
+    return track === 'signin' ? { kind: 'invalid' } : { kind: 'locked', until };
   }
   return { kind: 'invalid' };
 }
@@ -490,11 +567,15 @@ export async function ownerLogin(
   const deviceId = device?.id ?? null;
   const outcome = await withTransaction(ctx, async (tx, emit) => {
     const row = await authRepo.lockOwnerByEmail(tx, input.email);
-    const attempt = await attemptOwner(tx, ctx, emit, row, input, {
-      deviceId,
-      ip: meta.ip,
-      failureAction: 'auth.owner_login_failed',
-    });
+    const attempt = await attemptOwner(
+      tx,
+      ctx,
+      emit,
+      row,
+      input,
+      { deviceId, ip: meta.ip },
+      'signin',
+    );
     if (attempt.kind !== 'ok') return attempt;
     if (!row) throw new Error('an attempt cannot succeed without an account');
 
@@ -555,15 +636,12 @@ export async function stepUp(
     let method: string;
     if (credentials.type === 'owner') {
       const row = await authRepo.lockOwnerByStaffId(tx, principal.staffId);
-      attempt = await attemptOwner(tx, ctx, emit, row, credentials.factors, {
-        ...where,
-        failureAction: 'auth.step_up_failed',
-      });
+      attempt = await attemptOwner(tx, ctx, emit, row, credentials.factors, where, 'step_up');
       method =
         credentials.factors.recoveryCode === undefined ? 'password+totp' : 'password+recovery_code';
     } else {
       const row = await authRepo.lockStaffForPin(tx, principal.staffId);
-      attempt = await attemptPin(tx, ctx, emit, row, credentials.pin, where);
+      attempt = await attemptPin(tx, ctx, emit, row, credentials.pin, where, 'step_up');
       method = 'pin';
     }
     if (attempt.kind !== 'ok') return attempt;

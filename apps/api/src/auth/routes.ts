@@ -1,5 +1,6 @@
 import { ownerLoginInputSchema, pinLoginInputSchema, registerDeviceInputSchema } from '@sds/shared';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
+import { createGlobalLimiter, globalRateLimitHook } from '../rate-limit.ts';
 import { parse } from '../validate.ts';
 import { type GuardFactory, principalOf } from './guards.ts';
 import {
@@ -32,6 +33,21 @@ export async function registerAuthRoutes(
   ctx: AuthContext,
   guard: GuardFactory,
 ): Promise<void> {
+  const ownerBucket = globalRateLimitHook(
+    createGlobalLimiter({
+      max: ctx.policy.ownerGlobalRatePerMinute,
+      windowMs: 60_000,
+      now: ctx.now,
+    }),
+  );
+  const stepUpBucket = globalRateLimitHook(
+    createGlobalLimiter({
+      max: ctx.policy.stepUpGlobalRatePerMinute,
+      windowMs: 60_000,
+      now: ctx.now,
+    }),
+  );
+
   // Tokens and session data must never be cached by a browser or proxy.
   app.addHook('onSend', async (_request, reply) => {
     reply.header('cache-control', 'no-store');
@@ -63,15 +79,17 @@ export async function registerAuthRoutes(
     return pinLogin(ctx, device, input, meta(request));
   });
 
-  app.post('/owner', limit(10), async (request) => {
+  app.post('/owner', { onRequest: ownerBucket, ...limit(10) }, async (request) => {
     const token = deviceToken(request);
     const device = token === undefined ? null : await authenticateDevice(ctx, token);
     const input = parse(ownerLoginInputSchema, request.body);
     return ownerLogin(ctx, device, input, meta(request));
   });
 
-  app.post('/step-up', { preHandler: guard(), ...limit(10) }, async (request) =>
-    stepUp(ctx, principalOf(request), request.body, meta(request)),
+  app.post(
+    '/step-up',
+    { onRequest: stepUpBucket, preHandler: guard(), ...limit(10) },
+    async (request) => stepUp(ctx, principalOf(request), request.body, meta(request)),
   );
 
   app.get('/me', { preHandler: guard() }, async (request) => describeSession(principalOf(request)));

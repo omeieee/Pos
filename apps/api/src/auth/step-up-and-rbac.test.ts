@@ -213,7 +213,7 @@ describe('POST /v1/auth/step-up', () => {
     expect(used[0]?.after).toEqual({ remaining: 7 });
   });
 
-  test('owner: five wrong tries lock the account, and the lock also blocks signing in', async () => {
+  test('owner: five wrong tries lock step-up only; signing in is a separate lock', async () => {
     freshClock();
     const owner = await h.newOwner();
     const token = await h.ownerSession(owner);
@@ -224,8 +224,11 @@ describe('POST /v1/auth/step-up', () => {
     }
     const fifth = await stepUp(token, { password: 'nope-nope-nope', totp: '000000' });
     expect(fifth.statusCode).toBe(423);
-    expect((await h.auditRows(owner.staffId)).map((a) => a.action)).toContain('auth.owner_locked');
+    expect((await h.auditRows(owner.staffId)).map((a) => a.action)).toContain(
+      'auth.step_up_locked',
+    );
 
+    // Someone holding a session can lock step-up, but cannot lock the owner out of signing in.
     h.clock.advanceSeconds(30);
     const login = await h.app.inject({
       method: 'POST',
@@ -233,7 +236,7 @@ describe('POST /v1/auth/step-up', () => {
       payload: { email: owner.email, password: owner.password, totp: owner.totp(1) },
       remoteAddress: h.nextIp(),
     });
-    expect(login.statusCode).toBe(423);
+    expect(login.statusCode).toBe(200);
   });
 
   test('manager: re-enters the PIN; the password form is refused', async () => {
@@ -250,14 +253,14 @@ describe('POST /v1/auth/step-up', () => {
     expect((await h.probe(who.token, 'payment.void_refund')).statusCode).toBe(200);
   });
 
-  test('manager: wrong PINs share the PIN lock with signing in', async () => {
+  test('manager: wrong step-up PINs lock step-up only; signing in is a separate lock', async () => {
     freshClock();
     const device = await h.newDevice();
     const staff = await h.newStaff('manager', '4821');
     const token = await h.pinSession(device.token, staff.id, '4821');
     for (let i = 0; i < 4; i++) expect((await stepUp(token, { pin: '0000' })).statusCode).toBe(401);
     expect((await stepUp(token, { pin: '0000' })).statusCode).toBe(423);
-    // The right PIN is refused now, for step-up and for a new sign-in alike.
+    // The right PIN is refused for step-up now, but a new sign-in is a separate count.
     expect((await stepUp(token, { pin: '4821' })).statusCode).toBe(423);
     const login = await h.app.inject({
       method: 'POST',
@@ -266,7 +269,7 @@ describe('POST /v1/auth/step-up', () => {
       payload: { staffId: staff.id, pin: '4821' },
       remoteAddress: h.nextIp(),
     });
-    expect(login.statusCode).toBe(423);
+    expect(login.statusCode).toBe(200);
   });
 
   test('is per session: a second session has none, and so does a new sign-in', async () => {

@@ -205,6 +205,9 @@ export const staff = pgTable(
     active: boolean('active').notNull().default(true),
     failedPinCount: integer('failed_pin_count').notNull().default(0),
     lockedUntil: ts('locked_until'),
+    /** Step-up (a signed-in session re-entering the PIN) counts and locks apart from sign-in. */
+    stepUpFailedCount: integer('step_up_failed_count').notNull().default(0),
+    stepUpLockedUntil: ts('step_up_locked_until'),
     ...sync,
   },
   (t) => [index('staff_rev_idx').on(t.rev), check('staff_role', oneOf('role', STAFF_ROLES))],
@@ -219,6 +222,9 @@ export const ownerCredentials = pgTable('owner_credentials', {
   totpSecretEnc: text('totp_secret_enc'),
   failedLoginCount: integer('failed_login_count').notNull().default(0),
   lockedUntil: ts('locked_until'),
+  /** Step-up counts and locks apart from the public sign-in above. */
+  stepUpFailedCount: integer('step_up_failed_count').notNull().default(0),
+  stepUpLockedUntil: ts('step_up_locked_until'),
   /** Highest TOTP time step already accepted: a code is single use (RFC 6238 §5.2). */
   totpLastStep: bigint('totp_last_step', { mode: 'number' }),
   /** HMAC hashes of the unused one-time recovery codes. */

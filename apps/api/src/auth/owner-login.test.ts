@@ -139,11 +139,13 @@ describe('POST /v1/auth/owner', () => {
   test('five wrong tries lock the account for 15 minutes, with audit rows and an alert', async () => {
     await fresh();
     for (let i = 1; i <= 4; i++) expect((await login(wrong(owner))).statusCode).toBe(401);
+    // The caller is never told: the fifth answer is the same as the first four.
     const fifth = await login(wrong(owner));
-    expect(fifth.statusCode).toBe(423);
-    expect(fifth.json()).toMatchObject({
-      code: 'ACCOUNT_LOCKED',
-      details: { retryAfterSeconds: 900 },
+    expect(fifth.statusCode).toBe(401);
+    expect(fifth.json()).toEqual({
+      code: 'INVALID_CREDENTIALS',
+      message: 'Those details are not correct',
+      details: {},
     });
 
     const actions = (await h.auditRows(owner.staffId)).map((a) => a.action);
@@ -158,9 +160,11 @@ describe('POST /v1/auth/owner', () => {
       }),
     );
 
-    // Even the right credentials are refused while locked.
+    // Even the right credentials are refused while locked, in the same words.
     h.clock.advanceSeconds(60);
-    expect((await login(withTotp(owner))).statusCode).toBe(423);
+    const locked = await login(withTotp(owner));
+    expect(locked.statusCode).toBe(401);
+    expect(locked.json()).toMatchObject({ code: 'INVALID_CREDENTIALS' });
     // After the lock the owner can sign in again and the count starts over.
     h.clock.advanceSeconds(15 * 60);
     expect((await login(withTotp(owner))).statusCode).toBe(200);

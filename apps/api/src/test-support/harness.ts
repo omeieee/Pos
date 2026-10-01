@@ -142,7 +142,13 @@ export async function createHarness(
     checkDb: async () => {},
     logger: { level: 'trace', stream: { write: (line: string) => void lines.push(line) } },
   });
-  const policy = { ...DEFAULT_AUTH_POLICY, ...options.policy };
+  // The global buckets are effectively off here; their own test turns them down.
+  const policy = {
+    ...DEFAULT_AUTH_POLICY,
+    ownerGlobalRatePerMinute: 100_000,
+    stepUpGlobalRatePerMinute: 100_000,
+    ...options.policy,
+  };
   await registerV1(app, {
     db,
     authSecretKey: TEST_MASTER_KEY,

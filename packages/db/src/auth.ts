@@ -65,6 +65,8 @@ export interface StaffPinRow extends StaffPrincipalRow {
   active: boolean;
   failedPinCount: number;
   lockedUntil: Date | null;
+  stepUpFailedCount: number;
+  stepUpLockedUntil: Date | null;
 }
 
 /** Active staff who have a PIN: the tiles on the PIN screen. */
@@ -88,6 +90,8 @@ export async function lockStaffForPin(db: Db, staffId: string): Promise<StaffPin
       active: staff.active,
       failedPinCount: staff.failedPinCount,
       lockedUntil: staff.lockedUntil,
+      stepUpFailedCount: staff.stepUpFailedCount,
+      stepUpLockedUntil: staff.stepUpLockedUntil,
     })
     .from(staff)
     .where(eq(staff.id, staffId))
@@ -104,10 +108,25 @@ export async function setStaffPinState(
   await db.update(staff).set(state).where(eq(staff.id, staffId));
 }
 
+/** Step-up has its own count and lock, apart from sign-in (QA: one must not lock the other). */
+export async function setStaffStepUpState(
+  db: Db,
+  staffId: string,
+  state: { stepUpFailedCount: number; stepUpLockedUntil: Date | null },
+): Promise<void> {
+  await db.update(staff).set(state).where(eq(staff.id, staffId));
+}
+
 export async function setStaffPinHash(db: Db, staffId: string, pinHash: string): Promise<void> {
   await db
     .update(staff)
-    .set({ pinHash, failedPinCount: 0, lockedUntil: null })
+    .set({
+      pinHash,
+      failedPinCount: 0,
+      lockedUntil: null,
+      stepUpFailedCount: 0,
+      stepUpLockedUntil: null,
+    })
     .where(eq(staff.id, staffId));
 }
 
@@ -120,6 +139,8 @@ export interface OwnerLoginRow {
   totpSecretEnc: string | null;
   failedLoginCount: number;
   lockedUntil: Date | null;
+  stepUpFailedCount: number;
+  stepUpLockedUntil: Date | null;
   totpLastStep: number | null;
   recoveryCodeHashes: string[];
   displayName: string;
@@ -134,6 +155,8 @@ const ownerColumns = {
   totpSecretEnc: ownerCredentials.totpSecretEnc,
   failedLoginCount: ownerCredentials.failedLoginCount,
   lockedUntil: ownerCredentials.lockedUntil,
+  stepUpFailedCount: ownerCredentials.stepUpFailedCount,
+  stepUpLockedUntil: ownerCredentials.stepUpLockedUntil,
   totpLastStep: ownerCredentials.totpLastStep,
   recoveryCodeHashes: ownerCredentials.recoveryCodeHashes,
   displayName: staff.displayName,
@@ -194,15 +217,26 @@ export async function replaceOwnerSecondFactor(
       totpLastStep: null,
       failedLoginCount: 0,
       lockedUntil: null,
+      stepUpFailedCount: 0,
+      stepUpLockedUntil: null,
     })
     .where(eq(ownerCredentials.staffId, staffId));
 }
 
+/** Clears both locks: the public sign-in and step-up. */
 export async function clearOwnerLocks(db: Db, staffId: string): Promise<void> {
   await db
     .update(ownerCredentials)
-    .set({ failedLoginCount: 0, lockedUntil: null })
+    .set({ failedLoginCount: 0, lockedUntil: null, stepUpFailedCount: 0, stepUpLockedUntil: null })
     .where(eq(ownerCredentials.staffId, staffId));
+}
+
+export async function setOwnerStepUpState(
+  db: Db,
+  staffId: string,
+  state: { stepUpFailedCount: number; stepUpLockedUntil: Date | null },
+): Promise<void> {
+  await db.update(ownerCredentials).set(state).where(eq(ownerCredentials.staffId, staffId));
 }
 
 export async function setOwnerLoginState(

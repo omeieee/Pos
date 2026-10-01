@@ -17,6 +17,12 @@ export interface AuthPolicy {
   /** The owner's password login faces the internet, so its lock is longer. */
   ownerMaxFailures: number;
   ownerLockSeconds: number;
+  /**
+   * Ceiling on /v1/auth/owner and /v1/auth/step-up requests per minute across ALL callers,
+   * a backstop against guessing spread over many addresses.
+   */
+  ownerGlobalRatePerMinute: number;
+  stepUpGlobalRatePerMinute: number;
   /** `devices.last_seen_at` is synced to clients, so it is refreshed this rarely. */
   deviceSeenIntervalSeconds: number;
   /** `sessions.last_seen_at` (idle clock) is refreshed at most this often. */
@@ -33,6 +39,8 @@ export const DEFAULT_AUTH_POLICY: AuthPolicy = {
   pinLockSeconds: 5 * 60,
   ownerMaxFailures: 5,
   ownerLockSeconds: 15 * 60,
+  ownerGlobalRatePerMinute: 30,
+  stepUpGlobalRatePerMinute: 30,
   deviceSeenIntervalSeconds: 5 * 60,
   sessionTouchIntervalSeconds: 60,
 };

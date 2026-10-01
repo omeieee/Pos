@@ -155,6 +155,50 @@ describe('owner administration queries', () => {
   });
 });
 
+describe('step-up counters are kept apart from sign-in counters', () => {
+  test('owner: each has its own count and lock, and clearOwnerLocks clears both', async () => {
+    const { staffId, email } = await newOwner();
+    const until = new Date('2026-10-01T10:00:00Z');
+    await auth.setOwnerLoginState(db, staffId, { failedLoginCount: 2, lockedUntil: null });
+    await auth.setOwnerStepUpState(db, staffId, { stepUpFailedCount: 5, stepUpLockedUntil: until });
+    expect(await auth.lockOwnerByEmail(db, email)).toMatchObject({
+      failedLoginCount: 2,
+      lockedUntil: null,
+      stepUpFailedCount: 5,
+      stepUpLockedUntil: until,
+    });
+    await auth.clearOwnerLocks(db, staffId);
+    expect(await auth.lockOwnerByEmail(db, email)).toMatchObject({
+      failedLoginCount: 0,
+      stepUpFailedCount: 0,
+      stepUpLockedUntil: null,
+    });
+  });
+
+  test('staff: the same, and a new PIN clears both', async () => {
+    const [row] = await db
+      .insert(staff)
+      .values({ displayName: `s-${unique()}`, role: 'manager', pinHash: 'h' })
+      .returning({ id: staff.id });
+    const id = row?.id ?? '';
+    const until = new Date('2026-10-01T10:05:00Z');
+    await auth.setStaffPinState(db, id, { failedPinCount: 1, lockedUntil: null });
+    await auth.setStaffStepUpState(db, id, { stepUpFailedCount: 5, stepUpLockedUntil: until });
+    expect(await auth.lockStaffForPin(db, id)).toMatchObject({
+      failedPinCount: 1,
+      lockedUntil: null,
+      stepUpFailedCount: 5,
+      stepUpLockedUntil: until,
+    });
+    await auth.setStaffPinHash(db, id, 'new');
+    expect(await auth.lockStaffForPin(db, id)).toMatchObject({
+      failedPinCount: 0,
+      stepUpFailedCount: 0,
+      stepUpLockedUntil: null,
+    });
+  });
+});
+
 describe('staff PINs', () => {
   async function newStaff(role: 'cashier' | 'kitchen', pinHash: string | null, active = true) {
     const [row] = await db
