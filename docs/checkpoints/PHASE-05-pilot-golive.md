@@ -22,6 +22,8 @@ Run the real shop on the system safely, with trained staff and written procedure
 - [ ] SOPs printed or saved where staff can reach them; staff can run each SOP unaided
 - [ ] Security/PDPA review: no open high-severity findings
 - [ ] Soft launch: at least 7 business days with no data loss and every issue logged and triaged
+- [ ] (carried from P2) Rebuild-on-new-host procedure tested once on a second Always Free Micro VM, then the test VM **and its volume** deleted (docs/05 §3.1); Oracle Pay-As-You-Go checked in the console: account type, budget alert (about US$1), Cost Analysis at zero
+- [ ] (carried from P2) Restore drill repeated with real business data (the empty-table check was untested), and the backup bucket size checked against the 10 GB Standard allowance
 - [ ] Owner signs off go-live; P6/P8 priorities set
 
 ## As built
