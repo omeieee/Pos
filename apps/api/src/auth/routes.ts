@@ -56,7 +56,7 @@ export async function registerAuthRoutes(
   // The owner registers a device: step-up + audit + owner alert (rule 9).
   app.post(
     '/device',
-    { preHandler: guard('device.manage'), ...limit(10) },
+    { onRequest: guard('device.manage'), ...limit(10) },
     async (request, reply) => {
       const input = parse(registerDeviceInputSchema, request.body);
       const result = await registerDevice(ctx, principalOf(request), input, meta(request));
@@ -86,15 +86,13 @@ export async function registerAuthRoutes(
     return ownerLogin(ctx, device, input, meta(request));
   });
 
-  app.post(
-    '/step-up',
-    { onRequest: stepUpBucket, preHandler: guard(), ...limit(10) },
-    async (request) => stepUp(ctx, principalOf(request), request.body, meta(request)),
+  app.post('/step-up', { onRequest: [stepUpBucket, guard()], ...limit(10) }, async (request) =>
+    stepUp(ctx, principalOf(request), request.body, meta(request)),
   );
 
-  app.get('/me', { preHandler: guard() }, async (request) => describeSession(principalOf(request)));
+  app.get('/me', { onRequest: guard() }, async (request) => describeSession(principalOf(request)));
 
-  app.post('/logout', { preHandler: guard() }, async (request, reply) => {
+  app.post('/logout', { onRequest: guard() }, async (request, reply) => {
     await logout(ctx, principalOf(request));
     return reply.status(204).send();
   });

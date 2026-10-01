@@ -2,6 +2,9 @@
  * Route guard (02 §7): checks the bearer session, then the role's permission from
  * `@sds/shared`, then step-up for the sensitive ones. Every route in /v1 except the sign-in
  * routes uses it. UIs only hide what is not allowed; this is what enforces it.
+ *
+ * Routes run it as an `onRequest` hook, so it decides before Fastify reads the body: a caller who
+ * is not signed in costs no JSON parsing and cannot tell a bad body from a missing session.
  */
 import { hasPermission, type Permission, requiresStepUp } from '@sds/shared';
 import type { FastifyInstance, FastifyRequest } from 'fastify';

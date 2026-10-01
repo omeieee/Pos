@@ -26,7 +26,7 @@ export async function registerOrderRoutes(
   ctx: CoreContext,
   guard: GuardFactory,
 ): Promise<void> {
-  app.post('/', { preHandler: guard('order.create') }, async (request, reply) => {
+  app.post('/', { onRequest: guard('order.create') }, async (request, reply) => {
     const input = parse(createOrderInputSchema, request.body);
     // The idempotency key is the request id in the body. A header, if sent, must say the same.
     const header = request.headers['idempotency-key'];
@@ -44,17 +44,17 @@ export async function registerOrderRoutes(
     return reply.status(replay ? 200 : 201).send(order);
   });
 
-  app.get('/', { preHandler: guard() }, async (request) =>
+  app.get('/', { onRequest: guard() }, async (request) =>
     listOrdersForDay(ctx, parse(listOrdersQuerySchema, request.query)),
   );
 
-  app.get('/:id', { preHandler: guard() }, async (request) => getOrder(ctx, idOf(request)));
+  app.get('/:id', { onRequest: guard() }, async (request) => getOrder(ctx, idOf(request)));
 
-  app.patch('/:id', { preHandler: guard('order.create') }, async (request) =>
+  app.patch('/:id', { onRequest: guard('order.create') }, async (request) =>
     patchOrder(ctx, idOf(request), parse(patchOrderInputSchema, request.body)),
   );
 
-  app.post('/:id/transition', { preHandler: guard() }, async (request) =>
+  app.post('/:id/transition', { onRequest: guard() }, async (request) =>
     transitionOrder(
       ctx,
       principalOf(request),
@@ -63,7 +63,7 @@ export async function registerOrderRoutes(
     ),
   );
 
-  app.post('/:id/cancel', { preHandler: guard() }, async (request) => {
+  app.post('/:id/cancel', { onRequest: guard() }, async (request) => {
     const input = parse(cancelOrderInputSchema, request.body);
     return transitionOrder(ctx, principalOf(request), idOf(request), { ...input, to: 'cancelled' });
   });
