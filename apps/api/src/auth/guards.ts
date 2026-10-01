@@ -4,7 +4,7 @@
  * routes uses it. UIs only hide what is not allowed; this is what enforces it.
  */
 import { hasPermission, type Permission, requiresStepUp } from '@sds/shared';
-import type { FastifyRequest } from 'fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { forbidden, stepUpRequired, unauthenticated } from '../errors.ts';
 import {
   type AuthContext,
@@ -23,6 +23,46 @@ declare module 'fastify' {
 export type Guard = (request: FastifyRequest) => Promise<void>;
 export type GuardFactory = (permission?: Permission) => Guard;
 
+/** Marks the functions `guard()` makes, so the route inventory can tell a guard from any hook. */
+const GUARDED = Symbol.for('sds.guarded');
+
+function markGuard(fn: Guard): Guard {
+  return Object.assign(fn, { [GUARDED]: true });
+}
+
+type RouteHooks = { onRequest?: unknown; preHandler?: unknown };
+
+/** True when the route runs a `guard()` in its own `onRequest` or `preHandler` hooks. */
+export function isGuarded(route: RouteHooks): boolean {
+  return [route.onRequest, route.preHandler]
+    .flat(2)
+    .some(
+      (hook) =>
+        typeof hook === 'function' &&
+        (hook as unknown as Record<symbol, unknown>)[GUARDED] === true,
+    );
+}
+
+/**
+ * Makes "forgot the guard" a start-up failure (QA): every route declared under this scope whose
+ * path starts with /v1 must be guarded, unless it is in `open` as "METHOD /path" (HEAD counts as
+ * GET). Add the hook before declaring any route.
+ */
+export function enforceGuardedRoutes(scope: FastifyInstance, open: ReadonlySet<string>): void {
+  scope.addHook('onRoute', (route) => {
+    if (!route.url.startsWith('/v1')) return;
+    if (isGuarded(route)) return;
+    for (const method of [route.method].flat()) {
+      const key = `${method === 'HEAD' ? 'GET' : method} ${route.url}`;
+      if (!open.has(key)) {
+        throw new Error(
+          `${key} has no auth guard: add guard() to the route, or list it as an open route in v1.ts`,
+        );
+      }
+    }
+  });
+}
+
 const BEARER = /^Bearer ([A-Za-z0-9_-]{20,200})$/i;
 
 /**
@@ -31,7 +71,7 @@ const BEARER = /^Bearer ([A-Za-z0-9_-]{20,200})$/i;
  */
 export function createGuard(ctx: AuthContext): GuardFactory {
   return function guard(permission) {
-    return async (request) => {
+    return markGuard(async (request) => {
       const token = BEARER.exec(request.headers.authorization ?? '')?.[1];
       if (!token) throw unauthenticated();
       const deviceToken = request.headers['x-device-token'];
@@ -48,7 +88,7 @@ export function createGuard(ctx: AuthContext): GuardFactory {
       if (requiresStepUp(permission) && !hasFreshStepUp(principal, ctx.now())) {
         throw stepUpRequired();
       }
-    };
+    });
   };
 }
 

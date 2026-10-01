@@ -21,7 +21,7 @@ import {
   newRecoveryCodes,
   newToken,
 } from '../auth/crypto.ts';
-import { createGuard } from '../auth/guards.ts';
+import { createGuard, isGuarded } from '../auth/guards.ts';
 import { type AuthPolicy, DEFAULT_AUTH_POLICY } from '../auth/policy.ts';
 import type { AuthContext } from '../auth/service.ts';
 import { generateTotpSecret, hotp, timeStep } from '../auth/totp.ts';
@@ -95,6 +95,8 @@ export interface Harness {
   alerts: SecurityAlertEvent[];
   /** For tests that subscribe their own handler. */
   bus: EventBus;
+  /** Every route the app registered, and whether it runs the guard. */
+  routes: { method: string; url: string; guarded: boolean }[];
   /** Menu rows for order tests (built by hand: seed() holds the test PromptPay ID). */
   newMenu(): Promise<Menu>;
   /** Everything the logger wrote, as one string. */
@@ -141,6 +143,7 @@ export async function createHarness(
   // to every call, requests that carry a known PIN session get it filled in; a test that wants
   // the raw behaviour sends x-test-no-device-autofill.
   const deviceBySession = new Map<string, string>();
+  const routes: Harness['routes'] = [];
 
   const app = await buildApp({
     config: { corsOrigins: [], version: 'test' },
@@ -148,6 +151,11 @@ export async function createHarness(
     logger: { level: 'trace', stream: { write: (line: string) => void lines.push(line) } },
   });
   // The global buckets are effectively off here; their own test turns them down.
+  app.addHook('onRoute', (route) => {
+    for (const method of [route.method].flat()) {
+      routes.push({ method, url: route.url, guarded: isGuarded(route) });
+    }
+  });
   app.addHook('onRequest', async (request) => {
     if (request.headers['x-test-no-device-autofill'] !== undefined) return;
     if (request.headers['x-device-token'] !== undefined) return;
@@ -378,6 +386,7 @@ export async function createHarness(
     keys,
     events,
     alerts,
+    routes,
     bus,
     newMenu,
     logs: () => lines.join(''),
