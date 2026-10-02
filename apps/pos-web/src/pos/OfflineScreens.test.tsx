@@ -5,6 +5,7 @@ import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-libra
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import type { ApiClient } from '../api/client.ts';
 import { ApiClientError } from '../api/errors.ts';
+import type { OutboxEntry } from '../platform/localStore.ts';
 import { govCopayFrame, orderDto, paymentDto, uuid } from '../test-support/frames.ts';
 import { MENU, PLATFORM_DISH, seedPlatformDish } from '../test-support/menu-fixtures.ts';
 import { fixClock, loaded, ORDER, orderOf, setup } from '../test-support/payment-env.tsx';
@@ -304,6 +305,44 @@ describe('the orders list with orders waiting', () => {
     await settle();
     expect(screen.getByText(th['outbox.others'].replace('{count}', '1'))).toBeTruthy();
     expect(again.outbox.getState().items).toHaveLength(1);
+  });
+});
+
+describe('entries that wait for days', () => {
+  const DAY = 86_400_000;
+
+  async function reopenWith(change: (row: OutboxEntry) => OutboxEntry[]) {
+    const made = await offlineCounter();
+    await placeTeaOffline(made);
+    const row = (await made.localStore.outbox.list())[0];
+    if (!row) throw new Error('no row');
+    for (const next of change(row)) await made.localStore.outbox.put(next);
+    made.unbindOutbox();
+    cleanup();
+    const again = createTestServices({ queue: true, offline: true, localStore: made.localStore });
+    renderScreen(<OrdersScreen />, again.services);
+    await settle();
+    return again;
+  }
+
+  test('my own entry older than 3 days is flagged "old, check" and kept', async () => {
+    const again = await reopenWith((row) => [{ ...row, createdAt: Date.now() - 4 * DAY }]);
+    expect(screen.getByText(th['outbox.state.old'])).toBeTruthy();
+    expect(again.outbox.getState().items).toHaveLength(1);
+  });
+
+  test('a young entry is not flagged', async () => {
+    await reopenWith((row) => [{ ...row, createdAt: Date.now() - 1 * DAY }]);
+    expect(screen.queryByText(th['outbox.state.old'])).toBeNull();
+  });
+
+  test('entries of other people older than 14 days are purged, and only a count is shown', async () => {
+    const again = await reopenWith((row) => [
+      row,
+      { ...row, id: uuid(77), staffId: uuid(78), createdAt: Date.now() - 20 * DAY },
+    ]);
+    expect(screen.getByText(th['outbox.purged'].replace('{count}', '1'))).toBeTruthy();
+    expect(await again.localStore.outbox.count()).toBe(1);
   });
 });
 

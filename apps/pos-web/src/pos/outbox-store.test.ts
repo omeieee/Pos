@@ -3,7 +3,11 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import type { NewOrderInput } from '../api/client.ts';
 import { ApiClientError } from '../api/errors.ts';
 import { createStore } from '../lib/store.ts';
-import { createMemoryLocalStore, type LocalStore } from '../platform/localStore.ts';
+import {
+  createMemoryLocalStore,
+  type LocalStore,
+  type OutboxEntry,
+} from '../platform/localStore.ts';
 import { createEntityStore } from '../realtime/entity-store.ts';
 import { createFakeLifecycle } from '../test-support/fake-realtime.ts';
 import { FAKE_SESSION_TOKEN } from '../test-support/fixtures.ts';
@@ -649,6 +653,106 @@ describe('knowing that it is offline', () => {
     expect(outbox.isOffline()).toBe(true);
     connection.setState({ status: 'online' });
     expect(outbox.getState().offline).toBe(false);
+  });
+});
+
+describe('entries that never sync', () => {
+  const DAY = 86_400_000;
+  const row = (id: string, over: Partial<OutboxEntry> = {}): OutboxEntry => ({
+    id,
+    kind: 'order.create',
+    payload: { body, label: 'XK-01', lines, estimateSatang: 2500 },
+    createdAt: Date.now(),
+    attempts: 0,
+    state: 'queued',
+    staffId: OTHER,
+    deviceId: DEVICE,
+    ...over,
+  });
+  const cashRow = (id: string, entryId: string, over: Partial<OutboxEntry> = {}): OutboxEntry => ({
+    id,
+    kind: 'payment.cash',
+    payload: { target: { entryId }, tenderedSatang: 10000, label: 'XK-01', totalSatang: 2500 },
+    createdAt: Date.now(),
+    attempts: 0,
+    state: 'queued',
+    staffId: OTHER,
+    deviceId: DEVICE,
+    ...over,
+  });
+
+  test("on sign-in, other people's entries older than 14 days are purged, with only a count", async () => {
+    const store = persistentStore();
+    await store.outbox.put(row(uuid(10), { createdAt: Date.now() - 15 * DAY }));
+    await store.outbox.put(row(uuid(11), { createdAt: Date.now() - 13 * DAY }));
+    const { outbox } = setup({ store, online: false });
+    await settle();
+    expect((await store.outbox.list()).map((r) => r.id)).toEqual([uuid(11)]);
+    expect(outbox.getState().purgedCount).toBe(1);
+    expect(outbox.getState().othersCount).toBe(1);
+  });
+
+  test('the signed-in person’s own entries are never purged, however old', async () => {
+    const store = persistentStore();
+    await store.outbox.put(row(uuid(10), { staffId: ME, createdAt: Date.now() - 40 * DAY }));
+    const { outbox } = setup({ store, online: false });
+    await settle();
+    expect(await store.outbox.count()).toBe(1);
+    expect(outbox.getState().purgedCount).toBe(0);
+    expect(outbox.getState().items).toHaveLength(1);
+  });
+
+  test('the same person on an old device id counts as someone else and is purged when old', async () => {
+    const store = persistentStore();
+    await store.outbox.put(
+      row(uuid(10), { staffId: ME, deviceId: uuid(99), createdAt: Date.now() - 20 * DAY }),
+    );
+    const { outbox } = setup({ store, online: false });
+    await settle();
+    expect(await store.outbox.count()).toBe(0);
+    expect(outbox.getState().purgedCount).toBe(1);
+  });
+
+  test('the cash that waits for a purged order goes with it', async () => {
+    const store = persistentStore();
+    await store.outbox.put(row(uuid(10), { createdAt: Date.now() - 20 * DAY }));
+    await store.outbox.put(cashRow(uuid(11), uuid(10), { createdAt: Date.now() - 2 * DAY }));
+    const { outbox } = setup({ store, online: false });
+    await settle();
+    expect(await store.outbox.count()).toBe(0);
+    expect(outbox.getState().purgedCount).toBe(2);
+  });
+
+  test('with nobody signed in nothing is purged (whose entries are they?)', async () => {
+    const store = persistentStore();
+    await store.outbox.put(row(uuid(10), { staffId: ME, createdAt: Date.now() - 40 * DAY }));
+    setup({ store, staff: null, online: false });
+    await settle();
+    expect(await store.outbox.count()).toBe(1);
+  });
+
+  test('signing in as someone else later purges the old rows then', async () => {
+    const store = persistentStore();
+    await store.outbox.put(row(uuid(10), { staffId: ME, createdAt: Date.now() - 40 * DAY }));
+    const { signInAs, outbox } = setup({ store, staff: null, online: false });
+    await settle();
+    signInAs(OTHER);
+    await settle();
+    expect(await store.outbox.count()).toBe(0);
+    expect(outbox.getState().purgedCount).toBe(1);
+  });
+
+  test('a row that cannot be removed stays and is not counted as purged', async () => {
+    const store = persistentStore();
+    await store.outbox.put(row(uuid(10), { createdAt: Date.now() - 20 * DAY }));
+    store.outbox.remove = async () => {
+      throw new Error('blocked');
+    };
+    const { outbox } = setup({ store, online: false });
+    await settle();
+    expect(await store.outbox.count()).toBe(1);
+    expect(outbox.getState().purgedCount).toBe(0);
+    expect(outbox.getState().othersCount).toBe(1);
   });
 });
 

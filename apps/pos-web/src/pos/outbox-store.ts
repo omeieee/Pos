@@ -53,6 +53,7 @@ import {
   type PaymentPayload,
   paymentPayloadOf,
   provisionalLabel,
+  purgeableIds,
   type QueueItem,
   toQueueItems,
 } from './outbox-model.ts';
@@ -74,6 +75,8 @@ export interface OutboxState {
   items: QueueItem[];
   /** Entries on this device that belong to other people: a count, never contents. */
   othersCount: number;
+  /** Other people's entries that were older than 14 days and were removed at sign-in (a count only). */
+  purgedCount: number;
   /** Order entry id -> the server order id it became, for this run (so its page can follow). */
   synced: Readonly<Record<string, string>>;
 }
@@ -149,6 +152,7 @@ export function createOutboxStore(deps: OutboxDeps): OutboxStore {
     offline: false,
     items: [],
     othersCount: 0,
+    purgedCount: 0,
     synced: {},
   });
 
@@ -196,14 +200,37 @@ export function createOutboxStore(deps: OutboxDeps): OutboxStore {
 
   // ---------- Loading ----------
 
+  /** Removes what nobody is coming for (see `purgeableIds`); a row that cannot be removed stays. */
+  async function purgeOld(
+    opened: LocalStore,
+    all: OutboxEntry[],
+    person: Who,
+  ): Promise<{ rows: OutboxEntry[]; purged: number }> {
+    const gone = new Set<string>();
+    for (const id of purgeableIds(all, person, now())) {
+      try {
+        await opened.outbox.remove(id);
+        gone.add(id);
+      } catch {
+        // It stays, is counted with the other people's entries and is tried again at next sign-in.
+      }
+    }
+    return { rows: all.filter((r) => !gone.has(r.id)), purged: gone.size };
+  }
+
   async function load(person: Who, startedIn: number): Promise<void> {
     let rows: OutboxEntry[] = [];
     let persistent = false;
+    let purged = 0;
     try {
       const opened = await ensureStore();
       local = opened;
       persistent = opened.persistent;
-      rows = await opened.outbox.list();
+      // Inside the write lock, like every other change that reads and then writes.
+      ({ rows, purged } = await serial(async () => {
+        const all = await opened.outbox.list();
+        return purgeOld(opened, all, person);
+      }));
     } catch {
       persistent = false;
     }
@@ -213,6 +240,7 @@ export function createOutboxStore(deps: OutboxDeps): OutboxStore {
       ready: true,
       persistent,
       othersCount: rows.length - mine.length,
+      purgedCount: purged,
     });
     void pump();
   }
@@ -627,7 +655,7 @@ export function createOutboxStore(deps: OutboxDeps): OutboxStore {
     timer = null;
     running = false;
     again = false;
-    store.setState({ ready: false, items: [], othersCount: 0, synced: {} });
+    store.setState({ ready: false, items: [], othersCount: 0, purgedCount: 0, synced: {} });
   }
 
   function start(person: Who) {

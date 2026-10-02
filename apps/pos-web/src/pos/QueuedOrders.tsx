@@ -97,7 +97,7 @@ export function QueuedOrders() {
   const loose = payments.filter(
     (p) => p.dependsOn === null || !orders.some((o) => o.id === p.dependsOn),
   );
-  if (state.items.length === 0 && state.othersCount === 0) return null;
+  if (state.items.length === 0 && state.othersCount === 0 && state.purgedCount === 0) return null;
   return (
     <section className="queued" aria-labelledby="queued-title">
       {state.items.length > 0 ? (
@@ -116,6 +116,12 @@ export function QueuedOrders() {
             ))}
           </ul>
         </>
+      ) : null}
+      {state.purgedCount > 0 ? (
+        <p className="notice" role="status">
+          <Icon name="info" />
+          <span>{tr('outbox.purged', { count: state.purgedCount })}</span>
+        </p>
       ) : null}
       {state.othersCount > 0 ? (
         <p className="notice" role="status">

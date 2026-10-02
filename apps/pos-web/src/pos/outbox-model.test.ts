@@ -10,9 +10,11 @@ import {
   classifyReplayError,
   deviceCode,
   ERROR_PARENT_MISSING,
+  isOldEntry,
   orderEntry,
   ownsEntry,
   provisionalLabel,
+  purgeableIds,
   STUCK_AFTER,
   snapshotOrder,
   toQueueItems,
@@ -39,6 +41,49 @@ const payload = (label = 'XK-01') => ({
     },
   ],
   estimateSatang: 2500,
+});
+
+describe('entries that never sync', () => {
+  const DAY = 86_400_000;
+  const NOW = 1_800_000_000_000;
+  const other = { staffId: uuid(8), deviceId: uuid(2) };
+  const old = (id: string, who: typeof OWNER, daysAgo: number) =>
+    orderEntry(id, payload(), who, NOW - daysAgo * DAY);
+
+  test('an entry is "old" after 3 days', () => {
+    expect(isOldEntry(NOW - 2 * DAY, NOW)).toBe(false);
+    expect(isOldEntry(NOW - 3 * DAY - 1, NOW)).toBe(true);
+  });
+
+  test('only entries of others older than 14 days are purgeable; mine never are', () => {
+    const rows = [
+      old('a', other, 15),
+      old('b', other, 13),
+      old('c', OWNER, 30),
+      old('d', { staffId: OWNER.staffId, deviceId: uuid(9) }, 15),
+    ];
+    expect(purgeableIds(rows, OWNER, NOW).sort()).toEqual(['a', 'd']);
+  });
+
+  test('cash that waits for a purged order goes with it, but not for an order that stays', () => {
+    const rows = [
+      old('a', other, 15),
+      cashEntry(
+        'ca',
+        { target: { entryId: 'a' }, tenderedSatang: 100, label: 'X', totalSatang: 100 },
+        other,
+        NOW - 1 * DAY,
+      ),
+      old('b', other, 5),
+      cashEntry(
+        'cb',
+        { target: { entryId: 'b' }, tenderedSatang: 100, label: 'X', totalSatang: 100 },
+        other,
+        NOW - 1 * DAY,
+      ),
+    ];
+    expect(purgeableIds(rows, OWNER, NOW).sort()).toEqual(['a', 'ca']);
+  });
 });
 
 describe('the provisional label', () => {

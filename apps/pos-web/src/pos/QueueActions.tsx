@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import type { IconName } from '../app/routes.ts';
-import { useServices, useT } from '../ui/hooks.ts';
+import { useNow, useServices, useT } from '../ui/hooks.ts';
 import { Icon } from '../ui/Icon.tsx';
 import { Modal } from '../ui/Modal.tsx';
-import type { QueueItem } from './outbox-model.ts';
+import { isOldEntry, type QueueItem } from './outbox-model.ts';
 import { entryErrorText, stateKey } from './outbox-text.ts';
 
 const TONE: Record<QueueItem['state'], { tone: string; icon: IconName }> = {
@@ -13,14 +13,27 @@ const TONE: Record<QueueItem['state'], { tone: string; icon: IconName }> = {
 };
 
 /** The state of an entry: colour, icon and words together (a state is never colour alone). */
-export function QueueStateBadge({ item }: { item: Pick<QueueItem, 'state' | 'stuck'> }) {
+export function QueueStateBadge({
+  item,
+}: {
+  item: Pick<QueueItem, 'state' | 'stuck' | 'createdAt'>;
+}) {
   const tr = useT();
+  const now = useNow(60_000);
   const { tone, icon } = TONE[item.state];
   return (
-    <span className={`status status--${tone}`}>
-      <Icon name={icon} />
-      {tr(stateKey(item))}
-    </span>
+    <>
+      <span className={`status status--${tone}`}>
+        <Icon name={icon} />
+        {tr(stateKey(item))}
+      </span>
+      {isOldEntry(item.createdAt, now) ? (
+        <span className="status status--danger">
+          <Icon name="clock" />
+          {tr('outbox.state.old')}
+        </span>
+      ) : null}
+    </>
   );
 }
 

@@ -298,6 +298,43 @@ export function ownsEntry(
   return entry.staffId === who.staffId && entry.deviceId === who.deviceId;
 }
 
+// ---------- Entries that never sync ----------
+
+const DAY_MS = 86_400_000;
+/**
+ * Entries of OTHER people (or of this person on a device id that no longer exists) that are older
+ * than this have never synced and nobody is coming for them: they are purged at sign-in.
+ */
+export const PURGE_AFTER_MS = 14 * DAY_MS;
+/** The signed-in person's own entries are real orders and are never purged; after this they are flagged. */
+export const OLD_AFTER_MS = 3 * DAY_MS;
+
+export const isOldEntry = (createdAt: number, now: number): boolean =>
+  now - createdAt > OLD_AFTER_MS;
+
+/**
+ * The rows to purge for the person who just signed in: not theirs, never synced (every row is
+ * unsynced: a synced one is removed) and older than `PURGE_AFTER_MS`, plus the cash that waits for
+ * a purged order (it could never be sent). Their own rows are never in the list.
+ */
+export function purgeableIds(
+  rows: readonly OutboxEntry[],
+  who: { staffId: string; deviceId: string },
+  now: number,
+): string[] {
+  const doomed = new Set(
+    rows.filter((r) => !ownsEntry(r, who) && now - r.createdAt > PURGE_AFTER_MS).map((r) => r.id),
+  );
+  for (const row of rows) {
+    if (row.kind !== KIND_CASH || ownsEntry(row, who)) continue;
+    const payload = paymentPayloadOf(row);
+    if (payload && 'entryId' in payload.target && doomed.has(payload.target.entryId)) {
+      doomed.add(row.id);
+    }
+  }
+  return [...doomed];
+}
+
 // ---------- The provisional label ----------
 
 const CODE_CHARS = '123456789ABCDEFGHJKLMNPQRSTUVWXYZ';

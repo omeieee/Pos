@@ -474,6 +474,9 @@ export const en = {
   'outbox.state.attention': 'Needs attention',
   'outbox.state.blocked': 'Waiting for its order',
   'outbox.state.stuck': 'Tried several times, still trying',
+  'outbox.state.old': 'Waiting over 3 days: check',
+  'outbox.purged':
+    '{count} entries older than 14 days, left by other staff or a replaced device, were removed.',
   'outbox.provisional': 'Temporary number {label}',
   'outbox.section.title': 'Waiting to sync',
   'outbox.section.hint':
