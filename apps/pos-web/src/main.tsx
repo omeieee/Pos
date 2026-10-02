@@ -12,6 +12,7 @@ import './payment.css';
 import './kitchen.css';
 import './outbox.css';
 import './menu-editor.css';
+import './settings.css';
 
 const root = document.getElementById('root');
 if (!root) throw new Error('#root not found');

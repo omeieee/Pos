@@ -14,8 +14,8 @@ describe('who may open what (from the shared role permissions)', () => {
     expect(ids('manager')).toEqual(['new', 'platform', 'kitchen', 'orders', 'menu', 'settings']);
   });
 
-  test('the cashier takes orders and sees the queue; the kitchen sees the kitchen view and the queue only', () => {
-    expect(ids('cashier')).toEqual(['new', 'platform', 'kitchen', 'orders']);
+  test('the cashier takes orders, sees the queue and may look at settings; the kitchen sees the kitchen view and the queue only', () => {
+    expect(ids('cashier')).toEqual(['new', 'platform', 'kitchen', 'orders', 'settings']);
     expect(ids('kitchen')).toEqual(['kitchen', 'orders']);
   });
 
@@ -53,9 +53,26 @@ describe('resolving the address', () => {
   });
 
   test('a page the role may not open lands on the first allowed page', () => {
-    expect(resolveRoute('#/settings', cashier)?.page).toBe('new');
-    expect(resolveRoute('#/settings/menu', cashier)?.page).toBe('new');
+    expect(resolveRoute('#/settings', kitchen)?.page).toBe('kitchen');
+    expect(resolveRoute('#/settings/shop', kitchen)?.page).toBe('kitchen');
     expect(resolveRoute('#/new', kitchen)?.page).toBe('kitchen');
+  });
+
+  test('a settings section opens inside the settings page, with its name as a parameter', () => {
+    const resolved = resolveRoute('#/settings/shop', cashier);
+    expect(resolved).toMatchObject({
+      page: 'settingsSection',
+      params: { section: 'shop' },
+      path: '/settings/shop',
+    });
+    expect(resolved?.route.id).toBe('settings');
+  });
+
+  test('/settings/menu is the menu editor only for a role that may edit the menu; others get the settings section page, which says "not found" and never renders the editor', () => {
+    expect(resolveRoute('#/settings/menu', owner)?.page).toBe('menu');
+    const cashierMenu = resolveRoute('#/settings/menu', cashier);
+    expect(cashierMenu?.page).toBe('settingsSection');
+    expect(cashierMenu?.params.section).toBe('menu');
   });
 
   test('the kitchen role lands on the kitchen view, and the cashier on the new order page', () => {

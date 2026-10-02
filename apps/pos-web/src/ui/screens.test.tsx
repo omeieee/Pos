@@ -108,7 +108,8 @@ describe('screens (server-rendered, Thai first)', () => {
     expect(page).toContain(th['nav.new']);
     expect(page).toContain(th['nav.orders']);
     expect(page).not.toContain('href="#/settings/menu"');
-    expect(page).not.toContain('href="#/settings"');
+    // A cashier may look at the settings (read only), not edit the menu.
+    expect(page).toContain('href="#/settings"');
     // A cashier lands on order entry; the menu has not arrived yet.
     expect(page).toContain(th['pos.orderEntry.menuLoading']);
     // Buddhist Era year (2026 -> 2569 and later).

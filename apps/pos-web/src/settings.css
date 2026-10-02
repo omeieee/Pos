@@ -1,0 +1,71 @@
+/*
+ * Settings (the hub and its sections). Same rules as styles.css: every colour, size, space and
+ * radius comes from the --sds-* design tokens, every control is at least --tap tall, and nothing
+ * depends on hover.
+ */
+
+.sset {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sds-space-lg);
+  width: 100%;
+  max-width: 960px;
+  margin: 0 auto;
+  padding: var(--sds-space-lg) var(--sds-layout-gutter) var(--sds-space-xxl);
+}
+.sset__head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sds-space-xs);
+}
+.sset__title {
+  font-size: var(--sds-font-size-xxl);
+  font-family: var(--sds-font-display);
+  line-height: var(--sds-line-height-tight);
+}
+.sset__back {
+  align-self: flex-start;
+}
+
+/* The hub: one card per section, two columns on a wide screen, one on a phone. */
+.sset__cards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sds-space-md);
+}
+.sset__card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sds-space-xs);
+  min-height: var(--tap);
+  height: 100%;
+  padding: var(--sds-space-md) var(--sds-space-lg);
+  border: 1px solid var(--sds-color-border);
+  border-radius: var(--sds-radius-lg);
+  background: var(--sds-color-surface);
+  color: var(--sds-color-text);
+  text-decoration: none;
+}
+.sset__card:active {
+  background: var(--sds-color-surface-sunken);
+}
+.sset__card-title {
+  font-size: var(--sds-font-size-lg);
+  font-weight: var(--sds-font-weight-bold);
+}
+.sset__card-note {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sds-space-xs);
+  font-size: var(--sds-font-size-sm);
+  color: var(--sds-color-text-muted);
+}
+@media (max-width: 719px) {
+  .sset__cards {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

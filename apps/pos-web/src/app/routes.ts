@@ -41,8 +41,8 @@ export type IconName =
 /** The entries of the navigation: one per top-level page. */
 export type RouteId = 'new' | 'platform' | 'kitchen' | 'orders' | 'menu' | 'settings';
 
-/** Everything the address bar can show; `order` is a page inside `orders`. */
-export type PageId = RouteId | 'order';
+/** Everything the address bar can show; `order` is a page inside `orders`, `settingsSection` one inside `settings`. */
+export type PageId = RouteId | 'order' | 'settingsSection';
 
 export interface RouteDef {
   id: RouteId;
@@ -86,7 +86,8 @@ export const ROUTES: readonly RouteDef[] = [
     path: '/settings',
     labelKey: 'nav.settings',
     icon: 'gear',
-    permission: 'settings.edit',
+    // Anyone who may read settings gets the hub; each section inside asks for its own permission.
+    permission: 'settings.view',
   },
 ];
 
@@ -99,6 +100,8 @@ interface ParamRouteDef {
 
 const PARAM_ROUTES: readonly ParamRouteDef[] = [
   { page: 'order', pattern: '/orders/:id', parent: 'orders' },
+  // After the own paths: `/settings/menu` is the menu editor for a role that may open it.
+  { page: 'settingsSection', pattern: '/settings/:section', parent: 'settings' },
 ];
 
 /** The navigation entries a person may open. */

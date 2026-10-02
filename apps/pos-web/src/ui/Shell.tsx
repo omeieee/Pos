@@ -27,6 +27,13 @@ const MenuEditorScreen = lazy(async () => ({
   default: (await import('../menu-editor/MenuEditorScreen.tsx')).MenuEditorScreen,
 }));
 
+const SettingsHub = lazy(async () => ({
+  default: (await import('../settings/SettingsHub.tsx')).SettingsHub,
+}));
+const SettingsSectionScreen = lazy(async () => ({
+  default: (await import('../settings/SettingsSectionScreen.tsx')).SettingsSectionScreen,
+}));
+
 /**
  * The signed-in frame: top bar (shop, device, person, role, sign out), navigation limited to
  * what the role may open, and the page. Every page is a friendly placeholder for now.
@@ -51,7 +58,9 @@ export function Shell() {
     resolved?.page === 'order' ||
     resolved?.page === 'orders' ||
     resolved?.page === 'kitchen' ||
-    resolved?.page === 'menu';
+    resolved?.page === 'menu' ||
+    resolved?.page === 'settings' ||
+    resolved?.page === 'settingsSection';
 
   // A page this role may not open (or an unknown address) is replaced by the first allowed one.
   // A page with a parameter keeps its own address, so it is compared as a whole.
@@ -133,6 +142,21 @@ export function Shell() {
             }
           >
             <MenuEditorScreen />
+          </Suspense>
+        ) : null}
+        {resolved?.page === 'settings' || resolved?.page === 'settingsSection' ? (
+          <Suspense
+            fallback={
+              <p className="muted" role="status">
+                {tr('common.loading')}
+              </p>
+            }
+          >
+            {resolved.page === 'settings' ? (
+              <SettingsHub />
+            ) : (
+              <SettingsSectionScreen section={resolved.params.section ?? ''} />
+            )}
           </Suspense>
         ) : null}
         {resolved?.page === 'order' ? <OrderDetailScreen id={resolved.params.id ?? ''} /> : null}
