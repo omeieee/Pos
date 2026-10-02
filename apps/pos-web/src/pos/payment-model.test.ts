@@ -15,6 +15,7 @@ import {
   copayEstimate,
   copayVerdict,
   keyToTender,
+  localMethodOptions,
   methodOptions,
   openPayment,
   paymentActions,
@@ -130,6 +131,66 @@ describe('the methods on offer', () => {
       ]);
     });
 
+    test('PromptPay is on when the device may draw a QR from its saved ID; co-pay still needs the internet', () => {
+      const store = createEntityStore();
+      store.apply(govCopayFrame(6));
+      const list = methodOptions(order(), store.getState().settings, NOON, new Set(), false, 'ok');
+      expect(list).toEqual([
+        { method: 'cash', enabled: true },
+        { method: 'promptpay', enabled: true },
+        { method: 'gov_copay', enabled: false, reason: 'needsInternet' },
+      ]);
+    });
+
+    test.each([
+      ['none', 'qrNone'],
+      ['stale', 'qrStale'],
+      ['tooOld', 'qrTooOld'],
+    ] as const)(
+      'a saved ID that cannot be used (%s) keeps PromptPay off, with its own reason',
+      (saved, reason) => {
+        const store = createEntityStore();
+        const list = methodOptions(
+          order(),
+          store.getState().settings,
+          NOON,
+          new Set(),
+          false,
+          saved,
+        );
+        expect(list.find((m) => m.method === 'promptpay')).toEqual({
+          method: 'promptpay',
+          enabled: false,
+          reason,
+        });
+      },
+    );
+
+    test('the saved ID changes nothing online, and a Grab order is still not payable offline', () => {
+      const store = createEntityStore();
+      const online = methodOptions(
+        order(),
+        store.getState().settings,
+        NOON,
+        new Set(),
+        true,
+        'none',
+      );
+      expect(online.find((m) => m.method === 'promptpay')).toEqual({
+        method: 'promptpay',
+        enabled: true,
+      });
+      const grab = methodOptions(
+        order({ channel: 'grab', fulfillment: 'platform_delivery' }),
+        store.getState().settings,
+        NOON,
+        new Set(),
+        false,
+        'ok',
+      );
+      expect(grab[0]).toEqual({ method: 'platform', enabled: false, reason: 'needsInternet' });
+    });
+
     test('a co-pay that is unavailable for its own reason keeps that reason', () => {
       const list = offline(order({ fulfillment: 'room_delivery' }));
       expect(list.find((m) => m.method === 'gov_copay')).toEqual({
@@ -166,6 +227,26 @@ describe('the methods on offer', () => {
       );
       expect(list[0]).toEqual({ method: 'platform', enabled: false, reason: 'needsInternet' });
     });
+  });
+});
+
+describe('methods for an order that is only on the device', () => {
+  test('cash, and PromptPay only when the saved ID can be used; never co-pay', () => {
+    expect(localMethodOptions('ok')).toEqual([
+      { method: 'cash', enabled: true },
+      { method: 'promptpay', enabled: true },
+    ]);
+    expect(localMethodOptions('tooOld')[1]).toEqual({
+      method: 'promptpay',
+      enabled: false,
+      reason: 'qrTooOld',
+    });
+    expect(localMethodOptions('none')[1]).toMatchObject({ reason: 'qrNone' });
+    expect(localMethodOptions('stale')[1]).toMatchObject({ reason: 'qrStale' });
+  });
+
+  test('a role that may not read the ID is offered cash only', () => {
+    expect(localMethodOptions('forbidden')).toEqual([{ method: 'cash', enabled: true }]);
   });
 });
 

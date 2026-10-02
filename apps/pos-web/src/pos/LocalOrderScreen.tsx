@@ -1,13 +1,17 @@
 import { formatBaht } from '@sds/i18n';
 import { satang } from '@sds/shared';
-import { useLocale, useServices, useStoreState, useT } from '../ui/hooks.ts';
+import { useState } from 'react';
+import { useLocale, useNow, useServices, useStoreState, useT } from '../ui/hooks.ts';
 import { Icon } from '../ui/Icon.tsx';
 import { CashPanel } from './CashPanel.tsx';
+import { MethodTiles } from './MethodTiles.tsx';
 import { localName } from './names.ts';
+import { OfflinePromptPay } from './OfflinePromptPay.tsx';
 import type { QueuedOrder, QueuedPayment } from './outbox-model.ts';
+import { localMethodOptions, type PayMethod } from './payment-model.ts';
 import { isPlatformChannel } from './platform-model.ts';
 import { QueueActions, QueueStateBadge } from './QueueActions.tsx';
-import { QueuedCash } from './QueuedCash.tsx';
+import { QueuedPaymentView } from './QueuedPaymentView.tsx';
 
 /**
  * An order that is saved on this device and has not reached the server. It is shown from what was
@@ -16,16 +20,24 @@ import { QueuedCash } from './QueuedCash.tsx';
  * from the server after the sync, and this page then moves to the real order.
  *
  * Cash can be taken here: the keypad and the change are the usual ones, against the ESTIMATED total,
- * and the cash is saved to the outbox behind the order. PromptPay and ไทยช่วยไทย are not offered
- * until the order is on the server (they need the internet), and a platform order's payment is
- * recorded after it has synced. Status moves are not available offline.
+ * and the cash is saved to the outbox behind the order. So can PromptPay (D-20), when this device
+ * holds a PromptPay ID it may still draw a QR from: the QR is for the ESTIMATE and says so, and the
+ * payment is saved behind the order when staff say the money is in the bank app. ไทยช่วยไทย is not
+ * offered until the order is on the server, and a platform order's payment is recorded after it has
+ * synced. Status moves are not available offline.
  */
 export function LocalOrderScreen({ item }: { item: QueuedOrder }) {
-  const { outbox } = useServices();
+  const { outbox, promptpay } = useServices();
   const state = useStoreState(outbox);
+  useStoreState(promptpay);
+  // An old saved ID must stop being offered while this page stays open.
+  useNow(30_000);
   const tr = useT();
   const locale = useLocale();
   const money = (value: number) => formatBaht(value, locale);
+  const [method, setMethod] = useState<PayMethod>('cash');
+  const methods = localMethodOptions(promptpay.idStatus());
+  const choice = methods.find((m) => m.method === method && m.enabled) ? method : 'cash';
   const payment = state.items.find(
     (i): i is QueuedPayment => i.kind === 'payment' && i.dependsOn === item.id,
   );
@@ -109,7 +121,7 @@ export function LocalOrderScreen({ item }: { item: QueuedOrder }) {
           </header>
           <div className="ppanel__body">
             {payment ? (
-              <QueuedCash item={payment} />
+              <QueuedPaymentView item={payment} />
             ) : isPlatformChannel(item.channel) ? (
               <p className="notice">{tr('platform.payment.hint')}</p>
             ) : item.estimateSatang === null ? (
@@ -118,21 +130,51 @@ export function LocalOrderScreen({ item }: { item: QueuedOrder }) {
               <>
                 <p className="notice">
                   <Icon name="wifi-off" />
-                  <span>{tr('outbox.onlineOnly')}</span>
+                  <span>
+                    {tr(
+                      methods.some((m) => m.method === 'promptpay' && m.enabled)
+                        ? 'outbox.onlineOnlyCopay'
+                        : 'outbox.onlineOnly',
+                    )}
+                  </span>
                 </p>
-                <CashPanel
-                  order={{ id: item.id, totalSatang: satang(item.estimateSatang) }}
-                  queue={{
-                    estimated: true,
-                    submit: (tender) =>
-                      outbox.enqueueCash({
+                {methods.length > 1 ? (
+                  <MethodTiles
+                    options={methods}
+                    choice={choice}
+                    name="local-pay-method"
+                    onChoose={setMethod}
+                  />
+                ) : null}
+                {choice === 'promptpay' ? (
+                  <OfflinePromptPay
+                    amountSatang={item.estimateSatang}
+                    amountKind="estimate"
+                    submit={(qr) =>
+                      outbox.enqueuePromptpay({
                         target: { entryId: item.id },
-                        tenderedSatang: tender,
-                        totalSatang: item.estimateSatang,
+                        qrAmountSatang: qr.qrAmountSatang,
+                        amountKind: 'estimate',
+                        qrTargetMasked: qr.qrTargetMasked,
                         label: item.label,
-                      }),
-                  }}
-                />
+                      })
+                    }
+                  />
+                ) : (
+                  <CashPanel
+                    order={{ id: item.id, totalSatang: satang(item.estimateSatang) }}
+                    queue={{
+                      estimated: true,
+                      submit: (tender) =>
+                        outbox.enqueueCash({
+                          target: { entryId: item.id },
+                          tenderedSatang: tender,
+                          totalSatang: item.estimateSatang,
+                          label: item.label,
+                        }),
+                    }}
+                  />
+                )}
               </>
             ) : null}
           </div>

@@ -22,9 +22,11 @@ import { createSound } from '../platform/sound.ts';
 import { createMemoryTokenStore } from '../platform/tokenStore.ts';
 import { createCartStore } from '../pos/cart-store.ts';
 import type { CatalogueState } from '../pos/catalogue-cache.ts';
+import { PROMPTPAY_CACHE_KEY, type SavedPromptpay } from '../pos/offline-promptpay-model.ts';
 import { createOrderMovesStore } from '../pos/order-moves-store.ts';
 import { createOutboxStore } from '../pos/outbox-store.ts';
 import { createPaymentStore } from '../pos/payment-store.ts';
+import { createPromptpayCache } from '../pos/promptpay-cache.ts';
 import { createRecipientStore } from '../pos/recipient-store.ts';
 import type { ConnectionState } from '../realtime/connection.ts';
 import { createEntityStore } from '../realtime/entity-store.ts';
@@ -80,6 +82,11 @@ type Payments = ApiClient['payments'];
 const unexpected = (name: string) => async () => {
   throw new Error(`${name} was not expected`);
 };
+
+export interface TestPromptpay {
+  record?: SavedPromptpay;
+  fetch?: () => ReturnType<ApiClient['settings']['promptpay']>;
+}
 
 /** An API whose every call fails the test unless the test gave it an answer. */
 export function createFakeApi(
@@ -162,6 +169,12 @@ export function createTestServices(
     localStore?: LocalStore;
     /** The saved-menu notice's state (default: the menu did not come from a saved copy). */
     catalogue?: Partial<CatalogueState>;
+    /**
+     * The PromptPay ID saved on the device (D-20). `record` is already on the device when the app
+     * starts (default: nothing saved); `fetch` answers the refresh the app makes (default: no
+     * connection, so nothing changes).
+     */
+    promptpay?: TestPromptpay;
   } = {},
 ) {
   const entities = createEntityStore();
@@ -201,6 +214,34 @@ export function createTestServices(
     localStore: async () => localStore,
   });
   const unbindOutbox = outbox.bind();
+  if (options.promptpay?.record) {
+    void localStore.kv.set(PROMPTPAY_CACHE_KEY, options.promptpay.record);
+  }
+  const promptpayApi = {
+    settings: {
+      promptpay: vi.fn<ApiClient['settings']['promptpay']>(
+        options.promptpay?.fetch ??
+          (async () => {
+            throw new ApiClientError('NETWORK');
+          }),
+      ),
+    },
+  };
+  const promptpay = createPromptpayCache({
+    api: promptpayApi,
+    entities,
+    auth:
+      options.auth ??
+      createStore({
+        phase: 'signedIn' as const,
+        session: { staff: { id: IDS.cashier }, permissions: [...ROLE_PERMISSIONS.cashier] },
+        device: { id: IDS.device },
+      }),
+    connection,
+    lifecycle: life.lifecycle,
+    localStore: async () => localStore,
+  });
+  const unbindPromptpay = promptpay.bind();
   const queueDeps = options.queue ? { outbox } : {};
   const cart = createCartStore({ api: { orders: { create } }, entities, activity, ...queueDeps });
   const platformCart = createCartStore({
@@ -242,6 +283,7 @@ export function createTestServices(
     cart,
     platformCart,
     outbox,
+    promptpay,
     recipients,
     payments,
     orderMoves,
@@ -259,6 +301,9 @@ export function createTestServices(
     platformCart,
     outbox,
     unbindOutbox,
+    promptpay,
+    promptpayApi,
+    unbindPromptpay,
     localStore,
     recipients,
     payments,

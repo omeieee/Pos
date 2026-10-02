@@ -15,7 +15,7 @@ import { screen, waitFor } from '@testing-library/react';
 import { expect, vi } from 'vitest';
 import type { ApiClient } from '../api/client.ts';
 import { orderDto, paymentDto, uuid } from './frames.ts';
-import { createTestAuth, createTestServices } from './render.tsx';
+import { createTestAuth, createTestServices, type TestPromptpay } from './render.tsx';
 
 export const th = catalogs.th;
 export const en = catalogs.en;
@@ -56,6 +56,8 @@ export interface SetupOptions {
   api?: Partial<ApiClient['payments']>;
   /** The device starts offline (the outbox queues cash instead of sending it). */
   offline?: boolean;
+  /** The PromptPay ID saved on the device (see `createTestServices`). */
+  promptpay?: TestPromptpay;
 }
 
 export async function setup(options: SetupOptions = {}) {
@@ -63,6 +65,7 @@ export async function setup(options: SetupOptions = {}) {
   const env = createTestServices({
     auth,
     ...(options.offline ? { offline: true } : {}),
+    ...(options.promptpay ? { promptpay: options.promptpay } : {}),
     payments: {
       // The reload on opening the panel answers with what the store already has.
       list: async () => ({ payments: options.payments ?? [] }),

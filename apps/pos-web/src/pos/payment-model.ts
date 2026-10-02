@@ -81,7 +81,11 @@ export type CopayReason =
   | 'notAtCounter'
   | 'outsideWindow'
   /** The device is offline: this method needs the server (the QR, the platform record). */
-  | 'needsInternet';
+  | 'needsInternet'
+  /** Offline, and the saved PromptPay ID cannot be used for a QR (D-20): never saved, changed, or old. */
+  | 'qrNone'
+  | 'qrStale'
+  | 'qrTooOld';
 export type CopayVerdict = { available: true } | { available: false; reason: CopayReason };
 
 export type MethodOption =
@@ -131,15 +135,26 @@ export function copayVerdict(
  *
  * Offline (`online` false) only cash can be taken: it is queued and the server confirms it later.
  * PromptPay needs the signed QR link, ไทยช่วยไทย needs the server's scheme check, and the platform
- * payment must be confirmed after it is created; all three say "needs the internet". No QR is
- * made on the device: the PromptPay ID is masked in the feed on purpose.
+ * payment must be confirmed after it is created; all three say "needs the internet".
+ *
+ * Exception (D-20): `savedId` says whether this device holds a PromptPay ID it may draw a QR from.
+ * `'ok'` turns PromptPay on while offline (the QR is drawn locally and the payment is queued);
+ * a refusal reason keeps it off and says why. Left out (a role that may not read the ID), it is
+ * "needs the internet" as before. The scheme check stays online-only whatever this says.
  */
+const SAVED_ID_REASON = {
+  none: 'qrNone',
+  stale: 'qrStale',
+  tooOld: 'qrTooOld',
+} as const satisfies Record<'none' | 'stale' | 'tooOld', CopayReason>;
+
 export function methodOptions(
   order: Pick<OrderDto, 'channel' | 'fulfillment'>,
   settings: EntityState['settings'],
   nowMs: number,
   hidden: ReadonlySet<PayMethod>,
   online = true,
+  savedId?: 'ok' | 'none' | 'stale' | 'tooOld',
 ): MethodOption[] {
   const methods = paymentsSettingsSchema.parse(settings.get('payment_methods')?.data ?? {});
   const options: MethodOption[] = [];
@@ -164,10 +179,34 @@ export function methodOptions(
   }
   if (methods.cash && !hidden.has('cash')) options.push({ method: 'cash', enabled: true });
   if (methods.promptpay && !hidden.has('promptpay')) {
-    options.push(online ? { method: 'promptpay', enabled: true } : needsInternet('promptpay'));
+    options.push(
+      online || savedId === 'ok'
+        ? { method: 'promptpay', enabled: true }
+        : savedId === undefined
+          ? needsInternet('promptpay')
+          : { method: 'promptpay', enabled: false, reason: SAVED_ID_REASON[savedId] },
+    );
   }
   options.push(copay);
   return options;
+}
+
+/**
+ * The methods for an order that is only on this device (it has no server order yet): cash, and
+ * PromptPay when the device may draw a QR from its saved ID. A role that may not read the ID gets
+ * cash only (`forbidden`). Co-pay is not offered at all: it needs the server.
+ */
+export function localMethodOptions(
+  savedId: 'ok' | 'none' | 'stale' | 'tooOld' | 'forbidden',
+): MethodOption[] {
+  const cash: MethodOption = { method: 'cash', enabled: true };
+  if (savedId === 'forbidden') return [cash];
+  return [
+    cash,
+    savedId === 'ok'
+      ? { method: 'promptpay', enabled: true }
+      : { method: 'promptpay', enabled: false, reason: SAVED_ID_REASON[savedId] },
+  ];
 }
 
 export interface CopayEstimate {

@@ -1,12 +1,15 @@
+import { catalogs } from '@sds/i18n';
 import { promptpayPayload } from '@sds/promptpay';
 import { satang } from '@sds/shared';
 import { describe, expect, test } from 'vitest';
 import {
+  amountKindKey,
   CLOCK_BACK_TOLERANCE_MS,
   OFFLINE_QR_MAX_AGE_MS,
   offlineQr,
   PROMPTPAY_CACHE_SCHEMA,
   readSavedPromptpay,
+  refusalKey,
   type SavedPromptpay,
   savedIdRefusal,
 } from './offline-promptpay-model.ts';
@@ -49,6 +52,7 @@ describe('the QR for an amount', () => {
       ok: true,
       payload: promptpayPayload({ idType: 'phone', idValue: '0812345678' }, satang(7550)),
       last4: '5678',
+      masked: '******5678',
       savedAt: NOW - 60_000,
     });
   });
@@ -83,5 +87,18 @@ describe('reading the saved record', () => {
     expect(readSavedPromptpay({ ...saved(), staffId: '' })).toBeNull();
     expect(readSavedPromptpay('0812345678')).toBeNull();
     expect(readSavedPromptpay(undefined)).toBeNull();
+  });
+});
+
+describe('the words', () => {
+  test('every refusal and both amount kinds have a Thai and an English text', () => {
+    for (const reason of ['none', 'stale', 'tooOld', 'badAmount'] as const) {
+      expect(catalogs.th[refusalKey(reason)]).toBeTruthy();
+      expect(catalogs.en[refusalKey(reason)]).toBeTruthy();
+    }
+    for (const kind of ['estimate', 'server'] as const) {
+      expect(catalogs.th[amountKindKey(kind)]).toBeTruthy();
+      expect(catalogs.en[amountKindKey(kind)]).toBeTruthy();
+    }
   });
 });

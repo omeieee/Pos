@@ -16,6 +16,7 @@ import { Icon } from '../ui/Icon.tsx';
 import { CashPanel } from './CashPanel.tsx';
 import { GovCopaySteps } from './GovCopayPanel.tsx';
 import { MethodTiles } from './MethodTiles.tsx';
+import { OfflinePromptPay } from './OfflinePromptPay.tsx';
 import { OpenPayment } from './OpenPayment.tsx';
 import type { QueuedPayment } from './outbox-model.ts';
 import { PaymentHistory } from './PaymentHistory.tsx';
@@ -30,7 +31,7 @@ import {
   paymentsOf,
 } from './payment-model.ts';
 import { flowFor } from './payment-store.ts';
-import { QueuedCash } from './QueuedCash.tsx';
+import { QueuedPaymentView } from './QueuedPaymentView.tsx';
 import { StartPanel } from './StartPanel.tsx';
 import { VoidRefundDialog } from './VoidRefundDialog.tsx';
 
@@ -53,8 +54,9 @@ export function PaymentPanel({ orderId }: { orderId: string }) {
 }
 
 function PaymentPanelBody({ orderId }: { orderId: string }) {
-  const { payments: flow, outbox } = useServices();
+  const { payments: flow, outbox, promptpay } = useServices();
   const queue = useStoreState(outbox);
+  useStoreState(promptpay);
   const offline = queue.offline;
   const entities = useEntities();
   const flowState = useStoreState(flow);
@@ -118,9 +120,18 @@ function PaymentPanelBody({ orderId }: { orderId: string }) {
   useActivityHold(phase === 'open');
 
   if (!order) return null;
-  const options = methodOptions(order, entities.settings, now, hidden, !offline);
-  // Cash taken while offline for this order and not yet sent.
-  const queuedCash = queue.items.find(
+  // A role that may not read the PromptPay ID has no offline QR (PromptPay stays "needs the internet").
+  const idStatus = promptpay.idStatus();
+  const options = methodOptions(
+    order,
+    entities.settings,
+    now,
+    hidden,
+    !offline,
+    idStatus === 'forbidden' ? undefined : idStatus,
+  );
+  // Cash or PromptPay taken while offline for this order and not yet sent.
+  const queuedPayment = queue.items.find(
     (i): i is QueuedPayment => i.kind === 'payment' && i.orderId === order.id,
   );
   const choice = options.find((o) => o.method === selected && o.enabled)
@@ -193,16 +204,29 @@ function PaymentPanelBody({ orderId }: { orderId: string }) {
             ) : null}
           </div>
         ) : phase === 'open' ? (
-          <OpenPayment order={order} payment={waiting} hidden={hidden} onAttempt={remember} />
-        ) : queuedCash ? (
-          // Cash is already waiting to be sent: another method now would collide with it.
-          <QueuedCash item={queuedCash} />
+          <>
+            {/* The PromptPay payment was made on the server and its confirm (or the reason it was
+                held back) is still on this device. */}
+            {queuedPayment?.method === 'promptpay' ? (
+              <QueuedPaymentView item={queuedPayment} />
+            ) : null}
+            <OpenPayment order={order} payment={waiting} hidden={hidden} onAttempt={remember} />
+          </>
+        ) : queuedPayment ? (
+          // A payment is already waiting to be sent: another method now would collide with it.
+          <QueuedPaymentView item={queuedPayment} />
         ) : (
           <div className="choose">
             {offline ? (
               <p className="notice" role="status">
                 <Icon name="wifi-off" />
-                <span>{tr('outbox.onlineOnly')}</span>
+                <span>
+                  {tr(
+                    options.some((o) => o.method === 'promptpay' && o.enabled)
+                      ? 'outbox.onlineOnlyCopay'
+                      : 'outbox.onlineOnly',
+                  )}
+                </span>
               </p>
             ) : null}
             <MethodTiles
@@ -231,7 +255,24 @@ function PaymentPanelBody({ orderId }: { orderId: string }) {
               />
             ) : null}
             {choice === 'promptpay' ? (
-              <StartPanel order={order} method="promptpay" onAttempt={remember} />
+              offline && !isUnsure ? (
+                // No server: the QR is drawn here from the saved ID, for the server's last known total.
+                <OfflinePromptPay
+                  amountSatang={order.totalSatang}
+                  amountKind="server"
+                  submit={(qr) =>
+                    outbox.enqueuePromptpay({
+                      target: { orderId: order.id },
+                      qrAmountSatang: qr.qrAmountSatang,
+                      amountKind: 'server',
+                      qrTargetMasked: qr.qrTargetMasked,
+                      label: order.orderNo,
+                    })
+                  }
+                />
+              ) : (
+                <StartPanel order={order} method="promptpay" onAttempt={remember} />
+              )
             ) : null}
             {choice === 'platform' ? (
               <StartPanel order={order} method="platform" onAttempt={remember}>

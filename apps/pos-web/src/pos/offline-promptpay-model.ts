@@ -14,8 +14,9 @@
  *   otherwise be used for ever), or saved "in the future" (the clock was turned back);
  * - `badAmount`: zero, negative, not a whole number of satang or too large: no QR for it.
  */
+import type { MessageKey } from '@sds/i18n';
 import { promptpayPayload } from '@sds/promptpay';
-import { promptpaySettingsSchema, satang } from '@sds/shared';
+import { maskPromptpayId, promptpaySettingsSchema, satang } from '@sds/shared';
 import { z } from 'zod';
 
 export const PROMPTPAY_CACHE_KEY = 'promptpay.id';
@@ -56,6 +57,8 @@ export type OfflineQr =
       payload: string;
       /** The last four characters of the saved ID, for the "check the bank app" banner. */
       last4: string;
+      /** The ID masked the way the server masks it (`******5678`): what a queued payment keeps. */
+      masked: string;
       savedAt: number;
     }
   | { ok: false; reason: OfflineQrRefusal };
@@ -88,6 +91,7 @@ export function offlineQr(
       ok: true,
       payload: promptpayPayload(saved.target, satang(amountSatang)),
       last4: saved.target.idValue.slice(-4),
+      masked: maskPromptpayId(saved.target.idValue),
       savedAt: saved.savedAt,
     };
   } catch (error) {
@@ -96,3 +100,11 @@ export function offlineQr(
     throw error;
   }
 }
+
+/** The words for why a QR is not shown: always "reconnect", or what is wrong with the amount. */
+export const refusalKey = (reason: OfflineQrRefusal): MessageKey =>
+  `payment.offlineQr.refused.${reason}` as const;
+
+/** The label of the amount in the QR: an estimate from the saved menu, or the server's own total. */
+export const amountKindKey = (kind: 'estimate' | 'server'): MessageKey =>
+  `payment.offlineQr.amount.${kind}` as const;

@@ -123,14 +123,19 @@ describe('the order that is only on the device', () => {
     expect(made.getOrder).not.toHaveBeenCalled();
   });
 
-  test('offers cash only: PromptPay and ไทยช่วยไทย are not there, and it says why', async () => {
+  test('with no PromptPay ID saved on the device: cash only, PromptPay is off and says to connect once; ไทยช่วยไทย is not there', async () => {
     const made = await offlineCounter();
     const item = await placeTeaOffline(made);
     cleanup();
     renderScreen(<OrderDetailScreen id={item?.id ?? ''} />, made.services);
     expect(screen.getByText(th['outbox.onlineOnly'])).toBeTruthy();
+    const promptpay = screen.getByRole('radio', {
+      name: new RegExp(th['payment.method.promptpay']),
+    }) as HTMLInputElement;
+    expect(promptpay.disabled).toBe(true);
+    expect(screen.getByText(th['payment.copay.reason.qrNone'])).toBeTruthy();
     expect(
-      screen.queryByRole('radio', { name: new RegExp(th['payment.method.promptpay']) }),
+      screen.queryByRole('radio', { name: new RegExp(th['payment.method.gov_copay']) }),
     ).toBeNull();
     expect(screen.getByRole('button', { name: th['payment.cash.exact'] })).toBeTruthy();
   });
@@ -563,7 +568,7 @@ describe('the top bar badge', () => {
 });
 
 describe('paying an order the server has, while offline', () => {
-  test('cash stays; PromptPay and ไทยช่วยไทย are disabled with "needs the internet"', async () => {
+  test('cash stays; ไทยช่วยไทย needs the internet, and PromptPay is off until an ID is saved on the device', async () => {
     // Noon on a day inside the test scheme: co-pay would be on offer if the device were online.
     fixClock();
     const env = await setup({ offline: true, frames: [govCopayFrame(6)] });
@@ -577,7 +582,8 @@ describe('paying an order the server has, while offline', () => {
     }) as HTMLInputElement;
     expect(promptpay.disabled).toBe(true);
     expect(copay.disabled).toBe(true);
-    expect(screen.getAllByText(th['payment.copay.reason.needsInternet']).length).toBe(2);
+    expect(screen.getAllByText(th['payment.copay.reason.needsInternet']).length).toBe(1);
+    expect(screen.getByText(th['payment.copay.reason.qrNone'])).toBeTruthy();
     expect(screen.getByText(th['outbox.onlineOnly'])).toBeTruthy();
     expect(
       (

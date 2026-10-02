@@ -120,3 +120,34 @@
   flex-direction: column;
   gap: var(--sds-space-sm);
 }
+
+/* ---------- PromptPay with no connection (D-20) ---------- */
+.oqr {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sds-space-md);
+}
+/* The banner staff must read before they accept money: large, bordered, with an icon. */
+.oqr__banner {
+  background: var(--sds-color-warning-subtle);
+  color: var(--sds-color-warning-text);
+  border: 2px solid var(--sds-color-warning-text);
+  font-size: var(--sds-font-size-lg);
+  font-weight: var(--sds-font-weight-bold);
+}
+.oqr__refused {
+  background: var(--sds-color-danger-subtle);
+  color: var(--sds-color-danger-text);
+  border: 2px solid var(--sds-color-danger-text);
+  font-size: var(--sds-font-size-lg);
+}
+.oqr__amount {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+/* The picture is drawn black on white on purpose (a scanner needs the contrast), and a little
+   bigger than the staff view of the server picture because the customer scans it. */
+.oqr .qr--local {
+  width: min(100%, 320px);
+}
