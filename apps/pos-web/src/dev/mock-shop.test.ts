@@ -186,6 +186,26 @@ describe('the dev shop socket', () => {
     connection.stop();
   });
 
+  test('a LINE order can arrive by itself: a new order frame and an alert, as the API sends them', async () => {
+    const { shop } = setup();
+    const seen: unknown[] = [];
+    const handle = shop.createSocket('wss://x/v1/ws', {
+      open: () => undefined,
+      message: (text) => seen.push(JSON.parse(text)),
+      close: () => undefined,
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    handle.send(JSON.stringify({ type: 'auth', sessionToken: FAKE_SESSION_TOKEN }));
+    const order = shop.simulateIncomingOrder();
+    expect(orderDtoSchema.safeParse(order).success).toBe(true);
+    expect(order).toMatchObject({ channel: 'line', status: 'new', orderNo: 'S-001' });
+    expect(order.items.length).toBeGreaterThan(0);
+    const types = seen.slice(1).map((m) => (m as { type: string }).type);
+    expect(types).toEqual(['order.upserted', 'alert.new_order']);
+    // The next one is a different order.
+    expect(shop.simulateIncomingOrder().id).not.toBe(order.id);
+  });
+
   test('it pings, so a quiet dev session is not dropped as dead', async () => {
     const { shop } = setup();
     const seen: unknown[] = [];

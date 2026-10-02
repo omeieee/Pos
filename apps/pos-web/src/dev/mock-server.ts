@@ -357,6 +357,8 @@ export function createMockServer(options: MockServerOptions = {}) {
     fetch: mockFetch,
     /** The made-up `/v1/ws`: hand it to `createServices({ createSocket })`. */
     createSocket: shop.createSocket,
+    /** Dev: a LINE order arrives by itself (a new-order frame and an alert on every open socket). */
+    simulateIncomingOrder: shop.simulateIncomingOrder,
     calls,
     /** A device token the server accepts, as if the owner had registered it earlier. */
     issueDeviceToken(name = 'iPad ตัวอย่าง', kind: 'ipad' | 'iphone' | 'laptop' = 'ipad') {

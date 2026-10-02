@@ -12,6 +12,10 @@ export async function devBackend(): Promise<
   if (import.meta.env.DEV && import.meta.env.VITE_MOCK_API === '1') {
     const { createMockServer } = await import('./mock-server.ts');
     const server = createMockServer({ delayMs: 150 });
+    // Try the kitchen view without a second device: __sdsMock.incomingOrder() in the console.
+    Object.assign(globalThis, {
+      __sdsMock: { incomingOrder: () => server.simulateIncomingOrder() },
+    });
     return { fetch: server.fetch, createSocket: server.createSocket };
   }
   return undefined;

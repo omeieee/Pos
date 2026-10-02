@@ -402,6 +402,51 @@ export function createMockShop(options: MockShopOptions = {}) {
     return { status: 201, body: order };
   }
 
+  /**
+   * A LINE order that arrives by itself, as `new` (it waits for staff to start it), with its
+   * `alert.new_order`. Dev only: this is how the kitchen view and the sound are tried without a
+   * second device. Dishes rotate so the tickets differ.
+   */
+  let incomingSeq = 0;
+  function simulateIncomingOrder(): OrderDto {
+    const samples = [
+      {
+        fulfillment: 'room_delivery' as const,
+        roomNo: '1204',
+        note: 'ฝากไว้หน้าห้อง',
+        items: [
+          {
+            menuItemId: id(201),
+            qty: 2,
+            modifierOptionIds: [id(401), id(407), id(410)],
+            note: 'ไม่ใส่ถั่วงอก',
+          },
+          { menuItemId: id(208), qty: 1, modifierOptionIds: [] },
+        ],
+      },
+      {
+        fulfillment: 'takeaway' as const,
+        roomNo: undefined,
+        note: undefined,
+        items: [
+          { menuItemId: id(204), qty: 1, modifierOptionIds: [id(402), id(408)] },
+          { menuItemId: id(206), qty: 2, modifierOptionIds: [] },
+        ],
+      },
+    ];
+    const sample = samples[incomingSeq++ % samples.length] ?? samples[0];
+    if (!sample) throw new Error('no sample order');
+    const answer = createOrder({
+      clientRequestId: newUuid(),
+      channel: 'line',
+      fulfillment: sample.fulfillment,
+      ...(sample.roomNo ? { roomNo: sample.roomNo } : {}),
+      ...(sample.note ? { note: sample.note } : {}),
+      items: sample.items,
+    });
+    return answer.body as OrderDto;
+  }
+
   function sync(query: URLSearchParams): MockAnswer {
     const parsed = syncQuerySchema.safeParse(Object.fromEntries(query));
     if (!parsed.success) return { status: 400, body: errorBody('VALIDATION_ERROR') };
@@ -519,7 +564,7 @@ export function createMockShop(options: MockShopOptions = {}) {
     };
   };
 
-  return { handle, createSocket };
+  return { handle, createSocket, simulateIncomingOrder };
 }
 
 export type MockShop = ReturnType<typeof createMockShop>;
