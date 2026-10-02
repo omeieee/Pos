@@ -54,6 +54,12 @@ export interface EntityState {
    * older value must be rebuilt: compare this with the value you saw when you fetched it.
    */
   promptpayRev: number;
+  /**
+   * The highest rev among the rows put in by `hydrate` (a saved copy of the menu and settings).
+   * They are not "caught up to" anything, so `lastRev` is untouched; the connection compares the
+   * server's rev with this one too, to notice a server restored from a backup.
+   */
+  cachedRev: number;
 }
 
 type FamilyKey =
@@ -77,6 +83,7 @@ const emptyState = (): EntityState => ({
   settings: new Map(),
   lastRev: 0,
   promptpayRev: 0,
+  cachedRev: 0,
 });
 
 export interface EntityStore extends ReadableStore<EntityState> {
@@ -84,6 +91,12 @@ export interface EntityStore extends ReadableStore<EntityState> {
   apply(frame: RealtimeFrame): boolean;
   /** Applies frames in order and notifies once. */
   applyMany(frames: readonly RealtimeFrame[]): void;
+  /**
+   * Puts a saved copy of the menu and the settings in (start-up, before the network). Same rev rule
+   * as `apply`, but `lastRev` does not move, so the catch-up still starts as for a fresh device and
+   * brings in what was never saved (orders and payments are not taken from a saved copy at all).
+   */
+  hydrate(frames: readonly RealtimeFrame[]): void;
   /** Raises `lastRev` to the final `nextSince` of a catch-up. Never lowers it. */
   advance(rev: number): void;
   /** Forgets everything (sign-out, or a server restored from a backup). Alert listeners stay. */
@@ -101,6 +114,8 @@ export function createEntityStore(): EntityStore {
     state: EntityState;
     cloned: Set<FamilyKey>;
     changed: boolean;
+    /** A saved copy: record the rev as `cachedRev`, not `lastRev`. */
+    saved?: boolean;
   }
 
   function put(draft: Draft, family: FamilyKey, id: string, entity: unknown, rev: number): boolean {
@@ -116,7 +131,11 @@ export function createEntityStore(): EntityStore {
       draft.cloned.add(family);
     }
     (draft.state[family] as Map<string, unknown>).set(id, entity);
-    if (rev > draft.state.lastRev) draft.state = { ...draft.state, lastRev: rev };
+    if (draft.saved) {
+      if (rev > draft.state.cachedRev) draft.state = { ...draft.state, cachedRev: rev };
+    } else if (rev > draft.state.lastRev) {
+      draft.state = { ...draft.state, lastRev: rev };
+    }
     draft.changed = true;
     return true;
   }
@@ -186,6 +205,20 @@ export function createEntityStore(): EntityStore {
       return applied;
     },
     applyMany,
+    hydrate(frames) {
+      const draft: Draft = {
+        state: store.getState(),
+        cloned: new Set(),
+        changed: false,
+        saved: true,
+      };
+      for (const frame of frames) {
+        if (frame.type === 'menu.upserted' || frame.type === 'settings.updated') {
+          applyTo(draft, frame);
+        }
+      }
+      if (draft.changed) store.setState(draft.state);
+    },
     advance(rev) {
       if (rev > store.getState().lastRev) store.setState({ lastRev: rev });
     },

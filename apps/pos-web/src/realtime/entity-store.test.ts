@@ -13,6 +13,45 @@ import {
 } from '../test-support/frames.ts';
 import { createEntityStore } from './entity-store.ts';
 
+describe('hydrating from a saved copy', () => {
+  test('puts the rows in without moving lastRev, so the catch-up still starts from a fresh device', () => {
+    const store = createEntityStore();
+    store.hydrate([itemFrame(uuid(1), 40), categoryFrame(uuid(2), 50)]);
+    const state = store.getState();
+    expect(state.items.has(uuid(1))).toBe(true);
+    expect(state.categories.has(uuid(2))).toBe(true);
+    expect(state.lastRev).toBe(0);
+    expect(state.cachedRev).toBe(50);
+  });
+
+  test('a saved copy never beats a newer row and a newer row replaces it', () => {
+    const store = createEntityStore();
+    store.apply(itemFrame(uuid(1), 90, { nameTh: 'ใหม่' }));
+    store.hydrate([itemFrame(uuid(1), 40, { nameTh: 'เก่า' })]);
+    expect(store.getState().items.get(uuid(1))?.nameTh).toBe('ใหม่');
+    const other = createEntityStore();
+    other.hydrate([itemFrame(uuid(1), 40, { nameTh: 'เก่า' })]);
+    other.apply(itemFrame(uuid(1), 41, { nameTh: 'ใหม่' }));
+    expect(other.getState().items.get(uuid(1))?.nameTh).toBe('ใหม่');
+    expect(other.getState().lastRev).toBe(41);
+  });
+
+  test('reset forgets it, including the saved revision', () => {
+    const store = createEntityStore();
+    store.hydrate([itemFrame(uuid(1), 40)]);
+    store.reset();
+    expect(store.getState().items.size).toBe(0);
+    expect(store.getState().cachedRev).toBe(0);
+  });
+
+  test('orders, payments and customers are never taken from a saved copy', () => {
+    const store = createEntityStore();
+    store.hydrate([orderFrame(uuid(3), 60), paymentFrame(uuid(4), uuid(3), 61)]);
+    expect(store.getState().orders.size).toBe(0);
+    expect(store.getState().payments.size).toBe(0);
+  });
+});
+
 describe('the rev rule', () => {
   test('a frame is applied only when its rev is newer than the stored one', () => {
     const store = createEntityStore();

@@ -230,7 +230,9 @@ export function createConnection(deps: ConnectionDeps): Connection {
       readyTimer = undefined;
       phase = 'catchup';
       armDeadTimer();
-      if (message.serverRev < deps.entities.getState().lastRev) deps.entities.reset();
+      // A saved copy of the menu counts too: behind it means a server restored from a backup.
+      const held = deps.entities.getState();
+      if (message.serverRev < Math.max(held.lastRev, held.cachedRev)) deps.entities.reset();
       void catchUp(attempt);
       return;
     }

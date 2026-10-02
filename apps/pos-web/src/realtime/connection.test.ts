@@ -422,3 +422,20 @@ describe('stop', () => {
     expect(env.connection.getState().status).toBe('idle');
   });
 });
+
+describe('a saved copy of the menu', () => {
+  test('does not shorten the catch-up: a fresh device still asks from 0', async () => {
+    const env = setup();
+    env.entities.hydrate([itemFrame(uuid(1), 5000)]);
+    await bringOnline(env, 5200);
+    expect(env.fetchSync.mock.calls[0]?.[0].since).toBe(0);
+  });
+
+  test('is dropped when the server is behind it (a restored backup)', async () => {
+    const env = setup();
+    env.entities.hydrate([itemFrame(uuid(1), 5000)]);
+    await bringOnline(env, 120);
+    expect(env.entities.getState().items.size).toBe(0);
+    expect(env.fetchSync.mock.calls[0]?.[0].since).toBe(0);
+  });
+});
