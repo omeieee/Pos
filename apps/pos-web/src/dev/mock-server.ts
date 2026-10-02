@@ -347,6 +347,8 @@ export function createMockServer(options: MockServerOptions = {}) {
     const method = (init?.method ?? 'GET').toUpperCase();
     const body = typeof init?.body === 'string' ? JSON.parse(init.body) : undefined;
     calls.push({ method, path: url.pathname });
+    // No network: what a browser does when it cannot reach the server.
+    if (shop.isOffline()) throw new TypeError('Failed to fetch');
     if (options.delayMs) await new Promise((resolve) => setTimeout(resolve, options.delayMs));
     const injected = options.intercept?.({ method, path: url.pathname, body });
     if (injected) return injected;
@@ -359,6 +361,11 @@ export function createMockServer(options: MockServerOptions = {}) {
     createSocket: shop.createSocket,
     /** Dev: a LINE order arrives by itself (a new-order frame and an alert on every open socket). */
     simulateIncomingOrder: shop.simulateIncomingOrder,
+    /** Dev and tests: the network goes away or comes back (requests fail like a lost connection). */
+    setOffline: shop.setOffline,
+    /** Dev: change prices or sell a dish out on the server only, as if done while a counter was offline. */
+    bumpPrices: shop.bumpPrices,
+    soldOut: shop.soldOut,
     calls,
     /** A device token the server accepts, as if the owner had registered it earlier. */
     issueDeviceToken(name = 'iPad ตัวอย่าง', kind: 'ipad' | 'iphone' | 'laptop' = 'ipad') {

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { createMockServer, MOCK_STAFF } from './dev/mock-server.ts';
+import { createMemoryLocalStore, type LocalStore } from './platform/localStore.ts';
 import type { SoundPlayer } from './platform/sound.ts';
 import { createMemoryTokenStore } from './platform/tokenStore.ts';
 import { createServices } from './services.ts';
@@ -23,7 +24,11 @@ const fakeSound = () => {
   return sound;
 };
 
-async function signedIn(role: 'cashier' | 'kitchen', sound = fakeSound()) {
+async function signedIn(
+  role: 'cashier' | 'kitchen',
+  sound = fakeSound(),
+  localStore?: () => Promise<LocalStore>,
+) {
   const server = createMockServer();
   const tokens = createMemoryTokenStore();
   await tokens.saveDevice(server.issueDeviceToken());
@@ -34,6 +39,7 @@ async function signedIn(role: 'cashier' | 'kitchen', sound = fakeSound()) {
     createSocket: server.createSocket,
     lifecycle: createFakeLifecycle().lifecycle,
     sound,
+    ...(localStore ? { localStore } : {}),
   });
   const unbind = services.bindRealtime();
   await services.auth.boot();
@@ -78,5 +84,51 @@ describe('the new-order sound', () => {
       data: { ...frame.data, createdOnDeviceId: deviceId ?? null },
     });
     expect(sound.play).not.toHaveBeenCalled();
+  });
+});
+
+describe('the offline outbox', () => {
+  const persistent = () => ({ ...createMemoryLocalStore(), persistent: true });
+
+  test('the local store is opened once for the outbox and anything else that needs it', async () => {
+    const store = persistent();
+    let opened = 0;
+    const { services } = await signedIn('cashier', fakeSound(), async () => {
+      opened += 1;
+      return store;
+    });
+    await vi.waitFor(() => expect(services.outbox.getState().ready).toBe(true));
+    expect(opened).toBe(1);
+  });
+
+  test('sign-out keeps what is waiting on the device and forgets it on screen', async () => {
+    const store = persistent();
+    const { services } = await signedIn('cashier', fakeSound(), async () => store);
+    await vi.waitFor(() => expect(services.outbox.getState().ready).toBe(true));
+    const saved = await services.outbox.enqueueOrder({
+      clientRequestId: uuid(40),
+      body: {
+        channel: 'storefront',
+        fulfillment: 'entrance_delivery',
+        deliveryBuilding: 'B1',
+        recipientName: 'Fah',
+        items: [{ menuItemId: uuid(41), qty: 1, modifierOptionIds: [] }],
+      },
+      lines: [],
+      estimateSatang: null,
+    });
+    expect(saved.ok).toBe(true);
+    await services.auth.signOut();
+    expect(await store.outbox.count()).toBe(1);
+    expect(services.outbox.getState().items).toHaveLength(0);
+  });
+
+  test('sign-out empties both carts', async () => {
+    const { services } = await signedIn('cashier', fakeSound(), async () => persistent());
+    services.cart.addItem({ itemId: uuid(41) });
+    services.platformCart.setPlatformRef('GF-1');
+    await services.auth.signOut();
+    expect(services.cart.getState().lines).toHaveLength(0);
+    expect(services.platformCart.getState().platformRef).toBe('');
   });
 });

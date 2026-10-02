@@ -143,7 +143,7 @@ const OPTIONS = [
 
 type ItemSeed = Omit<
   ItemDto,
-  'rev' | 'channelPrices' | 'descriptionTh' | 'descriptionEn' | 'imageUrl' | 'archived' | 'version'
+  'rev' | 'descriptionTh' | 'descriptionEn' | 'imageUrl' | 'archived' | 'version'
 >;
 
 const item = (
@@ -160,7 +160,9 @@ const item = (
   nameEn,
   priceSatang: satang(price),
   isAvailable: true,
-  channels: ['storefront', 'line', 'grab'],
+  // Sold on both delivery platforms, each at its own price (฿5 and ฿7 more than in the shop).
+  channels: ['storefront', 'line', 'grab', 'lineman'],
+  channelPrices: { grab: satang(price + 500), lineman: satang(price + 700) },
   modifierGroupIds: [],
   sort: n,
   ...over,
@@ -204,7 +206,16 @@ export function createMockShop(options: MockShopOptions = {}) {
   const latest = new Map<string, SyncChange>();
   const orders = new Map<string, OrderDto>();
   const byRequest = new Map<string, OrderDto>();
+  /** What each request id carried, so a reused id with another body is refused like the server does. */
+  const requestBodies = new Map<string, string>();
   let orderSeq = 0;
+  /**
+   * Dev only: changes the server's prices and availability WITHOUT telling any client (no frame), as
+   * if the owner edited the menu while a counter was offline. The order the offline counter saved is
+   * then refused, or its cash comes up short, when it syncs.
+   */
+  const silent = { priceBump: 0, soldOut: new Set<string>() };
+  let offline = false;
   let uuidCounter = 5000 + seed++;
   const newUuid = () => id(++uuidCounter);
 
@@ -259,7 +270,6 @@ export function createMockShop(options: MockShopOptions = {}) {
           descriptionTh: null,
           descriptionEn: null,
           imageUrl: null,
-          channelPrices: {},
           archived: false,
           version: 1,
           rev: r,
@@ -310,13 +320,18 @@ export function createMockShop(options: MockShopOptions = {}) {
           id: i.id,
           nameTh: i.nameTh,
           nameEn: i.nameEn,
-          priceSatang: i.priceSatang,
+          priceSatang: satang(i.priceSatang + silent.priceBump),
           estCostSatang: ZERO,
-          isAvailable: i.isAvailable,
+          isAvailable: i.isAvailable && !silent.soldOut.has(i.id),
           archived: false,
           categoryActive: true,
           channels: i.channels,
-          channelPrices: {},
+          channelPrices: Object.fromEntries(
+            Object.entries(i.channelPrices).map(([channel, price]) => [
+              channel,
+              satang(Number(price) + silent.priceBump),
+            ]),
+          ),
           groups: i.modifierGroupIds.flatMap((gid) => {
             const group = groups.get(gid);
             return group ? [group] : [];
@@ -395,8 +410,15 @@ export function createMockShop(options: MockShopOptions = {}) {
   function createOrder(body: unknown): MockAnswer {
     const input = createOrderInputSchema.safeParse(body);
     if (!input.success) return { status: 400, body: errorBody('VALIDATION_ERROR') };
-    const existing = byRequest.get(input.data.clientRequestId);
-    if (existing) return { status: 200, body: existing };
+    const { clientRequestId, ...content } = input.data;
+    const fingerprint = JSON.stringify(content);
+    const existing = byRequest.get(clientRequestId);
+    if (existing) {
+      // The same id with another body is a client bug, not a retry (the real server hashes it).
+      return requestBodies.get(clientRequestId) === fingerprint
+        ? { status: 200, body: existing }
+        : { status: 409, body: errorBody('IDEMPOTENCY_KEY_REUSED') };
+    }
 
     // Like the server: only entrance deliveries (and platform orders for their channels), and
     // only to a building on the list.
@@ -480,7 +502,8 @@ export function createMockShop(options: MockShopOptions = {}) {
       })),
     };
     orders.set(order.id, order);
-    byRequest.set(input.data.clientRequestId, order);
+    byRequest.set(clientRequestId, order);
+    requestBodies.set(clientRequestId, fingerprint);
     publish({ type: 'order.upserted', id: order.id, rev: r, data: order });
     const alert: RealtimeFrame = {
       type: 'alert.new_order',
@@ -638,6 +661,11 @@ export function createMockShop(options: MockShopOptions = {}) {
   /** A WebSocket that behaves like `/v1/ws`: auth first, `ready`, pushes, a ping every 25 s. */
   const createSocket: SocketFactory = (_url, handlers) => {
     const socket: OpenSocket = { handlers, ready: false, timer: undefined };
+    // No network: the socket never opens (the client sees an abnormal close and backs off).
+    if (offline) {
+      queueMicrotask(() => handlers.close(1006));
+      return { send: () => undefined, close: () => undefined };
+    }
     sockets.add(socket);
     queueMicrotask(() => handlers.open());
     const end = (code: number) => {
@@ -670,7 +698,35 @@ export function createMockShop(options: MockShopOptions = {}) {
     };
   };
 
-  return { handle, createSocket, simulateIncomingOrder };
+  /** Dev: the network goes away (every open socket drops, new ones never open) or comes back. */
+  function setOffline(on: boolean) {
+    offline = on;
+    if (!on) return;
+    for (const socket of [...sockets]) {
+      clearInterval(socket.timer);
+      sockets.delete(socket);
+      socket.handlers.close(1006);
+    }
+  }
+
+  return {
+    handle,
+    createSocket,
+    simulateIncomingOrder,
+    setOffline,
+    isOffline: () => offline,
+    /** Dev: every price rises by this many satang on the server only. */
+    bumpPrices(satangMore: number) {
+      silent.priceBump = satangMore;
+    },
+    /** Dev: a dish sells out on the server only (by its position in the menu, 1 to 10). */
+    soldOut(itemNumber: number, on = true) {
+      const itemId = ITEMS[itemNumber - 1]?.id;
+      if (!itemId) return;
+      if (on) silent.soldOut.add(itemId);
+      else silent.soldOut.delete(itemId);
+    },
+  };
 }
 
 export type MockShop = ReturnType<typeof createMockShop>;

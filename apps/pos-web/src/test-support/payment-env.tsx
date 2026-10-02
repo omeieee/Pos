@@ -54,12 +54,15 @@ export interface SetupOptions {
   payments?: PaymentDto[];
   frames?: RealtimeFrame[];
   api?: Partial<ApiClient['payments']>;
+  /** The device starts offline (the outbox queues cash instead of sending it). */
+  offline?: boolean;
 }
 
 export async function setup(options: SetupOptions = {}) {
   const { auth, stepUp } = await createTestAuth(options.role ?? 'cashier');
   const env = createTestServices({
     auth,
+    ...(options.offline ? { offline: true } : {}),
     payments: {
       // The reload on opening the panel answers with what the store already has.
       list: async () => ({ payments: options.payments ?? [] }),
