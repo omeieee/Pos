@@ -144,6 +144,11 @@ export interface MenuEditorStore extends ReadableStore<MenuEditorState> {
 /** Codes that mean "this row is not where you thought": read the menu again. */
 const STALE_CODES: readonly string[] = ['VERSION_CONFLICT', 'REORDER_SET_MISMATCH'];
 
+/** The `pending` key of one row, and of one list being reordered: screens disable a control while it is in. */
+export const rowKey = (id: string) => `row:${id}`;
+export const reorderKey = (kind: ReorderKind, parentId: string | undefined) =>
+  `reorder:${kind}:${parentId ?? ''}`;
+
 const initial = (): MenuEditorState => ({ status: 'idle', error: null, costs: null, pending: [] });
 
 const categoryFrame = (c: CategoryDto): RealtimeFrame => ({
@@ -314,8 +319,6 @@ export function createMenuEditorStore(deps: MenuEditorDeps): MenuEditorStore {
     deps.entities.applyMany(frames);
   }
 
-  const rowKey = (id: string) => `row:${id}`;
-
   return {
     getState: store.getState,
     subscribe: store.subscribe,
@@ -468,7 +471,7 @@ export function createMenuEditorStore(deps: MenuEditorDeps): MenuEditorStore {
         if (expectedVersion === undefined) return { ok: false, reason: 'stale' };
         order.push({ id, expectedVersion });
       }
-      const key = `reorder:${kind}:${parentId ?? ''}`;
+      const key = reorderKey(kind, parentId);
       const outcome = await run(
         key,
         () =>

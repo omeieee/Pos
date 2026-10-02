@@ -9,6 +9,7 @@ import { ApiClientError } from './api/errors.ts';
 import { resetRoute } from './app/navigate.ts';
 import { type AuthStore, createAuthStore } from './auth/auth-store.ts';
 import { type Activity, createActivity } from './lib/activity.ts';
+import { createMenuEditorStore, type MenuEditorStore } from './menu-editor/menu-editor-store.ts';
 import {
   type AppUpdates,
   createAppUpdates,
@@ -17,6 +18,7 @@ import {
 import { apiBaseUrl } from './platform/config.ts';
 import { type Lifecycle, webLifecycle } from './platform/lifecycle.ts';
 import { type LocalStore, openLocalStore } from './platform/localStore.ts';
+import { createWebPhotoEngine } from './platform/photo.ts';
 import { webServiceWorker } from './platform/serviceWorker.ts';
 import { createWebSocket, type SocketFactory, socketUrl } from './platform/socket.ts';
 import { createSound, type SoundPlayer } from './platform/sound.ts';
@@ -63,6 +65,11 @@ export interface Services {
   recipients: RecipientStore;
   /** The payment calls of the order page: guarded, idempotent, kept across pages. */
   payments: PaymentStore;
+  /**
+   * The menu editor (Settings): online only, reads archived rows and, for `report.view`, the costs,
+   * which live in this store's memory and nowhere else.
+   */
+  menuEditor: MenuEditorStore;
   /** The status moves of an order (order page and kitchen view): guarded, reconciled, epoch-safe. */
   orderMoves: OrderMovesStore;
   /** The chime for a new order and its remembered on/off choice (a platform seam). */
@@ -171,6 +178,13 @@ export function createServices(
   const recipients = createRecipientStore({ api, entities });
   const payments = createPaymentStore({ api, entities, activity, auth });
   const orderMoves = createOrderMovesStore({ api, entities });
+  const menuEditor = createMenuEditorStore({
+    api,
+    entities,
+    lifecycle,
+    canSeeCosts: () => auth.getState().session?.permissions.includes('report.view') ?? false,
+    photoEngine: createWebPhotoEngine(),
+  });
   const updates = createAppUpdates({
     host: options.serviceWorker ?? webServiceWorker,
     lifecycle: options.lifecycle ?? webLifecycle,
@@ -205,6 +219,7 @@ export function createServices(
     recipients,
     payments,
     orderMoves,
+    menuEditor,
     sound,
     wakeLock,
     lifecycle,
@@ -221,6 +236,7 @@ export function createServices(
           recipients.reset();
           payments.reset();
           orderMoves.reset();
+          menuEditor.reset();
           // The next person lands on their own first page, not on the one the last person left.
           resetRoute();
         },

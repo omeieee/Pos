@@ -1,6 +1,7 @@
 import { formatDate } from '@sds/i18n';
 import { useEffect, useState } from 'react';
 import { allowedRoutes, pathFromHash, resolveRoute } from '../app/routes.ts';
+import { MenuEditorScreen } from '../menu-editor/MenuEditorScreen.tsx';
 import { KitchenScreen } from '../pos/KitchenScreen.tsx';
 import { OrderDetailScreen } from '../pos/OrderDetailScreen.tsx';
 import { OrderEntryScreen } from '../pos/OrderEntryScreen.tsx';
@@ -45,7 +46,8 @@ export function Shell() {
     resolved?.page === 'platform' ||
     resolved?.page === 'order' ||
     resolved?.page === 'orders' ||
-    resolved?.page === 'kitchen';
+    resolved?.page === 'kitchen' ||
+    resolved?.page === 'menu';
 
   // A page this role may not open (or an unknown address) is replaced by the first allowed one.
   // A page with a parameter keeps its own address, so it is compared as a whole.
@@ -118,6 +120,7 @@ export function Shell() {
         {resolved?.page === 'platform' ? <OrderEntryScreen mode="platform" /> : null}
         {resolved?.page === 'orders' ? <OrdersScreen /> : null}
         {resolved?.page === 'kitchen' ? <KitchenScreen /> : null}
+        {resolved?.page === 'menu' ? <MenuEditorScreen /> : null}
         {resolved?.page === 'order' ? <OrderDetailScreen id={resolved.params.id ?? ''} /> : null}
         {route && resolved && !full ? (
           <section className="coming-soon">
