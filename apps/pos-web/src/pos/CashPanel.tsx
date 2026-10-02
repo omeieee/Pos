@@ -125,6 +125,26 @@ export function CashPanel({
               </>
             )}
           </div>
+          {unsure ? (
+            <p className="error" role="alert">
+              {tr('payment.unsure')}
+            </p>
+          ) : failure ? (
+            <p className="error" role="alert">
+              {errorText(tr, failure, 'payment')}
+            </p>
+          ) : null}
+
+          <button
+            type="button"
+            className="btn btn-success btn-lg btn-block"
+            disabled={sending || !view.canConfirm}
+            aria-busy={sending}
+            onClick={() => void confirm()}
+          >
+            <Icon name="check-circle" />
+            {confirmLabel}
+          </button>
         </div>
         <fieldset className="keypad">
           <legend className="visually-hidden">{tr('payment.cash.keypad')}</legend>
@@ -158,27 +178,6 @@ export function CashPanel({
           </button>
         </fieldset>
       </div>
-
-      {unsure ? (
-        <p className="error" role="alert">
-          {tr('payment.unsure')}
-        </p>
-      ) : failure ? (
-        <p className="error" role="alert">
-          {errorText(tr, failure, 'payment')}
-        </p>
-      ) : null}
-
-      <button
-        type="button"
-        className="btn btn-success btn-lg btn-block"
-        disabled={sending || !view.canConfirm}
-        aria-busy={sending}
-        onClick={() => void confirm()}
-      >
-        <Icon name="check-circle" />
-        {confirmLabel}
-      </button>
     </section>
   );
 }

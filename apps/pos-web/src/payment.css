@@ -513,3 +513,8 @@ fieldset.methods {
   background: var(--sds-color-brand);
   color: var(--sds-color-on-brand);
 }
+
+/* The staff view of the QR is smaller; the customer view has the big one. */
+.qrbox .qr {
+  width: min(100%, 240px);
+}
