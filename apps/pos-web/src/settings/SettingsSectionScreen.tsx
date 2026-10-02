@@ -4,6 +4,7 @@ import { DeliveryForm } from './DeliveryForm.tsx';
 import { HoursForm } from './HoursForm.tsx';
 import { NumberingForm } from './NumberingForm.tsx';
 import { PaymentsForm } from './PaymentsForm.tsx';
+import { PromptpayForm } from './PromptpayForm.tsx';
 import { SettingSection } from './SettingSection.tsx';
 import { ShopForm } from './ShopForm.tsx';
 import { type SectionDef, sectionById } from './sections.ts';
@@ -50,6 +51,12 @@ function SectionBody({ def, editable }: { def: SectionDef; editable: boolean }) 
       return (
         <SettingSection name="delivery" editable={editable}>
           {(p) => <DeliveryForm {...p} />}
+        </SettingSection>
+      );
+    case 'promptpay':
+      return (
+        <SettingSection name="promptpay" editable={editable}>
+          {(p) => <PromptpayForm {...p} />}
         </SettingSection>
       );
     default:

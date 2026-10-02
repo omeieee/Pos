@@ -58,6 +58,10 @@ export async function createTestAuth(role: StaffRole = 'cashier') {
     if (pin !== STEP_UP_PIN) throw new ApiClientError('INVALID_CREDENTIALS', { status: 401 });
     return { stepUpUntil: new Date(Date.now() + 5 * 60_000).toISOString() };
   });
+  // The owner's step-up (password plus a code): the fake accepts any factors.
+  const stepUpOwner = vi.fn(async () => ({
+    stepUpUntil: new Date(Date.now() + 5 * 60_000).toISOString(),
+  }));
   const api = {
     auth: {
       listStaff: async () => ({ staff: [] }),
@@ -71,6 +75,7 @@ export async function createTestAuth(role: StaffRole = 'cashier') {
         permissions: [...ROLE_PERMISSIONS[role]],
       }),
       stepUpStaff: stepUp,
+      stepUpOwner,
       logout: async () => undefined,
     },
   } as unknown as ReturnType<typeof createApiClient>;
@@ -78,7 +83,7 @@ export async function createTestAuth(role: StaffRole = 'cashier') {
   await auth.boot();
   const result = await auth.signInWithPin(IDS.cashier, '1234');
   if (!result.ok) throw new Error('the test sign-in failed');
-  return { auth, stepUp };
+  return { auth, stepUp, stepUpOwner };
 }
 
 type Orders = ApiClient['orders'];

@@ -22,6 +22,8 @@ import type {
   OpeningHoursPatchInput,
   PaymentsPatchInput,
   PaymentsSettings,
+  PromptpayMasked,
+  PromptpayPatchInput,
   ShopPatchInput,
   ShopSettings,
 } from '@sds/shared';
@@ -38,6 +40,8 @@ export interface SettingsResources {
   numbering: { value: BusinessDaySettings; input: NumberingPatchInput };
   payments: { value: PaymentsSettings; input: PaymentsPatchInput };
   delivery: { value: DeliverySettings; input: DeliveryPatchInput };
+  /** Masked, always: the ID in clear never reaches the store (the client reduces it). */
+  promptpay: { value: PromptpayMasked | null; input: PromptpayPatchInput };
 }
 export type ResourceName = keyof SettingsResources;
 export type ValueOf<K extends ResourceName> = SettingsResources[K]['value'];
@@ -106,6 +110,7 @@ const initial = (): SettingsState => ({
     numbering: emptySlot(),
     payments: emptySlot(),
     delivery: emptySlot(),
+    promptpay: emptySlot(),
   },
   pending: [],
 });
@@ -144,6 +149,8 @@ export function createSettingsStore(deps: SettingsDeps): SettingsStore {
     numbering: resource(s.numbering),
     payments: resource(s.payments),
     delivery: resource(s.deliveryList),
+    // Owner only, and the step-up comes first.
+    promptpay: resource(s.promptpayMasked, true),
   };
 
   const putSlot = <K extends ResourceName>(name: K, slot: Slot<ValueOf<K>>) =>

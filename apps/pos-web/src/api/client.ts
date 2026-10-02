@@ -38,6 +38,7 @@ import {
   itemDtoSchema,
   listOrdersQuerySchema,
   listOrdersResponseSchema,
+  maskPromptpayId,
   menuCostsResponseSchema,
   numberingPatchInputSchema,
   openingHoursPatchInputSchema,
@@ -60,6 +61,7 @@ import {
   paymentsPatchInputSchema,
   paymentsSettingsSchema,
   pinLoginInputSchema,
+  promptpayPatchInputSchema,
   promptpaySettingsSchema,
   publicMenuQuerySchema,
   publicMenuResponseSchema,
@@ -746,6 +748,42 @@ export function createApiClient(options: ApiClientOptions) {
     };
   }
 
+  /**
+   * The PromptPay ID as the settings screen sees it: masked, and nothing else. The server answers
+   * (and echoes a change) with the ID in clear, so it is reduced here, before anything returns: no
+   * screen, store or log can hold what this function never hands out. `save` is the one place a
+   * full ID travels, from the person's own typing to the request.
+   */
+  const promptpayMasked = (() => {
+    const path = '/v1/settings/promptpay';
+    const schema = settingResponseSchema(promptpaySettingsSchema.nullable());
+    const reduce = (answer: z.output<typeof schema>) => ({
+      value:
+        answer.value === null
+          ? null
+          : { idType: answer.value.idType, idMasked: maskPromptpayId(answer.value.idValue) },
+      version: answer.version,
+      rev: answer.rev,
+      updatedAt: answer.updatedAt,
+    });
+    return {
+      read: async () =>
+        reduce((await get({ path, schema, session: true, device: 'optional' })).data),
+      save: async (body: z.input<typeof promptpayPatchInputSchema>) =>
+        reduce(
+          (
+            await patch({
+              path,
+              body: checked(promptpayPatchInputSchema, body),
+              schema,
+              session: true,
+              device: 'optional',
+            })
+          ).data,
+        ),
+    };
+  })();
+
   const settings = {
     shop: settingsResource('shop', shopSettingsSchema, shopPatchInputSchema),
     openingHours: settingsResource(
@@ -755,6 +793,7 @@ export function createApiClient(options: ApiClientOptions) {
     ),
     numbering: settingsResource('numbering', businessDaySettingsSchema, numberingPatchInputSchema),
     payments: settingsResource('payments', paymentsSettingsSchema, paymentsPatchInputSchema),
+    promptpayMasked,
     /** The buildings list as an editor reads and replaces it (PUT). */
     deliveryList: settingsResource(
       'delivery',

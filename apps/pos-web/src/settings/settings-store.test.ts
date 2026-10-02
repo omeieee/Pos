@@ -2,7 +2,7 @@ import { DEFAULT_SHOP_SETTINGS } from '@sds/shared';
 import { describe, expect, test, vi } from 'vitest';
 import type { ApiClient } from '../api/client.ts';
 import { ApiClientError } from '../api/errors.ts';
-import { createSettingsStore } from './settings-store.ts';
+import { createSettingsStore, type SettingsDeps } from './settings-store.ts';
 
 const NOW = '2026-10-03T03:00:00.000Z';
 const answer = <V>(value: V, version: number) => ({
@@ -158,5 +158,70 @@ describe('save', () => {
     release();
     expect(await pending).toEqual({ ok: false, reason: 'stale' });
     expect(store.getState().slots.shop).toMatchObject({ status: 'idle', loaded: null });
+  });
+});
+
+describe('the PromptPay ID (sensitive: a step-up comes first)', () => {
+  const masked = { idType: 'phone' as const, idMasked: '******1234' };
+  const input = { expectedVersion: 2, idType: 'phone' as const, idValue: '0899990000' };
+
+  function promptpayEnv(runSensitive: SettingsDeps['auth']['runSensitive']) {
+    const promptpay = {
+      read: vi.fn(async () => answer(masked, 2)),
+      save: vi.fn(async () => answer({ idType: 'phone' as const, idMasked: '******0000' }, 3)),
+    };
+    const unused = { read: vi.fn(), save: vi.fn() };
+    const store = createSettingsStore({
+      api: {
+        settings: {
+          shop: unused,
+          openingHours: unused,
+          numbering: unused,
+          payments: unused,
+          deliveryList: unused,
+          promptpayMasked: promptpay,
+        } as unknown as ApiClient['settings'],
+      },
+      lifecycle: { isOnline: () => true },
+      auth: { runSensitive },
+    });
+    return { store, promptpay };
+  }
+
+  test('the change runs inside the step-up, and the saved value held is masked', async () => {
+    let asked = 0;
+    const { store, promptpay } = promptpayEnv(async (call) => {
+      asked += 1;
+      return { ok: true as const, value: await call() };
+    });
+    const outcome = await store.save('promptpay', input);
+    expect(asked).toBe(1);
+    expect(outcome).toMatchObject({ ok: true });
+    expect(promptpay.save).toHaveBeenCalledWith(input);
+    expect(store.getState().slots.promptpay.loaded).toEqual({
+      value: { idType: 'phone', idMasked: '******0000' },
+      version: 3,
+    });
+    // Nothing the store holds contains the ID that was typed.
+    expect(JSON.stringify(store.getState())).not.toContain('0899990000');
+  });
+
+  test('a step-up the person closes is "cancelled": nothing is sent and no error is shown', async () => {
+    const { store, promptpay } = promptpayEnv(async () => ({ ok: false as const, error: null }));
+    expect(await store.save('promptpay', input)).toEqual({ ok: false, reason: 'cancelled' });
+    expect(promptpay.save).not.toHaveBeenCalled();
+    expect(store.getState().pending).toEqual([]);
+  });
+
+  test('a refusal the server gives is reported with its code', async () => {
+    const { store } = promptpayEnv(async () => ({
+      ok: false as const,
+      error: new ApiClientError('FORBIDDEN', { status: 403 }),
+    }));
+    expect(await store.save('promptpay', input)).toMatchObject({
+      ok: false,
+      reason: 'error',
+      refreshed: false,
+    });
   });
 });

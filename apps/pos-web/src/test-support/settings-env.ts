@@ -13,7 +13,13 @@ import type { ApiClient } from '../api/client.ts';
 type Settings = ApiClient['settings'];
 export type FakeResource = { read: (...a: never[]) => unknown; save: (...a: never[]) => unknown };
 export type SettingsOverrides = {
-  [K in 'shop' | 'openingHours' | 'numbering' | 'payments' | 'deliveryList']?: Partial<Settings[K]>;
+  [K in
+    | 'shop'
+    | 'openingHours'
+    | 'numbering'
+    | 'payments'
+    | 'deliveryList'
+    | 'promptpayMasked']?: Partial<Settings[K]>;
 };
 
 const NOW = '2026-10-03T03:00:00.000Z';
@@ -33,6 +39,7 @@ const DEFAULT_READS = {
   numbering: { cutoffMinutes: 240, timeZone: 'Asia/Bangkok' },
   payments: { cash: true, promptpay: true, platform: true, other: false },
   deliveryList: DEFAULT_DELIVERY_SETTINGS,
+  promptpayMasked: { idType: 'phone', idMasked: '******1234' },
 } as const;
 
 export function createFakeSettingsApi(overrides: SettingsOverrides = {}) {

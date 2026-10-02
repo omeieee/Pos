@@ -9,6 +9,7 @@ import {
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, test } from 'vitest';
 import { ApiClientError } from '../api/errors.ts';
+import { settingsFrame } from '../test-support/frames.ts';
 import { createTestAuth, createTestServices, renderScreen } from '../test-support/render.tsx';
 import type { SettingsOverrides } from '../test-support/settings-env.ts';
 import { settingAnswer } from '../test-support/settings-env.ts';
@@ -111,6 +112,35 @@ describe('shop details', () => {
     // The typed phone was not carried over: the form starts again from the latest values.
     expect((screen.getByLabelText(tr('settings.shop.phone')) as HTMLInputElement).value).toBe('');
     expect(env.settingsApi.shop.save).toHaveBeenCalledTimes(1);
+  });
+
+  test('a newer version from another device is announced, and loaded only when the person chooses', async () => {
+    let reads = 0;
+    const env = await open('shop', {
+      settingsApi: {
+        shop: {
+          read: async () => {
+            reads += 1;
+            return settingAnswer(
+              { ...DEFAULT_SHOP_SETTINGS, nameTh: reads === 1 ? 'ร้านเดิม' : 'ร้านใหม่' },
+              reads === 1 ? 1 : 2,
+            );
+          },
+        },
+      },
+    });
+    await screen.findByDisplayValue('ร้านเดิม');
+    expect(screen.queryByText(tr('settings.changedElsewhere'))).toBeNull();
+    // The same version arriving again (our own save echoed back) says nothing.
+    env.entities.apply(settingsFrame('shop', 60, 1));
+    expect(screen.queryByText(tr('settings.changedElsewhere'))).toBeNull();
+    env.entities.apply(settingsFrame('shop', 70, 2));
+    expect(await screen.findByText(tr('settings.changedElsewhere'))).toBeTruthy();
+    // Nothing was replaced under the form.
+    expect(screen.getByDisplayValue('ร้านเดิม')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: tr('settings.reload') }));
+    expect(await screen.findByDisplayValue('ร้านใหม่')).toBeTruthy();
+    expect(screen.queryByText(tr('settings.changedElsewhere'))).toBeNull();
   });
 
   test('offline: says so, reads nothing, and Save is off', async () => {

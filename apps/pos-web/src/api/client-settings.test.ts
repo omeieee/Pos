@@ -117,3 +117,56 @@ describe('settings writes', () => {
     ]);
   });
 });
+
+// A made-up ID (the dev shop's), never a real account.
+const MADE_UP_ID = '0800001234';
+
+describe('the PromptPay ID is only ever shown masked', () => {
+  test('a read keeps the type and the masked form, and nothing else of the ID', async () => {
+    const { api, calls } = clientWith(() => answer({ idType: 'phone', idValue: MADE_UP_ID }, 4));
+    const read = await api.settings.promptpayMasked.read();
+    expect(read.value).toEqual({ idType: 'phone', idMasked: '******1234' });
+    expect(read.version).toBe(4);
+    expect(JSON.stringify(read)).not.toContain(MADE_UP_ID);
+    expect(calls[0]).toMatchObject({ method: 'GET', url: `${BASE}/v1/settings/promptpay` });
+  });
+
+  test('no ID saved yet reads as null', async () => {
+    const { api } = clientWith(() => answer(null, 0));
+    expect((await api.settings.promptpayMasked.read()).value).toBeNull();
+  });
+
+  test('a change sends the whole new ID once, and the answer comes back masked', async () => {
+    const { api, calls } = clientWith(() => answer({ idType: 'phone', idValue: '0899990000' }, 5));
+    const saved = await api.settings.promptpayMasked.save({
+      expectedVersion: 4,
+      idType: 'phone',
+      idValue: '0899990000',
+    });
+    expect(calls[0]).toMatchObject({ method: 'PATCH', url: `${BASE}/v1/settings/promptpay` });
+    expect(bodyOf(calls[0])).toEqual({
+      expectedVersion: 4,
+      idType: 'phone',
+      idValue: '0899990000',
+    });
+    expect(saved.value).toEqual({ idType: 'phone', idMasked: '******0000' });
+    expect(JSON.stringify(saved)).not.toContain('0899990000');
+  });
+
+  test('an ID of the wrong shape never reaches the network', async () => {
+    const { api, calls } = clientWith(() => answer(null, 0));
+    await expect(
+      api.settings.promptpayMasked.save({ expectedVersion: 1, idType: 'phone', idValue: '12345' }),
+    ).rejects.toMatchObject({ code: 'REQUEST_INVALID' });
+    expect(calls).toHaveLength(0);
+  });
+
+  test('a refusal carries only its code: the ID is in no error', async () => {
+    const { api } = clientWith(() => apiError(403, 'STEP_UP_REQUIRED'));
+    const error = await api.settings.promptpayMasked
+      .save({ expectedVersion: 1, idType: 'phone', idValue: MADE_UP_ID })
+      .catch((e: unknown) => e as Error);
+    expect(error).toMatchObject({ code: 'STEP_UP_REQUIRED' });
+    expect(JSON.stringify(error) + String((error as Error).message)).not.toContain(MADE_UP_ID);
+  });
+});
