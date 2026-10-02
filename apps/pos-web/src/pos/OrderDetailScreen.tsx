@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { errorText, isApiClientError } from '../api/errors.ts';
 import { useAuthState, useEntities, useLocale, useServices, useT } from '../ui/hooks.ts';
 import { Icon } from '../ui/Icon.tsx';
+import { deliveryLabel } from './delivery-model.ts';
 import { localName } from './names.ts';
 import { OrderMoves } from './OrderMoves.tsx';
 import { PaymentPanel } from './PaymentPanel.tsx';
@@ -90,6 +91,7 @@ export function OrderDetailScreen({ id }: { id: string }) {
   }
 
   const role = auth.session?.staff.role;
+  const to = deliveryLabel(order);
 
   return (
     <section className="odetail odetail--wide" aria-labelledby="order-title">
@@ -110,6 +112,12 @@ export function OrderDetailScreen({ id }: { id: string }) {
           {order.roomNo ? ` · ${tr('order.detail.room', { room: order.roomNo })}` : ''}
           {` · ${formatDate(order.placedAt, locale, 'dateTime')}`}
         </p>
+        {to ? (
+          <p className="odetail__to">
+            <strong>{to.headline}</strong>
+            {to.note ? <span className="muted"> {to.note}</span> : null}
+          </p>
+        ) : null}
         {order.status === 'cancelled' && order.cancelReason ? (
           <p className="muted">{tr('order.cancel.reasonShown', { reason: order.cancelReason })}</p>
         ) : null}

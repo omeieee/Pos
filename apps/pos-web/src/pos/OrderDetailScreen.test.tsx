@@ -103,6 +103,24 @@ describe('the order page', () => {
     expect(screen.getAllByText('฿65.00').length).toBeGreaterThan(0);
   });
 
+  test('says where the order goes: building and name, and the other details apart from the kitchen note', async () => {
+    const env = await setup({
+      order: withItems({
+        fulfillment: 'entrance_delivery',
+        roomNo: null,
+        deliveryBuilding: 'B1',
+        recipientName: 'Fah ตัวอย่าง',
+        deliveryNote: 'ชั้น 3',
+      }),
+    });
+    renderScreen(<OrderDetailScreen id={ID} />, env.services);
+    expect(screen.getByText(/B1 · Fah ตัวอย่าง/)).toBeTruthy();
+    expect(screen.getByText(/ชั้น 3/)).toBeTruthy();
+    expect(
+      screen.getByText(th['pos.orderEntry.fulfilment.entrance_delivery'], { exact: false }),
+    ).toBeTruthy();
+  });
+
   test('has a way back to the orders list', async () => {
     const { services } = await setup({ order: withItems() });
     renderScreen(<OrderDetailScreen id={ID} />, services);

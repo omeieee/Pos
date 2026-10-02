@@ -160,6 +160,12 @@ fieldset.ksound {
   background: var(--sds-color-accent-subtle);
   color: var(--sds-color-accent-text);
 }
+/* The other details of the recipient, readable from across the counter, under the building and name. */
+.kcard__serve-note {
+  flex-basis: 100%;
+  font-size: var(--sds-font-size-lg);
+  font-weight: var(--sds-font-weight-medium);
+}
 .kcard__lines {
   list-style: none;
   margin: 0;

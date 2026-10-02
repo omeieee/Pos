@@ -3,6 +3,7 @@ import { ORDER_NO_PREFIX, type OrderDto } from '@sds/shared';
 import { useState } from 'react';
 import { useEntities, useLocale, useNow, useServices, useStoreState, useT } from '../ui/hooks.ts';
 import { Icon } from '../ui/Icon.tsx';
+import { deliveryLabel } from './delivery-model.ts';
 import { elapsedText } from './elapsed-text.ts';
 import {
   type BoardFilter,
@@ -23,6 +24,7 @@ function OrderCard({ order, now }: { order: OrderDto; now: number }) {
   const locale = useLocale();
   const waiting = (WAITING as readonly string[]).includes(order.status);
   const attention = order.paymentStatus === 'awaiting_confirmation' && order.status !== 'cancelled';
+  const to = deliveryLabel(order);
   return (
     <li>
       <a className={`ocard${attention ? ' ocard--attention' : ''}`} href={`#/orders/${order.id}`}>
@@ -34,6 +36,12 @@ function OrderCard({ order, now }: { order: OrderDto; now: number }) {
           <span className="ocard__no">{order.orderNo}</span>
           <span className="ocard__total money">{formatBaht(order.totalSatang, locale)}</span>
         </span>
+        {to ? (
+          <span className="ocard__to">
+            <span className="ocard__where">{to.headline}</span>
+            {to.note ? <span className="ocard__note muted small">{to.note}</span> : null}
+          </span>
+        ) : null}
         <span className="ocard__meta muted small">
           {tr(`pos.orderEntry.fulfilment.${order.fulfillment}`)}
           {order.roomNo ? ` · ${tr('order.detail.room', { room: order.roomNo })}` : ''}

@@ -131,6 +131,19 @@
   font-weight: var(--sds-font-weight-bold);
   font-size: var(--sds-font-size-lg);
 }
+/* Where the order goes: "B1 · Fah", with the other details under it. */
+.ocard__to {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.ocard__where {
+  font-weight: var(--sds-font-weight-bold);
+  overflow-wrap: anywhere;
+}
+.ocard__note {
+  overflow-wrap: anywhere;
+}
 .ocard__badges {
   display: flex;
   flex-wrap: wrap;

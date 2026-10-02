@@ -136,6 +136,28 @@ describe('the tickets', () => {
     expect(within(card).getByText(/ห่อกลับ ใส่ถุงสองใบ/)).toBeTruthy();
   });
 
+  test('show where an entrance delivery goes: building and name large, the other details with them', async () => {
+    await mount({
+      orders: [
+        ticket(1, {
+          fulfillment: 'entrance_delivery',
+          deliveryBuilding: 'B1',
+          recipientName: 'Fah ตัวอย่าง',
+          deliveryNote: 'ชั้น 3 เสื้อแดง',
+          note: 'ไม่เผ็ด',
+        }),
+      ],
+    });
+    const card = await waitFor(() => ticketOf('L-001'));
+    const where = card.querySelector('.kcard__serve-where') as HTMLElement;
+    expect(where.textContent).toBe('B1 · Fah ตัวอย่าง');
+    expect(within(card).getByText('ชั้น 3 เสื้อแดง')).toBeTruthy();
+    expect(within(card).getByText(th['pos.orderEntry.fulfilment.entrance_delivery'])).toBeTruthy();
+    // The kitchen note is still its own thing.
+    expect(within(card).getByText(/ไม่เผ็ด/)).toBeTruthy();
+    expect(card.textContent).not.toMatch(/฿|\d+\.\d\d/);
+  });
+
   test('show where it goes: the way it is served, and the room for a delivery', async () => {
     await mount({
       orders: [
@@ -392,8 +414,22 @@ describe('ready, waiting for hand-over', () => {
     await mount({
       orders: [
         ticket(1),
-        ticket(2, { status: 'ready', readyAt: ago(9), orderNo: 'L-002' }),
-        ticket(3, { status: 'ready', readyAt: ago(2), orderNo: 'L-003' }),
+        ticket(2, {
+          status: 'ready',
+          readyAt: ago(9),
+          orderNo: 'L-002',
+          fulfillment: 'entrance_delivery',
+          deliveryBuilding: 'A2',
+          recipientName: 'Nok',
+        }),
+        ticket(3, {
+          status: 'ready',
+          readyAt: ago(2),
+          orderNo: 'L-003',
+          fulfillment: 'entrance_delivery',
+          deliveryBuilding: 'B1',
+          recipientName: 'Fah',
+        }),
       ],
     });
     await waitFor(() => ticketOf('L-001'));
@@ -407,6 +443,11 @@ describe('ready, waiting for hand-over', () => {
     const rows = [...document.querySelectorAll('.kready .kready__no')].map((e) => e.textContent);
     // The longest waiting first.
     expect(rows).toEqual(['L-002', 'L-003']);
+    const serve = [...document.querySelectorAll('.kready .kready__serve')].map(
+      (e) => e.textContent,
+    );
+    const how = th['pos.orderEntry.fulfilment.entrance_delivery'];
+    expect(serve).toEqual([`${how} · A2 · Nok`, `${how} · B1 · Fah`]);
     const list = document.querySelector('.kready__list') as HTMLElement;
     expect(within(list).queryAllByRole('button')).toHaveLength(0);
     fireEvent.click(toggle);

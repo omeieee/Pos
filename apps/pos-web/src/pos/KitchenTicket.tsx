@@ -2,6 +2,7 @@ import { ORDER_NO_PREFIX, type OrderDto, type StaffRole } from '@sds/shared';
 import { errorText } from '../api/errors.ts';
 import { useLocale, useServices, useStoreState, useT } from '../ui/hooks.ts';
 import { Icon } from '../ui/Icon.tsx';
+import { deliveryLabel } from './delivery-model.ts';
 import { elapsedText } from './elapsed-text.ts';
 import { kitchenMoves, waitLevel, waitMinutes } from './kitchen-model.ts';
 import { localName } from './names.ts';
@@ -23,11 +24,18 @@ function Channel({ order }: { order: OrderDto }) {
 /** How the order is served, and where it goes (the room of a delivery), in large type. */
 function Serve({ order }: { order: OrderDto }) {
   const tr = useT();
+  const to = deliveryLabel(order);
   return (
     <p className="kcard__serve">
       <span className="kcard__serve-how">
         {tr(`pos.orderEntry.fulfilment.${order.fulfillment}`)}
       </span>
+      {to ? (
+        <>
+          <span className="kcard__serve-where">{to.headline}</span>
+          {to.note ? <span className="kcard__serve-note">{to.note}</span> : null}
+        </>
+      ) : null}
       {order.roomNo ? (
         <span className="kcard__serve-where">
           {tr('order.detail.room', { room: order.roomNo })}
@@ -146,12 +154,14 @@ export function KitchenTicket({
 /** A compact row for an order that is ready and waiting to be handed over: information only. */
 export function ReadyRow({ order, now }: { order: OrderDto; now: number }) {
   const tr = useT();
+  const to = deliveryLabel(order);
   return (
     <li className="kready__row">
       <Channel order={order} />
       <span className="kready__no">{order.orderNo}</span>
       <span className="kready__serve small">
         {tr(`pos.orderEntry.fulfilment.${order.fulfillment}`)}
+        {to ? ` · ${to.headline}` : ''}
         {order.roomNo ? ` · ${tr('order.detail.room', { room: order.roomNo })}` : ''}
       </span>
       <span className="kready__wait small muted">
