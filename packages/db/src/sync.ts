@@ -124,6 +124,7 @@ const itemColumns = {
   descriptionEn: menuItems.descriptionEn,
   priceSatang: menuItems.priceSatang,
   imageKey: menuItems.imageKey,
+  photoVersion: menuItems.photoVersion,
   isAvailable: menuItems.isAvailable,
   channels: menuItems.channels,
   sort: menuItems.sort,

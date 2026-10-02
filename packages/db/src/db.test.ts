@@ -74,6 +74,7 @@ describe('migrations on an empty Postgres', () => {
         'menu_categories',
         'menu_item_channel_prices',
         'menu_item_modifier_groups',
+        'menu_item_photos',
         'menu_items',
         'modifier_groups',
         'modifier_options',

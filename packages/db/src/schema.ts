@@ -18,6 +18,8 @@ import {
   ORDER_STATUSES,
   PAYMENT_METHODS,
   PAYMENT_STATUSES,
+  PHOTO_CONTENT_TYPES,
+  PHOTO_MAX_BYTES,
   SESSION_KINDS,
   STAFF_ROLES,
 } from '@sds/shared';
@@ -26,6 +28,7 @@ import {
   bigint,
   boolean,
   check,
+  customType,
   date,
   index,
   integer,
@@ -42,6 +45,12 @@ import {
 export const revSeq = pgSequence('rev_seq');
 
 const id = () => uuid('id').primaryKey().default(sql`uuid_generate_v7()`);
+/** A byte string. PGlite hands back a Uint8Array and postgres-js a Buffer; callers always get a Buffer. */
+const bytea = customType<{ data: Buffer; driverData: Buffer | Uint8Array }>({
+  dataType: () => 'bytea',
+  toDriver: (value) => value,
+  fromDriver: (value) => Buffer.from(value),
+});
 const money = (name: string) => bigint(name, { mode: 'number' });
 const ts = (name: string) => timestamp(name, { withTimezone: true, mode: 'date' });
 const sync = {
@@ -95,6 +104,13 @@ export const menuItems = pgTable(
     priceSatang: money('price_satang').notNull(),
     estCostSatang: money('est_cost_satang').notNull().default(0),
     imageKey: text('image_key'),
+    /**
+     * The version of this item's photo (D-21), or null when it has none. It travels in the feed so
+     * clients know when to refetch `GET /v1/menu/items/:id/photo?v=`; the bytes never do (they are
+     * in `menu_item_photos`). Set to the item's next `version`, so it only ever grows for an item
+     * and a deleted-then-replaced photo never reuses a URL a browser has cached as immutable.
+     */
+    photoVersion: integer('photo_version'),
     isAvailable: boolean('is_available').notNull().default(true),
     channels: text('channels').array().notNull().default(sql`'{storefront,line}'::text[]`),
     sort: integer('sort').notNull().default(0),
@@ -119,6 +135,35 @@ export const menuItems = pgTable(
       'menu_items_channels_valid',
       sql.raw(`channels <@ array[${MENU_CHANNELS.map((c) => `'${c}'`).join(',')}]::text[]`),
     ),
+  ],
+);
+
+/**
+ * The photo of a menu item (D-21), apart from `menu_items` so the bytes never reach the sync feed
+ * or an item query. At most one per item; the API validates the bytes (magic numbers, size) before
+ * it writes. Not a synced table: it has no rev, and a change is announced by `menu_items`.
+ */
+export const menuItemPhotos = pgTable(
+  'menu_item_photos',
+  {
+    menuItemId: uuid('menu_item_id')
+      .primaryKey()
+      .references(() => menuItems.id),
+    contentType: text('content_type').notNull(),
+    bytes: bytea('bytes').notNull(),
+    byteSize: integer('byte_size').notNull(),
+    width: integer('width').notNull(),
+    height: integer('height').notNull(),
+    version: integer('version').notNull(),
+    updatedAt: ts('updated_at').notNull().defaultNow(),
+  },
+  (t) => [
+    check('menu_item_photos_type', oneOf('content_type', PHOTO_CONTENT_TYPES)),
+    check(
+      'menu_item_photos_size',
+      sql.raw(`byte_size between 1 and ${PHOTO_MAX_BYTES} and octet_length(bytes) = byte_size`),
+    ),
+    check('menu_item_photos_dimensions', sql`${t.width} > 0 and ${t.height} > 0`),
   ],
 );
 

@@ -9,6 +9,7 @@ import {
   menuCategories,
   menuItemChannelPrices,
   menuItemModifierGroups,
+  menuItemPhotos,
   menuItems,
   modifierGroups,
   modifierOptions,
@@ -194,7 +195,11 @@ export async function insertItem(db: Db, input: NewItem & RequestKey): Promise<I
   return row;
 }
 
-export type ItemPatch = Partial<NewItem> & { archivedAt?: Date | null; updatedAt?: Date };
+export type ItemPatch = Partial<NewItem> & {
+  archivedAt?: Date | null;
+  updatedAt?: Date;
+  photoVersion?: number | null;
+};
 
 /** One UPDATE guarded by the version the caller saw; the sync trigger bumps version and rev. */
 export async function updateItemIfVersion(
@@ -236,6 +241,91 @@ export async function replaceItemGroups(
       .insert(menuItemModifierGroups)
       .values(groupIds.map((groupId, index) => ({ itemId, groupId, sort: index + 1 })));
   }
+}
+
+// ---------- Item photos (D-21) ----------
+
+export type PhotoRow = typeof menuItemPhotos.$inferSelect;
+
+export interface NewPhoto {
+  contentType: string;
+  bytes: Buffer;
+  width: number;
+  height: number;
+  version: number;
+}
+
+export async function findPhoto(db: Db, itemId: string): Promise<PhotoRow | undefined> {
+  const [row] = await db
+    .select()
+    .from(menuItemPhotos)
+    .where(eq(menuItemPhotos.menuItemId, itemId))
+    .limit(1);
+  return row;
+}
+
+/** Inserts or replaces the item's one photo row. */
+export async function setPhoto(db: Db, itemId: string, photo: NewPhoto): Promise<void> {
+  const values = {
+    contentType: photo.contentType,
+    bytes: photo.bytes,
+    byteSize: photo.bytes.length,
+    width: photo.width,
+    height: photo.height,
+    version: photo.version,
+    updatedAt: new Date(),
+  };
+  await db
+    .insert(menuItemPhotos)
+    .values({ menuItemId: itemId, ...values })
+    .onConflictDoUpdate({ target: menuItemPhotos.menuItemId, set: values });
+}
+
+/** True when there was a photo to remove. */
+export async function deletePhoto(db: Db, itemId: string): Promise<boolean> {
+  const removed = await db
+    .delete(menuItemPhotos)
+    .where(eq(menuItemPhotos.menuItemId, itemId))
+    .returning({ id: menuItemPhotos.menuItemId });
+  return removed.length > 0;
+}
+
+export interface ServablePhoto {
+  contentType: string;
+  bytes: Buffer;
+  version: number;
+}
+
+/**
+ * What the PUBLIC photo route may serve (no session): the photo the item points at (`photo_version`
+ * equals the stored version), for an item that is not archived and sits in an active category.
+ * Sold-out items count: staff tills show their tiles with the picture. One query, so a caller cannot
+ * tell "no such item" from "archived" from "no photo".
+ */
+export async function findServablePhoto(
+  db: Db,
+  itemId: string,
+): Promise<ServablePhoto | undefined> {
+  const [row] = await db
+    .select({
+      contentType: menuItemPhotos.contentType,
+      bytes: menuItemPhotos.bytes,
+      version: menuItemPhotos.version,
+    })
+    .from(menuItems)
+    .innerJoin(menuCategories, eq(menuCategories.id, menuItems.categoryId))
+    .innerJoin(
+      menuItemPhotos,
+      and(
+        eq(menuItemPhotos.menuItemId, menuItems.id),
+        eq(menuItemPhotos.version, menuItems.photoVersion),
+      ),
+    )
+    .where(
+      and(eq(menuItems.id, itemId), isNull(menuItems.archivedAt), eq(menuCategories.active, true)),
+    )
+    .limit(1);
+  return row;
 }
 
 // ---------- Modifier groups and options ----------

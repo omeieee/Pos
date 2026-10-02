@@ -109,6 +109,8 @@ describe('column allow-lists (a new column cannot leak by default)', () => {
       'line_message_log',
       'daily_counters',
       'tax_profiles',
+      // Photo bytes (D-21) are fetched by URL, never pushed: only menu_items.photo_version travels.
+      'menu_item_photos',
     ]) {
       expect(inFeed.has(t), t).toBe(false);
     }
