@@ -49,6 +49,8 @@ export interface RecordedCall {
   /** Header names are lower-cased. */
   headers: Record<string, string>;
   body: unknown;
+  /** The bytes of a binary body (a photo upload), else undefined. */
+  bytes?: Uint8Array;
 }
 
 export type Reply = { status: number; json?: unknown; text?: string };
@@ -68,11 +70,13 @@ export function mockFetch(responder: (call: RecordedCall) => Reply | Promise<Rep
       headers[key.toLowerCase()] = value;
     }
     const raw = typeof init?.body === 'string' ? init.body : undefined;
+    const binary = init?.body instanceof Blob ? init.body : undefined;
     const call: RecordedCall = {
       url: String(input),
       method: init?.method ?? 'GET',
       headers,
       body: raw === undefined ? undefined : JSON.parse(raw),
+      ...(binary ? { bytes: new Uint8Array(await binary.arrayBuffer()) } : {}),
     };
     calls.push(call);
     const reply = await responder(call);

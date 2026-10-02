@@ -608,4 +608,10 @@ export const en = {
   'platform.payment.hint':
     'The platform collects the money and pays the shop later. Record it once you have checked in the platform app that this order is real.',
   'payment.start.platform': 'Record that the platform has paid',
+  'error.reorderMismatch':
+    'The list was changed on another device. The latest list is loaded. Try the move again.',
+  'error.photoEmpty': 'The photo came through empty. Choose it again.',
+  'error.photoTooLarge': 'The photo is too large. Choose another one.',
+  'error.photoNotImage': 'That file is not a usable image (JPEG, PNG or WebP).',
+  'error.photoTooManyPixels': 'The photo is bigger than the system accepts. Choose another one.',
 } as const satisfies Record<MessageKey, string>;

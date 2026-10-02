@@ -75,6 +75,15 @@ describe('error code -> message', () => {
       'OWNER_PROTECTED',
       'UPGRADE_REQUIRED',
       'BAD_REQUEST',
+      // the menu editor
+      'REORDER_SET_MISMATCH',
+      'PHOTO_EMPTY',
+      'PHOTO_TOO_LARGE',
+      'PHOTO_NOT_AN_IMAGE',
+      'PHOTO_TYPE_MISMATCH',
+      'PHOTO_TOO_MANY_PIXELS',
+      'FST_ERR_CTP_BODY_TOO_LARGE',
+      'FST_ERR_CTP_INVALID_MEDIA_TYPE',
     ];
     for (const code of needed) expect(Object.hasOwn(API_ERROR_KEYS, code), code).toBe(true);
   });

@@ -573,6 +573,11 @@ export const th = {
   'platform.payment.hint':
     'แพลตฟอร์มรับเงินจากลูกค้าและโอนให้ร้านภายหลัง กดบันทึกเมื่อตรวจในแอปแล้วว่าออเดอร์นี้เป็นของจริง',
   'payment.start.platform': 'บันทึกว่าแพลตฟอร์มรับเงินแล้ว',
+  'error.reorderMismatch': 'รายการถูกเพิ่ม ลบ หรือจัดลำดับใหม่จากเครื่องอื่น โหลดข้อมูลล่าสุดให้แล้ว ลองจัดลำดับอีกครั้ง',
+  'error.photoEmpty': 'ไม่พบข้อมูลรูป ลองเลือกรูปอีกครั้ง',
+  'error.photoTooLarge': 'รูปใหญ่เกินไป ลองเลือกรูปอื่น',
+  'error.photoNotImage': 'ไฟล์นี้ไม่ใช่รูปภาพที่ใช้ได้ (JPEG, PNG หรือ WebP)',
+  'error.photoTooManyPixels': 'รูปมีขนาดเกินที่ระบบรับได้ ลองเลือกรูปอื่น',
 } as const;
 
 export type MessageKey = keyof typeof th;

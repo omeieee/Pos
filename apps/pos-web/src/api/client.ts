@@ -17,24 +17,36 @@
 import {
   authMeResponseSchema,
   authStaffListResponseSchema,
+  availabilityInputSchema,
   cancelOrderInputSchema,
   categoryDtoSchema,
   changePaymentMethodInputSchema,
   changePaymentMethodResultSchema,
   claimPaymentInputSchema,
   confirmPaymentInputSchema,
+  createCategoryInputSchema,
+  createGroupInputSchema,
+  createItemInputSchema,
+  createOptionInputSchema,
   createOrderInputSchema,
   createPaymentInputSchema,
   deliverySettingsSchema,
   groupDtoSchema,
+  idParamSchema,
   itemDtoSchema,
   listOrdersQuerySchema,
   listOrdersResponseSchema,
+  menuCostsResponseSchema,
+  optionDtoSchema,
   orderDtoSchema,
   orderIdParamSchema,
   orderPaymentsResponseSchema,
   ownerLoginInputSchema,
   ownerStepUpInputSchema,
+  patchCategoryInputSchema,
+  patchGroupInputSchema,
+  patchItemInputSchema,
+  patchOptionInputSchema,
   patchOrderInputSchema,
   paymentIdParamSchema,
   paymentQrUrlResponseSchema,
@@ -48,6 +60,8 @@ import {
   recipientsResponseSchema,
   registerDeviceInputSchema,
   registerDeviceResponseSchema,
+  reorderInputSchema,
+  reorderResponseSchema,
   sessionResponseSchema,
   settingResponseSchema,
   staffStepUpInputSchema,
@@ -84,10 +98,12 @@ export interface ApiClientOptions {
 type DeviceHeader = 'omit' | 'optional' | 'required';
 
 interface RequestSpec<T> {
-  method: 'GET' | 'POST' | 'PATCH';
+  method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
   path: string;
   query?: Record<string, string | undefined>;
   body?: unknown;
+  /** A file sent as it is (a menu photo): sent with `contentType` instead of JSON. */
+  rawBody?: { data: Blob; contentType: string };
   schema?: Schema<T>;
   /** `true`: bearer from the store. A string: use this token (logout, after local clear). */
   session?: boolean | string;
@@ -169,6 +185,11 @@ type WithoutRequestId<T> = T extends unknown ? Omit<T, 'clientRequestId'> : neve
 export type NewPaymentInput = WithoutRequestId<z.input<typeof createPaymentInputSchema>>;
 export type ChangePaymentInput = WithoutRequestId<z.input<typeof changePaymentMethodInputSchema>>;
 
+export type NewCategoryInput = Omit<z.input<typeof createCategoryInputSchema>, 'clientRequestId'>;
+export type NewItemInput = Omit<z.input<typeof createItemInputSchema>, 'clientRequestId'>;
+export type NewGroupInput = Omit<z.input<typeof createGroupInputSchema>, 'clientRequestId'>;
+export type NewOptionInput = Omit<z.input<typeof createOptionInputSchema>, 'clientRequestId'>;
+
 const categoryListSchema = z.object({ categories: z.array(categoryDtoSchema) });
 const itemListSchema = z.object({ items: z.array(itemDtoSchema) });
 const groupListSchema = z.object({ groups: z.array(groupDtoSchema) });
@@ -210,8 +231,11 @@ export function createApiClient(options: ApiClientOptions) {
       }
     }
 
-    let body: string | undefined;
-    if (spec.body !== undefined) {
+    let body: string | Blob | undefined;
+    if (spec.rawBody) {
+      headers['Content-Type'] = spec.rawBody.contentType;
+      body = spec.rawBody.data;
+    } else if (spec.body !== undefined) {
       headers['Content-Type'] = 'application/json';
       body = JSON.stringify(spec.body);
     }
@@ -264,6 +288,9 @@ export function createApiClient(options: ApiClientOptions) {
   const get = <T>(spec: Omit<RequestSpec<T>, 'method'>) => request({ ...spec, method: 'GET' });
   const post = <T>(spec: Omit<RequestSpec<T>, 'method'>) => request({ ...spec, method: 'POST' });
   const patch = <T>(spec: Omit<RequestSpec<T>, 'method'>) => request({ ...spec, method: 'PATCH' });
+  const put = <T>(spec: Omit<RequestSpec<T>, 'method'>) => request({ ...spec, method: 'PUT' });
+  const del = <T>(spec: Omit<RequestSpec<T>, 'method'>) => request({ ...spec, method: 'DELETE' });
+  const menuId = (id: string) => checked(idParamSchema, { id }).id;
   const orderPath = (id: string) => `/v1/orders/${checked(orderIdParamSchema, { id }).id}`;
 
   const auth = {
@@ -453,26 +480,194 @@ export function createApiClient(options: ApiClientOptions) {
         })
       ).data,
 
-    listItems: async () =>
+    /** `includeArchived` is for roles with `menu.edit` (anyone else gets 403). */
+    listItems: async (options: { includeArchived?: boolean } = {}) =>
       (
         await get({
           path: '/v1/menu/items',
+          ...(options.includeArchived ? { query: { includeArchived: 'true' } } : {}),
           schema: itemListSchema,
           session: true,
           device: 'optional',
         })
       ).data,
 
-    listGroups: async () =>
+    listGroups: async (options: { includeArchived?: boolean } = {}) =>
       (
         await get({
           path: '/v1/menu/modifier-groups',
+          ...(options.includeArchived ? { query: { includeArchived: 'true' } } : {}),
           schema: groupListSchema,
           session: true,
           device: 'optional',
         })
       ).data,
+
+    // ----- The menu editor (`menu.edit`) -----
+    // Every create carries `clientRequestId` (body and `Idempotency-Key`). The id belongs to the
+    // logical create: a caller that may retry makes it once and passes it on every attempt.
+    // Every patch needs the `expectedVersion` the editor saw (409 VERSION_CONFLICT otherwise).
+
+    createCategory: async (input: NewCategoryInput, options?: { clientRequestId?: string }) =>
+      create('/v1/menu/categories', createCategoryInputSchema, categoryDtoSchema, input, options),
+
+    patchCategory: async (id: string, input: z.input<typeof patchCategoryInputSchema>) =>
+      (
+        await patch({
+          path: `/v1/menu/categories/${menuId(id)}`,
+          body: checked(patchCategoryInputSchema, input),
+          schema: categoryDtoSchema,
+          session: true,
+          device: 'optional',
+        })
+      ).data,
+
+    createItem: async (input: NewItemInput, options?: { clientRequestId?: string }) =>
+      create('/v1/menu/items', createItemInputSchema, itemDtoSchema, input, options),
+
+    patchItem: async (id: string, input: z.input<typeof patchItemInputSchema>) =>
+      (
+        await patch({
+          path: `/v1/menu/items/${menuId(id)}`,
+          body: checked(patchItemInputSchema, input),
+          schema: itemDtoSchema,
+          session: true,
+          device: 'optional',
+        })
+      ).data,
+
+    /** The sold-out switch (หมด). */
+    setItemAvailable: async (id: string, input: z.input<typeof availabilityInputSchema>) =>
+      (
+        await patch({
+          path: `/v1/menu/items/${menuId(id)}/availability`,
+          body: checked(availabilityInputSchema, input),
+          schema: itemDtoSchema,
+          session: true,
+          device: 'optional',
+        })
+      ).data,
+
+    createGroup: async (input: NewGroupInput, options?: { clientRequestId?: string }) =>
+      create('/v1/menu/modifier-groups', createGroupInputSchema, groupDtoSchema, input, options),
+
+    patchGroup: async (id: string, input: z.input<typeof patchGroupInputSchema>) =>
+      (
+        await patch({
+          path: `/v1/menu/modifier-groups/${menuId(id)}`,
+          body: checked(patchGroupInputSchema, input),
+          schema: groupDtoSchema,
+          session: true,
+          device: 'optional',
+        })
+      ).data,
+
+    createOption: async (
+      groupId: string,
+      input: NewOptionInput,
+      options?: { clientRequestId?: string },
+    ) =>
+      create(
+        `/v1/menu/modifier-groups/${menuId(groupId)}/options`,
+        createOptionInputSchema,
+        optionDtoSchema,
+        input,
+        options,
+      ),
+
+    patchOption: async (id: string, input: z.input<typeof patchOptionInputSchema>) =>
+      (
+        await patch({
+          path: `/v1/menu/modifier-options/${menuId(id)}`,
+          body: checked(patchOptionInputSchema, input),
+          schema: optionDtoSchema,
+          session: true,
+          device: 'optional',
+        })
+      ).data,
+
+    setOptionAvailable: async (id: string, input: z.input<typeof availabilityInputSchema>) =>
+      (
+        await patch({
+          path: `/v1/menu/modifier-options/${menuId(id)}/availability`,
+          body: checked(availabilityInputSchema, input),
+          schema: optionDtoSchema,
+          session: true,
+          device: 'optional',
+        })
+      ).data,
+
+    /** One sibling set in its new order, atomically. Idempotent: no request id. */
+    reorder: async (input: z.input<typeof reorderInputSchema>) =>
+      (
+        await post({
+          path: '/v1/menu/reorder',
+          body: checked(reorderInputSchema, input),
+          schema: reorderResponseSchema,
+          session: true,
+          device: 'optional',
+        })
+      ).data,
+
+    /**
+     * The costs of items and options, for roles with `report.view`. They are in no other answer
+     * and in nothing the app saves: keep them in memory, for the editor only.
+     */
+    costs: async () =>
+      (
+        await get({
+          path: '/v1/menu/costs',
+          schema: menuCostsResponseSchema,
+          session: true,
+          device: 'optional',
+        })
+      ).data,
+
+    /**
+     * Stores the item's photo. `photo` must already be re-encoded (`platform/photo.ts`): the server
+     * does not strip location data. The type sent is the blob's own, not a guess.
+     */
+    putPhoto: async (id: string, photo: Blob) =>
+      (
+        await put({
+          path: `/v1/menu/items/${menuId(id)}/photo`,
+          rawBody: { data: photo, contentType: photo.type },
+          schema: itemDtoSchema,
+          session: true,
+          device: 'optional',
+        })
+      ).data,
+
+    removePhoto: async (id: string) =>
+      (
+        await del({
+          path: `/v1/menu/items/${menuId(id)}/photo`,
+          schema: itemDtoSchema,
+          session: true,
+          device: 'optional',
+        })
+      ).data,
   };
+
+  /** A create that is safe to repeat: 201 for a new row, 200 for the row an earlier try made. */
+  async function create<S extends z.ZodType>(
+    path: string,
+    inputSchema: Schema<unknown>,
+    schema: S,
+    input: object,
+    options?: { clientRequestId?: string },
+  ) {
+    const clientRequestId = options?.clientRequestId ?? newClientRequestId();
+    const { data, status } = await post<z.output<S>>({
+      path,
+      body: checked(inputSchema, { ...input, clientRequestId }),
+      schema,
+      session: true,
+      device: 'optional',
+      headers: { 'Idempotency-Key': clientRequestId },
+    });
+    return { row: data, replay: status === 200, clientRequestId };
+  }
 
   const sync = {
     /** One page of changes newer than `since`, the same frames the socket pushes. */

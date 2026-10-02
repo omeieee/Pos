@@ -62,6 +62,15 @@ export const API_ERROR_KEYS = {
   // Menu, staff and the socket route
   UNKNOWN_CATEGORY: 'error.unknownMenuRow',
   UNKNOWN_GROUP: 'error.unknownMenuRow',
+  REORDER_SET_MISMATCH: 'error.reorderMismatch',
+  // Menu photos. The two FST_ codes are Fastify's own answers (body over the cap, other type).
+  PHOTO_EMPTY: 'error.photoEmpty',
+  PHOTO_TOO_LARGE: 'error.photoTooLarge',
+  PHOTO_NOT_AN_IMAGE: 'error.photoNotImage',
+  PHOTO_TYPE_MISMATCH: 'error.photoNotImage',
+  PHOTO_TOO_MANY_PIXELS: 'error.photoTooManyPixels',
+  FST_ERR_CTP_BODY_TOO_LARGE: 'error.photoTooLarge',
+  FST_ERR_CTP_INVALID_MEDIA_TYPE: 'error.photoNotImage',
   OWNER_PROTECTED: 'error.ownerProtected',
   UPGRADE_REQUIRED: 'error.upgradeRequired',
   RATE_LIMITED: 'error.rateLimited',
