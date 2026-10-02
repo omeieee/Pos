@@ -442,3 +442,74 @@ fieldset.methods {
   -webkit-touch-callout: none;
   user-select: none;
 }
+
+/* ---------- ไทยช่วยไทย: the guided steps ---------- */
+.copay,
+.govpay {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sds-space-lg);
+}
+.govpay__title {
+  font-size: var(--sds-font-size-lg);
+}
+.copay__card {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sds-space-xl);
+  padding: var(--sds-space-lg);
+  width: 100%;
+}
+.copay__card > * {
+  flex: 1 1 240px;
+}
+.copay__split {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sds-space-sm);
+}
+.copay__estimate {
+  display: flex;
+  align-items: center;
+  gap: var(--sds-space-xs);
+  color: var(--sds-color-warning-text);
+  font-size: var(--sds-font-size-sm);
+  font-weight: var(--sds-font-weight-bold);
+}
+.steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sds-space-md);
+  counter-reset: step;
+}
+.steps li {
+  position: relative;
+  min-height: 32px;
+  padding: 3px 0 0 44px;
+  counter-increment: step;
+}
+.steps li::before {
+  content: counter(step);
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--sds-color-surface-sunken);
+  font-weight: var(--sds-font-weight-bold);
+}
+.steps li.done::before {
+  content: "¹3";
+  background: var(--sds-color-success);
+  color: var(--sds-color-on-success);
+}
+.steps li.now::before {
+  background: var(--sds-color-brand);
+  color: var(--sds-color-on-brand);
+}

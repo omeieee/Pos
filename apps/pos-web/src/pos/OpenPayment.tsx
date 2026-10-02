@@ -1,5 +1,6 @@
 import type { OrderDto, PaymentDto } from '@sds/shared';
 import { useAuthState, useT } from '../ui/hooks.ts';
+import { GovCopayPanel } from './GovCopayPanel.tsx';
 import { PaymentMoves } from './PaymentMoves.tsx';
 import { PromptPayPanel } from './PromptPayPanel.tsx';
 import { paymentActions } from './payment-model.ts';
@@ -26,6 +27,9 @@ export function OpenPayment({
   const actions = paymentActions(role, payment);
   if (payment.method === 'promptpay') {
     return <PromptPayPanel order={order} payment={payment} actions={actions} />;
+  }
+  if (payment.method === 'gov_copay') {
+    return <GovCopayPanel order={order} payment={payment} actions={actions} />;
   }
   return (
     <PaymentMoves

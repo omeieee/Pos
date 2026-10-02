@@ -12,10 +12,12 @@ import {
 } from '../ui/hooks.ts';
 import { Icon } from '../ui/Icon.tsx';
 import { CashPanel } from './CashPanel.tsx';
+import { GovCopaySteps } from './GovCopayPanel.tsx';
 import { OpenPayment } from './OpenPayment.tsx';
 import { PaymentHistory } from './PaymentHistory.tsx';
 import {
   confirmedPayment,
+  govCopayScheme,
   methodOptions,
   openPayment,
   type PayMethod,
@@ -107,6 +109,7 @@ function PaymentPanelBody({ orderId }: { orderId: string }) {
     : (options.find((o) => o.enabled)?.method ?? null);
   const money = (value: number) => formatBaht(value, locale);
   const received = confirmedPayment(list);
+  const scheme = govCopayScheme(entities.settings);
   const remember = (method: PayMethod) => {
     attempted.current = method;
   };
@@ -173,6 +176,12 @@ function PaymentPanelBody({ orderId }: { orderId: string }) {
                     <span className="method__sub">
                       {tr(`payment.copay.reason.${option.reason}`)}
                     </span>
+                  ) : option.method === 'gov_copay' && scheme ? (
+                    <span className="method__sub">
+                      {tr('payment.method.govCopaySub', {
+                        date: formatDate(scheme.activeTo, locale, 'date'),
+                      })}
+                    </span>
                   ) : null}
                 </span>
               </label>
@@ -181,6 +190,11 @@ function PaymentPanelBody({ orderId }: { orderId: string }) {
           {choice === 'cash' ? <CashPanel order={order} onAttempt={remember} /> : null}
           {choice === 'promptpay' ? (
             <StartPanel order={order} method="promptpay" onAttempt={remember} />
+          ) : null}
+          {choice === 'gov_copay' ? (
+            <StartPanel order={order} method="gov_copay" onAttempt={remember}>
+              <GovCopaySteps order={order} payment={undefined} />
+            </StartPanel>
           ) : null}
         </div>
       )}
