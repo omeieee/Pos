@@ -17,9 +17,21 @@
  *   cleared. Editing it would send a different body under the same id;
  * - when the server refused the order (a 4xx), nothing was created: the cart stays editable, and
  *   changing it makes a new request id.
+ *
+ * Offline (the outbox, 02 §8): when the device is known to be offline, or the request got no
+ * answer, the order is saved to the outbox with the SAME request id and body and the cart is free
+ * again; the outbox replays it, and the server's idempotency makes a duplicate impossible even if
+ * the first attempt did arrive. "Saved" is only said once the device has written it. When it
+ * cannot be written (storage refused, queue full) nothing is pretended: an unsent order stays
+ * editable on screen, and an order that may exist stays locked as `unsure`, as before.
+ *
+ * Two stores are made from this file: the counter's (storefront entrance deliveries) and the
+ * platform one (Grab and LINE MAN orders keyed in by hand: no recipient, the platform's order code
+ * and channel instead). They share every rule above and nothing else.
  */
 import {
   buildingNameSchema,
+  type OrderChannel,
   type OrderDto,
   type RecipientDto,
   recipientKey,
@@ -33,8 +45,22 @@ import { newUuid } from '../platform/ids.ts';
 import type { EntityStore } from '../realtime/entity-store.ts';
 import { type CartLine, priceCart } from './cart-pricing.ts';
 import { deliveryBuildings } from './delivery-model.ts';
+import { snapshotOrder } from './outbox-model.ts';
+import type { EnqueueResult, OutboxStore } from './outbox-store.ts';
+import {
+  PLATFORM_NOTE_MAX,
+  type PlatformChannel,
+  platformNote,
+  platformRefSchema,
+} from './platform-model.ts';
 
 export type CartPhase = 'editing' | 'sending' | 'unsure';
+
+/** Which kind of order this cart makes. */
+export type CartMode = 'storefront' | 'platform';
+
+/** Why an order could not be saved to the outbox. */
+export type SaveError = Extract<EnqueueResult, { ok: false }>['reason'];
 
 /**
  * A remembered recipient the staff tapped. It is only a link: the server finds or creates the
@@ -56,15 +82,25 @@ export interface CartState {
   chosen: ChosenRecipient | null;
   /** The kitchen note, apart from the delivery details. */
   note: string;
+  /** `storefront` at the counter; `grab` or `lineman` in the platform cart. */
+  channel: OrderChannel;
+  /** The platform's own order code (platform cart only). */
+  platformRef: string;
   phase: CartPhase;
   clientRequestId: string | null;
   /** The last failed attempt, until the order changes or a new attempt starts. */
   error: ApiClientError | null;
+  /** The order could not be written to the device's outbox, until it changes or is tried again. */
+  saveError: SaveError | null;
 }
 
 export type SubmitOutcome =
   | { ok: true; order: OrderDto; replay: boolean }
-  | { ok: false; reason: 'empty' | 'invalid' | 'deliveryRequired' | 'busy' }
+  /** Saved on this device and waiting to be sent: `id` is the id its page uses until it syncs. */
+  | { ok: true; queued: { id: string; label: string } }
+  | { ok: false; reason: 'empty' | 'invalid' | 'deliveryRequired' | 'refRequired' | 'busy' }
+  /** Not sent, or sent without an answer, and could not be saved either: see `cause`. */
+  | { ok: false; reason: 'notSaved'; cause: SaveError }
   /** The person signed out while the request ran: its answer belongs to nobody and was dropped. */
   | { ok: false; reason: 'stale' }
   | { ok: false; reason: 'error'; error: ApiClientError };
@@ -73,6 +109,9 @@ export interface CartDeps {
   api: { orders: { create: ApiClient['orders']['create'] } };
   entities: EntityStore;
   activity: Activity;
+  /** Where an order goes when it cannot be sent; without one the cart behaves as before. */
+  outbox?: Pick<OutboxStore, 'enqueueOrder' | 'isOffline'>;
+  mode?: CartMode;
   /** Ids for the request id; tests fix them. */
   newId?: () => string;
 }
@@ -97,6 +136,9 @@ export interface CartStore extends ReadableStore<CartState> {
   /** Prefills building, name and details from a remembered recipient (all stay editable). */
   chooseRecipient(recipient: RecipientDto): void;
   setNote(value: string): void;
+  /** Platform cart: Grab or LINE MAN. Another channel is another body, so another request id. */
+  setChannel(channel: PlatformChannel): void;
+  setPlatformRef(value: string): void;
   /** Empties the order (also from `unsure`: the person chose to discard it). */
   clear(): void;
   /** The choices last made for a dish, to repeat them with one tap. */
@@ -143,17 +185,23 @@ export function mayHaveBeenCreated(error: ApiClientError): boolean {
 
 export function createCartStore(deps: CartDeps): CartStore {
   const newId = deps.newId ?? newUuid;
-  const initial = (): CartState => ({
+  const platform = deps.mode === 'platform';
+  const initial = (channel: OrderChannel = platform ? 'grab' : 'storefront'): CartState => ({
     lines: [],
     deliveryBuilding: '',
     recipientName: '',
     deliveryNote: '',
     chosen: null,
     note: '',
+    channel,
+    platformRef: '',
     phase: 'editing',
     clientRequestId: null,
     error: null,
+    saveError: null,
   });
+  /** The next order after this one: nothing carried over, but the platform stays chosen. */
+  const next = (): CartState => initial(platform ? store.getState().channel : undefined);
   const store = createStore<CartState>(initial());
   const lastChoices = new Map<string, readonly string[]>();
   let lineCounter = 0;
@@ -182,7 +230,7 @@ export function createCartStore(deps: CartDeps): CartStore {
   /** A change to the order: a new body, so a new request id and no stale error. */
   function edit(patch: Partial<CartState>) {
     if (!editable()) return;
-    store.setState({ ...patch, clientRequestId: null, error: null });
+    store.setState({ ...patch, clientRequestId: null, error: null, saveError: null });
   }
 
   function mergeInto(lines: CartLine[], line: CartLine): CartLine[] {
@@ -263,11 +311,15 @@ export function createCartStore(deps: CartDeps): CartStore {
         },
       });
     },
-    setNote: (note) => edit({ note }),
+    setNote: (note) => edit({ note: platform ? note.slice(0, PLATFORM_NOTE_MAX) : note }),
+    setChannel: (channel) => {
+      if (platform) edit({ channel });
+    },
+    setPlatformRef: (platformRef) => edit({ platformRef }),
 
     clear() {
       if (inFlight) return;
-      store.setState(initial());
+      store.setState(next());
     },
 
     lastChoice: (itemId) => lastChoices.get(itemId),
@@ -280,42 +332,98 @@ export function createCartStore(deps: CartDeps): CartStore {
       // (same body, same id) even if the menu has changed since. A refusal then comes from the
       // server, which answers the original order for a known id.
       if (state.phase !== 'unsure') {
-        // The server owns the list of buildings; the screen offers only that list.
-        if (!deliveryFilled(state)) return { ok: false, reason: 'deliveryRequired' };
-        if (!priceCart(deps.entities.getState(), state.lines).valid) {
+        if (platform) {
+          if (!platformRefSchema.safeParse(state.platformRef).success) {
+            return { ok: false, reason: 'refRequired' };
+          }
+        } else if (!deliveryFilled(state)) {
+          // The server owns the list of buildings; the screen offers only that list.
+          return { ok: false, reason: 'deliveryRequired' };
+        }
+        if (!priceCart(deps.entities.getState(), state.lines, state.channel).valid) {
           return { ok: false, reason: 'invalid' };
         }
       }
 
       inFlight = true;
       const clientRequestId = state.clientRequestId ?? newId();
-      store.setState({ phase: 'sending', clientRequestId, error: null });
-      const input: NewOrderInput = {
-        channel: 'storefront',
-        fulfillment: 'entrance_delivery',
-        deliveryBuilding: state.deliveryBuilding.trim(),
-        recipientName: state.recipientName.trim(),
-        ...(state.deliveryNote.trim() === '' ? {} : { deliveryNote: state.deliveryNote.trim() }),
-        ...(linkedCustomerId(state) ? { customerId: linkedCustomerId(state) } : {}),
-        ...(state.note.trim() === '' ? {} : { note: state.note.trim() }),
-        items: state.lines.map((l) => ({
+      store.setState({ phase: 'sending', clientRequestId, error: null, saveError: null });
+      const itemsOf = () =>
+        state.lines.map((l) => ({
           menuItemId: l.itemId,
           qty: l.qty,
           modifierOptionIds: [...l.optionIds],
           ...(l.note.trim() === '' ? {} : { note: l.note.trim() }),
-        })),
-      };
+        }));
+      const input: NewOrderInput = platform
+        ? {
+            channel: state.channel,
+            fulfillment: 'platform_delivery',
+            note: platformNote(state.channel as PlatformChannel, state.platformRef, state.note),
+            items: itemsOf(),
+          }
+        : {
+            channel: 'storefront',
+            fulfillment: 'entrance_delivery',
+            deliveryBuilding: state.deliveryBuilding.trim(),
+            recipientName: state.recipientName.trim(),
+            ...(state.deliveryNote.trim() === ''
+              ? {}
+              : { deliveryNote: state.deliveryNote.trim() }),
+            ...(linkedCustomerId(state) ? { customerId: linkedCustomerId(state) } : {}),
+            ...(state.note.trim() === '' ? {} : { note: state.note.trim() }),
+            items: itemsOf(),
+          };
       const startedIn = epoch;
+
+      /**
+       * Saves the order to the outbox under the same id and body. `sent`: a request already went
+       * out and got no answer, so if saving fails the order stays locked as `unsure`; otherwise
+       * nothing went out and it stays editable.
+       */
+      async function save(sent: ApiClientError | null): Promise<SubmitOutcome> {
+        const outbox = deps.outbox;
+        if (!outbox) {
+          return { ok: false, reason: 'error', error: sent ?? new ApiClientError('NETWORK') };
+        }
+        const snapshot = snapshotOrder(deps.entities.getState(), state.lines, state.channel);
+        const saved = await outbox.enqueueOrder({
+          clientRequestId,
+          body: input,
+          lines: snapshot.lines,
+          estimateSatang: snapshot.estimateSatang,
+        });
+        if (epoch !== startedIn) return { ok: false, reason: 'stale' };
+        if (saved.ok) {
+          store.setState(next());
+          return { ok: true, queued: { id: saved.id, label: saved.label } };
+        }
+        store.setState({
+          phase: sent ? 'unsure' : 'editing',
+          error: sent,
+          saveError: saved.reason,
+        });
+        return { ok: false, reason: 'notSaved', cause: saved.reason };
+      }
+
       try {
+        // Known offline: do not make the person wait for a timeout.
+        // An order that was sent once and got no answer may exist: it stays `unsure` if the save fails.
+        if (deps.outbox?.isOffline()) {
+          return await save(
+            state.phase === 'unsure' ? (state.error ?? new ApiClientError('NETWORK')) : null,
+          );
+        }
         const { order, replay } = await deps.api.orders.create(input, { clientRequestId });
         if (epoch !== startedIn) return { ok: false, reason: 'stale' };
         deps.entities.apply({ type: 'order.upserted', id: order.id, rev: order.rev, data: order });
         // The next order is somebody else's: the recipient is not carried over.
-        store.setState(initial());
+        store.setState(next());
         return { ok: true, order, replay };
       } catch (caught) {
         if (epoch !== startedIn) return { ok: false, reason: 'stale' };
         const error = isApiClientError(caught) ? caught : new ApiClientError('UNKNOWN');
+        if (mayHaveBeenCreated(error) && deps.outbox) return await save(error);
         store.setState({ phase: mayHaveBeenCreated(error) ? 'unsure' : 'editing', error });
         return { ok: false, reason: 'error', error };
       } finally {

@@ -467,4 +467,71 @@ export const en = {
   'error.unknownMenuRow': 'That category or option group was not found',
   'error.ownerProtected': 'The owner account cannot be changed from here',
   'error.upgradeRequired': 'This address only speaks WebSocket',
+  'outbox.badge.waiting': 'Waiting {count}',
+  'outbox.badge.attention': 'Check {count}',
+  'outbox.badge.label': 'Items kept on this device',
+  'outbox.state.waiting': 'Waiting to sync',
+  'outbox.state.attention': 'Needs attention',
+  'outbox.state.blocked': 'Waiting for its order',
+  'outbox.state.stuck': 'Tried several times, still trying',
+  'outbox.provisional': 'Temporary number {label}',
+  'outbox.section.title': 'Waiting to sync',
+  'outbox.section.hint':
+    'Saved on this device and sent automatically when the internet is back. The kitchen and other devices cannot see these orders yet.',
+  'outbox.others':
+    '{count} items from other staff are on this device. They are sent when their owner signs in.',
+  'outbox.sendNow': 'Send now',
+  'outbox.retry': 'Send again',
+  'outbox.discard': 'Remove this',
+  'outbox.discard.title': 'Remove this unsent item?',
+  'outbox.discard.order':
+    'This order is not in the system and the kitchen cannot see it. If you remove it the order is gone, and any cash saved for it is removed too.',
+  'outbox.discard.payment':
+    'This cash payment is not recorded in the system. If you remove it, record it again on the order page.',
+  'outbox.discard.confirm': 'Remove it',
+  'outbox.discard.keep': 'Keep it',
+  'outbox.error.storage':
+    'Could not save on this device. This order was not sent and was not kept. Write it down and try again when the internet is back.',
+  'outbox.error.full': 'The queue on this device is full ({max} items). Wait for it to sync first.',
+  'outbox.error.noSession': 'Not signed in, so it cannot be saved.',
+  'outbox.error.unreadable': 'This item cannot be read. Remove it and enter it again.',
+  'outbox.error.orderMissing':
+    'The order for this item was not found. Remove it and check the orders page.',
+  'outbox.refused': 'The server did not accept this: {reason}',
+  'outbox.order.title': 'Order {label}',
+  'outbox.order.notYet': 'Not in the system yet. The real order number comes after it syncs.',
+  'outbox.order.openSynced': 'Open the synced order',
+  'outbox.order.estimateHint':
+    'An estimate. The server works out the real total when it syncs, and it may differ.',
+  'outbox.order.noEstimate':
+    'The estimate could not be worked out, so cash cannot be taken offline.',
+  'outbox.cash.title': 'Cash (offline)',
+  'outbox.cash.confirm': 'Save cash received (waiting to sync)',
+  'outbox.cash.summary': 'Received {tendered} · change {change}',
+  'outbox.cash.waiting':
+    'The cash is saved on this device. It does not count as paid until the server confirms it.',
+  'outbox.cash.estimate': 'Change is worked out from the estimated total',
+  'outbox.onlineOnly': 'Offline: cash works. PromptPay and ไทยช่วยไทย need the internet.',
+  'payment.copay.reason.needsInternet': 'Needs the internet',
+  'pos.orderEntry.placeOffline': 'Save order (offline)',
+  'pos.orderEntry.offlineHint':
+    'Offline. The order is kept on this device and sent automatically when the internet is back.',
+  'shell.signOut.queueTitle': 'Some items are not sent yet',
+  'shell.signOut.queueBody':
+    '{count} items are not sent to the system yet. They are not lost, but they are sent when you sign in again with the internet on. Signing in needs the internet.',
+  'shell.signOut.confirm': 'Sign out',
+  'shell.signOut.stay': 'Stay',
+  'nav.platform': 'Grab / LINE MAN',
+  'platform.title': 'Platform order',
+  'platform.channel': 'Platform',
+  'platform.ref': 'Platform order code',
+  'platform.refPlaceholder': 'e.g. GF-1234',
+  'platform.refNeeded': 'Enter the order code from the Grab or LINE MAN app',
+  'platform.duplicate': 'An order with this code already exists. Check before keying it again.',
+  'platform.hint':
+    "Priced at the platform's prices. The platform takes the payment. After creating the order, record the payment on the order page.",
+  'platform.place': 'Create platform order',
+  'platform.payment.hint':
+    'The platform collects the money and pays the shop later. Record it once you have checked in the platform app that this order is real.',
+  'payment.start.platform': 'Record that the platform has paid',
 } as const satisfies Record<MessageKey, string>;

@@ -39,7 +39,7 @@ export type IconName =
   | 'volume-off';
 
 /** The entries of the navigation: one per top-level page. */
-export type RouteId = 'new' | 'kitchen' | 'orders' | 'menu' | 'settings';
+export type RouteId = 'new' | 'platform' | 'kitchen' | 'orders' | 'menu' | 'settings';
 
 /** Everything the address bar can show; `order` is a page inside `orders`. */
 export type PageId = RouteId | 'order';
@@ -55,6 +55,14 @@ export interface RouteDef {
 
 export const ROUTES: readonly RouteDef[] = [
   { id: 'new', path: '/new', labelKey: 'nav.new', icon: 'grid', permission: 'order.create' },
+  // Grab and LINE MAN orders keyed in by hand: the same permission as taking an order.
+  {
+    id: 'platform',
+    path: '/platform',
+    labelKey: 'nav.platform',
+    icon: 'store',
+    permission: 'order.create',
+  },
   // The kitchen view is for whoever moves orders along; a kitchen-only role has no other first page.
   {
     id: 'kitchen',

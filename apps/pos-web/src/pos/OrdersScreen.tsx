@@ -13,6 +13,7 @@ import {
   filterOrders,
   ordersForDay,
 } from './order-board.ts';
+import { QueuedOrders } from './QueuedOrders.tsx';
 import { OrderStatusBadge, PaymentStatusBadge } from './StatusBadge.tsx';
 import { useLoadOrders } from './use-load-orders.ts';
 
@@ -118,6 +119,8 @@ export function OrdersScreen() {
           </a>
         </div>
       ) : null}
+
+      <QueuedOrders />
 
       {load === 'error' ? (
         <div className="error board__notice" role="alert">

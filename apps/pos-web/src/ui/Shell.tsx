@@ -1,13 +1,24 @@
 import { formatDate } from '@sds/i18n';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { allowedRoutes, pathFromHash, resolveRoute } from '../app/routes.ts';
 import { KitchenScreen } from '../pos/KitchenScreen.tsx';
 import { OrderDetailScreen } from '../pos/OrderDetailScreen.tsx';
 import { OrderEntryScreen } from '../pos/OrderEntryScreen.tsx';
 import { OrdersScreen } from '../pos/OrdersScreen.tsx';
+import { OutboxBadge } from '../pos/OutboxBadge.tsx';
+import { SignOutGuard } from '../pos/SignOutGuard.tsx';
 import { Brand } from './Brand.tsx';
 import { ConnectionBadge } from './ConnectionBadge.tsx';
-import { useAuthState, useAuthStore, useHash, useLocale, useNow, useT } from './hooks.ts';
+import {
+  useAuthState,
+  useAuthStore,
+  useHash,
+  useLocale,
+  useNow,
+  useServices,
+  useStoreState,
+  useT,
+} from './hooks.ts';
 import { Icon } from './Icon.tsx';
 import { UpdateBanner } from './UpdateBanner.tsx';
 
@@ -23,12 +34,15 @@ export function Shell() {
   const now = useNow(60_000);
   const hash = useHash();
   const session = state.session;
+  const [confirmingSignOut, setConfirmingSignOut] = useState(false);
+  const waiting = useStoreState(useServices().outbox).items.length;
   const routes = allowedRoutes(session?.permissions ?? []);
   const resolved = resolveRoute(hash, routes);
   const route = resolved?.route ?? null;
   // The order screens fill the page; the others are still placeholders.
   const full =
     resolved?.page === 'new' ||
+    resolved?.page === 'platform' ||
     resolved?.page === 'order' ||
     resolved?.page === 'orders' ||
     resolved?.page === 'kitchen';
@@ -54,6 +68,7 @@ export function Shell() {
             <span className="chip">{tr('shell.device', { name: state.device.name })}</span>
           ) : null}
           <ConnectionBadge />
+          <OutboxBadge />
           <span className="chip chip--person">
             <Icon name="user" />
             <span>{session.staff.displayName}</span>
@@ -67,7 +82,7 @@ export function Shell() {
           type="button"
           className="btn btn-soft topbar__signout"
           aria-label={signOutLabel}
-          onClick={() => void auth.signOut()}
+          onClick={() => (waiting > 0 ? setConfirmingSignOut(true) : void auth.signOut())}
         >
           <Icon name="door" />
           <span className="topbar__signout-label">{signOutLabel}</span>
@@ -75,6 +90,14 @@ export function Shell() {
       </header>
 
       <UpdateBanner />
+
+      {confirmingSignOut ? (
+        <SignOutGuard
+          count={waiting}
+          onCancel={() => setConfirmingSignOut(false)}
+          onSignOut={() => void auth.signOut()}
+        />
+      ) : null}
 
       <nav className="nav" aria-label={tr('nav.label')}>
         {routes.map((item) => (
@@ -92,6 +115,7 @@ export function Shell() {
 
       <main className={full ? 'page page--full' : 'page'}>
         {resolved?.page === 'new' ? <OrderEntryScreen /> : null}
+        {resolved?.page === 'platform' ? <OrderEntryScreen mode="platform" /> : null}
         {resolved?.page === 'orders' ? <OrdersScreen /> : null}
         {resolved?.page === 'kitchen' ? <KitchenScreen /> : null}
         {resolved?.page === 'order' ? <OrderDetailScreen id={resolved.params.id ?? ''} /> : null}

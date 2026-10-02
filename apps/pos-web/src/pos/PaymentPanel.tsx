@@ -1,4 +1,5 @@
 import { formatBaht, formatDate } from '@sds/i18n';
+import type { satang } from '@sds/shared';
 import { useEffect, useRef, useState } from 'react';
 import { can } from '../auth/auth-store.ts';
 import {
@@ -16,6 +17,7 @@ import { CashPanel } from './CashPanel.tsx';
 import { GovCopaySteps } from './GovCopayPanel.tsx';
 import { MethodTiles } from './MethodTiles.tsx';
 import { OpenPayment } from './OpenPayment.tsx';
+import type { QueuedPayment } from './outbox-model.ts';
 import { PaymentHistory } from './PaymentHistory.tsx';
 import {
   COPAY_TICK_MS,
@@ -28,6 +30,7 @@ import {
   paymentsOf,
 } from './payment-model.ts';
 import { flowFor } from './payment-store.ts';
+import { QueuedCash } from './QueuedCash.tsx';
 import { StartPanel } from './StartPanel.tsx';
 import { VoidRefundDialog } from './VoidRefundDialog.tsx';
 
@@ -50,7 +53,9 @@ export function PaymentPanel({ orderId }: { orderId: string }) {
 }
 
 function PaymentPanelBody({ orderId }: { orderId: string }) {
-  const { payments: flow } = useServices();
+  const { payments: flow, outbox } = useServices();
+  const queue = useStoreState(outbox);
+  const offline = queue.offline;
   const entities = useEntities();
   const flowState = useStoreState(flow);
   const tr = useT();
@@ -113,7 +118,11 @@ function PaymentPanelBody({ orderId }: { orderId: string }) {
   useActivityHold(phase === 'open');
 
   if (!order) return null;
-  const options = methodOptions(order, entities.settings, now, hidden);
+  const options = methodOptions(order, entities.settings, now, hidden, !offline);
+  // Cash taken while offline for this order and not yet sent.
+  const queuedCash = queue.items.find(
+    (i): i is QueuedPayment => i.kind === 'payment' && i.orderId === order.id,
+  );
   const choice = options.find((o) => o.method === selected && o.enabled)
     ? selected
     : (options.find((o) => o.enabled)?.method ?? null);
@@ -185,17 +194,49 @@ function PaymentPanelBody({ orderId }: { orderId: string }) {
           </div>
         ) : phase === 'open' ? (
           <OpenPayment order={order} payment={waiting} hidden={hidden} onAttempt={remember} />
+        ) : queuedCash ? (
+          // Cash is already waiting to be sent: another method now would collide with it.
+          <QueuedCash item={queuedCash} />
         ) : (
           <div className="choose">
+            {offline ? (
+              <p className="notice" role="status">
+                <Icon name="wifi-off" />
+                <span>{tr('outbox.onlineOnly')}</span>
+              </p>
+            ) : null}
             <MethodTiles
               options={options}
               choice={choice}
               name="pay-method"
               onChoose={setSelected}
             />
-            {choice === 'cash' ? <CashPanel order={order} onAttempt={remember} /> : null}
+            {choice === 'cash' ? (
+              <CashPanel
+                order={order}
+                onAttempt={remember}
+                {...(offline && !isUnsure
+                  ? {
+                      queue: {
+                        submit: (tender: ReturnType<typeof satang>) =>
+                          outbox.enqueueCash({
+                            target: { orderId: order.id },
+                            tenderedSatang: tender,
+                            totalSatang: order.totalSatang,
+                            label: order.orderNo,
+                          }),
+                      },
+                    }
+                  : {})}
+              />
+            ) : null}
             {choice === 'promptpay' ? (
               <StartPanel order={order} method="promptpay" onAttempt={remember} />
+            ) : null}
+            {choice === 'platform' ? (
+              <StartPanel order={order} method="platform" onAttempt={remember}>
+                <p className="hint">{tr('platform.payment.hint')}</p>
+              </StartPanel>
             ) : null}
             {choice === 'gov_copay' ? (
               <StartPanel order={order} method="gov_copay" onAttempt={remember}>

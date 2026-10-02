@@ -2,9 +2,17 @@ import { formatBaht, formatDate } from '@sds/i18n';
 import { orderIdParamSchema } from '@sds/shared';
 import { useEffect, useState } from 'react';
 import { errorText, isApiClientError } from '../api/errors.ts';
-import { useAuthState, useEntities, useLocale, useServices, useT } from '../ui/hooks.ts';
+import {
+  useAuthState,
+  useEntities,
+  useLocale,
+  useServices,
+  useStoreState,
+  useT,
+} from '../ui/hooks.ts';
 import { Icon } from '../ui/Icon.tsx';
 import { deliveryLabel } from './delivery-model.ts';
+import { LocalOrderScreen } from './LocalOrderScreen.tsx';
 import { localName } from './names.ts';
 import { OrderMoves } from './OrderMoves.tsx';
 import { PaymentPanel } from './PaymentPanel.tsx';
@@ -18,7 +26,11 @@ type Load = { state: 'idle' | 'loading' | 'notFound' } | { state: 'error'; error
  * returned). An order that is not in the store (a reload, a link) is fetched once and put into it.
  */
 export function OrderDetailScreen({ id }: { id: string }) {
-  const { api, entities: store } = useServices();
+  const { api, entities: store, outbox } = useServices();
+  const queue = useStoreState(outbox);
+  // The page of an order that is only on this device (until the server numbers it), and where it went.
+  const waiting = queue.items.find((item) => item.kind === 'order' && item.id === id);
+  const syncedTo = queue.synced[id];
   const auth = useAuthState();
   const order = useEntities().orders.get(id);
   const tr = useT();
@@ -26,7 +38,7 @@ export function OrderDetailScreen({ id }: { id: string }) {
   const valid = orderIdParamSchema.safeParse({ id }).success;
   const [load, setLoad] = useState<Load>({ state: 'idle' });
   const [attempt, setAttempt] = useState(0);
-  const missing = valid && !order;
+  const missing = valid && !order && !waiting && !syncedTo;
 
   // `attempt` re-runs the load when the person taps "try again".
   // biome-ignore lint/correctness/useExhaustiveDependencies: see above
@@ -53,6 +65,22 @@ export function OrderDetailScreen({ id }: { id: string }) {
       live = false;
     };
   }, [missing, id, api, store, attempt]);
+
+  // The order reached the server while this page was open: move to the real order.
+  useEffect(() => {
+    if (syncedTo) window.location.replace(`#/orders/${syncedTo}`);
+  }, [syncedTo]);
+
+  if (waiting?.kind === 'order') return <LocalOrderScreen item={waiting} />;
+  if (syncedTo) {
+    return (
+      <section className="odetail odetail--note">
+        <p className="muted" role="status">
+          {tr('order.detail.loading')}
+        </p>
+      </section>
+    );
+  }
 
   const another = (
     <a className="btn btn-primary" href="#/new">

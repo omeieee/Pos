@@ -1,9 +1,11 @@
 import { formatBaht } from '@sds/i18n';
-import { type OrderDto, satang } from '@sds/shared';
+import { type OrderDto, type Satang, satang } from '@sds/shared';
 import { useState } from 'react';
 import { errorText } from '../api/errors.ts';
 import { useActivityHold, useLocale, useServices, useStoreState, useT } from '../ui/hooks.ts';
 import { Icon } from '../ui/Icon.tsx';
+import type { EnqueueResult } from './outbox-store.ts';
+import { saveErrorText } from './outbox-text.ts';
 import { cashView, keyToTender, type PayMethod, quickTenders } from './payment-model.ts';
 import { flowFor } from './payment-store.ts';
 
@@ -17,18 +19,31 @@ const DIGIT_KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '00', '0'] as c
  * outcome is unsure, because a retry must send the same body. That tender is kept in the payment
  * store next to the request id, so a panel that is closed and opened again while the outcome is
  * unsure starts with the tender it sent, and a retry is the same call again.
+ *
+ * Offline (`queue` given): the same keypad and the same change calculation, but confirming saves
+ * the cash to the outbox instead of calling the server. The caller says what the total is: an
+ * estimate for an order the server has not got yet. Nothing is shown as paid: the order page shows
+ * the entry as waiting to sync until the server confirms it.
  */
 export function CashPanel({
   order,
   changeFrom,
   onAttempt,
   onDone,
+  queue,
 }: {
-  order: OrderDto;
+  order: Pick<OrderDto, 'id' | 'totalSatang'>;
   /** The waiting payment this one replaces (the change-method call), if any. */
   changeFrom?: string;
   onAttempt?: (method: PayMethod) => void;
   onDone?: () => void;
+  /** Saves the tender to the outbox (offline); without it the payment goes straight to the server. */
+  queue?: {
+    submit: (
+      tender: Satang,
+    ) => Promise<EnqueueResult> /** The total is an estimate (the server has not got the order yet). */;
+    estimated?: boolean;
+  };
 }) {
   const { payments } = useServices();
   const flow = useStoreState(payments);
@@ -43,9 +58,13 @@ export function CashPanel({
   const [tender, setTender] = useState<ReturnType<typeof keyToTender>>(
     sentCash ? satang(sentCash.tendered) : null,
   );
+  const [saving, setSaving] = useState(false);
+  const [notSaved, setNotSaved] = useState<Extract<EnqueueResult, { ok: false }>['reason'] | null>(
+    null,
+  );
   useActivityHold(tender !== null);
 
-  const sending = mine.sending !== null;
+  const sending = mine.sending !== null || saving;
   const unsure = attempt !== null;
   const locked = sending || (sentCash !== null && tender !== null);
   const view = cashView(order.totalSatang, tender);
@@ -55,6 +74,14 @@ export function CashPanel({
   async function confirm() {
     // An unsure request is retried through this very button (same tender, same request id).
     if (sending || tender === null || !view.canConfirm) return;
+    if (queue) {
+      setSaving(true);
+      setNotSaved(null);
+      const saved = await queue.submit(tender).finally(() => setSaving(false));
+      if (saved.ok) onDone?.();
+      else setNotSaved(saved.reason);
+      return;
+    }
     onAttempt?.('cash');
     const input = { method: 'cash', tendered: tender } as const;
     const outcome = changeFrom
@@ -66,12 +93,14 @@ export function CashPanel({
   const money = (value: number) => formatBaht(value, locale);
   const confirmLabel = sending
     ? tr('payment.sending')
-    : view.change !== null && view.change > 0
-      ? tr('payment.cash.confirmWithChange', {
-          amount: money(order.totalSatang),
-          change: money(view.change),
-        })
-      : tr('payment.confirmAmount', { amount: money(order.totalSatang) });
+    : queue
+      ? tr('outbox.cash.confirm')
+      : view.change !== null && view.change > 0
+        ? tr('payment.cash.confirmWithChange', {
+            amount: money(order.totalSatang),
+            change: money(view.change),
+          })
+        : tr('payment.confirmAmount', { amount: money(order.totalSatang) });
 
   return (
     <section className="cash" aria-labelledby="cash-title">
@@ -131,7 +160,12 @@ export function CashPanel({
               </>
             )}
           </div>
-          {unsure ? (
+          {queue?.estimated ? <p className="hint">{tr('outbox.cash.estimate')}</p> : null}
+          {notSaved ? (
+            <p className="error" role="alert">
+              {saveErrorText(tr, notSaved)}
+            </p>
+          ) : unsure ? (
             <p className="error" role="alert">
               {tr(sentCash ? 'payment.unsure' : 'payment.unsureOtherMethod')}
             </p>

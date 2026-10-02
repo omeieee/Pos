@@ -10,6 +10,7 @@ import './order-entry.css';
 import './orders.css';
 import './payment.css';
 import './kitchen.css';
+import './outbox.css';
 
 const root = document.getElementById('root');
 if (!root) throw new Error('#root not found');

@@ -3,7 +3,12 @@ import { useEntities, useLocale, useT } from '../ui/hooks.ts';
 import { Icon } from '../ui/Icon.tsx';
 import { govCopayScheme, type MethodOption, type PayMethod } from './payment-model.ts';
 
-const METHOD_ICON = { cash: 'cash', promptpay: 'qr', gov_copay: 'hands' } as const;
+const METHOD_ICON = {
+  cash: 'cash',
+  promptpay: 'qr',
+  gov_copay: 'hands',
+  platform: 'store',
+} as const;
 
 /**
  * The payment methods as a group of large radio tiles. A method that cannot be used is shown

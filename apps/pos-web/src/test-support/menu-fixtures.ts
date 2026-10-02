@@ -149,3 +149,21 @@ export function seedMenu(store: EntityStore): void {
   ];
   store.applyMany(frames);
 }
+
+/** A dish sold on Grab and LINE MAN, each at its own price (฿30 and ฿32; ฿25 in the shop). */
+export const PLATFORM_DISH = uuid(209);
+
+/** Added on request, so the counts of the shared menu above stay as they are. */
+export function seedPlatformDish(store: EntityStore): void {
+  store.apply(
+    itemFrame(PLATFORM_DISH, 500, {
+      categoryId: MENU.catDrink,
+      nameTh: 'ชามะนาว',
+      nameEn: 'Lime tea',
+      priceSatang: satang(2500),
+      channels: ['storefront', 'grab', 'lineman'],
+      channelPrices: { grab: satang(3000), lineman: satang(3200) },
+      sort: 9,
+    }),
+  );
+}

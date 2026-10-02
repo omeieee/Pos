@@ -114,6 +114,59 @@ describe('the methods on offer', () => {
       enabled: true,
     });
   });
+
+  describe('while offline', () => {
+    const offline = (o = order(), frames: Parameters<typeof methodsOf>[0] = [govCopayFrame(6)]) => {
+      const store = createEntityStore();
+      for (const frame of frames) store.apply(frame);
+      return methodOptions(o, store.getState().settings, NOON, new Set(), false);
+    };
+
+    test('cash stays; PromptPay and co-pay say they need the internet', () => {
+      expect(offline()).toEqual([
+        { method: 'cash', enabled: true },
+        { method: 'promptpay', enabled: false, reason: 'needsInternet' },
+        { method: 'gov_copay', enabled: false, reason: 'needsInternet' },
+      ]);
+    });
+
+    test('a co-pay that is unavailable for its own reason keeps that reason', () => {
+      const list = offline(order({ fulfillment: 'room_delivery' }));
+      expect(list.find((m) => m.method === 'gov_copay')).toEqual({
+        method: 'gov_copay',
+        enabled: false,
+        reason: 'notAtCounter',
+      });
+    });
+  });
+
+  describe('a Grab or LINE MAN order', () => {
+    const platformOrder = () => order({ channel: 'grab', fulfillment: 'platform_delivery' });
+
+    test('is paid by the platform: that method, and co-pay shown as not available', () => {
+      expect(methodsOf([govCopayFrame(6)], platformOrder())).toEqual([
+        { method: 'platform', enabled: true },
+        { method: 'gov_copay', enabled: false, reason: 'notAtCounter' },
+      ]);
+    });
+
+    test('is not offered the platform method when the owner switched it off', () => {
+      const list = methodsOf([paymentMethodsFrame(5, { platform: false })], platformOrder());
+      expect(list.map((m) => m.method)).toEqual(['gov_copay']);
+    });
+
+    test('cannot record the platform payment offline (it has to be confirmed after creating)', () => {
+      const store = createEntityStore();
+      const list = methodOptions(
+        platformOrder(),
+        store.getState().settings,
+        NOON,
+        new Set(),
+        false,
+      );
+      expect(list[0]).toEqual({ method: 'platform', enabled: false, reason: 'needsInternet' });
+    });
+  });
 });
 
 describe('government co-pay availability', () => {

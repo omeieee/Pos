@@ -6,58 +6,81 @@ import { useEntities, useLocale, useServices, useStoreState, useT } from '../ui/
 import { Icon } from '../ui/Icon.tsx';
 import { Modal } from '../ui/Modal.tsx';
 import { priceCart } from './cart-pricing.ts';
+import type { CartMode } from './cart-store.ts';
 import { DeliveryFields } from './DeliveryFields.tsx';
 import { deliveryBuildings, deliveryReady } from './delivery-model.ts';
 import { localName } from './names.ts';
+import { saveErrorText } from './outbox-text.ts';
+import { PlatformFields } from './PlatformFields.tsx';
+import { PLATFORM_NOTE_MAX, platformRefSchema } from './platform-model.ts';
+import { useCart } from './use-cart.ts';
 
 /**
  * The order on the counter: where it goes, the lines, a note to the kitchen, the ESTIMATED total
  * and the create button. The estimate is labelled as one; the server's total is shown on the order page
  * after the order is created. A panel beside the menu on iPad and laptop, a sheet on iPhone.
+ *
+ * `mode` platform: an order keyed in by hand from Grab or LINE MAN. It has no recipient; it has the
+ * platform's order code instead, and the platform's prices.
+ *
+ * Offline, the same button saves the order on this device (the outbox) and says so; the order page
+ * then shows it as waiting to sync.
  */
 export function CartPanel({
   onClose,
   onEditLine,
+  mode = 'storefront',
 }: {
   onClose?: () => void;
   onEditLine: (lineKey: string) => void;
+  mode?: CartMode;
 }) {
-  const { cart, recipients } = useServices();
+  const { recipients, outbox } = useServices();
+  const cart = useCart(mode);
+  const offline = useStoreState(outbox).offline;
+  const platform = mode === 'platform';
   const state = useStoreState(cart);
   const entities = useEntities();
   const tr = useT();
   const locale = useLocale();
 
-  const pricing = useMemo(() => priceCart(entities, state.lines), [entities, state.lines]);
+  const pricing = useMemo(
+    () => priceCart(entities, state.lines, state.channel),
+    [entities, state.lines, state.channel],
+  );
   const priced = new Map(pricing.lines.map((l) => [l.key, l]));
   const locked = state.phase !== 'editing';
   const sending = state.phase === 'sending';
   const unsure = state.phase === 'unsure';
   const buildings = deliveryBuildings(entities.settings);
-  const deliveryOk = deliveryReady(
-    { building: state.deliveryBuilding, name: state.recipientName },
-    buildings,
-  );
+  const detailsOk = platform
+    ? platformRefSchema.safeParse(state.platformRef).success
+    : deliveryReady({ building: state.deliveryBuilding, name: state.recipientName }, buildings);
   // An order we are unsure about is retried as it was sent, whatever the menu says now.
-  const canPlace = state.lines.length > 0 && !sending && (unsure || (pricing.valid && deliveryOk));
+  const canPlace = state.lines.length > 0 && !sending && (unsure || (pricing.valid && detailsOk));
   const [confirmingClear, setConfirmingClear] = useState(false);
 
   async function place() {
     const outcome = await cart.submit();
-    if (outcome.ok) {
+    if (!outcome.ok) return;
+    if (!platform) {
       // The newest recipient is now first in the list for the next order.
       void recipients.refresh();
-      onClose?.();
-      goTo(`/orders/${outcome.order.id}`);
     }
+    onClose?.();
+    // A waiting order has its own page until the server numbers it.
+    goTo(`/orders/${'queued' in outcome ? outcome.queued.id : outcome.order.id}`);
   }
 
   return (
-    <section className="cart" aria-label={tr('pos.orderEntry.newOrder')}>
+    <section
+      className="cart"
+      aria-label={tr(platform ? 'platform.title' : 'pos.orderEntry.newOrder')}
+    >
       <header className="cart__head">
         <div className="cart__title-row">
           <h2 id="cart-title" className="cart__title">
-            {tr('pos.orderEntry.newOrder')}
+            {tr(platform ? 'platform.title' : 'pos.orderEntry.newOrder')}
           </h2>
           {onClose ? (
             <button
@@ -159,7 +182,7 @@ export function CartPanel({
             })}
           </ul>
         )}
-        <DeliveryFields locked={locked} />
+        {platform ? <PlatformFields locked={locked} /> : <DeliveryFields locked={locked} />}
       </div>
 
       <footer className="cart__foot">
@@ -171,7 +194,7 @@ export function CartPanel({
             id="order-note"
             className="input"
             type="text"
-            maxLength={500}
+            maxLength={platform ? PLATFORM_NOTE_MAX : 500}
             autoComplete="off"
             placeholder={tr('pos.orderEntry.orderNotePlaceholder')}
             disabled={locked}
@@ -190,8 +213,19 @@ export function CartPanel({
           </p>
         ) : null}
 
-        {state.lines.length > 0 && !unsure && !deliveryOk ? (
-          <p className="hint">{tr('pos.delivery.needed')}</p>
+        {state.saveError ? (
+          <p className="error" role="alert">
+            {saveErrorText(tr, state.saveError)}
+          </p>
+        ) : offline && !sending ? (
+          <p className="notice" role="status">
+            <Icon name="wifi-off" />
+            <span>{tr('pos.orderEntry.offlineHint')}</span>
+          </p>
+        ) : null}
+
+        {state.lines.length > 0 && !unsure && !detailsOk ? (
+          <p className="hint">{tr(platform ? 'platform.refNeeded' : 'pos.delivery.needed')}</p>
         ) : null}
 
         <div className="sumrow muted small">
@@ -219,7 +253,15 @@ export function CartPanel({
             onClick={() => void place()}
           >
             {tr(
-              sending ? 'pos.orderEntry.placing' : unsure ? 'common.retry' : 'pos.orderEntry.place',
+              sending
+                ? 'pos.orderEntry.placing'
+                : unsure
+                  ? 'common.retry'
+                  : offline
+                    ? 'pos.orderEntry.placeOffline'
+                    : platform
+                      ? 'platform.place'
+                      : 'pos.orderEntry.place',
             )}
           </button>
         </div>

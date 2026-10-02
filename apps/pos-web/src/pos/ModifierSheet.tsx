@@ -1,12 +1,14 @@
 import { formatBaht } from '@sds/i18n';
 import { useEffect, useMemo, useState } from 'react';
-import { useEntities, useLocale, useServices, useT } from '../ui/hooks.ts';
+import { useEntities, useLocale, useT } from '../ui/hooks.ts';
 import { Icon } from '../ui/Icon.tsx';
 import { Modal } from '../ui/Modal.tsx';
 import { checkSelection, estimateLineTotal } from './cart-pricing.ts';
+import type { CartMode } from './cart-store.ts';
 import type { MenuGroupView, MenuItemView } from './menu-model.ts';
 import { localName } from './names.ts';
 import { groupRule, isOptionLocked, pruneSelection, toggleOption } from './selection.ts';
+import { useCart } from './use-cart.ts';
 
 export type SheetTarget = { mode: 'add'; itemId: string } | { mode: 'edit'; lineKey: string };
 
@@ -21,12 +23,14 @@ export function ModifierSheet({
   target,
   item,
   onClose,
+  mode = 'storefront',
 }: {
   target: SheetTarget;
   item: MenuItemView;
   onClose: () => void;
+  mode?: CartMode;
 }) {
-  const { cart } = useServices();
+  const cart = useCart(mode);
   const entities = useEntities();
   const tr = useT();
   const locale = useLocale();
@@ -57,9 +61,10 @@ export function ModifierSheet({
   }, [lineGone, onClose]);
   if (lineGone) return null;
 
-  const check = checkSelection(entities, item.id, optionIds);
+  const { channel } = cart.getState();
+  const check = checkSelection(entities, item.id, optionIds, channel);
   const amount = formatBaht(
-    estimateLineTotal(entities, { itemId: item.id, optionIds, qty }),
+    estimateLineTotal(entities, { itemId: item.id, optionIds, qty }, channel),
     locale,
   );
   const name = localName(locale, item.nameTh, item.nameEn);

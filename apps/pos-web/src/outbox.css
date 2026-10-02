@@ -1,0 +1,121 @@
+/*
+ * The offline outbox and the platform entry. Same rules as the other screens: every colour, size,
+ * space and radius comes from the --sds-* design tokens, every control is at least --tap tall, and
+ * nothing depends on hover.
+ */
+
+/* ---------- The top bar: how many orders and payments wait ---------- */
+.qbadge {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sds-space-xs);
+  min-height: var(--tap);
+  color: inherit;
+  text-decoration: none;
+}
+.qbadge__part {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sds-space-xs);
+  min-height: 32px;
+  padding: 0 var(--sds-space-md);
+  border-radius: var(--sds-radius-pill);
+  font-size: var(--sds-font-size-sm);
+  font-weight: var(--sds-font-weight-bold);
+  white-space: nowrap;
+}
+.qbadge__part--waiting {
+  background: var(--sds-color-warning-subtle);
+  color: var(--sds-color-warning-text);
+}
+.qbadge__part--attention {
+  background: var(--sds-color-danger-subtle);
+  color: var(--sds-color-danger-text);
+}
+
+/* ---------- The orders waiting to sync, above the board ---------- */
+.queued {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sds-space-sm);
+}
+.queued__title {
+  display: flex;
+  align-items: center;
+  gap: var(--sds-space-sm);
+  font-size: var(--sds-font-size-lg);
+}
+.queued__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: var(--sds-space-md);
+  align-items: start;
+}
+.qcard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sds-space-sm);
+  padding: var(--sds-space-md) var(--sds-space-lg);
+  border: 1.5px dashed var(--sds-color-warning-text);
+  border-radius: var(--sds-radius-md);
+  background: var(--sds-color-warning-subtle);
+}
+.qcard--attention {
+  border-style: solid;
+  border-color: var(--sds-color-danger-text);
+  background: var(--sds-color-danger-subtle);
+}
+.qcard__link {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sds-space-xs);
+  min-height: var(--tap);
+  color: inherit;
+  text-decoration: none;
+  -webkit-touch-callout: none;
+}
+.qcard__link:active {
+  opacity: 0.7;
+}
+
+/* What a person can do with a waiting or refused entry. */
+.qactions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sds-space-sm);
+}
+.qactions__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sds-space-sm);
+}
+.qactions__row .btn {
+  flex: 1;
+}
+
+/* The cash taken offline, waiting to be sent. */
+.qcash {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sds-space-sm);
+}
+.qcash__summary {
+  font-size: var(--sds-font-size-xl);
+  font-weight: var(--sds-font-weight-bold);
+}
+
+/* ---------- Grab / LINE MAN entry ---------- */
+.oe__platform {
+  flex: none;
+  max-width: 420px;
+}
+.platform {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sds-space-sm);
+}

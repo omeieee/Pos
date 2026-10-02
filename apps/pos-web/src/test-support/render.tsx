@@ -17,10 +17,12 @@ import { ApiClientError } from '../api/errors.ts';
 import { type AuthStore, createAuthStore } from '../auth/auth-store.ts';
 import { createActivity } from '../lib/activity.ts';
 import { createStore } from '../lib/store.ts';
+import { createMemoryLocalStore, type LocalStore } from '../platform/localStore.ts';
 import { createSound } from '../platform/sound.ts';
 import { createMemoryTokenStore } from '../platform/tokenStore.ts';
 import { createCartStore } from '../pos/cart-store.ts';
 import { createOrderMovesStore } from '../pos/order-moves-store.ts';
+import { createOutboxStore } from '../pos/outbox-store.ts';
 import { createPaymentStore } from '../pos/payment-store.ts';
 import { createRecipientStore } from '../pos/recipient-store.ts';
 import type { ConnectionState } from '../realtime/connection.ts';
@@ -151,6 +153,12 @@ export function createTestServices(
     buildings?: boolean;
     /** Signed-in auth from `createTestAuth`. Without one, screens that need a person cannot render. */
     auth?: AuthStore;
+    /** The carts save to the outbox when the device is offline or gets no answer (default: no). */
+    queue?: boolean;
+    /** The device starts offline. */
+    offline?: boolean;
+    /** The local store behind the outbox; default a persistent in-memory one. */
+    localStore?: LocalStore;
   } = {},
 ) {
   const entities = createEntityStore();
@@ -168,7 +176,37 @@ export function createTestServices(
   });
   const create = api.orders.create;
   const getOrder = api.orders.get;
-  const cart = createCartStore({ api: { orders: { create } }, entities, activity });
+  const life = createFakeLifecycle({ online: !options.offline });
+  const connection = createStore<ConnectionState>({
+    status: 'online',
+    synced: true,
+    ...options.connection,
+  });
+  const localStore = options.localStore ?? { ...createMemoryLocalStore(), persistent: true };
+  const outbox = createOutboxStore({
+    api,
+    entities,
+    auth:
+      options.auth ??
+      createStore({
+        phase: 'signedIn' as const,
+        session: { staff: { id: IDS.cashier } },
+        device: { id: IDS.device },
+      }),
+    lifecycle: life.lifecycle,
+    connection,
+    localStore: async () => localStore,
+  });
+  const unbindOutbox = outbox.bind();
+  const queueDeps = options.queue ? { outbox } : {};
+  const cart = createCartStore({ api: { orders: { create } }, entities, activity, ...queueDeps });
+  const platformCart = createCartStore({
+    api: { orders: { create } },
+    entities,
+    activity,
+    mode: 'platform',
+    ...queueDeps,
+  });
   const recipients = createRecipientStore({ api, entities });
   const payments = createPaymentStore({
     api,
@@ -180,7 +218,6 @@ export function createTestServices(
   });
   const orderMoves = createOrderMovesStore({ api, entities });
   // The sound and the wake lock run on doubles: the engine starts only on unlock, like iOS.
-  const life = createFakeLifecycle();
   const audio = createFakeEngine();
   const soundPrefs = createFakePrefs();
   const sound = createSound({
@@ -189,16 +226,13 @@ export function createTestServices(
     lifecycle: life.lifecycle,
   });
   const wake = createFakeWakeLock();
-  const connection = createStore<ConnectionState>({
-    status: 'online',
-    synced: true,
-    ...options.connection,
-  });
   const services = {
     api,
     entities,
     activity,
     cart,
+    platformCart,
+    outbox,
     recipients,
     payments,
     orderMoves,
@@ -212,6 +246,10 @@ export function createTestServices(
     services,
     entities,
     cart,
+    platformCart,
+    outbox,
+    unbindOutbox,
+    localStore,
     recipients,
     payments,
     orderMoves,

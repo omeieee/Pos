@@ -27,6 +27,7 @@ import { createWebAudioEngine } from './platform/webAudio.ts';
 import { type CartStore, createCartStore } from './pos/cart-store.ts';
 import { createNewOrderAlarm } from './pos/new-order-alarm.ts';
 import { createOrderMovesStore, type OrderMovesStore } from './pos/order-moves-store.ts';
+import { createOutboxStore, type OutboxStore } from './pos/outbox-store.ts';
 import { createPaymentStore, type PaymentStore } from './pos/payment-store.ts';
 import { createRecipientStore, type RecipientStore } from './pos/recipient-store.ts';
 import { bindRealtime } from './realtime/bind.ts';
@@ -42,6 +43,10 @@ export interface Services {
   activity: Activity;
   /** The order being rung up at the counter. */
   cart: CartStore;
+  /** The Grab / LINE MAN order being keyed in by hand (its own cart: no recipient, a channel). */
+  platformCart: CartStore;
+  /** Orders and cash that could not reach the server: kept on the device, replayed when it can. */
+  outbox: OutboxStore;
   /** The remembered recipients of the order screen, and the list of buildings. */
   recipients: RecipientStore;
   /** The payment calls of the order page: guarded, idempotent, kept across pages. */
@@ -61,6 +66,15 @@ export interface Services {
    * returns the unbinder.
    */
   bindRealtime(): () => void;
+}
+
+/** Runs `make` the first time and hands every caller the same answer. */
+function once<T>(make: () => Promise<T>): () => Promise<T> {
+  let promise: Promise<T> | null = null;
+  return () => {
+    promise ??= make();
+    return promise;
+  };
 }
 
 export function createServices(
@@ -110,7 +124,18 @@ export function createServices(
 
   const lifecycle = options.lifecycle ?? webLifecycle;
   const activity = createActivity();
-  const cart = createCartStore({ api, entities, activity });
+  // One opening of the local store, shared by the outbox and the sound preference.
+  const openStore = once(options.localStore ?? (() => openLocalStore()));
+  const outbox = createOutboxStore({
+    api,
+    entities,
+    auth,
+    lifecycle,
+    connection,
+    localStore: openStore,
+  });
+  const cart = createCartStore({ api, entities, activity, outbox });
+  const platformCart = createCartStore({ api, entities, activity, outbox, mode: 'platform' });
   const recipients = createRecipientStore({ api, entities });
   const payments = createPaymentStore({ api, entities, activity, auth });
   const orderMoves = createOrderMovesStore({ api, entities });
@@ -124,7 +149,7 @@ export function createServices(
     options.sound ??
     createSound({
       engine: createWebAudioEngine(),
-      prefs: createSoundPrefs(options.localStore ?? (() => openLocalStore())),
+      prefs: createSoundPrefs(openStore),
       lifecycle,
     });
   const wakeLock = options.wakeLock ?? createWebWakeLock({ lifecycle });
@@ -141,6 +166,8 @@ export function createServices(
     connection,
     activity,
     cart,
+    platformCart,
+    outbox,
     recipients,
     payments,
     orderMoves,
@@ -156,6 +183,7 @@ export function createServices(
         // What belongs to the person who left, including requests still on their way.
         onSignedOut: () => {
           cart.reset();
+          platformCart.reset();
           recipients.reset();
           payments.reset();
           orderMoves.reset();
@@ -165,9 +193,12 @@ export function createServices(
       });
       void sound.init();
       const stopAlarm = alarm.start();
+      // Replays the outbox while someone is signed in; sign-out keeps what is waiting.
+      const unbindOutbox = outbox.bind();
       return () => {
         unbind();
         stopAlarm();
+        unbindOutbox();
       };
     },
   };

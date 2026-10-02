@@ -13,10 +13,13 @@ import { Icon } from '../ui/Icon.tsx';
 import { Modal } from '../ui/Modal.tsx';
 import { CartPanel } from './CartPanel.tsx';
 import { checkSelection, priceCart } from './cart-pricing.ts';
+import type { CartMode } from './cart-store.ts';
 import { ModifierSheet, type SheetTarget } from './ModifierSheet.tsx';
 import { buildMenu, findItem, type MenuItemView, matchesSearch } from './menu-model.ts';
 import { localName } from './names.ts';
+import { PLATFORM_CHANNELS, type PlatformChannel } from './platform-model.ts';
 import { pruneSelection } from './selection.ts';
+import { useCart } from './use-cart.ts';
 
 /** Same breakpoint as the shell: below it the navigation moves to the bottom and the order is a sheet. */
 const PHONE_MAX_WIDTH = 719;
@@ -26,8 +29,10 @@ const PHONE_MAX_WIDTH = 719;
  * laptop) or behind a bar at the bottom (iPhone). Tap a dish: one without required choices is
  * added at once; one with them repeats the last choices made for it, or opens the options sheet.
  */
-export function OrderEntryScreen() {
-  const { cart, recipients } = useServices();
+export function OrderEntryScreen({ mode = 'storefront' }: { mode?: CartMode }) {
+  const { recipients } = useServices();
+  const cart = useCart(mode);
+  const platform = mode === 'platform';
   const entities = useEntities();
   const connection = useConnection();
   const cartState = useStoreState(cart);
@@ -42,16 +47,20 @@ export function OrderEntryScreen() {
 
   // The remembered recipients and the buildings are read when the screen opens.
   useEffect(() => {
+    if (platform) return;
     void recipients.refresh();
     void recipients.ensureBuildings();
-  }, [recipients]);
+  }, [recipients, platform]);
 
   const { categories, items, groups, options } = entities;
   const menu = useMemo(
-    () => buildMenu({ categories, items, groups, options }),
-    [categories, items, groups, options],
+    () => buildMenu({ categories, items, groups, options }, cartState.channel),
+    [categories, items, groups, options, cartState.channel],
   );
-  const pricing = useMemo(() => priceCart(entities, cartState.lines), [entities, cartState.lines]);
+  const pricing = useMemo(
+    () => priceCart(entities, cartState.lines, cartState.channel),
+    [entities, cartState.lines, cartState.channel],
+  );
 
   const activeCategory = menu.some((c) => c.id === category) ? category : 'all';
   const shown = menu
@@ -73,7 +82,7 @@ export function OrderEntryScreen() {
       return;
     }
     const last = pruneSelection(item.groups, cart.lastChoice(item.id) ?? []);
-    if (last.length > 0 && checkSelection(entities, item.id, last).ok) {
+    if (last.length > 0 && checkSelection(entities, item.id, last, cartState.channel).ok) {
       cart.addItem({ itemId: item.id, optionIds: last });
       return;
     }
@@ -105,7 +114,31 @@ export function OrderEntryScreen() {
 
   return (
     <div className="oe">
-      <section className="oe__menu" aria-label={tr('pos.orderEntry.title')}>
+      <section
+        className="oe__menu"
+        aria-label={tr(platform ? 'platform.title' : 'pos.orderEntry.title')}
+      >
+        {platform ? (
+          <fieldset className="seg oe__platform">
+            <legend className="visually-hidden">{tr('platform.channel')}</legend>
+            {PLATFORM_CHANNELS.map((channel: PlatformChannel) => (
+              <label
+                key={channel}
+                className={`seg__item${cartState.channel === channel ? ' seg__item--on' : ''}${locked ? ' seg__item--locked' : ''}`}
+              >
+                <input
+                  className="visually-hidden"
+                  type="radio"
+                  name="platform-channel"
+                  checked={cartState.channel === channel}
+                  disabled={locked}
+                  onChange={() => cart.setChannel(channel)}
+                />
+                {tr(`orders.channel.${channel}`)}
+              </label>
+            ))}
+          </fieldset>
+        ) : null}
         <div className="oe__tools">
           <label className="oe__search">
             <Icon name="search" />
@@ -199,7 +232,7 @@ export function OrderEntryScreen() {
 
       {phone ? null : (
         <aside className="oe__cart">
-          <CartPanel onEditLine={editLine} />
+          <CartPanel onEditLine={editLine} mode={mode} />
         </aside>
       )}
 
@@ -219,12 +252,12 @@ export function OrderEntryScreen() {
 
       {phone && cartOpen ? (
         <Modal labelledBy="cart-title" onClose={() => setCartOpen(false)} variant="cart">
-          <CartPanel onClose={() => setCartOpen(false)} onEditLine={editLine} />
+          <CartPanel onClose={() => setCartOpen(false)} onEditLine={editLine} mode={mode} />
         </Modal>
       ) : null}
 
       {sheet && sheetItem ? (
-        <ModifierSheet target={sheet} item={sheetItem} onClose={closeSheet} />
+        <ModifierSheet target={sheet} item={sheetItem} onClose={closeSheet} mode={mode} />
       ) : null}
     </div>
   );

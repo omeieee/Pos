@@ -70,12 +70,18 @@ export function paymentPhase(order: OrderDto, payments: readonly PaymentDto[]): 
 
 // ---------- Methods on offer ----------
 
-export type PayMethod = 'cash' | 'promptpay' | 'gov_copay';
+export type PayMethod = 'cash' | 'promptpay' | 'gov_copay' | 'platform';
 
 /** How often a screen re-reads the clock to see whether the co-pay window has closed. */
 export const COPAY_TICK_MS = 30_000;
 
-export type CopayReason = 'notConfigured' | 'off' | 'notAtCounter' | 'outsideWindow';
+export type CopayReason =
+  | 'notConfigured'
+  | 'off'
+  | 'notAtCounter'
+  | 'outsideWindow'
+  /** The device is offline: this method needs the server (the QR, the platform record). */
+  | 'needsInternet';
 export type CopayVerdict = { available: true } | { available: false; reason: CopayReason };
 
 export type MethodOption =
@@ -119,25 +125,48 @@ export function copayVerdict(
  * The methods staff may start with, in the order of the design: cash, PromptPay, ไทยช่วยไทย.
  * A method the owner switched off, or one the server refused as disabled (`hidden`), is left out.
  * Co-pay is always listed, disabled with its reason when it cannot be used (never silently gone).
+ *
+ * A Grab or LINE MAN order is paid by the platform: its one method is `platform`, and co-pay is
+ * listed as not available.
+ *
+ * Offline (`online` false) only cash can be taken: it is queued and the server confirms it later.
+ * PromptPay needs the signed QR link, ไทยช่วยไทย needs the server's scheme check, and the platform
+ * payment must be confirmed after it is created; all three say "needs the internet". No QR is
+ * made on the device: the PromptPay ID is masked in the feed on purpose.
  */
 export function methodOptions(
   order: Pick<OrderDto, 'channel' | 'fulfillment'>,
   settings: EntityState['settings'],
   nowMs: number,
   hidden: ReadonlySet<PayMethod>,
+  online = true,
 ): MethodOption[] {
   const methods = paymentsSettingsSchema.parse(settings.get('payment_methods')?.data ?? {});
   const options: MethodOption[] = [];
+  const needsInternet = (method: PayMethod): MethodOption => ({
+    method,
+    enabled: false,
+    reason: 'needsInternet',
+  });
+  const verdict = copayVerdict(govCopayScheme(settings), order, nowMs);
+  const copay: MethodOption = verdict.available
+    ? online
+      ? { method: 'gov_copay', enabled: true }
+      : needsInternet('gov_copay')
+    : { method: 'gov_copay', enabled: false, reason: verdict.reason };
+
+  if (isPlatformOrder(order)) {
+    if (methods.platform && !hidden.has('platform')) {
+      options.push(online ? { method: 'platform', enabled: true } : needsInternet('platform'));
+    }
+    options.push(copay);
+    return options;
+  }
   if (methods.cash && !hidden.has('cash')) options.push({ method: 'cash', enabled: true });
   if (methods.promptpay && !hidden.has('promptpay')) {
-    options.push({ method: 'promptpay', enabled: true });
+    options.push(online ? { method: 'promptpay', enabled: true } : needsInternet('promptpay'));
   }
-  const verdict = copayVerdict(govCopayScheme(settings), order, nowMs);
-  options.push(
-    verdict.available
-      ? { method: 'gov_copay', enabled: true }
-      : { method: 'gov_copay', enabled: false, reason: verdict.reason },
-  );
+  options.push(copay);
   return options;
 }
 
