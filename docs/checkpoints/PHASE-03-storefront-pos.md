@@ -72,3 +72,4 @@ Tasks 1 (except the TOTP app choice) and 4 need no owner answers. Tasks 1–6 ar
 - 2026-10-02 · Orders board and payment screens (F2a) QA-reviewed, pushed and deployed as 297e69c ([PROGRESS](../PROGRESS.md))
 - 2026-10-02 · Sync window and kitchen view (F2b) QA-reviewed, pushed and deployed as d60a7d1 ([PROGRESS](../PROGRESS.md))
 - 2026-10-02 · Entrance delivery and saved recipients QA-reviewed, pushed and deployed as 8b7274a ([PROGRESS](../PROGRESS.md))
+- 2026-10-02 · Recipient integrity, customer erasure and idempotent menu creates QA-reviewed, pushed and deployed as baf86de ([PROGRESS](../PROGRESS.md))
