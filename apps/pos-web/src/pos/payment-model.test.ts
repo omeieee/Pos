@@ -1,4 +1,4 @@
-import { type PaymentStatus, satang } from '@sds/shared';
+import { FULFILLMENTS, isCopayAvailable, type PaymentStatus, satang } from '@sds/shared';
 import { describe, expect, test } from 'vitest';
 import { createEntityStore } from '../realtime/entity-store.ts';
 import {
@@ -127,6 +127,40 @@ describe('government co-pay availability', () => {
 
   test('is available for a storefront order inside the dates and hours', () => {
     expect(copayVerdict(scheme(), order(), NOON)).toEqual({ available: true });
+  });
+
+  test('is available for an entrance delivery inside the dates and hours (the hand-over is face to face)', () => {
+    expect(
+      copayVerdict(scheme(), order({ fulfillment: 'entrance_delivery', channel: 'line' }), NOON),
+    ).toEqual({ available: true });
+    expect(
+      copayVerdict(scheme(), order({ fulfillment: 'entrance_delivery', channel: 'phone' }), NOON),
+    ).toEqual({ available: true });
+  });
+
+  test('an entrance delivery outside the dates or hours says "outside", not "not at the counter"', () => {
+    const late = Date.parse('2030-10-15T16:00:00Z');
+    expect(copayVerdict(scheme(), order({ fulfillment: 'entrance_delivery' }), late)).toEqual({
+      available: false,
+      reason: 'outsideWindow',
+    });
+  });
+
+  test('gives the very answer of the shared rule for every fulfilment (a copy of the rule would fail here)', () => {
+    const times = [
+      NOON,
+      Date.parse('2030-10-14T22:00:00Z'),
+      Date.parse('2030-10-15T16:00:00Z'),
+      Date.parse('2030-12-01T05:00:00Z'),
+    ];
+    for (const fulfillment of FULFILLMENTS) {
+      for (const at of times) {
+        const verdict = copayVerdict(scheme(), order({ fulfillment, channel: 'storefront' }), at);
+        expect(verdict.available, `${fulfillment} @ ${at}`).toBe(
+          isCopayAvailable(scheme(), new Date(at), 'storefront', fulfillment),
+        );
+      }
+    }
   });
 
   test('is never offered for room delivery', () => {

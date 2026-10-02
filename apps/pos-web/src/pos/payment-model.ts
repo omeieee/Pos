@@ -92,9 +92,10 @@ export function govCopayScheme(settings: EntityState['settings']): GovCopayDto |
 }
 
 /**
- * Whether co-pay may be offered for this order now. It makes the same call as the server: counter
- * payments are face to face at the storefront whatever channel the order came by, Grab and LINE MAN
- * orders are paid on their platform, and room delivery is never face to face. When it is not
+ * Whether co-pay may be offered for this order now. It makes the same call as the server (the
+ * shared `isCopayAvailable`, never a copy of its rule): the payment is face to face at the
+ * entrance hand-over whatever channel the order came by, Grab and LINE MAN orders are paid on
+ * their platform, and room delivery is never face to face. When it is not
  * available, the reason says why. The clock is this device's; the server decides for real.
  */
 export function copayVerdict(
@@ -107,8 +108,9 @@ export function copayVerdict(
   if (isPlatformOrder(order)) return { available: false, reason: 'notAtCounter' };
   const now = new Date(nowMs);
   if (isCopayAvailable(scheme, now, 'storefront', order.fulfillment)) return { available: true };
-  // The time is fine for a counter order, so it is the way the order is served that rules it out.
-  return isCopayAvailable(scheme, now, 'storefront', 'dine_in')
+  // The time is fine for a hand-over at the entrance, so it is the way the order is served
+  // (room delivery, a platform) that rules it out.
+  return isCopayAvailable(scheme, now, 'storefront', 'entrance_delivery')
     ? { available: false, reason: 'notAtCounter' }
     : { available: false, reason: 'outsideWindow' };
 }
