@@ -12,6 +12,7 @@ import {
   buildNumberingPatch,
   buildPaymentsPatch,
   buildShopPatch,
+  hasOtherHoursRules,
   hoursFormFrom,
   minutesToText,
   numberingFormFrom,
@@ -146,6 +147,22 @@ describe('opening hours', () => {
       ]),
     ).toEqual(['closure:1']);
     expect(errors([{ date: '2026-10-20', note: '' }])).toEqual(['closure:0']);
+  });
+
+  test('says when the saved hours hold rules this form does not show', () => {
+    expect(hasOtherHoursRules(hours())).toBe(false);
+    expect(
+      hasOtherHoursRules(hours({ weekly: { mon: { storefront: null, delivery: null } } })),
+    ).toBe(false);
+    expect(hasOtherHoursRules(hours({ weekly: { tue: { delivery: null } } }))).toBe(true);
+    expect(
+      hasOtherHoursRules(
+        hours({ overrides: [{ date: '2026-10-20', closed: false, delivery: null }] }),
+      ),
+    ).toBe(true);
+    expect(hasOtherHoursRules(hours({ overrides: [{ date: '2026-10-13', closed: true }] }))).toBe(
+      false,
+    );
   });
 
   test('nothing changed sends nothing', () => {

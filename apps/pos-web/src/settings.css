@@ -69,3 +69,110 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* A section's body and its forms. */
+.sset__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sds-space-md);
+}
+.sset__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sds-space-lg);
+  max-width: 640px;
+}
+.sset__message {
+  margin: 0;
+  padding: var(--sds-space-sm) var(--sds-space-md);
+  border-radius: var(--sds-radius-md);
+  background: var(--sds-color-info-subtle);
+  color: var(--sds-color-info-text);
+}
+.sset__actions {
+  display: flex;
+  justify-content: flex-start;
+}
+.sset__pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sds-space-md);
+}
+fieldset.sset__window {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sds-space-sm);
+  margin: 0;
+  min-width: 0;
+}
+.sset__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sds-space-md);
+}
+.sset__row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sds-space-sm);
+  padding: var(--sds-space-md);
+  border: 1px solid var(--sds-color-border);
+  border-radius: var(--sds-radius-md);
+  background: var(--sds-color-surface);
+}
+.sset__row-fields {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sds-space-md);
+}
+.sset__add {
+  align-self: flex-start;
+}
+
+/* The building list: chips with a remove button, and the add row. */
+.sset__chips {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sds-space-sm);
+}
+.sset__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sds-space-xs);
+  padding-left: var(--sds-space-md);
+  border: 1.5px solid var(--sds-color-border-strong);
+  border-radius: var(--sds-radius-pill);
+  background: var(--sds-color-surface);
+  font-weight: var(--sds-font-weight-medium);
+}
+.sset__add-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--sds-space-sm);
+}
+.sset__add-row .field-group {
+  flex: 1 1 200px;
+}
+
+fieldset.group {
+  margin: 0;
+  min-width: 0;
+}
+
+@media (max-width: 719px) {
+  .sset__pair,
+  .sset__row-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .sset__row {
+    flex-wrap: wrap;
+  }
+}

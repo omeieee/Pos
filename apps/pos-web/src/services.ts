@@ -37,6 +37,7 @@ import { createRecipientStore, type RecipientStore } from './pos/recipient-store
 import { bindRealtime } from './realtime/bind.ts';
 import { type Connection, createConnection } from './realtime/connection.ts';
 import { createEntityStore, type EntityStore } from './realtime/entity-store.ts';
+import { createSettingsStore, type SettingsStore } from './settings/settings-store.ts';
 
 export interface Services {
   api: ApiClient;
@@ -70,6 +71,11 @@ export interface Services {
    * which live in this store's memory and nowhere else.
    */
   menuEditor: MenuEditorStore;
+  /**
+   * The settings screens (Settings): online only, versioned writes, a sensitive one asks for a
+   * step-up first.
+   */
+  settingsEditor: SettingsStore;
   /** The status moves of an order (order page and kitchen view): guarded, reconciled, epoch-safe. */
   orderMoves: OrderMovesStore;
   /** The chime for a new order and its remembered on/off choice (a platform seam). */
@@ -185,6 +191,7 @@ export function createServices(
     canSeeCosts: () => auth.getState().session?.permissions.includes('report.view') ?? false,
     photoEngine: createWebPhotoEngine(),
   });
+  const settingsEditor = createSettingsStore({ api, lifecycle, auth });
   const updates = createAppUpdates({
     host: options.serviceWorker ?? webServiceWorker,
     lifecycle: options.lifecycle ?? webLifecycle,
@@ -220,6 +227,7 @@ export function createServices(
     payments,
     orderMoves,
     menuEditor,
+    settingsEditor,
     sound,
     wakeLock,
     lifecycle,
@@ -237,6 +245,7 @@ export function createServices(
           payments.reset();
           orderMoves.reset();
           menuEditor.reset();
+          settingsEditor.reset();
           // The next person lands on their own first page, not on the one the last person left.
           resetRoute();
         },

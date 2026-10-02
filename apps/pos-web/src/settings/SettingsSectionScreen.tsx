@@ -1,5 +1,11 @@
 import { useAuthState, useT } from '../ui/hooks.ts';
 import { Icon } from '../ui/Icon.tsx';
+import { DeliveryForm } from './DeliveryForm.tsx';
+import { HoursForm } from './HoursForm.tsx';
+import { NumberingForm } from './NumberingForm.tsx';
+import { PaymentsForm } from './PaymentsForm.tsx';
+import { SettingSection } from './SettingSection.tsx';
+import { ShopForm } from './ShopForm.tsx';
 import { type SectionDef, sectionById } from './sections.ts';
 
 function BackLink() {
@@ -13,9 +19,42 @@ function BackLink() {
 }
 
 /** What a section shows. Each section's screen is added as it is built. */
-function SectionBody(_props: { def: SectionDef; canEdit: boolean }) {
+function SectionBody({ def, editable }: { def: SectionDef; editable: boolean }) {
   const tr = useT();
-  return <p className="muted">{tr('settings.soon')}</p>;
+  switch (def.id) {
+    case 'shop':
+      return (
+        <SettingSection name="shop" editable={editable}>
+          {(p) => <ShopForm {...p} />}
+        </SettingSection>
+      );
+    case 'hours':
+      return (
+        <SettingSection name="hours" editable={editable}>
+          {(p) => <HoursForm {...p} />}
+        </SettingSection>
+      );
+    case 'numbering':
+      return (
+        <SettingSection name="numbering" editable={editable}>
+          {(p) => <NumberingForm {...p} />}
+        </SettingSection>
+      );
+    case 'payments':
+      return (
+        <SettingSection name="payments" editable={editable}>
+          {(p) => <PaymentsForm {...p} />}
+        </SettingSection>
+      );
+    case 'delivery':
+      return (
+        <SettingSection name="delivery" editable={editable}>
+          {(p) => <DeliveryForm {...p} />}
+        </SettingSection>
+      );
+    default:
+      return <p className="muted">{tr('settings.soon')}</p>;
+  }
 }
 
 /**
@@ -52,7 +91,7 @@ export function SettingsSectionScreen({ section }: { section: string }) {
         </h1>
         <p className="muted">{tr(def.descKey)}</p>
       </header>
-      <SectionBody def={def} canEdit={permissions.includes(def.edit)} />
+      <SectionBody def={def} editable={permissions.includes(def.edit)} />
     </section>
   );
 }

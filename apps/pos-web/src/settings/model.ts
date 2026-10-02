@@ -152,6 +152,15 @@ export function hoursFormFrom(hours: OpeningHours): HoursForm {
   };
 }
 
+/** Does the saved value hold weekday rules or dated hours that this form keeps but does not show? */
+export function hasOtherHoursRules(hours: OpeningHours): boolean {
+  const otherWeekday = WEEKDAYS.some((day) => {
+    const rule = hours.weekly[day];
+    return rule !== undefined && !isClosedDay(rule);
+  });
+  return otherWeekday || hours.overrides.some((o) => !o.closed);
+}
+
 /** A window as typed, or null when it is not a real one (open before close, both real times). */
 function readWindow(form: WindowForm): DayWindow | null {
   const openMinute = parseTimeText(form.open);

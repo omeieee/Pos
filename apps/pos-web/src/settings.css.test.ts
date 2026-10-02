@@ -20,4 +20,12 @@ describe('the settings styles follow the design tokens and the touch rules', () 
   test('on a phone the cards take one column', () => {
     expect(css).toMatch(/max-width:\s*719px\)\s*{[^}]*\.sset__cards/);
   });
+
+  test('on a phone the two-column form rows take one column', () => {
+    expect(css).toMatch(/max-width:\s*719px\)\s*{[^}]*\.sset__pair/);
+  });
+
+  test('the building chips are pills, told apart by a border and not by colour alone', () => {
+    expect(css).toMatch(/\.sset__chip\s*{[^}]*border:\s*1\.5px solid/);
+  });
 });

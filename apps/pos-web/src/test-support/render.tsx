@@ -33,6 +33,7 @@ import { createRecipientStore } from '../pos/recipient-store.ts';
 import type { ConnectionState } from '../realtime/connection.ts';
 import { createEntityStore } from '../realtime/entity-store.ts';
 import type { Services } from '../services.ts';
+import { createSettingsStore } from '../settings/settings-store.ts';
 import { AuthContext, LocaleContext, ServicesContext } from '../ui/hooks.ts';
 import { StepUpDialog } from '../ui/StepUpDialog.tsx';
 import { createFakeEngine, createFakePrefs, createFakeWakeLock } from './fake-audio.ts';
@@ -41,6 +42,7 @@ import { FAKE_DEVICE_TOKEN, IDS, sessionBody } from './fixtures.ts';
 import { deliveryFrame } from './frames.ts';
 import { cleanEngine, createFakeMenuApi } from './menu-editor-env.ts';
 import { seedMenu } from './menu-fixtures.ts';
+import { createFakeSettingsApi, type SettingsOverrides } from './settings-env.ts';
 
 /** The PIN the fake step-up accepts. */
 export const STEP_UP_PIN = '4321';
@@ -180,6 +182,8 @@ export function createTestServices(
     promptpay?: TestPromptpay;
     /** What the menu editor's calls answer (every other call fails the test). */
     menuApi?: Partial<ApiClient['menu']>;
+    /** What the settings screens' calls answer (every other call fails the test). */
+    settingsApi?: SettingsOverrides;
     /** The browser's picture engine for a menu photo (default: one that returns a clean WebP). */
     photoEngine?: PhotoEngine;
   } = {},
@@ -277,6 +281,14 @@ export function createTestServices(
       options.auth?.getState().session?.permissions.includes('report.view') ?? false,
     photoEngine: options.photoEngine ?? cleanEngine(),
   });
+  const settingsApi = createFakeSettingsApi(options.settingsApi);
+  const settingsEditor = createSettingsStore({
+    api: { settings: settingsApi as unknown as ApiClient['settings'] },
+    lifecycle: life.lifecycle,
+    auth: options.auth ?? {
+      runSensitive: async (call) => ({ ok: true as const, value: await call() }),
+    },
+  });
   // The sound and the wake lock run on doubles: the engine starts only on unlock, like iOS.
   const audio = createFakeEngine();
   const soundPrefs = createFakePrefs();
@@ -304,6 +316,7 @@ export function createTestServices(
     payments,
     orderMoves,
     menuEditor,
+    settingsEditor,
     sound,
     wakeLock: wake.wakeLock,
     lifecycle: life.lifecycle,
@@ -327,6 +340,8 @@ export function createTestServices(
     orderMoves,
     menuEditor,
     menuApi,
+    settingsEditor,
+    settingsApi,
     sound,
     audio,
     soundPrefs,
