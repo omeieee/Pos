@@ -342,6 +342,21 @@ export async function findPhotoBytes(
   return row?.bytes;
 }
 
+// ---------- Costs (read by the editor only) ----------
+
+/** Every item and option cost, archived rows included. Never mapped into an item or option DTO. */
+export async function listCosts(db: Db) {
+  const items = await db
+    .select({ id: menuItems.id, estCostSatang: menuItems.estCostSatang })
+    .from(menuItems)
+    .orderBy(asc(menuItems.id));
+  const options = await db
+    .select({ id: modifierOptions.id, costDeltaSatang: modifierOptions.costDeltaSatang })
+    .from(modifierOptions)
+    .orderBy(asc(modifierOptions.id));
+  return { items, options };
+}
+
 // ---------- Modifier groups and options ----------
 
 export async function listGroups(

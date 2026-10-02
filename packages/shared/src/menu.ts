@@ -1,6 +1,6 @@
 /**
  * Menu API shapes (02 §6, 03 §3 "Menu"). Prices are integer satang. Costs (`est_cost_satang`,
- * `cost_delta_satang`) can be written by managers but are never in any response: a kitchen tablet
+ * `cost_delta_satang`) can be written by managers but are in no item or option response (only `GET /v1/menu/costs`, report.view): a kitchen tablet
  * or a customer must not see what a bowl costs. Photos are stored by the API (D-21): `photoUrl`.
  */
 import { z } from 'zod';
@@ -30,6 +30,17 @@ const needsAFieldMessage = {
  * IDEMPOTENCY_KEY_REUSED). Never part of a response.
  */
 const clientRequestId = z.uuid().optional();
+
+/**
+ * What the Settings menu editor may read back: the write-only costs, by id (`GET /v1/menu/costs`,
+ * report.view). Deliberately not part of any item or option DTO: those go to every till and to the
+ * kitchen sockets.
+ */
+export const menuCostsResponseSchema = z.object({
+  items: z.array(z.object({ id: z.uuid(), estCostSatang: nonNegativeSatangSchema })),
+  options: z.array(z.object({ id: z.uuid(), costDeltaSatang: satangSchema })),
+});
+export type MenuCostsResponse = z.infer<typeof menuCostsResponseSchema>;
 
 const imageUrl = z.url({ protocol: /^https$/ }).max(500);
 const channelsSchema = z

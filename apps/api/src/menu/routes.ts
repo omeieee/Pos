@@ -34,6 +34,7 @@ import {
   deactivateCategory,
   getItem,
   listCategories,
+  listCosts,
   listGroups,
   listItems,
   patchCategory,
@@ -93,6 +94,11 @@ export async function registerMenuRoutes(
 
   const view = { onRequest: guard('menu.availability') };
   const edit = { onRequest: guard('menu.edit') };
+
+  // Costs: write-only in every DTO, readable here by the roles that see reports.
+  app.get('/costs', { onRequest: guard('report.view') }, async (_request, reply) =>
+    reply.header('cache-control', 'no-store').send(await listCosts(ctx)),
+  );
 
   // Categories
   app.get('/categories', view, async () => listCategories(ctx));

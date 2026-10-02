@@ -3,7 +3,7 @@
  * transaction: lock the row, check `expectedVersion`, write (the sync trigger bumps version and
  * rev), audit with before/after of what changed, publish `menu.upserted` after commit.
  *
- * Prices are integer satang. Estimated costs are accepted and stored but are in no response.
+ * Prices are integer satang. Estimated costs are accepted and stored, and read back only by `listCosts`.
  * Nothing is ever hard-deleted: DELETE archives (or deactivates a category), so past orders keep
  * pointing at a real row and keep the names and prices they were sold with.
  */
@@ -23,6 +23,8 @@ import {
   type ItemDto,
   itemDtoSchema,
   type MENU_CHANNELS,
+  type MenuCostsResponse,
+  menuCostsResponseSchema,
   menuPhotoPath,
   type OptionDto,
   optionDtoSchema,
@@ -329,6 +331,11 @@ export async function publicMenu(
         }),
     })),
   });
+}
+
+/** Costs for the editor (report.view, checked by the route). Not in any DTO. */
+export async function listCosts(ctx: AuthContext): Promise<MenuCostsResponse> {
+  return menuCostsResponseSchema.parse(await menuRepo.listCosts(ctx.db));
 }
 
 // ---------- Categories ----------
