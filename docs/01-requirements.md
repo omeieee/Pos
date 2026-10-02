@@ -83,7 +83,7 @@ The laptop is for the back office, not a cashier terminal. The AIS router provid
 - **P7** Voiding or refunding after confirmation needs a manager or the owner, plus a reason, and is written to the audit log.
 - **P8** Gov co-pay flow:
   - the POS shows the full amount to type into ถุงเงิน, plus an *estimated* government/customer split;
-  - it enforces the scheme's dates and hours and allows the storefront only.
+  - it enforces the scheme's dates and hours and allows only face-to-face payment (counter or entrance hand-over, D-08).
 - **P9** The data model supports split payments (e.g. part cash, part transfer). The UI for them is a stretch goal in P3.
 
 ### Realtime (R)

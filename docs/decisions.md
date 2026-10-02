@@ -17,7 +17,7 @@ This is the **single source of truth for technology and design choices**. Other 
 | D-05 | Frontends: React + Vite PWA; one staff app, one customer app | **Accepted** | 2026-09-29 |
 | D-06 | Customer channel: LINE OA + unverified LINE MINI App (LIFF SDK), one LINE provider | Proposed | 2026-09-29 |
 | D-07 | Every payment is confirmed manually by staff; no gateway, no paid slip API | **Accepted** | 2026-09-29 |
-| D-08 | Government co-pay is a generic configurable method; paid face-to-face at the storefront; pickup only until the ถุงเงิน terms confirm room delivery | Proposed | 2026-09-29 |
+| D-08 | Government co-pay is a generic configurable method; paid face to face (counter or entrance hand-over, owner decision 2026-10-02); staff confirm by hand | Proposed | 2026-09-29 |
 | D-09 | LINE messaging: reply first, push only when needed, track the quota | Proposed | 2026-09-29 |
 | D-10 | Hosting: Oracle E2.1.Micro VM (Free Tier) + Docker Compose; **for now** Caddy + Let's Encrypt on a free hostname (no domain); web apps on Cloudflare Pages | **Accepted (interim)** | 2026-09-29 |
 | D-11 | Money in integer satang; Asia/Bangkok business day | Proposed | 2026-09-29 |
@@ -85,6 +85,7 @@ This is the **single source of truth for technology and design choices**. Other 
 - **Decision:** a generic payment method, "โครงการรัฐร่วมจ่าย", preset for **ไทยช่วยไทย พลัส 60/40**. It has configurable name, government share, daily cap, active dates and hours, and allowed channels. It is **disabled outside those dates and hours**. The customer pays **face-to-face at the storefront** by scanning a QR that staff create **per transaction** in ถุงเงิน. The QR is **never sent through LINE**. LINE customers can pick it as "pay at the storefront".
 - **Why:** the scheme rules require per-transaction QRs, scanning at the storefront and GPS (see [04-integrations.md](04-integrations.md#3-government-co-pay-scheme-thai-chuay-thai-plus)). Schemes also change name and ratio every few months.
 - **Revisit if:** the scheme's terms allow remote payment.
+- **Owner decision (2026-10-02):** the shop delivers only to the building entrance (a security guard is stationed there) and the customer comes down to receive the order, so the hand-over is face to face. Co-pay is therefore offered for `entrance_delivery` orders as a plain payment option: staff create the ถุงเงิน QR for the transaction at the hand-over, the customer pays, and **staff confirm it by hand**, exactly like PromptPay. It stays refused for `platform_delivery`, `grab` and `lineman` orders, outside the scheme dates and hours, and when disabled; the QR is never sent through LINE. ⚠ Compliance risk accepted by the owner: whether the scheme's terms (face-to-face scan, GPS at the shop) allow a hand-over at the building entrance is **not confirmed with ถุงเงิน**; if the terms or an audit say no, switch the scheme off in settings.
 - **Channels (2026-10-02):** co-pay is refused for `grab` and `lineman` orders (the platform takes the payment) as well as room and platform delivery; a LINE pickup order paid at the counter stays allowed, because that payment is face to face.
 
 ## D-09 · LINE messaging budget — Proposed

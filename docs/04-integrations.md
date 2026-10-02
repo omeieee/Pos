@@ -130,7 +130,7 @@ Thai name: ไทยช่วยไทย พลัส 60/40.
 Sources: [PRD merchant registration](https://www.prd.go.th/th/content/category/detail/id/39/iid/505963), [Thai PRD (EN)](https://thailand.prd.go.th/en/content/category/detail/id/48/iid/506070), [The Standard, additional round](https://thestandard.co/thai-chuay-thai-plus-60-40-2/), [Dailynews, merchant flow & settlement](https://www.dailynews.co.th/news/5894215/), [Dailynews, why scans fail](https://www.dailynews.co.th/news/5910202/), [official merchant page](https://www.xn--b3czb2arbbzn9a6eulf7c.th/howto/merchant/index.html).
 
 ### 3.2 How the POS supports it
-- **Scheme settings** (`gov_copay_schemes`): name, government share, daily cap, active dates and hours, channels (storefront only), settlement note, enabled. Outside the active window the method is hidden.
+- **Scheme settings** (`gov_copay_schemes`): name, government share, daily cap, active dates and hours, channels (storefront, and the entrance hand-over since 2026-10-02: see D-08), settlement note, enabled. Outside the active window the method is hidden.
 - **At the counter:** the cashier picks "ไทยช่วยไทย". The POS shows the **full amount to type into ถุงเงิน** in large type, plus an *estimated* split. Example for ฿95: government ≈ ฿57, customer ≈ ฿38. The estimate ignores the customer's remaining daily cap, which only เป๋าตัง knows.
 
   Staff create the QR in ถุงเงิน, the customer scans it, staff see the success notice, and then confirm in the POS (optionally with the ถุงเงิน reference).

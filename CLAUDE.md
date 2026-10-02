@@ -76,7 +76,7 @@ A cloud POS for a made-to-order noodle restaurant inside a condominium.
    - Never hardcode the ID; the initial value is recorded in 01-requirements P3.
    - Changing it requires the owner + step-up + audit + alert.
 4. **Government co-pay (ไทยช่วยไทย)** is a configurable scheme.
-   - It is available only within the scheme's dates and hours, and only face-to-face at the storefront.
+   - It is available only within the scheme's dates and hours, and only face to face between staff and the customer: at the counter or at the entrance hand-over (owner decision 2026-10-02: the shop delivers only to the building entrance; the scheme terms for this are not yet confirmed with ถุงเงิน).
    - Staff create the ถุงเงิน QR per transaction. It is **never sent through LINE**.
 5. **LINE:** reply first, which is free. Push only through the quota-aware sender (the free plan counts 300 messages a month).
 6. **Writes:**
