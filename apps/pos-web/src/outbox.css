@@ -115,6 +115,7 @@
   max-width: 420px;
 }
 .platform {
+  padding: var(--sds-space-md) var(--sds-space-lg);
   display: flex;
   flex-direction: column;
   gap: var(--sds-space-sm);
