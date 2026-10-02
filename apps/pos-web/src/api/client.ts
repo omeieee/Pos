@@ -18,6 +18,7 @@ import {
   authMeResponseSchema,
   authStaffListResponseSchema,
   availabilityInputSchema,
+  businessDaySettingsSchema,
   cancelOrderInputSchema,
   categoryDtoSchema,
   changePaymentMethodInputSchema,
@@ -30,6 +31,7 @@ import {
   createOptionInputSchema,
   createOrderInputSchema,
   createPaymentInputSchema,
+  deliveryPatchInputSchema,
   deliverySettingsSchema,
   groupDtoSchema,
   idParamSchema,
@@ -37,6 +39,9 @@ import {
   listOrdersQuerySchema,
   listOrdersResponseSchema,
   menuCostsResponseSchema,
+  numberingPatchInputSchema,
+  openingHoursPatchInputSchema,
+  openingHoursSchema,
   optionDtoSchema,
   orderDtoSchema,
   orderIdParamSchema,
@@ -52,6 +57,8 @@ import {
   paymentQrUrlResponseSchema,
   paymentReasonInputSchema,
   paymentResultSchema,
+  paymentsPatchInputSchema,
+  paymentsSettingsSchema,
   pinLoginInputSchema,
   promptpaySettingsSchema,
   publicMenuQuerySchema,
@@ -64,6 +71,8 @@ import {
   reorderResponseSchema,
   sessionResponseSchema,
   settingResponseSchema,
+  shopPatchInputSchema,
+  shopSettingsSchema,
   staffStepUpInputSchema,
   stepUpResponseSchema,
   syncQuerySchema,
@@ -708,7 +717,51 @@ export function createApiClient(options: ApiClientOptions) {
     },
   };
 
+  /**
+   * One settings resource: `read` is GET (never-saved settings answer the default at version 0),
+   * `save` is PATCH, or PUT where the whole value is replaced. The body is checked against the
+   * shared input schema first, so a body with no change or an unknown field never reaches the
+   * network. Every save names the version it was built on (`expectedVersion`).
+   */
+  function settingsResource<V extends z.ZodType, I extends z.ZodType>(
+    name: string,
+    value: V,
+    input: I,
+    verb: 'patch' | 'put' = 'patch',
+  ) {
+    const path = `/v1/settings/${name}`;
+    const schema = settingResponseSchema(value);
+    return {
+      read: async () => (await get({ path, schema, session: true, device: 'optional' })).data,
+      save: async (body: z.input<I>) =>
+        (
+          await (verb === 'put' ? put : patch)({
+            path,
+            body: checked(input, body),
+            schema,
+            session: true,
+            device: 'optional',
+          })
+        ).data,
+    };
+  }
+
   const settings = {
+    shop: settingsResource('shop', shopSettingsSchema, shopPatchInputSchema),
+    openingHours: settingsResource(
+      'opening-hours',
+      openingHoursSchema,
+      openingHoursPatchInputSchema,
+    ),
+    numbering: settingsResource('numbering', businessDaySettingsSchema, numberingPatchInputSchema),
+    payments: settingsResource('payments', paymentsSettingsSchema, paymentsPatchInputSchema),
+    /** The buildings list as an editor reads and replaces it (PUT). */
+    deliveryList: settingsResource(
+      'delivery',
+      deliverySettingsSchema,
+      deliveryPatchInputSchema,
+      'put',
+    ),
     /** The buildings the shop delivers to (never-saved settings answer the default, version 0). */
     delivery: async () =>
       (
