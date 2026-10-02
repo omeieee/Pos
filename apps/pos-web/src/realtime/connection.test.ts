@@ -114,11 +114,11 @@ describe('catch-up', () => {
     expect(env.entities.getState().lastRev).toBe(1100);
   });
 
-  test('never rewinds below 0', async () => {
+  test('never rewinds to 0 once the device holds rows: since=0 is the fresh-device bootstrap, which the server bounds to open and recent rows', async () => {
     const env = setup();
     env.entities.apply(orderFrame(uuid(1), 50));
     await bringOnline(env, 50);
-    expect(env.fetchSync.mock.calls[0]?.[0].since).toBe(0);
+    expect(env.fetchSync.mock.calls[0]?.[0].since).toBe(1);
   });
 
   test('live frames that arrive during the catch-up are held and applied after it', async () => {

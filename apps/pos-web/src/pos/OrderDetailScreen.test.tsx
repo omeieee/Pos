@@ -134,6 +134,18 @@ describe('the order page', () => {
     expect(entities.getState().orders.has(ID)).toBe(true);
   });
 
+  test('a past order that is not in the store also gets its payments over REST (a fresh device has no closed history)', async () => {
+    const { services, api } = await setup({
+      services: {
+        getOrder: async () => withItems({ status: 'completed', paymentStatus: 'paid' }),
+        payments: { list: async () => ({ payments: [] }) },
+      },
+    });
+    renderScreen(<OrderDetailScreen id={ID} />, services);
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'ออเดอร์ S-007' })).toBeTruthy());
+    await waitFor(() => expect(api.payments.list).toHaveBeenCalledWith(ID));
+  });
+
   test('an order that does not exist says so, with a way back', async () => {
     const { services } = await setup({
       services: {

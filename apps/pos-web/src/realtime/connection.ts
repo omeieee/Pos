@@ -177,7 +177,11 @@ export function createConnection(deps: ConnectionDeps): Connection {
   }
 
   async function catchUp(attempt: number) {
-    let since = Math.max(0, deps.entities.getState().lastRev - SYNC_SAFETY_REVS);
+    // 0 means "a fresh device" to the server, which then sends only today's and the open rows.
+    // A device that already holds rows rewinds by the margin but never down to 0, or an old open
+    // order it holds could miss its close.
+    const { lastRev } = deps.entities.getState();
+    let since = lastRev === 0 ? 0 : Math.max(1, lastRev - SYNC_SAFETY_REVS);
     let last = since;
     try {
       for (;;) {
