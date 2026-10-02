@@ -147,6 +147,7 @@ export function createServices(
     auth,
     connection,
     localStore: openStore,
+    lifecycle,
     ...(options.catalogueDebounceMs === undefined
       ? {}
       : { debounceMs: options.catalogueDebounceMs }),

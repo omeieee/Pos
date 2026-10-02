@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { createStore } from '../lib/store.ts';
 import { createMemoryLocalStore, type LocalStore } from '../platform/localStore.ts';
 import { createEntityStore } from '../realtime/entity-store.ts';
+import { createFakeLifecycle } from '../test-support/fake-realtime.ts';
 import {
   categoryFrame,
   deliveryFrame,
@@ -54,11 +55,13 @@ function setup(
     session: options.staff === null ? null : { staff: { id: options.staff ?? ME } },
   });
   const connection = createStore({ synced: false });
+  const life = createFakeLifecycle();
   const cache = createCatalogueCache({
     entities,
     auth,
     connection,
     localStore: async () => store,
+    lifecycle: life.lifecycle,
     now: options.now ?? (() => Date.now()),
     debounceMs: DEBOUNCE,
   });
@@ -69,7 +72,7 @@ function setup(
         ? { phase: 'locked', session: null }
         : { phase: 'signedIn', session: { staff: { id: staff } } },
     );
-  return { store, entities, auth, connection, cache, unbind, signInAs };
+  return { store, entities, auth, connection, cache, unbind, signInAs, life };
 }
 
 const settle = async () => {
@@ -118,6 +121,27 @@ describe('saving the menu and settings', () => {
     expect(text).not.toContain('Token');
     expect(text).toContain('delivery');
     for (const key of CATALOGUE_SETTING_KEYS) expect(key).not.toBe('promptpay');
+  });
+
+  test('going to the background writes a pending change at once', async () => {
+    const { store, entities, life } = setup();
+    await settle();
+    entities.applyMany(menuFrames());
+    life.hide();
+    await settle();
+    expect(await saved(store)).toBeDefined();
+  });
+
+  test('a setting that was never saved (version 0, read over REST) is kept and read back', async () => {
+    const first = setup();
+    await settle();
+    first.entities.applyMany([...menuFrames().slice(0, 4), { ...deliveryFrame(0), version: 0 }]);
+    await vi.advanceTimersByTimeAsync(DEBOUNCE + 10);
+    first.unbind();
+    const again = setup({ store: first.store });
+    await settle();
+    expect(again.entities.getState().settings.has('delivery')).toBe(true);
+    expect(again.entities.getState().items.size).toBe(1);
   });
 
   test('an empty store never overwrites a good copy (a reset on sign-out is not a change)', async () => {

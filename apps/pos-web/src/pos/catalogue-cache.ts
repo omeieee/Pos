@@ -34,6 +34,7 @@ import {
 import { z } from 'zod';
 import type { AuthPhase } from '../auth/auth-store.ts';
 import { createStore, type ReadableStore } from '../lib/store.ts';
+import type { Lifecycle } from '../platform/lifecycle.ts';
 import type { LocalStore } from '../platform/localStore.ts';
 import type { EntityState, EntityStore } from '../realtime/entity-store.ts';
 
@@ -81,7 +82,9 @@ export function catalogueFrames(
     frames.push({ type: 'menu.upserted', kind: 'group', id: group.id, rev: group.rev, data });
   }
   for (const entry of state.settings.values()) {
-    if (allowedSetting(entry.id)) frames.push(entry);
+    // A setting the shop never saved is read once over REST with version 0; the saved copy's schema
+    // wants a real version, and nothing reads the version of a cached setting.
+    if (allowedSetting(entry.id)) frames.push({ ...entry, version: Math.max(1, entry.version) });
   }
   return frames;
 }
@@ -113,6 +116,8 @@ export interface CatalogueDeps {
   /** `synced`: a catch-up has finished since the connection started. */
   connection: ReadableStore<{ synced: boolean }>;
   localStore: () => Promise<LocalStore>;
+  /** When the page goes to the background a pending write is made at once (the app may be killed). */
+  lifecycle?: Pick<Lifecycle, 'subscribe'>;
   now?: () => number;
   debounceMs?: number;
 }
@@ -266,8 +271,16 @@ export function createCatalogueCache(deps: CatalogueDeps): CatalogueCache {
           store.setState({ fromCache: false });
         }
       });
+      const unsubscribeLifecycle = deps.lifecycle?.subscribe({
+        hidden: () => {
+          if (timer === null) return;
+          cancel();
+          void flush(epoch);
+        },
+      });
       follow();
       return () => {
+        unsubscribeLifecycle?.();
         unsubscribeAuth();
         unsubscribeEntities();
         unsubscribeConnection();
