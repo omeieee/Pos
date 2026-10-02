@@ -1,7 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App.tsx';
-import { devFetch } from './dev/enable.ts';
+import { devBackend } from './dev/enable.ts';
 import { supportsServiceWorker } from './platform/serviceWorker.ts';
 import { createServices } from './services.ts';
 import './styles.css';
@@ -11,8 +11,8 @@ import './order-entry.css';
 const root = document.getElementById('root');
 if (!root) throw new Error('#root not found');
 
-const fetchOverride = await devFetch();
-const services = createServices(fetchOverride ? { fetch: fetchOverride } : {});
+const backend = await devBackend();
+const services = createServices(backend ?? {});
 services.bindRealtime();
 void services.auth.boot();
 if (supportsServiceWorker()) services.updates.start();

@@ -24,6 +24,7 @@ import {
   registerDeviceInputSchema,
   staffStepUpInputSchema,
 } from '@sds/shared';
+import { createMockShop } from './mock-shop.ts';
 
 type Role = 'owner' | 'manager' | 'cashier' | 'kitchen';
 
@@ -169,6 +170,8 @@ export function createMockServer(options: MockServerOptions = {}) {
   /** Sessions issued at or before this counter value are treated as ended. */
   let revokedUpTo = 0;
   const calls: { method: string; path: string }[] = [];
+  // The menu, orders, sync and the socket: see mock-shop.ts.
+  const shop = createMockShop({ now });
 
   const reply = (status: number, body?: unknown): Response =>
     new Response(status === 204 || body === undefined ? null : JSON.stringify(body), {
@@ -246,9 +249,21 @@ export function createMockServer(options: MockServerOptions = {}) {
 
   const validation = () => fail(400, 'VALIDATION_ERROR');
 
-  function route(method: string, path: string, headers: Headers, body: unknown): Response {
+  function route(
+    method: string,
+    path: string,
+    headers: Headers,
+    body: unknown,
+    query: URLSearchParams,
+  ): Response {
     const deviceHeader = headers.get('x-device-token') ?? undefined;
     const auth = headers.get('authorization') ?? undefined;
+
+    // The public menu needs no session.
+    if (method === 'GET' && path === '/v1/menu') {
+      const answer = shop.handle(method, path, query, body);
+      if (answer) return reply(answer.status, answer.body);
+    }
 
     if (method === 'GET' && path === '/v1/auth/staff') {
       if (!deviceOf(deviceHeader)) return fail(401, 'DEVICE_UNREGISTERED');
@@ -350,6 +365,16 @@ export function createMockServer(options: MockServerOptions = {}) {
       });
     }
 
+    if (
+      method === 'POST' &&
+      path === '/v1/orders' &&
+      !PERMISSIONS[session.staff.role].includes('order.create')
+    ) {
+      return fail(403, 'FORBIDDEN');
+    }
+    const answer = shop.handle(method, path, query, body);
+    if (answer) return reply(answer.status, answer.body);
+
     return fail(404, 'NOT_FOUND');
   }
 
@@ -362,11 +387,13 @@ export function createMockServer(options: MockServerOptions = {}) {
     if (options.delayMs) await new Promise((resolve) => setTimeout(resolve, options.delayMs));
     const injected = options.intercept?.({ method, path: url.pathname, body });
     if (injected) return injected;
-    return route(method, url.pathname, new Headers(init?.headers), body);
+    return route(method, url.pathname, new Headers(init?.headers), body, url.searchParams);
   }) as typeof fetch;
 
   return {
     fetch: mockFetch,
+    /** The made-up `/v1/ws`: hand it to `createServices({ createSocket })`. */
+    createSocket: shop.createSocket,
     calls,
     /** A device token the server accepts, as if the owner had registered it earlier. */
     issueDeviceToken(name = 'iPad ตัวอย่าง', kind: 'ipad' | 'iphone' | 'laptop' = 'ipad') {
