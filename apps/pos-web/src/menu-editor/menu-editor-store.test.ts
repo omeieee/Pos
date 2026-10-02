@@ -60,6 +60,43 @@ describe('load', () => {
     expect(JSON.stringify([...env.entities.getState().items.values()])).not.toContain('Cost');
   });
 
+  test('a cost read that fails for any reason but 403 is flagged; a 403 is a role without costs', async () => {
+    const reads = {
+      listCategories: async () => ({ categories: [] }),
+      listItems: async () => ({ items: [] }),
+      listGroups: async () => ({ groups: [] }),
+    };
+    const broken = createEditorEnv({
+      costs: true,
+      seed: false,
+      menu: {
+        ...reads,
+        costs: async () => {
+          throw new ApiClientError('NETWORK');
+        },
+      },
+    });
+    await broken.store.load();
+    expect(broken.store.getState()).toMatchObject({
+      status: 'ready',
+      costs: null,
+      costsFailed: true,
+    });
+
+    const forbidden = createEditorEnv({
+      costs: true,
+      seed: false,
+      menu: {
+        ...reads,
+        costs: async () => {
+          throw new ApiClientError('FORBIDDEN', { status: 403 });
+        },
+      },
+    });
+    await forbidden.store.load();
+    expect(forbidden.store.getState()).toMatchObject({ costs: null, costsFailed: false });
+  });
+
   test('a failed first load is an error screen; a failed later read keeps the rows', async () => {
     let fail = true;
     const env = createEditorEnv({

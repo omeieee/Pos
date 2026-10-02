@@ -92,6 +92,25 @@ describe('the lists', () => {
     expect(screen.queryByText(/ต้นทุน/)).toBeNull();
   });
 
+  test('says so when the costs could not be read for a reason other than 403, and retries', async () => {
+    let fail = true;
+    const env = await open({
+      menuApi: {
+        costs: async () => {
+          if (fail) throw new ApiClientError('NETWORK');
+          return { items: [{ id: MENU.tomYum, estCostSatang: satang(1800) }], options: [] };
+        },
+      },
+    });
+    expect(await screen.findByText(tr('menuEditor.costsFailed'))).toBeTruthy();
+    expect(screen.queryByText(tr('menuEditor.costLabel', { amount: '฿18' }))).toBeNull();
+    fail = false;
+    fireEvent.click(screen.getByRole('button', { name: tr('common.retry') }));
+    expect(await screen.findByText(tr('menuEditor.costLabel', { amount: '฿18' }))).toBeTruthy();
+    expect(screen.queryByText(tr('menuEditor.costsFailed'))).toBeNull();
+    expect(env.menuApi.costs).toHaveBeenCalledTimes(2);
+  });
+
   test('a failed first load says so and offers a retry', async () => {
     const { auth } = await createTestAuth('manager');
     let fail = true;

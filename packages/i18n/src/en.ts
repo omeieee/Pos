@@ -619,6 +619,8 @@ export const en = {
     'Editing the menu needs the internet. You are offline: you can look but not change anything. Edits are not saved for later.',
   'menuEditor.loading': 'Loading the menu…',
   'menuEditor.loadFailed': 'The menu could not be loaded',
+  'menuEditor.costsFailed':
+    'The costs could not be loaded, so the cost fields are hidden for now. Try again.',
   'menuEditor.refreshed': 'The latest data is loaded. Check it and try again.',
   'menuEditor.tabs': 'Menu sections',
   'menuEditor.tab.items': 'Dishes',

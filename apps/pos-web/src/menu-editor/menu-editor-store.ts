@@ -47,6 +47,11 @@ export interface MenuEditorState {
   error: ApiClientError | null;
   /** Estimated costs by id, for roles with `report.view`; null for everyone else. */
   costs: Costs | null;
+  /**
+   * The costs were asked for and the read failed for a reason other than 403 (a role that may not
+   * see costs is not a failure). The screen says so: the cost fields stay hidden until a read works.
+   */
+  costsFailed: boolean;
   /** Keys of the rows (or lists) with a request on its way. */
   pending: readonly string[];
 }
@@ -149,7 +154,13 @@ export const rowKey = (id: string) => `row:${id}`;
 export const reorderKey = (kind: ReorderKind, parentId: string | undefined) =>
   `reorder:${kind}:${parentId ?? ''}`;
 
-const initial = (): MenuEditorState => ({ status: 'idle', error: null, costs: null, pending: [] });
+const initial = (): MenuEditorState => ({
+  status: 'idle',
+  error: null,
+  costs: null,
+  costsFailed: false,
+  pending: [],
+});
 
 const categoryFrame = (c: CategoryDto): RealtimeFrame => ({
   type: 'menu.upserted',
@@ -193,12 +204,21 @@ export function createMenuEditorStore(deps: MenuEditorDeps): MenuEditorStore {
   async function read(): Promise<void> {
     const startedIn = epoch;
     const withCost = deps.canSeeCosts();
+    /** A 403 means this role may not see costs; any other failure is reported, never swallowed. */
+    const readCosts = () =>
+      deps.api.menu.costs().then(
+        (costs) => ({ costs, failed: false }),
+        (caught: unknown) => ({
+          costs: null,
+          failed: !(isApiClientError(caught) && caught.status === 403),
+        }),
+      );
     try {
-      const [categories, items, groups, costs] = await Promise.all([
+      const [categories, items, groups, costRead] = await Promise.all([
         deps.api.menu.listCategories(),
         deps.api.menu.listItems({ includeArchived: true }),
         deps.api.menu.listGroups({ includeArchived: true }),
-        withCost ? deps.api.menu.costs().catch(() => null) : Promise.resolve(null),
+        withCost ? readCosts() : Promise.resolve({ costs: null, failed: false }),
       ]);
       if (epoch !== startedIn) return;
       const frames: RealtimeFrame[] = [
@@ -210,12 +230,15 @@ export function createMenuEditorStore(deps: MenuEditorDeps): MenuEditorStore {
       store.setState({
         status: 'ready',
         error: null,
-        costs: costs
+        costs: costRead.costs
           ? {
-              items: Object.fromEntries(costs.items.map((c) => [c.id, c.estCostSatang])),
-              options: Object.fromEntries(costs.options.map((c) => [c.id, c.costDeltaSatang])),
+              items: Object.fromEntries(costRead.costs.items.map((c) => [c.id, c.estCostSatang])),
+              options: Object.fromEntries(
+                costRead.costs.options.map((c) => [c.id, c.costDeltaSatang]),
+              ),
             }
           : null,
+        costsFailed: costRead.failed,
       });
     } catch (caught) {
       if (epoch !== startedIn) return;

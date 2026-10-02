@@ -127,6 +127,21 @@ export function MenuEditorScreen() {
           </div>
         ) : null}
 
+        {editor.costsFailed ? (
+          <div className="notice" role="alert">
+            <Icon name="alert" />
+            <span>{tr('menuEditor.costsFailed')}</span>
+            <button
+              type="button"
+              className="btn btn-soft"
+              disabled={offline}
+              onClick={() => void menuEditor.load()}
+            >
+              {tr('common.retry')}
+            </button>
+          </div>
+        ) : null}
+
         {tab === 'items' ? <ItemsTab /> : null}
         {tab === 'categories' ? <CategoriesTab /> : null}
         {tab === 'groups' ? <GroupsTab /> : null}
