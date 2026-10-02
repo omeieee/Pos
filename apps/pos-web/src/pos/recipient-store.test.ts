@@ -177,9 +177,14 @@ describe('the buildings', () => {
     expect(deliveryBuildings(entities.getState().settings)).toEqual(['A1', 'Z9', 'Q1']);
   });
 
-  test('a failed read is tried again next time', async () => {
+  test('a failed read is tried again next time, and says it failed only until one succeeds', async () => {
     const { store, delivery } = setup();
+    expect(store.getState().buildingsFailed).toBe(false);
     delivery.mockRejectedValueOnce(new ApiClientError('NETWORK'));
+    await store.ensureBuildings();
+    expect(store.getState().buildingsFailed).toBe(true);
+    await store.ensureBuildings();
+    expect(store.getState().buildingsFailed).toBe(false);
     await store.ensureBuildings();
     await store.ensureBuildings();
     expect(delivery).toHaveBeenCalledTimes(2);

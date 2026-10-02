@@ -73,8 +73,6 @@ export function CartPanel({
       </header>
 
       <div className="cart__body">
-        <DeliveryFields locked={locked} />
-
         {state.lines.length === 0 ? (
           <div className="cart__empty empty">
             <Icon name="cart" />
@@ -161,6 +159,7 @@ export function CartPanel({
             })}
           </ul>
         )}
+        <DeliveryFields locked={locked} />
       </div>
 
       <footer className="cart__foot">

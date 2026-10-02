@@ -32,7 +32,7 @@ export function DeliveryFields({ locked }: { locked: boolean }) {
           <span className="label">
             {tr(typed ? 'pos.delivery.matches' : 'pos.delivery.recent')}
           </span>
-          <div className="chips">
+          <div className="rlist">
             {chips.map(({ recipient, label, hint }) => (
               <button
                 key={recipient.id}
@@ -53,7 +53,11 @@ export function DeliveryFields({ locked }: { locked: boolean }) {
         </div>
       ) : null}
 
-      {buildings === null ? (
+      {buildings === null && !remembered.buildingsFailed ? (
+        <p className="muted" role="status">
+          {tr('pos.delivery.buildingLoading')}
+        </p>
+      ) : buildings === null ? (
         <div className="deliv__missing" role="status">
           <span className="muted">{tr('pos.delivery.buildingMissing')}</span>
           <button

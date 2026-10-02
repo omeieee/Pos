@@ -324,7 +324,7 @@ fieldset.group {
   flex-direction: column;
   gap: var(--sds-space-md);
   padding: var(--sds-space-lg);
-  border-bottom: 1px solid var(--sds-color-border);
+  border-top: 1px solid var(--sds-color-border);
 }
 .deliv__title {
   font-size: var(--sds-font-size-lg, 1.125rem);
@@ -341,11 +341,17 @@ fieldset.group {
   justify-content: space-between;
   gap: var(--sds-space-md);
 }
+/* One recipient to a row: the name is never cut short on a 380 px panel or a phone. */
+.rlist {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sds-space-sm);
+}
 /* A saved recipient: "B1 · Fah", with the saved details under it, small. */
 .rchip {
   flex: none;
   min-height: var(--tap);
-  max-width: 220px;
+  width: 100%;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -361,7 +367,6 @@ fieldset.group {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 100%;
 }
 .rchip__hint {
   font-size: var(--sds-font-size-sm);
@@ -369,7 +374,6 @@ fieldset.group {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 100%;
 }
 /* The buildings: four to a row, each a target of at least 44 px. */
 fieldset.bld {
@@ -703,6 +707,17 @@ fieldset.bld {
     max-height: 90vh;
     /* biome-ignore lint/suspicious/noDuplicateProperties: vh is the fallback for browsers without dvh */
     max-height: 90dvh;
+  }
+  /* The whole sheet scrolls (lines, recipient, note, total, button): with the keyboard open a
+     fixed footer would leave the fields almost no room. */
+  .sheet--cart .cart {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+  }
+  .sheet--cart .cart__body {
+    flex: none;
+    overflow: visible;
   }
   .osheet__head,
   .osheet__body,

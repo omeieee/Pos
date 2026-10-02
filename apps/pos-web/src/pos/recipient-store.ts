@@ -26,6 +26,8 @@ export interface RecipientState {
   recent: RecipientDto[];
   /** The answer to the typed name; null when nothing is typed. */
   matches: RecipientDto[] | null;
+  /** The last read of the building list failed (and none has arrived since). */
+  buildingsFailed: boolean;
 }
 
 export interface RecipientDeps {
@@ -50,7 +52,7 @@ export interface RecipientStore extends ReadableStore<RecipientState> {
 
 export function createRecipientStore(deps: RecipientDeps): RecipientStore {
   const debounceMs = deps.debounceMs ?? SEARCH_DEBOUNCE_MS;
-  const store = createStore<RecipientState>({ recent: [], matches: null });
+  const store = createStore<RecipientState>({ recent: [], matches: null, buildingsFailed: false });
   let epoch = 0;
   let recentSeq = 0;
   let searchSeq = 0;
@@ -104,6 +106,7 @@ export function createRecipientStore(deps: RecipientDeps): RecipientStore {
     ensureBuildings() {
       if (deliveryBuildings(deps.entities.getState().settings) !== null) return Promise.resolve();
       loadingBuildings ??= (async () => {
+        store.setState({ buildingsFailed: false });
         try {
           const setting = await deps.api.settings.delivery();
           deps.entities.apply({
@@ -115,6 +118,7 @@ export function createRecipientStore(deps: RecipientDeps): RecipientStore {
           });
         } catch {
           // The screen says the list is missing and offers a retry.
+          store.setState({ buildingsFailed: true });
         } finally {
           loadingBuildings = null;
         }
@@ -127,7 +131,7 @@ export function createRecipientStore(deps: RecipientDeps): RecipientStore {
       recentSeq += 1;
       searchSeq += 1;
       cancelTimer();
-      store.setState({ recent: [], matches: null });
+      store.setState({ recent: [], matches: null, buildingsFailed: false });
     },
   };
 }
