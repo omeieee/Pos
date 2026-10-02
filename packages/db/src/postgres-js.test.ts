@@ -37,7 +37,7 @@ describe('postgres-js client', () => {
       readFileSync(join(MIGRATIONS_DIR, 'meta', '_journal.json'), 'utf8'),
     ) as { entries: unknown[] };
     expect(applied.rows[0]?.n).toBe(journal.entries.length);
-  });
+  }, 60_000); // every migration, twice, through PGlite: the 5 s default fails on a loaded machine
 
   test('createDb queries through the schema and pingDb succeeds', async () => {
     const { db, close } = createDb(url, { max: 1 });

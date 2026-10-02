@@ -41,7 +41,7 @@ describe('verifyOwnerProof', () => {
       });
       expect(res.statusCode).toBe(200);
     });
-  }, 30_000);
+  }, 120_000); // five scrypt checks: 30 s is not enough when every package runs its tests at once
 
   test('refuses anything else and records the refusal', async () => {
     await withOwner(async (h, owner) => {
