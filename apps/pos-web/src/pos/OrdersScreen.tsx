@@ -1,36 +1,22 @@
 import { formatBaht, formatDate } from '@sds/i18n';
 import { ORDER_NO_PREFIX, type OrderDto } from '@sds/shared';
-import { useEffect, useState } from 'react';
-import {
-  type Tr,
-  useEntities,
-  useLocale,
-  useNow,
-  useServices,
-  useStoreState,
-  useT,
-} from '../ui/hooks.ts';
+import { useState } from 'react';
+import { useEntities, useLocale, useNow, useServices, useStoreState, useT } from '../ui/hooks.ts';
 import { Icon } from '../ui/Icon.tsx';
+import { elapsedText } from './elapsed-text.ts';
 import {
   type BoardFilter,
   boardColumns,
   currentBusinessDay,
   elapsedMinutes,
-  elapsedParts,
   filterOrders,
   ordersForDay,
 } from './order-board.ts';
 import { OrderStatusBadge, PaymentStatusBadge } from './StatusBadge.tsx';
+import { useLoadOrders } from './use-load-orders.ts';
 
 const FILTERS: readonly BoardFilter[] = ['open', 'all'];
 const WAITING = ['new', 'preparing', 'ready'] as const;
-
-function elapsedText(tr: Tr, minutes: number): string {
-  const { hours, minutes: rest } = elapsedParts(minutes);
-  return hours > 0
-    ? tr('orders.elapsedHours', { hours, minutes: rest })
-    : tr('duration.minutes', { count: rest });
-}
 
 function OrderCard({ order, now }: { order: OrderDto; now: number }) {
   const tr = useT();
@@ -79,41 +65,13 @@ function OrderCard({ order, now }: { order: OrderDto; now: number }) {
  * where the moves and the payment are.
  */
 export function OrdersScreen() {
-  const { api, entities: store, cart } = useServices();
+  const { cart } = useServices();
   const state = useEntities();
   const cartState = useStoreState(cart);
   const tr = useT();
   const now = useNow(30_000);
   const [filter, setFilter] = useState<BoardFilter>('open');
-  const [load, setLoad] = useState<'loading' | 'ok' | 'error'>('loading');
-  const [attempt, setAttempt] = useState(0);
-
-  // `attempt` re-runs the load when the person taps "try again".
-  // biome-ignore lint/correctness/useExhaustiveDependencies: see above
-  useEffect(() => {
-    let live = true;
-    setLoad('loading');
-    api.orders.list().then(
-      (listed) => {
-        if (!live) return;
-        store.applyMany(
-          listed.orders.map((order) => ({
-            type: 'order.upserted' as const,
-            id: order.id,
-            rev: order.rev,
-            data: order,
-          })),
-        );
-        setLoad('ok');
-      },
-      () => {
-        if (live) setLoad('error');
-      },
-    );
-    return () => {
-      live = false;
-    };
-  }, [api, store, attempt]);
+  const { load, retry } = useLoadOrders();
 
   const day = currentBusinessDay(state.settings, now);
   const todays = ordersForDay(state.orders.values(), day);
@@ -156,7 +114,7 @@ export function OrdersScreen() {
       {load === 'error' ? (
         <div className="error board__notice" role="alert">
           <span>{tr('orders.loadFailed')}</span>
-          <button type="button" className="btn" onClick={() => setAttempt((n) => n + 1)}>
+          <button type="button" className="btn" onClick={retry}>
             {tr('common.retry')}
           </button>
         </div>

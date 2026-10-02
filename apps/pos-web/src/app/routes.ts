@@ -33,10 +33,13 @@ export type IconName =
   | 'cash'
   | 'qr'
   | 'hands'
-  | 'store';
+  | 'store'
+  | 'flame'
+  | 'volume'
+  | 'volume-off';
 
 /** The entries of the navigation: one per top-level page. */
-export type RouteId = 'new' | 'orders' | 'menu' | 'settings';
+export type RouteId = 'new' | 'kitchen' | 'orders' | 'menu' | 'settings';
 
 /** Everything the address bar can show; `order` is a page inside `orders`. */
 export type PageId = RouteId | 'order';
@@ -52,6 +55,14 @@ export interface RouteDef {
 
 export const ROUTES: readonly RouteDef[] = [
   { id: 'new', path: '/new', labelKey: 'nav.new', icon: 'grid', permission: 'order.create' },
+  // The kitchen view is for whoever moves orders along; a kitchen-only role has no other first page.
+  {
+    id: 'kitchen',
+    path: '/kitchen',
+    labelKey: 'nav.kitchen',
+    icon: 'flame',
+    permission: 'order.advance',
+  },
   { id: 'orders', path: '/orders', labelKey: 'nav.orders', icon: 'list', permission: null },
   { id: 'menu', path: '/menu', labelKey: 'nav.menu', icon: 'bowl', permission: 'menu.edit' },
   {

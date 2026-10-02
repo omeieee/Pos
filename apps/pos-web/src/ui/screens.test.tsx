@@ -115,6 +115,22 @@ describe('screens (server-rendered, Thai first)', () => {
     expect(page).toMatch(/25[6-9]\d/);
   });
 
+  test('signed in as the kitchen: lands on the kitchen view, with the queue next to it and no way to the counter', async () => {
+    const { auth } = await lockedDevice();
+    const cook = MOCK_STAFF.find((s) => s.role === 'kitchen');
+    await auth.signInWithPin(cook?.id ?? '', cook?.pin ?? '');
+    const page = html(auth);
+    expect(page).toContain(th['role.kitchen']);
+    expect(page).toContain('href="#/kitchen"');
+    expect(page).toContain('href="#/orders"');
+    expect(page).not.toContain('href="#/new"');
+    expect(page).not.toContain('href="#/menu"');
+    expect(page).not.toContain('href="#/settings"');
+    // The kitchen view itself (its sound switch is there), not the order board.
+    expect(page).toContain(th['kitchen.sound.label']);
+    expect(page).toContain(th['kitchen.loading']);
+  });
+
   test('signed in as the owner: all three pages', async () => {
     const { auth } = await lockedDevice();
     await auth.signInOwner({
@@ -123,7 +139,7 @@ describe('screens (server-rendered, Thai first)', () => {
       totp: '111111',
     });
     const page = html(auth);
-    for (const route of ['new', 'orders', 'menu', 'settings']) {
+    for (const route of ['new', 'kitchen', 'orders', 'menu', 'settings']) {
       expect(page).toContain(`href="#/${route}"`);
     }
   });

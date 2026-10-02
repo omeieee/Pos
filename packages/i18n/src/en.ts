@@ -283,9 +283,35 @@ export const en = {
   'line.checkout.placeOrder': 'Place order · {amount}',
   'line.checkout.staffConfirms': 'The shop checks your transfer and confirms in chat',
 
+  // Kitchen view
+  'kitchen.title': 'Kitchen',
+  'kitchen.toMake': 'To make',
+  'kitchen.toMakeCount': '{count} orders',
+  'kitchen.empty': 'Nothing to make right now',
+  'kitchen.loading': 'Loading orders…',
+  'kitchen.level.warn': 'Getting long',
+  'kitchen.level.late': 'Late',
+  'kitchen.ready.toggle': 'Ready, waiting for hand-over · {count}',
+  'kitchen.ready.empty': 'Nothing is waiting for hand-over',
+  'kitchen.readyWait': 'Ready for {time}',
+  'kitchen.sound.label': 'New-order sound',
+  'kitchen.sound.state.off': 'Off',
+  'kitchen.sound.state.on': 'On',
+  'kitchen.sound.state.blocked': 'Blocked',
+  'kitchen.sound.state.unsupported': 'Not available',
+  'kitchen.sound.turnOn': 'Turn on sound',
+  'kitchen.sound.turnOff': 'Turn sound off',
+  'kitchen.sound.unblock': 'Tap to enable sound',
+  'kitchen.sound.hint.off': 'Tap so this device chimes when a new order comes in',
+  'kitchen.sound.hint.blocked':
+    'The browser stopped the sound. Tap the button once to turn it on again',
+  'kitchen.sound.hint.unsupported':
+    'This browser cannot play sound. Watch the screen for new orders instead',
+
   // Staff app shell and navigation (apps/pos-web)
   'nav.label': 'Main menu',
   'nav.new': 'New order',
+  'nav.kitchen': 'Kitchen',
   'nav.orders': 'Orders',
   'nav.menu': 'Menu',
   'nav.settings': 'Settings',

@@ -1,0 +1,286 @@
+/*
+ * The kitchen view. Same rules as styles.css: every colour, size, space and radius comes from the
+ * --sds-* design tokens, every control is at least --tap tall, and nothing depends on hover.
+ * Made for an iPhone in portrait on the kitchen wall (one column, big type), and a grid of tickets
+ * on an iPad or a laptop. The wait colours are always paired with words and an icon.
+ */
+
+.kitchen {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sds-space-lg);
+  padding: var(--sds-space-lg) var(--sds-layout-gutter)
+    calc(var(--sds-space-xl) + var(--safe-bottom));
+}
+.kitchen__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sds-space-md) var(--sds-space-lg);
+}
+.kitchen__title {
+  display: flex;
+  align-items: center;
+  gap: var(--sds-space-md);
+}
+.kitchen__count {
+  padding: var(--sds-space-xs) var(--sds-space-md);
+  font-size: var(--sds-font-size-md);
+}
+
+/* ---------- The sound switch ---------- */
+fieldset.ksound {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+.ksound {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sds-space-xs);
+  max-width: 100%;
+  /* A long press on the switch must not select its text or open the iOS callout. */
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.ksound__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sds-space-sm) var(--sds-space-md);
+}
+.ksound__state {
+  min-height: var(--tap);
+  padding: 0 var(--sds-space-lg);
+  font-size: var(--sds-font-size-md);
+}
+.ksound__state--on {
+  background: var(--sds-color-success-subtle);
+  color: var(--sds-color-success-text);
+}
+.ksound__state--off,
+.ksound__state--unsupported {
+  background: var(--sds-color-surface-sunken);
+  color: var(--sds-color-text-muted);
+}
+.ksound__state--blocked {
+  background: var(--sds-color-warning-subtle);
+  color: var(--sds-color-warning-text);
+}
+.ksound__btn {
+  min-height: var(--tap);
+}
+.ksound__hint {
+  max-width: 36ch;
+}
+
+/* ---------- Tickets ---------- */
+.ktickets {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--sds-space-lg);
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
+  align-items: start;
+}
+.kcard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sds-space-md);
+  padding: var(--sds-space-lg);
+  border: 2px solid var(--sds-color-border);
+  border-radius: var(--sds-radius-lg);
+  background: var(--sds-color-surface);
+}
+/* The colour steps: calm, then amber, then red. The words come with them (kitchen.level.*). */
+.kcard--warn {
+  border-color: var(--sds-color-warning-text);
+  background: var(--sds-color-warning-subtle);
+}
+.kcard--late {
+  border: 4px solid var(--sds-color-danger-text);
+  background: var(--sds-color-danger-subtle);
+}
+.kcard__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sds-space-sm) var(--sds-space-md);
+}
+.kcard__channel {
+  width: 40px;
+  height: 40px;
+  font-size: var(--sds-font-size-lg);
+}
+.kcard__no {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--sds-font-display);
+  font-size: var(--sds-font-size-order-no);
+  line-height: var(--sds-line-height-tight);
+}
+.kcard__wait {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sds-space-xs) var(--sds-space-sm);
+  padding: var(--sds-space-xs) var(--sds-space-md);
+  border-radius: var(--sds-radius-pill);
+  background: var(--sds-color-surface-sunken);
+  font-size: var(--sds-font-size-lg);
+  font-weight: var(--sds-font-weight-bold);
+  font-variant-numeric: tabular-nums;
+}
+.kcard__wait--warn {
+  background: var(--sds-color-warning-subtle);
+  color: var(--sds-color-warning-text);
+}
+.kcard__wait--late {
+  background: var(--sds-color-danger-text);
+  color: var(--sds-color-on-brand);
+}
+.kcard__level {
+  font-size: var(--sds-font-size-md);
+}
+.kcard__serve {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sds-space-xs) var(--sds-space-md);
+  font-size: var(--sds-font-size-xl);
+  font-weight: var(--sds-font-weight-bold);
+}
+.kcard__serve-where {
+  padding: 0 var(--sds-space-md);
+  border-radius: var(--sds-radius-sm);
+  background: var(--sds-color-accent-subtle);
+  color: var(--sds-color-accent-text);
+}
+.kcard__lines {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sds-space-md);
+}
+.kline {
+  display: flex;
+  gap: var(--sds-space-md);
+  align-items: baseline;
+}
+.kline__qty {
+  flex: none;
+  min-width: 2.2em;
+  font-size: var(--sds-font-size-xxl);
+  font-weight: var(--sds-font-weight-bold);
+  line-height: var(--sds-line-height-tight);
+  font-variant-numeric: tabular-nums;
+}
+.kline__what {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sds-space-xxs);
+}
+.kline__name {
+  font-size: var(--sds-font-size-xl);
+  font-weight: var(--sds-font-weight-bold);
+  line-height: var(--sds-line-height-tight);
+}
+.kline__mods {
+  font-size: var(--sds-font-size-lg);
+  color: var(--sds-color-text);
+}
+.kline__note,
+.kcard__note {
+  font-size: var(--sds-font-size-lg);
+  font-weight: var(--sds-font-weight-medium);
+  color: var(--sds-color-accent-text);
+}
+.kcard__note {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sds-space-sm);
+  padding: var(--sds-space-sm) var(--sds-space-md);
+  border-radius: var(--sds-radius-md);
+  background: var(--sds-color-accent-subtle);
+}
+.kcard__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sds-space-sm);
+}
+.kcard .status {
+  font-size: var(--sds-font-size-sm);
+  padding: var(--sds-space-xs) var(--sds-space-md);
+}
+.kcard__moves {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sds-space-sm);
+}
+.kcard__move {
+  min-height: var(--sds-touch-primary, var(--tap));
+  font-size: var(--sds-font-size-xl);
+}
+
+/* ---------- Ready, waiting for hand-over ---------- */
+.kready {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sds-space-md);
+}
+.kready__heading {
+  font-size: var(--sds-font-size-md);
+}
+.kready__toggle {
+  min-height: var(--tap);
+  justify-content: flex-start;
+}
+.kready__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sds-space-sm);
+}
+.kready__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sds-space-xs) var(--sds-space-md);
+  min-height: var(--tap);
+  padding: var(--sds-space-sm) var(--sds-space-md);
+  border: 1.5px solid var(--sds-color-border);
+  border-radius: var(--sds-radius-md);
+  background: var(--sds-color-surface);
+}
+.kready__no {
+  font-family: var(--sds-font-display);
+  font-size: var(--sds-font-size-xl);
+  line-height: var(--sds-line-height-tight);
+}
+.kready__serve {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Phone, portrait: one column, a little less padding; the order screens' bottom bar is below. */
+@media (max-width: 719px) {
+  .kitchen {
+    padding-left: var(--sds-space-md);
+    padding-right: var(--sds-space-md);
+  }
+  .ktickets {
+    grid-template-columns: 1fr;
+  }
+  .ksound__hint {
+    max-width: none;
+  }
+}

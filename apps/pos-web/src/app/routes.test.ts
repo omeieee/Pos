@@ -10,13 +10,19 @@ const ids = (role: Parameters<typeof hasPermission>[0]) =>
 
 describe('who may open what (from the shared role permissions)', () => {
   test('owner and manager see everything', () => {
-    expect(ids('owner')).toEqual(['new', 'orders', 'menu', 'settings']);
-    expect(ids('manager')).toEqual(['new', 'orders', 'menu', 'settings']);
+    expect(ids('owner')).toEqual(['new', 'kitchen', 'orders', 'menu', 'settings']);
+    expect(ids('manager')).toEqual(['new', 'kitchen', 'orders', 'menu', 'settings']);
   });
 
-  test('the cashier takes orders and sees the queue; the kitchen sees the queue only', () => {
-    expect(ids('cashier')).toEqual(['new', 'orders']);
-    expect(ids('kitchen')).toEqual(['orders']);
+  test('the cashier takes orders and sees the queue; the kitchen sees the kitchen view and the queue only', () => {
+    expect(ids('cashier')).toEqual(['new', 'kitchen', 'orders']);
+    expect(ids('kitchen')).toEqual(['kitchen', 'orders']);
+  });
+
+  test('the kitchen view is for whoever may move an order along (order.advance), nobody else', () => {
+    const route = ROUTES.find((r) => r.id === 'kitchen');
+    expect(route?.permission).toBe('order.advance');
+    expect(allowedRoutes([]).map((r) => r.id)).toEqual(['orders']);
   });
 
   test('every page has a path, a label key and an icon', () => {
@@ -48,13 +54,23 @@ describe('resolving the address', () => {
   test('a page the role may not open lands on the first allowed page', () => {
     expect(resolveRoute('#/settings', cashier)?.page).toBe('new');
     expect(resolveRoute('#/menu', cashier)?.page).toBe('new');
-    expect(resolveRoute('#/new', kitchen)?.page).toBe('orders');
+    expect(resolveRoute('#/new', kitchen)?.page).toBe('kitchen');
+  });
+
+  test('the kitchen role lands on the kitchen view, and the cashier on the new order page', () => {
+    expect(resolveRoute('', kitchen)?.path).toBe('/kitchen');
+    expect(resolveRoute('#/settings', kitchen)?.path).toBe('/kitchen');
+    expect(resolveRoute('', cashier)?.path).toBe('/new');
+  });
+  test('an address the role may open is kept, so a deep link or a reload stays where it was', () => {
+    expect(resolveRoute('#/orders', kitchen)?.page).toBe('orders');
+    expect(resolveRoute('#/kitchen', cashier)?.page).toBe('kitchen');
   });
 
   test('an unknown or empty address lands on the first allowed page', () => {
     expect(resolveRoute('', owner)?.page).toBe('new');
     expect(resolveRoute('#/nope', owner)?.page).toBe('new');
-    expect(resolveRoute('#/nope', kitchen)?.path).toBe('/orders');
+    expect(resolveRoute('#/nope', kitchen)?.path).toBe('/kitchen');
   });
 
   test('nothing allowed means nothing to show', () => {
