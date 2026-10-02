@@ -342,6 +342,90 @@ export async function findPhotoBytes(
   return row?.bytes;
 }
 
+// ---------- Reorder ----------
+
+export type SiblingKind = 'categories' | 'items' | 'groups' | 'options';
+
+/** One row of a sibling set as the reorder needs it. */
+export interface Sibling {
+  id: string;
+  sort: number;
+  version: number;
+  rev: number;
+}
+
+/**
+ * The sibling set of a reorder, locked FOR UPDATE in id order (so two reorders cannot deadlock),
+ * listed in display order. Categories: all. Items: live ones of the category. Groups: live ones.
+ * Options: live ones of the group.
+ */
+export async function lockSiblings(
+  db: Db,
+  kind: SiblingKind,
+  parentId: string | undefined,
+): Promise<Sibling[]> {
+  if ((kind === 'items' || kind === 'options') && parentId === undefined) {
+    throw new Error(`reordering ${kind} needs a parent id`);
+  }
+  let rows: Sibling[];
+  switch (kind) {
+    case 'categories':
+      rows = await db
+        .select({
+          id: menuCategories.id,
+          sort: menuCategories.sort,
+          version: menuCategories.version,
+          rev: menuCategories.rev,
+        })
+        .from(menuCategories)
+        .orderBy(asc(menuCategories.id))
+        .for('update');
+      break;
+    case 'items':
+      rows = await db
+        .select({
+          id: menuItems.id,
+          sort: menuItems.sort,
+          version: menuItems.version,
+          rev: menuItems.rev,
+        })
+        .from(menuItems)
+        .where(and(eq(menuItems.categoryId, parentId as string), isNull(menuItems.archivedAt)))
+        .orderBy(asc(menuItems.id))
+        .for('update');
+      break;
+    case 'groups':
+      rows = await db
+        .select({
+          id: modifierGroups.id,
+          sort: modifierGroups.sort,
+          version: modifierGroups.version,
+          rev: modifierGroups.rev,
+        })
+        .from(modifierGroups)
+        .where(isNull(modifierGroups.archivedAt))
+        .orderBy(asc(modifierGroups.id))
+        .for('update');
+      break;
+    case 'options':
+      rows = await db
+        .select({
+          id: modifierOptions.id,
+          sort: modifierOptions.sort,
+          version: modifierOptions.version,
+          rev: modifierOptions.rev,
+        })
+        .from(modifierOptions)
+        .where(
+          and(eq(modifierOptions.groupId, parentId as string), isNull(modifierOptions.archivedAt)),
+        )
+        .orderBy(asc(modifierOptions.id))
+        .for('update');
+      break;
+  }
+  return rows.sort((a, b) => a.sort - b.sort || (a.id < b.id ? -1 : 1));
+}
+
 // ---------- Costs (read by the editor only) ----------
 
 /** Every item and option cost, archived rows included. Never mapped into an item or option DTO. */

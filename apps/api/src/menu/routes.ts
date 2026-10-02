@@ -16,6 +16,7 @@ import {
   patchOptionInputSchema,
   photoQuerySchema,
   publicMenuQuerySchema,
+  reorderInputSchema,
 } from '@sds/shared';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { type GuardFactory, markPublicMediaCheck, principalOf } from '../auth/guards.ts';
@@ -44,6 +45,7 @@ import {
   publicMenu,
   publicPhoto,
   publicPhotoBytes,
+  reorder,
   setItemAvailability,
   setItemPhoto,
   setOptionAvailability,
@@ -98,6 +100,11 @@ export async function registerMenuRoutes(
   // Costs: write-only in every DTO, readable here by the roles that see reports.
   app.get('/costs', { onRequest: guard('report.view') }, async (_request, reply) =>
     reply.header('cache-control', 'no-store').send(await listCosts(ctx)),
+  );
+
+  // One sibling set in its new order, atomically. Naturally idempotent, so no request id.
+  app.post('/reorder', edit, async (request) =>
+    reorder(ctx, principalOf(request), parse(reorderInputSchema, request.body), meta(request)),
   );
 
   // Categories

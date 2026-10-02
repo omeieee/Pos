@@ -294,6 +294,48 @@ export const listItemsQuerySchema = z.object({
     .transform((v) => v === 'true'),
 });
 
+// ---------- Reorder ----------
+
+export const REORDER_KINDS = ['categories', 'items', 'groups', 'options'] as const;
+export type ReorderKind = (typeof REORDER_KINDS)[number];
+
+/**
+ * `POST /v1/menu/reorder`: the whole sibling set in its new order. Siblings are all categories,
+ * the live items of one category (`parentId`), all live modifier groups, or the live options of one
+ * group (`parentId`). `sort` becomes 0..n-1 in one transaction; every id needs the version the
+ * editor saw. Archived rows are not siblings.
+ */
+export const reorderInputSchema = z
+  .strictObject({
+    kind: z.enum(REORDER_KINDS),
+    parentId: z.uuid().optional(),
+    order: z
+      .array(z.strictObject({ id: z.uuid(), expectedVersion: version }))
+      .min(1)
+      .max(500),
+  })
+  .refine((v) => new Set(v.order.map((o) => o.id)).size === v.order.length, {
+    message: 'each id once',
+    path: ['order'],
+  })
+  .refine(
+    (v) => (v.kind === 'items' || v.kind === 'options' ? v.parentId !== undefined : !v.parentId),
+    { message: 'parentId is for items (category) and options (group) only', path: ['parentId'] },
+  );
+export type ReorderInput = z.infer<typeof reorderInputSchema>;
+
+export const reorderResponseSchema = z.object({
+  kind: z.enum(REORDER_KINDS),
+  parentId: z.uuid().nullable(),
+  /** How many rows were written (0 when the order was already right). */
+  changed: z.number().int().min(0),
+  /** Every sibling in the new order, with the version and rev to use next. */
+  rows: z.array(
+    z.object({ id: z.uuid(), sort: z.number().int(), version, rev: z.number().int().min(0) }),
+  ),
+});
+export type ReorderResponse = z.infer<typeof reorderResponseSchema>;
+
 // ---------- Public menu ----------
 
 export const publicMenuQuerySchema = z.object({ channel: menuChannel.default('storefront') });
