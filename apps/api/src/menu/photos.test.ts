@@ -511,8 +511,8 @@ describe('validation', () => {
 
   test('the body limit applies to the photo route only', async () => {
     const manager = await as('manager');
-    const big = await call('POST', '/v1/menu/categories', manager, { nameTh: 'x'.repeat(5000) });
-    expect(big.statusCode).toBe(400); // an ordinary validation error, not a size one
+    const big = await call('POST', '/v1/menu/categories', manager, { nameTh: 'x'.repeat(300_000) });
+    expect(big.statusCode).toBe(400); // over 200 KB, yet an ordinary validation error: the cap is on the photo route
   });
 });
 
