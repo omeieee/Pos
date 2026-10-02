@@ -255,23 +255,33 @@ describe('a fresh device (since=0)', () => {
     ]);
   });
 
-  test('the bound follows the page chain only: another session, a wrong cursor or a stale chain is a normal feed', async () => {
+  test('only the next page of the same session continues the bound: another session is a normal feed', async () => {
     const first = await sync(tokens.owner, '?since=0&limit=3');
     expect(first.hasMore).toBe(true);
-    // Another session continuing from the same number is a returning device, not this chain.
-    const other = await walk(tokens.manager, 500, first.nextSince - 1);
+    // Another session at the very cursor of the chain is a returning device, not this chain.
+    const other = await walk(tokens.manager, 500, first.nextSince);
     expect(orderIdsOf(other.changes)).toContain(old.closedPaid.id);
-    // The chain itself is untouched by that: the next page is still bounded.
+    // The chain itself is untouched by that: its next page is still bounded.
     const next = await walk(tokens.owner, 500, first.nextSince);
     expect(orderIdsOf(next.changes)).not.toContain(old.closedPaid.id);
+  });
 
-    // A chain left alone past its time-out falls back to the normal feed (more rows, none missing).
-    const stale = await sync(tokens.owner, '?since=0&limit=3');
-    h.clock.advanceSeconds(10 * 60);
-    h.clock.advanceSeconds(90);
-    const lateOwner = await h.ownerSession(owner); // the old session may have idled out
-    const late = await walk(lateOwner, 500, stale.nextSince);
+  test('the same session at any other cursor is a normal feed, and leaves the chain alone', async () => {
+    const first = await sync(tokens.owner, '?since=0&limit=3');
+    expect(first.hasMore).toBe(true);
+    const stray = await walk(tokens.owner, 500, first.nextSince - 1);
+    expect(orderIdsOf(stray.changes)).toContain(old.closedPaid.id);
+    const next = await walk(tokens.owner, 500, first.nextSince);
+    expect(orderIdsOf(next.changes)).not.toContain(old.closedPaid.id);
+  });
+
+  test('a chain left alone past its time-out falls back to the normal feed: more rows, none missing', async () => {
+    const first = await sync(tokens.manager, '?since=0&limit=3');
+    expect(first.hasMore).toBe(true);
+    h.clock.advanceSeconds(121); // the chain waits two minutes for its next page
+    const late = await walk(tokens.manager, 500, first.nextSince);
     expect(orderIdsOf(late.changes)).toContain(old.closedPaid.id);
+    // Within the time, the same request was bounded (see the tests above).
   });
 });
 
