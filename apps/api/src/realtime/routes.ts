@@ -4,7 +4,7 @@ import type { FastifyInstance } from 'fastify';
 import { type GuardFactory, markFirstMessageAuth, principalOf } from '../auth/guards.ts';
 import type { AuthContext } from '../auth/service.ts';
 import { createHub, type Hub, type HubOptions, type WsLike } from './hub.ts';
-import { catchUp } from './sync.ts';
+import { createCatchUp } from './sync.ts';
 
 export interface RealtimeOptions {
   hub?: Partial<HubOptions>;
@@ -64,6 +64,7 @@ export async function registerRealtimeRoutes(
   realtime: { hub: Hub; connectsPerMinute: number },
 ): Promise<void> {
   const { hub } = realtime;
+  const catchUp = createCatchUp(ctx);
 
   app.get(
     '/sync',
@@ -74,7 +75,7 @@ export async function registerRealtimeRoutes(
     },
     async (request, reply) => {
       reply.header('cache-control', 'no-store');
-      return catchUp(ctx, principalOf(request), request.query, request.log);
+      return catchUp(principalOf(request), request.query, request.log);
     },
   );
 

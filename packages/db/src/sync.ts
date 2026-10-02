@@ -16,9 +16,13 @@
  *
  * Revs are taken when a row is written, so a slow transaction can commit after a newer one has
  * been served: clients rewind by `SYNC_SAFETY_REVS` before each catch-up (see `@sds/shared`).
+ *
+ * A first catch-up can ask for a WINDOW (`SyncWindow`): then orders (with their lines) and payments
+ * are limited to what matters now, in the WHERE clause so that paging and `hasMore` stay exact.
+ * The window never hides a row written after it was fixed (`headRev`): a change always travels.
  */
 import { maskPromptpayId, promptpaySettingsSchema, SYNCED_SETTING_KEYS } from '@sds/shared';
-import { and, asc, desc, gt, inArray, isNull, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, inArray, isNull, or, sql } from 'drizzle-orm';
 import type { PgTable } from 'drizzle-orm/pg-core';
 import type { Db } from './client.ts';
 import {
@@ -318,6 +322,21 @@ export type SyncEntry =
   | { kind: 'setting'; rev: number; setting: SyncSettingRow }
   | { kind: 'gov_copay'; rev: number; scheme: SyncSchemeRow };
 
+/**
+ * What a fresh device needs of the order history: the orders of the current business day, every
+ * order still open (new, preparing, ready) and every order with a pending or claimed payment, plus
+ * the payments of those orders. Older, closed, settled orders stay out (REST still serves them).
+ *
+ * `headRev` is the newest rev when the catch-up began. A row above it is always included, whatever
+ * it is: an old order that is finished (or voided) after the first page went out must still reach
+ * the device, or the device would keep showing it as open.
+ */
+export interface SyncWindow {
+  /** The current business day, `YYYY-MM-DD`, fixed for the whole catch-up. */
+  businessDate: string;
+  headRev: number;
+}
+
 export interface SyncBatch {
   /** Oldest rev first, at most `limit`. */
   entries: SyncEntry[];
@@ -351,11 +370,42 @@ export async function currentRev(db: Db): Promise<number> {
   return row?.value == null ? 0 : Number(row.value);
 }
 
-async function readOrders(db: Db, since: number, take: number): Promise<SyncEntry[]> {
+const OPEN_ORDER_STATUSES = ['new', 'preparing', 'ready'];
+
+function orderInWindow(window: SyncWindow) {
+  return or(
+    gt(orders.rev, window.headRev),
+    eq(orders.businessDate, window.businessDate),
+    inArray(orders.status, OPEN_ORDER_STATUSES),
+    sql`exists (select 1 from ${payments} where ${payments.orderId} = ${orders.id} and ${payments.status} in ('pending', 'claimed'))`,
+  );
+}
+
+/** A payment of an order in the window, written out: the inner names are aliases of the same tables. */
+function paymentInWindow(window: SyncWindow) {
+  return or(
+    gt(payments.rev, window.headRev),
+    sql`exists (
+      select 1 from "orders" "w"
+      where "w"."id" = ${payments.orderId}
+        and ("w"."rev" > ${window.headRev}
+          or "w"."business_date" = ${window.businessDate}::date
+          or "w"."status" in ('new', 'preparing', 'ready')
+          or exists (select 1 from "payments" "p"
+            where "p"."order_id" = "w"."id" and "p"."status" in ('pending', 'claimed'))))`,
+  );
+}
+
+async function readOrders(
+  db: Db,
+  since: number,
+  take: number,
+  window: SyncWindow | undefined,
+): Promise<SyncEntry[]> {
   const rows = await db
     .select(orderColumns)
     .from(orders)
-    .where(gt(orders.rev, since))
+    .where(window ? and(gt(orders.rev, since), orderInWindow(window)) : gt(orders.rev, since))
     .orderBy(asc(orders.rev))
     .limit(take);
   return rows.map((order) => ({ kind: 'order', rev: order.rev, order, items: [] }));
@@ -378,11 +428,16 @@ async function attachOrderItems(db: Db, entries: SyncEntry[]): Promise<void> {
   for (const e of entries) if (e.kind === 'order') e.items = byId.get(e.order.id) ?? [];
 }
 
-async function readPayments(db: Db, since: number, take: number): Promise<SyncEntry[]> {
+async function readPayments(
+  db: Db,
+  since: number,
+  take: number,
+  window: SyncWindow | undefined,
+): Promise<SyncEntry[]> {
   const rows = await db
     .select(paymentColumns)
     .from(payments)
-    .where(gt(payments.rev, since))
+    .where(window ? and(gt(payments.rev, since), paymentInWindow(window)) : gt(payments.rev, since))
     .orderBy(asc(payments.rev))
     .limit(take);
   return rows.map((payment) => ({ kind: 'payment', rev: payment.rev, payment }));
@@ -515,17 +570,18 @@ async function readScheme(db: Db, since: number): Promise<SyncEntry[]> {
 /**
  * The next page of changes in `include`'s families with a rev above `since`. Each family is read
  * for `limit + 1` rows and the lot is merged by rev, so a page never skips a row and `hasMore` is
- * exact.
+ * exact. With a `window`, orders and payments are cut down as `SyncWindow` says, inside the query,
+ * so the same holds for the bounded set.
  */
 export async function readChanges(
   db: Db,
-  request: { since: number; limit: number; include: SyncInclude },
+  request: { since: number; limit: number; include: SyncInclude; window?: SyncWindow },
 ): Promise<SyncBatch> {
-  const { since, limit, include } = request;
+  const { since, limit, include, window } = request;
   const take = limit + 1;
   const parts = await Promise.all([
-    include.orders ? readOrders(db, since, take) : [],
-    include.payments ? readPayments(db, since, take) : [],
+    include.orders ? readOrders(db, since, take, window) : [],
+    include.payments ? readPayments(db, since, take, window) : [],
     include.menu ? readMenu(db, since, take) : [],
     include.customers ? readCustomers(db, since, take) : [],
     include.settings ? readSettings(db, since, take) : [],
