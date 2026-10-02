@@ -18,16 +18,15 @@ import { OpenPayment } from './OpenPayment.tsx';
 import { PaymentHistory } from './PaymentHistory.tsx';
 import {
   confirmedPayment,
-  govCopayScheme,
   methodOptions,
   openPayment,
   type PayMethod,
+  paymentActions,
   paymentPhase,
   paymentsOf,
 } from './payment-model.ts';
 import { StartPanel } from './StartPanel.tsx';
-
-const METHOD_ICON = { cash: 'cash', promptpay: 'qr', gov_copay: 'hands' } as const;
+import { VoidRefundDialog } from './VoidRefundDialog.tsx';
 
 /**
  * The payment part of the order page. Whatever it shows comes from the store, which holds only what
@@ -55,6 +54,8 @@ function PaymentPanelBody({ orderId }: { orderId: string }) {
   const locale = useLocale();
   const order = entities.orders.get(orderId);
   const [loaded, setLoaded] = useState(false);
+  const [voiding, setVoiding] = useState(false);
+  const role = useAuthState().session?.staff.role;
   const [selected, setSelected] = useState<PayMethod>('cash');
   const [hidden, setHidden] = useState<ReadonlySet<PayMethod>>(new Set());
   const attempted = useRef<PayMethod | null>(null);
@@ -110,7 +111,6 @@ function PaymentPanelBody({ orderId }: { orderId: string }) {
     : (options.find((o) => o.enabled)?.method ?? null);
   const money = (value: number) => formatBaht(value, locale);
   const received = confirmedPayment(list);
-  const scheme = govCopayScheme(entities.settings);
   const remember = (method: PayMethod) => {
     attempted.current = method;
   };
@@ -150,6 +150,14 @@ function PaymentPanelBody({ orderId }: { orderId: string }) {
             </p>
           ) : null}
           <p className="hint">{tr('payment.change.confirmedLocked')}</p>
+          {received && role && paymentActions(role, received).voidRefund ? (
+            <button type="button" className="btn btn-danger" onClick={() => setVoiding(true)}>
+              {tr('payment.void.button')}
+            </button>
+          ) : null}
+          {voiding && received ? (
+            <VoidRefundDialog order={order} payment={received} onClose={() => setVoiding(false)} />
+          ) : null}
         </div>
       ) : phase === 'open' ? (
         <OpenPayment order={order} payment={waiting} hidden={hidden} onAttempt={remember} />
