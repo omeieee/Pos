@@ -124,7 +124,9 @@ async function placeOrder(token: string): Promise<{ id: string; orderNo: string 
   const res = await call('POST', '/v1/orders', token, {
     clientRequestId: crypto.randomUUID(),
     channel: 'storefront',
-    fulfillment: 'takeaway',
+    fulfillment: 'entrance_delivery',
+    deliveryBuilding: 'B1',
+    recipientName: 'Test Recipient',
     items: [{ menuItemId: menu.noodles, qty: 1, modifierOptionIds: [menu.thin, menu.egg] }],
   });
   if (res.statusCode !== 201) throw new Error(`order failed: ${res.statusCode} ${res.body}`);
@@ -409,7 +411,9 @@ describe('fan-out after commit', () => {
     const res = await call('POST', '/v1/orders', all.cashier.token, {
       clientRequestId: crypto.randomUUID(),
       channel: 'storefront',
-      fulfillment: 'takeaway',
+      fulfillment: 'entrance_delivery',
+      deliveryBuilding: 'B1',
+      recipientName: 'Test Recipient',
       items: [{ menuItemId: crypto.randomUUID(), qty: 1, modifierOptionIds: [] }],
     });
     expect(res.statusCode).toBe(422);

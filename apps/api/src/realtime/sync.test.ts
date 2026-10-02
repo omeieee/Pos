@@ -160,7 +160,9 @@ beforeAll(async () => {
       call('POST', '/v1/orders', tokens.cashier, {
         clientRequestId: crypto.randomUUID(),
         channel: 'storefront',
-        fulfillment: 'takeaway',
+        fulfillment: 'entrance_delivery',
+        deliveryBuilding: 'B1',
+        recipientName: 'Test Recipient',
         items: [{ menuItemId: item.id, qty: 2, modifierOptionIds: [options[1]] }],
         ...extra,
       }),

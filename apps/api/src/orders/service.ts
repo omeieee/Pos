@@ -5,6 +5,7 @@
  */
 import { type Db, ordersRepo } from '@sds/db';
 import {
+  allowedFulfillments,
   businessDate,
   type CreateOrderInput,
   initialOrderStatus,
@@ -30,6 +31,7 @@ import {
   versionConflict,
 } from '../errors.ts';
 import { settlePaymentsForOrderCancel } from '../payments/service.ts';
+import { currentDeliverySettings } from '../settings/service.ts';
 import { type CoreContext, type Emit, withTransaction } from '../tx.ts';
 import { currentBusinessDate, loadBusinessDay } from './business-day.ts';
 import { toOrderDto } from './dto.ts';
@@ -88,6 +90,19 @@ export async function createOrder(
   actor: Principal,
   input: CreateOrderInput,
 ): Promise<{ order: OrderDto; replay: boolean }> {
+  // Owner decision 2026-10-02: each channel offers one way to be served (entrance delivery for
+  // storefront, LINE and phone; the platform's for Grab and LINE MAN). Checked before anything is
+  // written or numbered; a replay of an order that was already saved still gets it back below.
+  const allowed = allowedFulfillments(input.channel);
+  if (!allowed.includes(input.fulfillment)) {
+    throw new ApiError(
+      422,
+      'FULFILLMENT_NOT_OFFERED',
+      'This channel does not offer that way of receiving the order',
+      { channel: input.channel, fulfillment: input.fulfillment, allowed: [...allowed] },
+    );
+  }
+
   const requestHash = orderRequestHash(input);
   const existing = await ordersRepo.findOrderByClientRequestId(ctx.db, input.clientRequestId);
   if (existing) return replayOf(ctx.db, existing, requestHash);
@@ -100,6 +115,13 @@ export async function createOrder(
     const order = await withTransaction(ctx, async (tx, emit) => {
       if (input.customerId && !(await ordersRepo.customerExists(tx, input.customerId))) {
         throw new ApiError(422, 'UNKNOWN_CUSTOMER', 'That customer does not exist');
+      }
+      // The building must be one the shop delivers to, from the saved list (or the default).
+      if (
+        input.deliveryBuilding !== undefined &&
+        !(await currentDeliverySettings(tx)).buildings.includes(input.deliveryBuilding)
+      ) {
+        throw new ApiError(422, 'UNKNOWN_BUILDING', 'The shop does not deliver to that building');
       }
       const itemIds = [...new Set(input.items.map((i) => i.menuItemId))];
       const catalog = await ordersRepo.loadCatalog(tx, itemIds);
@@ -115,6 +137,9 @@ export async function createOrder(
         channel: input.channel,
         fulfillment: input.fulfillment,
         roomNo: input.roomNo ?? null,
+        deliveryBuilding: input.deliveryBuilding ?? null,
+        recipientName: input.recipientName ?? null,
+        deliveryNote: input.deliveryNote || null,
         customerId: input.customerId ?? null,
         status,
         subtotalSatang: priced.totals.subtotal,

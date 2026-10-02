@@ -111,8 +111,11 @@ describe('orderDtoSchema', () => {
     orderNo: 'S-012',
     businessDate: '2026-10-01',
     channel: 'storefront',
-    fulfillment: 'takeaway',
+    fulfillment: 'entrance_delivery',
     roomNo: null,
+    deliveryBuilding: 'B1',
+    recipientName: 'Test Recipient',
+    deliveryNote: null,
     customerId: null,
     status: 'preparing',
     paymentStatus: 'unpaid',
@@ -135,6 +138,23 @@ describe('orderDtoSchema', () => {
 
   test('accepts the shape the API returns', () => {
     expect(orderDtoSchema.safeParse(dto).success).toBe(true);
+  });
+
+  test('carries the recipient of an entrance delivery, and null for orders without one', () => {
+    expect(orderDtoSchema.parse(dto)).toMatchObject({
+      deliveryBuilding: 'B1',
+      recipientName: 'Test Recipient',
+      deliveryNote: null,
+    });
+    const platform = {
+      ...dto,
+      fulfillment: 'platform_delivery',
+      deliveryBuilding: null,
+      recipientName: null,
+    };
+    expect(orderDtoSchema.safeParse(platform).success).toBe(true);
+    const { recipientName: _omit, ...missing } = dto;
+    expect(orderDtoSchema.safeParse(missing).success).toBe(false);
   });
 
   test('has no cost fields: kitchen devices must not see what a bowl costs', () => {

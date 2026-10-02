@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { businessDate } from './business-date.ts';
+import { buildingNameSchema, deliveryNoteSchema, recipientNameSchema } from './delivery.ts';
 import { FULFILLMENTS, ORDER_CHANNELS, PAYMENT_METHODS, STAFF_ROLES } from './enums.ts';
 import { type Satang, satang } from './money.ts';
 
@@ -48,6 +49,10 @@ export const createOrderInputSchema = z
     channel: orderChannelSchema,
     fulfillment: fulfillmentSchema,
     roomNo: z.string().trim().min(1).max(20).optional(),
+    /** Entrance delivery: where, to whom, and anything else the guard or the rider should know. */
+    deliveryBuilding: buildingNameSchema.optional(),
+    recipientName: recipientNameSchema.optional(),
+    deliveryNote: deliveryNoteSchema.optional(),
     customerId: z.uuid().optional(),
     note: z.string().max(500).optional(),
     items: z
@@ -65,5 +70,24 @@ export const createOrderInputSchema = z
   .refine((o) => o.fulfillment !== 'room_delivery' || o.roomNo !== undefined, {
     message: 'roomNo is required for room delivery',
     path: ['roomNo'],
+  })
+  .superRefine((o, ctx) => {
+    // An entrance delivery needs its building and recipient name; no other fulfilment carries
+    // them (a refusal, never a silent drop). Whether the building is one of the configured ones,
+    // and whether the channel offers this fulfilment, are decided by the server.
+    const entrance = o.fulfillment === 'entrance_delivery';
+    for (const field of ['deliveryBuilding', 'recipientName', 'deliveryNote'] as const) {
+      const given = o[field] !== undefined;
+      const required = field !== 'deliveryNote';
+      if (entrance && required && !given) {
+        ctx.addIssue({ code: 'custom', path: [field], message: `${field} is required` });
+      } else if (!entrance && given) {
+        ctx.addIssue({
+          code: 'custom',
+          path: [field],
+          message: `${field} is only for entrance delivery`,
+        });
+      }
+    }
   });
 export type CreateOrderInput = z.infer<typeof createOrderInputSchema>;

@@ -97,7 +97,9 @@ async function place(token: string): Promise<OrderDto> {
     call('POST', '/v1/orders', token, {
       clientRequestId: crypto.randomUUID(),
       channel: 'storefront',
-      fulfillment: 'takeaway',
+      fulfillment: 'entrance_delivery',
+      deliveryBuilding: 'B1',
+      recipientName: 'Test Recipient',
       items: [{ menuItemId: menu.noodles, qty: 1, modifierOptionIds: [menu.thin] }],
     }),
     201,

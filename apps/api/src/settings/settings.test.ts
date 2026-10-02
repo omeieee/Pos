@@ -686,7 +686,9 @@ describe('PromptPay ID change warns about open PromptPay payments (owner decisio
     const order = await call('POST', '/v1/orders', token, {
       clientRequestId: crypto.randomUUID(),
       channel: 'storefront',
-      fulfillment: 'takeaway',
+      fulfillment: 'entrance_delivery',
+      deliveryBuilding: 'B1',
+      recipientName: 'Test Recipient',
       items: [{ menuItemId: menuId, qty: 1, modifierOptionIds: [thinId] }],
     });
     expect(order.statusCode, order.body).toBe(201);
@@ -748,7 +750,9 @@ describe('PromptPay ID change warns about open PromptPay payments (owner decisio
     const cashOrder = await call('POST', '/v1/orders', token, {
       clientRequestId: crypto.randomUUID(),
       channel: 'storefront',
-      fulfillment: 'takeaway',
+      fulfillment: 'entrance_delivery',
+      deliveryBuilding: 'B1',
+      recipientName: 'Test Recipient',
       items: [{ menuItemId: menuId, qty: 1, modifierOptionIds: [thinId] }],
     });
     await call('POST', `/v1/orders/${cashOrder.json().id}/payments`, token, {

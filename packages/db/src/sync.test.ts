@@ -212,7 +212,10 @@ async function seedWorld() {
       orderNo: 'S-001',
       businessDate: '2026-10-02',
       channel: 'storefront',
-      fulfillment: 'takeaway',
+      fulfillment: 'entrance_delivery',
+      deliveryBuilding: 'B1',
+      recipientName: 'Test Recipient',
+      deliveryNote: 'NOTE-FOR-THE-GUARD',
       customerId: customer?.id ?? null,
       status: 'new',
       subtotalSatang: 5500,
@@ -307,6 +310,14 @@ describe('readChanges', () => {
     const entry = batch.entries.find((e) => e.kind === 'order');
     if (entry?.kind !== 'order') throw new Error('no order entry');
     expect(entry.order.id).toBe(world.order?.id);
+    // Every staff role sees where an order goes and who receives it (the board and the kitchen
+    // show it); the order feed is the only place these fields travel.
+    expect(entry.order).toMatchObject({
+      fulfillment: 'entrance_delivery',
+      deliveryBuilding: 'B1',
+      recipientName: 'Test Recipient',
+      deliveryNote: 'NOTE-FOR-THE-GUARD',
+    });
     expect(entry.items).toHaveLength(1);
     expect(entry.items[0]?.modifiers).toEqual([
       {

@@ -15,6 +15,15 @@ export function orderRequestHash(input: CreateOrderInput): string {
     roomNo: input.roomNo ?? null,
     customerId: input.customerId ?? null,
     note: input.note ?? null,
+    // Added only when present, so an order without a recipient keeps the fingerprint it was
+    // saved with. An empty details field is the same as none.
+    ...(input.deliveryBuilding !== undefined
+      ? {
+          deliveryBuilding: input.deliveryBuilding,
+          recipientName: input.recipientName ?? null,
+          deliveryNote: input.deliveryNote || null,
+        }
+      : {}),
     items: input.items.map((item) => ({
       menuItemId: item.menuItemId,
       qty: item.qty,

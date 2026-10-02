@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { CreateOrderInput } from '@sds/shared';
 import { describe, expect, test } from 'vitest';
 import { orderRequestHash } from './request-hash.ts';
@@ -48,6 +49,48 @@ describe('orderRequestHash', () => {
     expect(orderRequestHash({ ...without, note: undefined, roomNo: undefined })).toBe(
       orderRequestHash(without),
     );
+  });
+
+  test('an order without a recipient hashes exactly as it did before recipients existed', () => {
+    // Orders saved earlier carry this fingerprint: a retry after an upgrade must still match it.
+    const canonical = JSON.stringify({
+      channel: 'storefront',
+      fulfillment: 'takeaway',
+      roomNo: null,
+      customerId: null,
+      note: 'ห่อกลับ',
+      items: base.items.map((item) => ({
+        menuItemId: item.menuItemId,
+        qty: item.qty,
+        modifierOptionIds: [...item.modifierOptionIds].sort(),
+        note: item.note ?? null,
+      })),
+    });
+    expect(hash()).toBe(createHash('sha256').update(canonical).digest('hex'));
+  });
+
+  describe('an entrance delivery', () => {
+    const entrance: Partial<CreateOrderInput> = {
+      fulfillment: 'entrance_delivery',
+      deliveryBuilding: 'B1',
+      recipientName: 'Test Recipient',
+    };
+
+    test('is the same order when only an empty note is added', () => {
+      expect(hash({ ...entrance, deliveryNote: '' })).toBe(hash(entrance));
+    });
+
+    test.each([
+      ['the building', { deliveryBuilding: 'B2' }],
+      ['the name', { recipientName: 'Other Recipient' }],
+      ['the note', { deliveryNote: 'ชั้น 3' }],
+    ])('differs when %s differs', (_label, change) => {
+      expect(hash({ ...entrance, ...change })).not.toBe(hash(entrance));
+    });
+
+    test('differs from the same order without a recipient', () => {
+      expect(hash(entrance)).not.toBe(hash({ fulfillment: 'entrance_delivery' }));
+    });
   });
 
   test.each([

@@ -54,6 +54,10 @@ export interface NewOrder {
   channel: OrderChannel;
   fulfillment: Fulfillment;
   roomNo: string | null;
+  /** Entrance delivery recipient (personal data); null on platform and legacy orders. */
+  deliveryBuilding: string | null;
+  recipientName: string | null;
+  deliveryNote: string | null;
   customerId: string | null;
   status: OrderStatus;
   subtotalSatang: number;

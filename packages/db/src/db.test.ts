@@ -272,8 +272,10 @@ describe('integrity rules', () => {
   test('the fulfilment check takes the entrance delivery and still takes the legacy values', async () => {
     for (const fulfillment of FULFILLMENTS) {
       await db.execute(sql`insert into orders
-        (order_no, business_date, channel, fulfillment, room_no, status, subtotal_satang, total_satang, client_request_id)
-        values ('F-' || uuid_generate_v7(), '2026-09-29', 'storefront', ${fulfillment}, '1204', 'new', 0, 0, uuid_generate_v7())`);
+        (order_no, business_date, channel, fulfillment, room_no, delivery_building, recipient_name,
+         status, subtotal_satang, total_satang, client_request_id)
+        values ('F-' || uuid_generate_v7(), '2026-09-29', 'storefront', ${fulfillment}, '1204',
+          'B1', 'Test Recipient', 'new', 0, 0, uuid_generate_v7())`);
     }
     await expectDbError(
       db.execute(sql`insert into orders
@@ -281,6 +283,32 @@ describe('integrity rules', () => {
         values ('F-bad', '2026-09-29', 'storefront', 'teleport', 'new', 0, 0, uuid_generate_v7())`),
       /orders_fulfillment/,
     );
+  });
+
+  test('an entrance delivery needs a building and a recipient name, neither empty', async () => {
+    const insert = (building: string | null, name: string | null) =>
+      db.execute(sql`insert into orders
+        (order_no, business_date, channel, fulfillment, delivery_building, recipient_name,
+         status, subtotal_satang, total_satang, client_request_id)
+        values ('E-' || uuid_generate_v7(), '2026-09-29', 'storefront', 'entrance_delivery',
+          ${building}, ${name}, 'new', 0, 0, uuid_generate_v7())`);
+    await insert('B1', 'Test Recipient'); // the room is not needed, the note is optional
+    for (const [building, name] of [
+      [null, 'Test Recipient'],
+      ['B1', null],
+      ['', 'Test Recipient'],
+      ['B1', ''],
+      ['  ', 'Test Recipient'],
+      ['B1', '  '],
+    ] as const) {
+      await expectDbError(insert(building, name), /orders_entrance_delivery_recipient/);
+    }
+  });
+
+  test('other fulfilments do not need a recipient (platform and legacy orders)', async () => {
+    await db.execute(sql`insert into orders
+      (order_no, business_date, channel, fulfillment, status, subtotal_satang, total_satang, client_request_id)
+      values ('G-' || uuid_generate_v7(), '2026-09-29', 'grab', 'platform_delivery', 'new', 0, 0, uuid_generate_v7())`);
   });
 
   test('room delivery needs a room number', async () => {

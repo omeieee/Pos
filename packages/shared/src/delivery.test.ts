@@ -1,6 +1,122 @@
 import { describe, expect, test } from 'vitest';
-import { allowedFulfillments } from './delivery.ts';
+import {
+  allowedFulfillments,
+  buildingNameSchema,
+  deliveryNoteSchema,
+  recipientKey,
+  recipientNameSchema,
+} from './delivery.ts';
 import { FULFILLMENTS, ORDER_CHANNELS } from './enums.ts';
+import { createOrderInputSchema } from './schemas.ts';
+
+// Made-up names only: no real customer data in tests.
+const NAME = 'Test Recipient';
+
+describe('recipient fields', () => {
+  test('a name is trimmed and 1 to 60 characters', () => {
+    expect(recipientNameSchema.parse(`  ${NAME}  `)).toBe(NAME);
+    expect(recipientNameSchema.safeParse('').success).toBe(false);
+    expect(recipientNameSchema.safeParse('   ').success).toBe(false);
+    expect(recipientNameSchema.safeParse('x'.repeat(60)).success).toBe(true);
+    expect(recipientNameSchema.safeParse('x'.repeat(61)).success).toBe(false);
+  });
+
+  test('a note is trimmed and 0 to 200 characters (empty is allowed)', () => {
+    expect(deliveryNoteSchema.parse('  ห้อง 12  ')).toBe('ห้อง 12');
+    expect(deliveryNoteSchema.parse('   ')).toBe('');
+    expect(deliveryNoteSchema.safeParse('x'.repeat(200)).success).toBe(true);
+    expect(deliveryNoteSchema.safeParse('x'.repeat(201)).success).toBe(false);
+  });
+
+  test('a building is trimmed and 1 to 10 characters', () => {
+    expect(buildingNameSchema.parse(' B1 ')).toBe('B1');
+    expect(buildingNameSchema.safeParse('').success).toBe(false);
+    expect(buildingNameSchema.safeParse('x'.repeat(11)).success).toBe(false);
+  });
+
+  test('the lookup key ignores case, surrounding spaces and repeated spaces', () => {
+    expect(recipientKey('  Test   RECIPIENT ')).toBe('test recipient');
+    expect(recipientKey(NAME)).toBe(recipientKey('test recipient'));
+    expect(recipientKey('Test\tRecipient')).toBe('test recipient');
+  });
+
+  test('the lookup key treats equivalent Unicode forms as the same name', () => {
+    // "é" as one code point and as "e" + combining accent
+    expect(recipientKey('Café')).toBe(recipientKey('Café'));
+    // Thai text has no case and is kept as typed (after the same clean-up)
+    expect(recipientKey('  ฟ้า  ใส ')).toBe('ฟ้า ใส');
+  });
+
+  test('different names have different keys', () => {
+    expect(recipientKey('Test A')).not.toBe(recipientKey('Test B'));
+  });
+});
+
+describe('createOrderInputSchema: entrance delivery', () => {
+  const uuid = '0192f3a0-0000-7000-8000-000000000001';
+  const base = {
+    clientRequestId: uuid,
+    channel: 'storefront',
+    fulfillment: 'entrance_delivery',
+    deliveryBuilding: 'B1',
+    recipientName: NAME,
+    items: [{ menuItemId: uuid, qty: 1 }],
+  };
+
+  test('takes the building, the name and an optional note, trimmed', () => {
+    const parsed = createOrderInputSchema.parse({
+      ...base,
+      recipientName: `  ${NAME} `,
+      deliveryNote: ' ถือป้ายสีฟ้า ',
+    });
+    expect(parsed).toMatchObject({
+      deliveryBuilding: 'B1',
+      recipientName: NAME,
+      deliveryNote: 'ถือป้ายสีฟ้า',
+    });
+    expect(createOrderInputSchema.parse(base).deliveryNote).toBeUndefined();
+  });
+
+  test('needs both the building and the name', () => {
+    const { deliveryBuilding: _b, ...noBuilding } = base;
+    const { recipientName: _n, ...noName } = base;
+    expect(createOrderInputSchema.safeParse(noBuilding).success).toBe(false);
+    expect(createOrderInputSchema.safeParse(noName).success).toBe(false);
+    expect(createOrderInputSchema.safeParse({ ...base, recipientName: '  ' }).success).toBe(false);
+    expect(createOrderInputSchema.safeParse({ ...base, deliveryBuilding: ' ' }).success).toBe(
+      false,
+    );
+  });
+
+  test('refuses a name over 60 characters and a note over 200', () => {
+    expect(
+      createOrderInputSchema.safeParse({ ...base, recipientName: 'x'.repeat(61) }).success,
+    ).toBe(false);
+    expect(
+      createOrderInputSchema.safeParse({ ...base, deliveryNote: 'x'.repeat(201) }).success,
+    ).toBe(false);
+  });
+
+  test('the room number is not needed', () => {
+    expect(createOrderInputSchema.safeParse(base).success).toBe(true);
+  });
+
+  test('recipient fields on any other fulfilment are refused, not dropped', () => {
+    for (const fulfillment of ['platform_delivery', 'takeaway'] as const) {
+      const res = createOrderInputSchema.safeParse({ ...base, fulfillment });
+      expect(res.success, fulfillment).toBe(false);
+    }
+    expect(
+      createOrderInputSchema.safeParse({
+        ...base,
+        channel: 'grab',
+        fulfillment: 'platform_delivery',
+        deliveryBuilding: undefined,
+        recipientName: undefined,
+      }).success,
+    ).toBe(true);
+  });
+});
 
 describe('allowedFulfillments (owner, 2026-10-02: delivery to the building entrance only)', () => {
   test.each(['storefront', 'line', 'phone'] as const)(

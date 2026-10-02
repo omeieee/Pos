@@ -239,7 +239,9 @@ describe('fan-out latency (two sockets, loopback TCP, PGlite)', () => {
         payload: {
           clientRequestId: crypto.randomUUID(),
           channel: 'storefront',
-          fulfillment: 'takeaway',
+          fulfillment: 'entrance_delivery',
+          deliveryBuilding: 'B1',
+          recipientName: 'Test Recipient',
           items: [{ menuItemId: menu.noodles, qty: 1, modifierOptionIds: [menu.thin] }],
         },
       });

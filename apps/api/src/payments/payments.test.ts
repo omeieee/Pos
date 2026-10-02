@@ -130,13 +130,19 @@ beforeEach(async () => {
   await setMethods(null);
 });
 
-const orderBody = (over: Record<string, unknown> = {}) => ({
-  clientRequestId: crypto.randomUUID(),
-  channel: 'storefront',
-  fulfillment: 'takeaway',
-  items: [{ menuItemId: menu.noodles, qty: 1, modifierOptionIds: [menu.thin] }],
-  ...over,
-});
+// A valid order for its channel: entrance delivery with a made-up recipient, or the platform's.
+const orderBody = (over: Record<string, unknown> = {}) => {
+  const channel = (over.channel as string | undefined) ?? 'storefront';
+  const platform = channel === 'grab' || channel === 'lineman';
+  return {
+    clientRequestId: crypto.randomUUID(),
+    channel,
+    fulfillment: platform ? 'platform_delivery' : 'entrance_delivery',
+    ...(platform ? {} : { deliveryBuilding: 'B1', recipientName: 'Test Recipient' }),
+    items: [{ menuItemId: menu.noodles, qty: 1, modifierOptionIds: [menu.thin] }],
+    ...over,
+  };
+};
 
 async function place(token: string, over: Record<string, unknown> = {}): Promise<OrderDto> {
   const res = await call('POST', '/v1/orders', token, orderBody(over));
@@ -449,9 +455,24 @@ describe('government co-pay (rule 4)', () => {
     expect(payment).toMatchObject({ estGovShareSatang: 1000, estCustomerShareSatang: 4000 });
   });
 
-  test('a LINE order paid at the counter qualifies (counter payments are storefront)', async () => {
+  // Owner, 2026-10-02: co-pay is a plain payment option, paid face to face between staff and the
+  // customer at the counter or at the entrance hand-over (staff create the ถุงเงิน QR there).
+  test.each(['storefront', 'line', 'phone'])(
+    'an entrance delivery from the %s channel qualifies when staff take the payment',
+    async (channel) => {
+      const cashier = await sign('cashier');
+      const order = await place(cashier, { channel });
+      expect(order.fulfillment).toBe('entrance_delivery');
+      const res = await pay(cashier, order.id, payBody('gov_copay'));
+      expect(res.statusCode).toBe(201);
+      expect(res.json().payment).toMatchObject({ method: 'gov_copay', status: 'pending' });
+    },
+  );
+
+  test('a legacy counter order (old row) still qualifies', async () => {
     const cashier = await sign('cashier');
-    const order = await place(cashier, { channel: 'line', fulfillment: 'pickup' });
+    const order = await place(cashier);
+    await h.client.query("update orders set fulfillment = 'takeaway' where id = $1", [order.id]);
     expect((await pay(cashier, order.id, payBody('gov_copay'))).statusCode).toBe(201);
   });
 
@@ -516,7 +537,11 @@ describe('government co-pay (rule 4)', () => {
 
   test('is refused for room delivery and platform delivery (not face to face)', async () => {
     const cashier = await sign('cashier');
-    const room = await place(cashier, { fulfillment: 'room_delivery', roomNo: '1204' });
+    const room = await place(cashier);
+    await h.client.query(
+      "update orders set fulfillment = 'room_delivery', room_no = '1204', delivery_building = null, recipient_name = null where id = $1",
+      [room.id],
+    );
     const res = await pay(cashier, room.id, payBody('gov_copay'));
     expect(res.statusCode).toBe(422);
     expect(res.json()).toMatchObject({ code: 'GOV_COPAY_UNAVAILABLE' });
@@ -1052,7 +1077,11 @@ describe('change-method (02 §4.4)', () => {
 
   test('if the new payment cannot be made, nothing changes: the old one stays pending, no events', async () => {
     const cashier = await sign('cashier');
-    const room = await place(cashier, { fulfillment: 'room_delivery', roomNo: '1204' });
+    const room = await place(cashier);
+    await h.client.query(
+      "update orders set fulfillment = 'room_delivery', room_no = '1204', delivery_building = null, recipient_name = null where id = $1",
+      [room.id],
+    );
     const old = await startPayment(cashier, room.id, 'promptpay');
     const before = h.events.length;
     const res = await call(

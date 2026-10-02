@@ -32,13 +32,25 @@ const sign = (role: 'cashier' | 'manager' | 'kitchen') =>
   h.pinSession(device.token, staff[role].id, staff[role].pin);
 const bearer = (token: string) => ({ authorization: `Bearer ${token}` });
 
-const orderBody = (over: Record<string, unknown> = {}) => ({
-  clientRequestId: crypto.randomUUID(),
-  channel: 'storefront',
-  fulfillment: 'takeaway',
-  items: [{ menuItemId: menu.noodles, qty: 1, modifierOptionIds: [menu.thin] }],
-  ...over,
-});
+// Made-up recipient, never a real customer's.
+const RECIPIENT = { deliveryBuilding: 'B1', recipientName: 'Test Recipient' };
+
+/**
+ * A valid order for its channel: storefront, LINE and phone orders go to the building entrance
+ * (with a recipient), Grab and LINE MAN orders go by the platform (with none).
+ */
+const orderBody = (over: Record<string, unknown> = {}) => {
+  const channel = (over.channel as string | undefined) ?? 'storefront';
+  const platform = channel === 'grab' || channel === 'lineman';
+  return {
+    clientRequestId: crypto.randomUUID(),
+    channel,
+    fulfillment: platform ? 'platform_delivery' : 'entrance_delivery',
+    ...(platform ? {} : RECIPIENT),
+    items: [{ menuItemId: menu.noodles, qty: 1, modifierOptionIds: [menu.thin] }],
+    ...over,
+  };
+};
 
 function post(token: string | undefined, body: unknown, headers: Record<string, string> = {}) {
   return h.app.inject({
@@ -57,6 +69,19 @@ async function place(token: string, over: Record<string, unknown> = {}): Promise
 
 const get = (token: string, url: string) =>
   h.app.inject({ method: 'GET', url, headers: bearer(token) });
+
+/**
+ * A legacy room delivery. The API no longer takes one (only the building entrance is offered), so
+ * an entrance order is switched in the database, as an old row would be.
+ */
+async function legacyRoomDelivery(token: string, roomNo = '1204'): Promise<OrderDto> {
+  const order = await place(token);
+  await h.client.query(
+    "update orders set fulfillment = 'room_delivery', room_no = $2, delivery_building = null, recipient_name = null where id = $1",
+    [order.id, roomNo],
+  );
+  return orderDtoSchema.parse((await get(token, `/v1/orders/${order.id}`)).json());
+}
 
 function patch(token: string, id: string, body: Record<string, unknown>) {
   return h.app.inject({
@@ -132,7 +157,10 @@ describe('POST /v1/orders', () => {
       orderNo: 'S-001',
       businessDate: day,
       channel: 'storefront',
-      fulfillment: 'takeaway',
+      fulfillment: 'entrance_delivery',
+      deliveryBuilding: 'B1',
+      recipientName: 'Test Recipient',
+      deliveryNote: null,
       status: 'preparing',
       paymentStatus: 'unpaid',
       subtotalSatang: 13000,
@@ -211,7 +239,7 @@ describe('POST /v1/orders', () => {
   test('LINE and platform orders wait for staff (new); Grab uses the Grab price', async () => {
     newDay();
     const cashier = await sign('cashier');
-    const line = await place(cashier, { channel: 'line', fulfillment: 'pickup' });
+    const line = await place(cashier, { channel: 'line' });
     expect(line).toMatchObject({
       status: 'new',
       acceptedAt: null,
@@ -227,17 +255,42 @@ describe('POST /v1/orders', () => {
 
   test('a phone order is keyed in at the counter: storefront prices, goes straight to preparing', async () => {
     newDay();
-    const phone = await place(await sign('cashier'), { channel: 'phone', fulfillment: 'pickup' });
+    const phone = await place(await sign('cashier'), { channel: 'phone' });
     expect(phone).toMatchObject({ orderNo: 'P-001', status: 'preparing', totalSatang: 5000 });
   });
 
-  test('a room delivery keeps its room number', async () => {
+  test('an entrance delivery keeps its building, its recipient and the extra details, trimmed', async () => {
     newDay();
     const order = await place(await sign('cashier'), {
-      fulfillment: 'room_delivery',
-      roomNo: ' 1204 ',
+      deliveryBuilding: ' C2 ',
+      recipientName: '  Test   Recipient ',
+      deliveryNote: '  ห้อง 12 ถือร่มสีฟ้า ',
+      note: 'ไม่ใส่ผัก',
     });
-    expect(order).toMatchObject({ fulfillment: 'room_delivery', roomNo: '1204' });
+    expect(order).toMatchObject({
+      fulfillment: 'entrance_delivery',
+      deliveryBuilding: 'C2',
+      // Trimmed at the ends; the inside is kept as typed (only the lookup key collapses spaces).
+      recipientName: 'Test   Recipient',
+      deliveryNote: 'ห้อง 12 ถือร่มสีฟ้า',
+      roomNo: null,
+      note: 'ไม่ใส่ผัก', // the kitchen note is a different field
+    });
+    const stored = await row(
+      'select delivery_building, recipient_name, delivery_note from orders where id = $1',
+      [order.id],
+    );
+    expect(stored).toMatchObject({
+      delivery_building: 'C2',
+      recipient_name: 'Test   Recipient',
+      delivery_note: 'ห้อง 12 ถือร่มสีฟ้า',
+    });
+  });
+
+  test('an empty details field is stored as nothing', async () => {
+    newDay();
+    const order = await place(await sign('cashier'), { deliveryNote: '   ' });
+    expect(order.deliveryNote).toBeNull();
   });
 
   test('later menu edits do not change a saved order', async () => {
@@ -378,6 +431,16 @@ describe('POST /v1/orders', () => {
     ['room delivery without a room', { fulfillment: 'room_delivery' }],
     ['an unknown channel', { channel: 'fax' }],
     ['a missing request id', { clientRequestId: undefined }],
+    ['an entrance delivery without a building', { deliveryBuilding: undefined }],
+    ['an entrance delivery without a recipient name', { recipientName: undefined }],
+    ['an empty recipient name', { recipientName: '   ' }],
+    ['a recipient name over 60 characters', { recipientName: 'x'.repeat(61) }],
+    ['a delivery note over 200 characters', { deliveryNote: 'x'.repeat(201) }],
+    ['a building name over 10 characters', { deliveryBuilding: 'x'.repeat(11) }],
+    [
+      'a recipient on a platform order',
+      { channel: 'grab', fulfillment: 'platform_delivery', ...RECIPIENT },
+    ],
   ])('rejects %s with a validation error', async (_label, over) => {
     newDay();
     const res = await post(await sign('cashier'), orderBody(over));
@@ -560,9 +623,9 @@ describe('order numbers', () => {
     const cashier = await sign('cashier');
     const numbers = [
       (await place(cashier)).orderNo,
-      (await place(cashier, { channel: 'line', fulfillment: 'pickup' })).orderNo,
+      (await place(cashier, { channel: 'line' })).orderNo,
       (await place(cashier)).orderNo,
-      (await place(cashier, { channel: 'phone', fulfillment: 'pickup' })).orderNo,
+      (await place(cashier, { channel: 'phone' })).orderNo,
     ];
     expect(numbers).toEqual(['S-001', 'L-002', 'S-003', 'P-004']);
   });
@@ -635,7 +698,7 @@ describe('events after commit', () => {
       seen.push({ id: event.id, sameRevInDb: Number(saved?.rev) === event.rev });
     });
     const before = h.events.length;
-    const res = await post(cashier, orderBody({ channel: 'line', fulfillment: 'pickup' }));
+    const res = await post(cashier, orderBody({ channel: 'line' }));
     await new Promise((resolve) => setTimeout(resolve, 20));
     off();
 
@@ -686,7 +749,7 @@ describe('GET /v1/orders', () => {
     const cashier = await sign('cashier');
     const first = await place(cashier);
     h.clock.advanceSeconds(60);
-    const second = await place(cashier, { channel: 'line', fulfillment: 'pickup' });
+    const second = await place(cashier, { channel: 'line' });
     const res = await get(cashier, '/v1/orders');
     expect(res.statusCode).toBe(200);
     const body = res.json() as { day: string; orders: OrderDto[] };
@@ -703,7 +766,7 @@ describe('GET /v1/orders', () => {
     const today = newDay();
     const cashier = await sign('cashier');
     const storefront = await place(cashier);
-    const line = await place(cashier, { channel: 'line', fulfillment: 'pickup' });
+    const line = await place(cashier, { channel: 'line' });
     const ids = async (query: string) =>
       ((await get(cashier, `/v1/orders${query}`)).json() as { orders: OrderDto[] }).orders.map(
         (o) => o.id,
@@ -751,14 +814,222 @@ describe('GET /v1/orders/{id}', () => {
   });
 });
 
+describe('which fulfilment a channel offers (owner, 2026-10-02: delivery to the building entrance only)', () => {
+  const NOT_OFFERED = { code: 'FULFILLMENT_NOT_OFFERED' };
+  const legacy = ['dine_in', 'takeaway', 'pickup', 'room_delivery'] as const;
+
+  test.each(['storefront', 'line', 'phone'])(
+    'a %s order is delivered to the building entrance',
+    async (channel) => {
+      newDay();
+      const order = await place(await sign('cashier'), { channel });
+      expect(order).toMatchObject({ fulfillment: 'entrance_delivery', deliveryBuilding: 'B1' });
+    },
+  );
+
+  test.each(['grab', 'lineman'])(
+    'a %s order goes by the platform, with no recipient',
+    async (channel) => {
+      newDay();
+      const order = await place(await sign('cashier'), { channel });
+      expect(order).toMatchObject({
+        fulfillment: 'platform_delivery',
+        deliveryBuilding: null,
+        recipientName: null,
+        deliveryNote: null,
+      });
+    },
+  );
+
+  test.each(['storefront', 'line', 'phone'])(
+    'a %s order refuses the old counter fulfilments and the platform one',
+    async (channel) => {
+      newDay();
+      const cashier = await sign('cashier');
+      for (const fulfillment of [...legacy, 'platform_delivery']) {
+        const body = orderBody({
+          channel,
+          fulfillment,
+          deliveryBuilding: undefined,
+          recipientName: undefined,
+          ...(fulfillment === 'room_delivery' ? { roomNo: '1204' } : {}),
+        });
+        const res = await post(cashier, body);
+        expect(res.statusCode, `${channel} ${fulfillment}`).toBe(422);
+        expect(res.json()).toMatchObject({
+          ...NOT_OFFERED,
+          details: { channel, fulfillment, allowed: ['entrance_delivery'] },
+        });
+        expect(await orderCount(body.clientRequestId)).toBe(0);
+      }
+    },
+  );
+
+  test.each(['grab', 'lineman'])(
+    'a %s order refuses entrance delivery and the old fulfilments',
+    async (channel) => {
+      newDay();
+      const cashier = await sign('cashier');
+      for (const fulfillment of [...legacy, 'entrance_delivery']) {
+        const body = orderBody({
+          channel,
+          fulfillment,
+          ...(fulfillment === 'entrance_delivery' ? RECIPIENT : {}),
+          ...(fulfillment === 'room_delivery' ? { roomNo: '1204' } : {}),
+        });
+        const res = await post(cashier, body);
+        expect(res.statusCode, `${channel} ${fulfillment}`).toBe(422);
+        expect(res.json()).toMatchObject({
+          ...NOT_OFFERED,
+          details: { channel, fulfillment, allowed: ['platform_delivery'] },
+        });
+      }
+    },
+  );
+
+  test('a refusal takes no order number and publishes nothing', async () => {
+    newDay();
+    const cashier = await sign('cashier');
+    const before = h.events.length;
+    const res = await post(
+      cashier,
+      orderBody({ fulfillment: 'takeaway', deliveryBuilding: undefined, recipientName: undefined }),
+    );
+    expect(res.statusCode).toBe(422);
+    expect(h.events.length).toBe(before);
+    expect((await place(cashier)).orderNo).toBe('S-001');
+  });
+});
+
+describe('the recipient of an entrance delivery', () => {
+  const putBuildings = async (buildings: string[]) => {
+    const manager = await sign('manager');
+    const res = await h.app.inject({
+      method: 'GET',
+      url: '/v1/settings/delivery',
+      headers: bearer(manager),
+    });
+    const saved = await h.app.inject({
+      method: 'PUT',
+      url: '/v1/settings/delivery',
+      headers: bearer(manager),
+      payload: { expectedVersion: res.json().version, buildings },
+    });
+    expect(saved.statusCode).toBe(200);
+  };
+  const clearBuildings = () => h.client.query("delete from settings where key = 'delivery'");
+
+  test('with no saved list, the eight default buildings are accepted and others are not', async () => {
+    newDay();
+    await clearBuildings();
+    const cashier = await sign('cashier');
+    for (const building of ['A1', 'A2', 'B1', 'B2', 'C1', 'C2', 'D1', 'D2']) {
+      expect((await post(cashier, orderBody({ deliveryBuilding: building }))).statusCode).toBe(201);
+    }
+    const res = await post(cashier, orderBody({ deliveryBuilding: 'E1' }));
+    expect(res.statusCode).toBe(422);
+    expect(res.json()).toMatchObject({ code: 'UNKNOWN_BUILDING' });
+  });
+
+  test('the owner-edited list decides, and the match is exact', async () => {
+    newDay();
+    await putBuildings(['Tower', 'E1']);
+    const cashier = await sign('cashier');
+    expect((await post(cashier, orderBody({ deliveryBuilding: 'Tower' }))).statusCode).toBe(201);
+    expect((await post(cashier, orderBody({ deliveryBuilding: ' E1 ' }))).statusCode).toBe(201);
+    for (const building of ['B1', 'tower', 'E']) {
+      const body = orderBody({ deliveryBuilding: building });
+      const res = await post(cashier, body);
+      expect(res.statusCode, building).toBe(422);
+      expect(res.json()).toMatchObject({ code: 'UNKNOWN_BUILDING' });
+      expect(await orderCount(body.clientRequestId)).toBe(0);
+    }
+    await clearBuildings();
+  });
+
+  test('a replay of an order keeps working after its building left the list', async () => {
+    newDay();
+    await clearBuildings();
+    const cashier = await sign('cashier');
+    const body = orderBody({ deliveryBuilding: 'D2' });
+    const created = await post(cashier, body);
+    expect(created.statusCode).toBe(201);
+    await putBuildings(['A1']);
+    const retry = await post(cashier, body);
+    expect(retry.statusCode).toBe(200);
+    expect(retry.json()).toEqual(created.json());
+    await clearBuildings();
+  });
+
+  test('the same request id with another recipient is refused, not replayed', async () => {
+    newDay();
+    const cashier = await sign('cashier');
+    const first = orderBody();
+    const created = await post(cashier, first);
+    expect(created.statusCode).toBe(201);
+    for (const change of [
+      { deliveryBuilding: 'B2' },
+      { recipientName: 'Another Recipient' },
+      { deliveryNote: 'ชั้น 3' },
+    ]) {
+      const res = await post(cashier, { ...first, ...change });
+      expect(res.statusCode, JSON.stringify(change)).toBe(409);
+      expect(res.json()).toMatchObject({ code: 'IDEMPOTENCY_KEY_REUSED' });
+    }
+    expect((await post(cashier, first)).statusCode).toBe(200);
+  });
+
+  test('the recipient reaches every staff role through GET, and the order events carry it', async () => {
+    newDay();
+    const before = h.events.length;
+    const order = await place(await sign('cashier'), { deliveryNote: 'ชั้น 3' });
+    for (const role of ['kitchen', 'cashier', 'manager'] as const) {
+      const one = orderDtoSchema.parse(
+        (await get(await sign(role), `/v1/orders/${order.id}`)).json(),
+      );
+      expect(one, role).toMatchObject({
+        deliveryBuilding: 'B1',
+        recipientName: 'Test Recipient',
+        deliveryNote: 'ชั้น 3',
+      });
+      const list = (await get(await sign(role), '/v1/orders')).json();
+      expect(list.orders[0], role).toMatchObject({ recipientName: 'Test Recipient' });
+    }
+    const upserted = h.events.slice(before).find((e) => e.type === 'order.upserted');
+    expect(upserted).toMatchObject({
+      data: { deliveryBuilding: 'B1', recipientName: 'Test Recipient' },
+    });
+  });
+
+  test('the name and the note appear in no log line and no new-order alert', async () => {
+    newDay();
+    const before = h.events.length;
+    const secretName = 'Zzyx-Unique-Recipient-Name';
+    const secretNote = 'Zzyx-Unique-Delivery-Note';
+    const cashier = await sign('cashier');
+    await place(cashier, { recipientName: secretName, deliveryNote: secretNote });
+    // A refused one too: its validation error must not echo the values either.
+    await post(
+      cashier,
+      orderBody({ recipientName: secretName, deliveryNote: secretNote, deliveryBuilding: 'ZZ' }),
+    );
+    await post(cashier, orderBody({ recipientName: secretName, deliveryNote: 'x'.repeat(300) }));
+    expect(h.logs()).not.toContain(secretName);
+    expect(h.logs()).not.toContain(secretNote);
+    const alerts = h.events.slice(before).filter((e) => e.type !== 'order.upserted');
+    expect(JSON.stringify(alerts)).not.toContain(secretName);
+    expect(JSON.stringify(alerts)).not.toContain(secretNote);
+  });
+});
+
 describe('PATCH /v1/orders/{id}', () => {
   test('changes the note and room, bumps version and rev, and publishes', async () => {
     newDay();
     const cashier = await sign('cashier');
-    const order = await place(cashier, { fulfillment: 'room_delivery', roomNo: '1204' });
+    const order = await legacyRoomDelivery(cashier);
     const before = h.events.length;
     const res = await patch(cashier, order.id, {
-      expectedVersion: 1,
+      expectedVersion: order.version,
       note: 'ไม่เผ็ด',
       roomNo: '1310',
     });
@@ -767,7 +1038,7 @@ describe('PATCH /v1/orders/{id}', () => {
     expect(updated).toMatchObject({
       note: 'ไม่เผ็ด',
       roomNo: '1310',
-      version: 2,
+      version: order.version + 1,
       totalSatang: order.totalSatang,
     });
     expect(updated.rev).toBeGreaterThan(order.rev);
@@ -828,11 +1099,11 @@ describe('PATCH /v1/orders/{id}', () => {
     ).toBe(1);
   });
 
-  test('a room delivery cannot lose its room number', async () => {
+  test('an old room delivery cannot lose its room number', async () => {
     newDay();
     const cashier = await sign('cashier');
-    const order = await place(cashier, { fulfillment: 'room_delivery', roomNo: '1204' });
-    const res = await patch(cashier, order.id, { expectedVersion: 1, roomNo: null });
+    const order = await legacyRoomDelivery(cashier);
+    const res = await patch(cashier, order.id, { expectedVersion: order.version, roomNo: null });
     expect(res.statusCode).toBe(400);
     expect(res.json()).toMatchObject({ code: 'ROOM_REQUIRED' });
   });
@@ -903,7 +1174,7 @@ describe('POST /v1/orders/{id}/transition', () => {
 
   test('a LINE order is accepted by staff (new to preparing)', async () => {
     newDay();
-    const order = await place(await sign('cashier'), { channel: 'line', fulfillment: 'pickup' });
+    const order = await place(await sign('cashier'), { channel: 'line' });
     expect(order.acceptedAt).toBeNull();
     h.clock.advanceSeconds(30);
     const res = await transition(await sign('kitchen'), order.id, { to: 'preparing' });
@@ -996,7 +1267,7 @@ describe('cancelling', () => {
   test('a cashier may cancel a new order with a reason', async () => {
     newDay();
     const cashier = await sign('cashier');
-    const order = await place(cashier, { channel: 'line', fulfillment: 'pickup' });
+    const order = await place(cashier, { channel: 'line' });
     h.clock.advanceSeconds(45);
     const res = await cancel(cashier, order.id, { reason: 'ลูกค้ายกเลิก' });
     expect(res.statusCode).toBe(200);

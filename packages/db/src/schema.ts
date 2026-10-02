@@ -303,6 +303,14 @@ export const orders = pgTable(
     channel: text('channel').notNull(),
     fulfillment: text('fulfillment').notNull(),
     roomNo: text('room_no'),
+    /**
+     * Entrance delivery (owner, 2026-10-02): the building whose entrance the order goes to, who
+     * receives it, and optional free-text details. Personal data (PDPA). The order's `note` stays
+     * the kitchen note. Null on platform and legacy orders.
+     */
+    deliveryBuilding: text('delivery_building'),
+    recipientName: text('recipient_name'),
+    deliveryNote: text('delivery_note'),
     customerId: uuid('customer_id').references(() => customers.id),
     status: text('status').notNull(),
     paymentStatus: text('payment_status').notNull().default('unpaid'),
@@ -350,6 +358,10 @@ export const orders = pgTable(
       sql`subtotal_satang >= 0 and discount_satang >= 0 and discount_satang <= subtotal_satang and total_satang = subtotal_satang - discount_satang`,
     ),
     check('orders_room_delivery_room', sql`fulfillment <> 'room_delivery' or room_no is not null`),
+    check(
+      'orders_entrance_delivery_recipient',
+      sql`fulfillment <> 'entrance_delivery' or (delivery_building is not null and btrim(delivery_building) <> '' and recipient_name is not null and btrim(recipient_name) <> '')`,
+    ),
   ],
 );
 

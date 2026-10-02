@@ -515,7 +515,9 @@ describe('deleting an item soft-deletes it', () => {
     const order = await call('POST', '/v1/orders', manager, {
       clientRequestId: crypto.randomUUID(),
       channel: 'storefront',
-      fulfillment: 'takeaway',
+      fulfillment: 'entrance_delivery',
+      deliveryBuilding: 'B1',
+      recipientName: 'Test Recipient',
       items: [{ menuItemId: item.id, qty: 1, modifierOptionIds: [g.options[0]?.id] }],
     });
     expect(order.statusCode).toBe(201);
@@ -532,7 +534,9 @@ describe('deleting an item soft-deletes it', () => {
     const again = await call('POST', '/v1/orders', manager, {
       clientRequestId: crypto.randomUUID(),
       channel: 'storefront',
-      fulfillment: 'takeaway',
+      fulfillment: 'entrance_delivery',
+      deliveryBuilding: 'B1',
+      recipientName: 'Test Recipient',
       items: [{ menuItemId: item.id, qty: 1, modifierOptionIds: [g.options[0]?.id] }],
     });
     expect(again.statusCode).toBe(422);
@@ -576,7 +580,9 @@ describe('sold out (หมด)', () => {
       call('POST', '/v1/orders', token, {
         clientRequestId: crypto.randomUUID(),
         channel: 'storefront',
-        fulfillment: 'takeaway',
+        fulfillment: 'entrance_delivery',
+        deliveryBuilding: 'B1',
+        recipientName: 'Test Recipient',
         items: [{ menuItemId: item.id, qty: 1, modifierOptionIds: [g.options[0]?.id] }],
       });
 

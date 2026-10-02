@@ -44,6 +44,10 @@ export const orderDtoSchema = z.object({
   channel: orderChannelSchema,
   fulfillment: fulfillmentSchema,
   roomNo: z.string().nullable(),
+  /** Entrance delivery: the building, the recipient and their extra details; null otherwise. */
+  deliveryBuilding: z.string().nullable(),
+  recipientName: z.string().nullable(),
+  deliveryNote: z.string().nullable(),
   customerId: z.uuid().nullable(),
   status: z.enum(ORDER_STATUSES),
   paymentStatus: z.enum(ORDER_PAYMENT_STATUSES),
