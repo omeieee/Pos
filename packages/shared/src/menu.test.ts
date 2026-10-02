@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import {
   availabilityInputSchema,
+  createCategoryInputSchema,
   createGroupInputSchema,
   createItemInputSchema,
   createOptionInputSchema,
@@ -156,5 +157,39 @@ describe('what leaves the server', () => {
     expect(publicMenuQuerySchema.parse({})).toEqual({ channel: 'storefront' });
     expect(publicMenuQuerySchema.parse({ channel: 'grab' })).toEqual({ channel: 'grab' });
     expect(publicMenuQuerySchema.safeParse({ channel: 'phone' }).success).toBe(false);
+  });
+});
+
+describe('clientRequestId on the create inputs', () => {
+  const id = '0192f3a0-0000-7000-8000-0000000000aa';
+  test('is an optional UUID on every create input', () => {
+    for (const [schema, body] of [
+      [createCategoryInputSchema, { nameTh: 'หมวด' }],
+      [createItemInputSchema, item],
+      [createGroupInputSchema, { nameTh: 'เส้น', minSelect: 1, maxSelect: 1 }],
+      [createOptionInputSchema, { nameTh: 'ไข่' }],
+    ] as const) {
+      expect(schema.safeParse(body).success).toBe(true);
+      expect(schema.safeParse({ ...body, clientRequestId: id }).success).toBe(true);
+      expect(schema.safeParse({ ...body, clientRequestId: 'nope' }).success).toBe(false);
+    }
+  });
+
+  test('an option nested in a new group takes none: the group carries the id', () => {
+    expect(
+      createGroupInputSchema.safeParse({
+        nameTh: 'เส้น',
+        minSelect: 1,
+        maxSelect: 1,
+        options: [{ nameTh: 'เส้นเล็ก', clientRequestId: id }],
+      }).success,
+    ).toBe(false);
+  });
+
+  test('a patch takes none (a PATCH is guarded by expectedVersion)', () => {
+    expect(
+      patchItemInputSchema.safeParse({ expectedVersion: 1, priceSatang: 1, clientRequestId: id })
+        .success,
+    ).toBe(false);
   });
 });

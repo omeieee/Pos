@@ -64,9 +64,21 @@ export const menuCategories = pgTable(
     nameEn: text('name_en'),
     sort: integer('sort').notNull().default(0),
     active: boolean('active').notNull().default(true),
+    /**
+     * Idempotency (CLAUDE.md rule 6) for the create route, like `orders.client_request_id`: the
+     * client's request id, and a fingerprint of the request body. Both null on rows made without
+     * one (every row before migration 0015, and any create sent without `clientRequestId`). A
+     * second create with the same id and the same fingerprint returns this row; with another
+     * fingerprint it is refused. The unique index allows many nulls.
+     */
+    clientRequestId: uuid('client_request_id'),
+    requestHash: text('request_hash'),
     ...sync,
   },
-  (t) => [index('menu_categories_rev_idx').on(t.rev)],
+  (t) => [
+    index('menu_categories_rev_idx').on(t.rev),
+    uniqueIndex('menu_categories_client_request_id_key').on(t.clientRequestId),
+  ],
 );
 
 export const menuItems = pgTable(
@@ -87,10 +99,20 @@ export const menuItems = pgTable(
     channels: text('channels').array().notNull().default(sql`'{storefront,line}'::text[]`),
     sort: integer('sort').notNull().default(0),
     archivedAt: ts('archived_at'),
+    /**
+     * Idempotency (CLAUDE.md rule 6) for the create route, like `orders.client_request_id`: the
+     * client's request id, and a fingerprint of the request body. Both null on rows made without
+     * one (every row before migration 0015, and any create sent without `clientRequestId`). A
+     * second create with the same id and the same fingerprint returns this row; with another
+     * fingerprint it is refused. The unique index allows many nulls.
+     */
+    clientRequestId: uuid('client_request_id'),
+    requestHash: text('request_hash'),
     ...sync,
   },
   (t) => [
     index('menu_items_rev_idx').on(t.rev),
+    uniqueIndex('menu_items_client_request_id_key').on(t.clientRequestId),
     index('menu_items_category_id_idx').on(t.categoryId),
     check('menu_items_price_nonneg', sql`${t.priceSatang} >= 0 and ${t.estCostSatang} >= 0`),
     check(
@@ -126,10 +148,20 @@ export const modifierGroups = pgTable(
     maxSelect: integer('max_select').notNull().default(1),
     sort: integer('sort').notNull().default(0),
     archivedAt: ts('archived_at'),
+    /**
+     * Idempotency (CLAUDE.md rule 6) for the create route, like `orders.client_request_id`: the
+     * client's request id, and a fingerprint of the request body. Both null on rows made without
+     * one (every row before migration 0015, and any create sent without `clientRequestId`). A
+     * second create with the same id and the same fingerprint returns this row; with another
+     * fingerprint it is refused. The unique index allows many nulls.
+     */
+    clientRequestId: uuid('client_request_id'),
+    requestHash: text('request_hash'),
     ...sync,
   },
   (t) => [
     index('modifier_groups_rev_idx').on(t.rev),
+    uniqueIndex('modifier_groups_client_request_id_key').on(t.clientRequestId),
     check('modifier_groups_select_range', sql`0 <= min_select and min_select <= max_select`),
   ],
 );
@@ -148,10 +180,20 @@ export const modifierOptions = pgTable(
     isAvailable: boolean('is_available').notNull().default(true),
     sort: integer('sort').notNull().default(0),
     archivedAt: ts('archived_at'),
+    /**
+     * Idempotency (CLAUDE.md rule 6) for the create route, like `orders.client_request_id`: the
+     * client's request id, and a fingerprint of the request body. Both null on rows made without
+     * one (every row before migration 0015, and any create sent without `clientRequestId`). A
+     * second create with the same id and the same fingerprint returns this row; with another
+     * fingerprint it is refused. The unique index allows many nulls.
+     */
+    clientRequestId: uuid('client_request_id'),
+    requestHash: text('request_hash'),
     ...sync,
   },
   (t) => [
     index('modifier_options_rev_idx').on(t.rev),
+    uniqueIndex('modifier_options_client_request_id_key').on(t.clientRequestId),
     index('modifier_options_group_id_idx').on(t.groupId),
   ],
 );

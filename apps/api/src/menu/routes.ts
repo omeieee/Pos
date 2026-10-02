@@ -16,6 +16,7 @@ import {
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { type GuardFactory, principalOf } from '../auth/guards.ts';
 import type { AuthContext } from '../auth/service.ts';
+import { ApiError } from '../errors.ts';
 import { parse } from '../validate.ts';
 import {
   archiveGroup,
@@ -42,11 +43,29 @@ import {
 const meta = (request: FastifyRequest) => ({ ip: request.ip ?? null });
 const idOf = (request: FastifyRequest) => parse(idParamSchema, request.params).id;
 
+/** The idempotency key is `clientRequestId` in the body. An Idempotency-Key header, if sent, must say the same. */
+function checkIdempotencyHeader(request: FastifyRequest, clientRequestId: string | undefined) {
+  const header = request.headers['idempotency-key'];
+  if (
+    header !== undefined &&
+    (clientRequestId === undefined ||
+      String(header).toLowerCase() !== clientRequestId.toLowerCase())
+  ) {
+    throw new ApiError(
+      400,
+      'IDEMPOTENCY_KEY_MISMATCH',
+      'Idempotency-Key must equal clientRequestId',
+    );
+  }
+}
+
 /**
  * Mounted at /v1/menu.
  * - `GET /v1/menu?channel=` is public: what can be ordered on a channel, at its price. No costs.
  * - Staff lists need `menu.availability` (every role); archived rows only for `menu.edit`.
  * - Creating, editing and deleting need `menu.edit` (managers, owner). Delete archives.
+ * - Every create takes an optional `clientRequestId` (UUID): a retry with the same id and content
+ *   returns the row with 200, the same id with other content is 409 IDEMPOTENCY_KEY_REUSED.
  * - The sold-out toggles need only `menu.availability`, so the kitchen can mark "หมด".
  */
 export async function registerMenuRoutes(
@@ -70,13 +89,10 @@ export async function registerMenuRoutes(
   // Categories
   app.get('/categories', view, async () => listCategories(ctx));
   app.post('/categories', edit, async (request, reply) => {
-    const created = await createCategory(
-      ctx,
-      principalOf(request),
-      parse(createCategoryInputSchema, request.body),
-      meta(request),
-    );
-    return reply.status(201).send(created);
+    const input = parse(createCategoryInputSchema, request.body);
+    checkIdempotencyHeader(request, input.clientRequestId);
+    const { dto, replay } = await createCategory(ctx, principalOf(request), input, meta(request));
+    return reply.status(replay ? 200 : 201).send(dto);
   });
   app.patch('/categories/:id', edit, async (request) =>
     patchCategory(
@@ -101,13 +117,10 @@ export async function registerMenuRoutes(
   );
   app.get('/items/:id', view, async (request) => getItem(ctx, idOf(request)));
   app.post('/items', edit, async (request, reply) => {
-    const created = await createItem(
-      ctx,
-      principalOf(request),
-      parse(createItemInputSchema, request.body),
-      meta(request),
-    );
-    return reply.status(201).send(created);
+    const input = parse(createItemInputSchema, request.body);
+    checkIdempotencyHeader(request, input.clientRequestId);
+    const { dto, replay } = await createItem(ctx, principalOf(request), input, meta(request));
+    return reply.status(replay ? 200 : 201).send(dto);
   });
   app.patch('/items/:id', edit, async (request) =>
     patchItem(
@@ -140,13 +153,10 @@ export async function registerMenuRoutes(
     ),
   );
   app.post('/modifier-groups', edit, async (request, reply) => {
-    const created = await createGroup(
-      ctx,
-      principalOf(request),
-      parse(createGroupInputSchema, request.body),
-      meta(request),
-    );
-    return reply.status(201).send(created);
+    const input = parse(createGroupInputSchema, request.body);
+    checkIdempotencyHeader(request, input.clientRequestId);
+    const { dto, replay } = await createGroup(ctx, principalOf(request), input, meta(request));
+    return reply.status(replay ? 200 : 201).send(dto);
   });
   app.patch('/modifier-groups/:id', edit, async (request) =>
     patchGroup(
@@ -161,14 +171,17 @@ export async function registerMenuRoutes(
     archiveGroup(ctx, principalOf(request), idOf(request), meta(request)),
   );
   app.post('/modifier-groups/:groupId/options', edit, async (request, reply) => {
-    const created = await createOption(
+    const groupId = parse(groupIdParamSchema, request.params).groupId;
+    const input = parse(createOptionInputSchema, request.body);
+    checkIdempotencyHeader(request, input.clientRequestId);
+    const { dto, replay } = await createOption(
       ctx,
       principalOf(request),
-      parse(groupIdParamSchema, request.params).groupId,
-      parse(createOptionInputSchema, request.body),
+      groupId,
+      input,
       meta(request),
     );
-    return reply.status(201).send(created);
+    return reply.status(replay ? 200 : 201).send(dto);
   });
   app.patch('/modifier-options/:id', edit, async (request) =>
     patchOption(

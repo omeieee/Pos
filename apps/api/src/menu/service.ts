@@ -33,8 +33,9 @@ import {
   type StaffRole,
 } from '@sds/shared';
 import type { AuthContext, Principal, RequestMeta } from '../auth/service.ts';
-import { ApiError, forbidden, notFound, versionConflict } from '../errors.ts';
+import { ApiError, conflict, forbidden, notFound, versionConflict } from '../errors.ts';
 import { type Emit, withTransaction } from '../tx.ts';
+import { menuRequestHash } from './request-hash.ts';
 
 type MenuKind = 'category' | 'item' | 'group' | 'option';
 
@@ -144,6 +145,54 @@ async function groupDto(
 function publish(emit: Emit, kind: MenuKind, id: string, rev: number, data: unknown) {
   emit({ type: 'menu.upserted', kind, id, rev, data });
 }
+
+// ---------- Idempotent creates ----------
+
+/** A create's answer. `replay` is true when the request id was seen before: nothing was written. */
+export interface Created<T> {
+  dto: T;
+  replay: boolean;
+}
+
+/**
+ * Runs a create that may carry a client request id (CLAUDE.md rule 6, mirroring orders). Without
+ * one, it just creates. With one: a row already made for that id is returned (same content) or
+ * refused (other content); otherwise `create` runs, and if it loses a race to a concurrent request
+ * with the same id (`DuplicateClientRequest`, its transaction rolled back with no audit row and no
+ * event) the winner is read and treated the same way. A replay writes, audits and publishes nothing.
+ */
+async function idempotentCreate<Row extends { requestHash: string | null }, Dto>(
+  ctx: AuthContext,
+  key: string | undefined,
+  requestHash: string,
+  find: (db: Db, key: string) => Promise<Row | undefined>,
+  toDto: (db: Db, row: Row) => Promise<Dto>,
+  create: () => Promise<Dto>,
+): Promise<Created<Dto>> {
+  if (key === undefined) return { dto: await create(), replay: false };
+  const replayOf = async (row: Row): Promise<Created<Dto>> => {
+    if (row.requestHash !== null && row.requestHash !== requestHash) {
+      throw conflict(
+        'IDEMPOTENCY_KEY_REUSED',
+        'This request id was already used for different content. Make a new request id for a new menu row',
+      );
+    }
+    return { dto: await toDto(ctx.db, row), replay: true };
+  };
+  const existing = await find(ctx.db, key);
+  if (existing) return replayOf(existing);
+  try {
+    return { dto: await create(), replay: false };
+  } catch (error) {
+    if (!(error instanceof menuRepo.DuplicateClientRequest)) throw error;
+    const winner = await find(ctx.db, key);
+    if (!winner) throw error;
+    return replayOf(winner);
+  }
+}
+
+const requestKey = (key: string | undefined, requestHash: string) =>
+  key === undefined ? {} : { clientRequestId: key, requestHash };
 
 const actorOf = (actor: Principal, meta: RequestMeta) => ({
   actorType: 'staff' as const,
@@ -282,12 +331,31 @@ export async function createCategory(
   actor: Principal,
   input: CreateCategoryInput,
   meta: RequestMeta,
+): Promise<Created<CategoryDto>> {
+  const hash = menuRequestHash('category', input);
+  return idempotentCreate(
+    ctx,
+    input.clientRequestId,
+    hash,
+    menuRepo.findCategoryByClientRequestId,
+    async (_db, row) => toCategory(row),
+    () => insertCategoryOnce(ctx, actor, input, meta, hash),
+  );
+}
+
+function insertCategoryOnce(
+  ctx: AuthContext,
+  actor: Principal,
+  input: CreateCategoryInput,
+  meta: RequestMeta,
+  hash: string,
 ): Promise<CategoryDto> {
   return withTransaction(ctx, async (tx, emit) => {
     const row = await menuRepo.insertCategory(tx, {
       nameTh: input.nameTh,
       nameEn: input.nameEn ?? null,
       sort: input.sort,
+      ...requestKey(input.clientRequestId, hash),
     });
     const dto = toCategory(row);
     await insertAudit(tx, {
@@ -358,6 +426,24 @@ export async function createGroup(
   actor: Principal,
   input: CreateGroupInput,
   meta: RequestMeta,
+): Promise<Created<GroupDto>> {
+  const hash = menuRequestHash('group', input);
+  return idempotentCreate(
+    ctx,
+    input.clientRequestId,
+    hash,
+    menuRepo.findGroupByClientRequestId,
+    (db, row) => groupDto(db, row),
+    () => insertGroupOnce(ctx, actor, input, meta, hash),
+  );
+}
+
+function insertGroupOnce(
+  ctx: AuthContext,
+  actor: Principal,
+  input: CreateGroupInput,
+  meta: RequestMeta,
+  hash: string,
 ): Promise<GroupDto> {
   return withTransaction(ctx, async (tx, emit) => {
     const row = await menuRepo.insertGroup(tx, {
@@ -366,6 +452,7 @@ export async function createGroup(
       minSelect: input.minSelect,
       maxSelect: input.maxSelect,
       sort: input.sort,
+      ...requestKey(input.clientRequestId, hash),
     });
     const options = await menuRepo.insertOptions(
       tx,
@@ -471,6 +558,25 @@ export async function createOption(
   groupId: string,
   input: CreateOptionInput,
   meta: RequestMeta,
+): Promise<Created<OptionDto>> {
+  const hash = menuRequestHash('option', input, groupId);
+  return idempotentCreate(
+    ctx,
+    input.clientRequestId,
+    hash,
+    menuRepo.findOptionByClientRequestId,
+    async (_db, row) => toOption(row),
+    () => insertOptionOnce(ctx, actor, groupId, input, meta, hash),
+  );
+}
+
+function insertOptionOnce(
+  ctx: AuthContext,
+  actor: Principal,
+  groupId: string,
+  input: CreateOptionInput,
+  meta: RequestMeta,
+  hash: string,
 ): Promise<OptionDto> {
   return withTransaction(ctx, async (tx, emit) => {
     const group = await menuRepo.lockGroup(tx, groupId);
@@ -484,6 +590,7 @@ export async function createOption(
         costDeltaSatang: input.costDeltaSatang,
         isAvailable: input.isAvailable,
         sort: input.sort,
+        ...requestKey(input.clientRequestId, hash),
       },
     ]);
     if (!row) throw new Error('option insert returned no row');
@@ -618,6 +725,24 @@ export async function createItem(
   actor: Principal,
   input: CreateItemInput,
   meta: RequestMeta,
+): Promise<Created<ItemDto>> {
+  const hash = menuRequestHash('item', input);
+  return idempotentCreate(
+    ctx,
+    input.clientRequestId,
+    hash,
+    menuRepo.findItemByClientRequestId,
+    (db, row) => itemDto(db, row),
+    () => insertItemOnce(ctx, actor, input, meta, hash),
+  );
+}
+
+function insertItemOnce(
+  ctx: AuthContext,
+  actor: Principal,
+  input: CreateItemInput,
+  meta: RequestMeta,
+  hash: string,
 ): Promise<ItemDto> {
   return withTransaction(ctx, async (tx, emit) => {
     await assertCategory(tx, input.categoryId);
@@ -634,6 +759,7 @@ export async function createItem(
       channels: input.channels,
       sort: input.sort,
       isAvailable: input.isAvailable,
+      ...requestKey(input.clientRequestId, hash),
     });
     await menuRepo.replaceItemChannelPrices(tx, row.id, priceRecord(input.channelPrices ?? {}));
     await menuRepo.replaceItemGroups(tx, row.id, input.modifierGroupIds ?? []);

@@ -23,6 +23,14 @@ const needsAFieldMessage = {
   path: ['expectedVersion'],
 };
 
+/**
+ * Idempotency for the create routes (CLAUDE.md rule 6), optional: a client that may retry (the
+ * offline outbox, a double tap) sends a fresh UUID per new row. The same id with the same content
+ * returns the row that was made (200); the same id with other content is refused (409
+ * IDEMPOTENCY_KEY_REUSED). Never part of a response.
+ */
+const clientRequestId = z.uuid().optional();
+
 const imageUrl = z.url({ protocol: /^https$/ }).max(500);
 const channelsSchema = z
   .array(menuChannel)
@@ -58,6 +66,7 @@ export const createCategoryInputSchema = z.strictObject({
   nameTh: text(80),
   nameEn: text(80).nullable().optional(),
   sort: sort.default(0),
+  clientRequestId,
 });
 export type CreateCategoryInput = z.infer<typeof createCategoryInputSchema>;
 
@@ -88,7 +97,7 @@ export const optionDtoSchema = z.object({
 });
 export type OptionDto = z.infer<typeof optionDtoSchema>;
 
-export const createOptionInputSchema = z.strictObject({
+const optionFields = {
   nameTh: text(80),
   nameEn: text(80).nullable().optional(),
   priceDeltaSatang: satangSchema.default(ZERO),
@@ -96,7 +105,11 @@ export const createOptionInputSchema = z.strictObject({
   costDeltaSatang: satangSchema.default(ZERO),
   isAvailable: z.boolean().default(true),
   sort: sort.default(0),
-});
+};
+/** An option made together with its group: the group's request id covers it. */
+const newGroupOptionSchema = z.strictObject(optionFields);
+
+export const createOptionInputSchema = z.strictObject({ ...optionFields, clientRequestId });
 export type CreateOptionInput = z.infer<typeof createOptionInputSchema>;
 
 export const patchOptionInputSchema = z
@@ -138,7 +151,8 @@ export const createGroupInputSchema = z
     minSelect: z.number().int().min(0).max(20),
     maxSelect: z.number().int().min(1).max(20),
     sort: sort.default(0),
-    options: z.array(createOptionInputSchema).max(50).optional(),
+    options: z.array(newGroupOptionSchema).max(50).optional(),
+    clientRequestId,
   })
   .refine(selectRange, selectRangeMessage);
 export type CreateGroupInput = z.infer<typeof createGroupInputSchema>;
@@ -212,6 +226,7 @@ export const createItemInputSchema = z.strictObject({
   modifierGroupIds: itemFields.modifierGroupIds.optional(),
   sort: itemFields.sort.default(0),
   isAvailable: itemFields.isAvailable.default(true),
+  clientRequestId,
 });
 export type CreateItemInput = z.infer<typeof createItemInputSchema>;
 

@@ -19,6 +19,27 @@ export type ItemRow = typeof menuItems.$inferSelect;
 export type GroupRow = typeof modifierGroups.$inferSelect;
 export type OptionRow = typeof modifierOptions.$inferSelect;
 
+/**
+ * Idempotency of the create routes (migration 0015): a client request id and the fingerprint of the
+ * request that carried it. Both are optional; a row made without them has none.
+ */
+export interface RequestKey {
+  clientRequestId?: string | undefined;
+  requestHash?: string | undefined;
+}
+
+/**
+ * A keyed insert found another row with the same client request id (a concurrent request that
+ * committed first). Thrown so the caller's transaction rolls back; the caller then reads the
+ * winner and decides between a replay and a reuse conflict.
+ */
+export class DuplicateClientRequest extends Error {
+  constructor() {
+    super('another request with the same client request id committed first');
+    this.name = 'DuplicateClientRequest';
+  }
+}
+
 // ---------- Categories ----------
 
 export async function listCategories(db: Db): Promise<CategoryRow[]> {
@@ -40,12 +61,28 @@ export async function findCategory(db: Db, id: string): Promise<CategoryRow | un
   return row;
 }
 
+export async function findCategoryByClientRequestId(
+  db: Db,
+  clientRequestId: string,
+): Promise<CategoryRow | undefined> {
+  const [row] = await db
+    .select()
+    .from(menuCategories)
+    .where(eq(menuCategories.clientRequestId, clientRequestId))
+    .limit(1);
+  return row;
+}
+
 export async function insertCategory(
   db: Db,
-  input: { nameTh: string; nameEn: string | null; sort: number },
+  input: { nameTh: string; nameEn: string | null; sort: number } & RequestKey,
 ): Promise<CategoryRow> {
-  const [row] = await db.insert(menuCategories).values(input).returning();
-  if (!row) throw new Error('category insert returned no row');
+  const [row] = await db
+    .insert(menuCategories)
+    .values(input)
+    .onConflictDoNothing({ target: menuCategories.clientRequestId })
+    .returning();
+  if (!row) throw new DuplicateClientRequest();
   return row;
 }
 
@@ -120,6 +157,18 @@ export async function loadItemExtras(db: Db, itemIds: readonly string[]): Promis
   return extras;
 }
 
+export async function findItemByClientRequestId(
+  db: Db,
+  clientRequestId: string,
+): Promise<ItemRow | undefined> {
+  const [row] = await db
+    .select()
+    .from(menuItems)
+    .where(eq(menuItems.clientRequestId, clientRequestId))
+    .limit(1);
+  return row;
+}
+
 export interface NewItem {
   categoryId: string;
   nameTh: string;
@@ -135,9 +184,13 @@ export interface NewItem {
   isAvailable: boolean;
 }
 
-export async function insertItem(db: Db, input: NewItem): Promise<ItemRow> {
-  const [row] = await db.insert(menuItems).values(input).returning();
-  if (!row) throw new Error('item insert returned no row');
+export async function insertItem(db: Db, input: NewItem & RequestKey): Promise<ItemRow> {
+  const [row] = await db
+    .insert(menuItems)
+    .values(input)
+    .onConflictDoNothing({ target: menuItems.clientRequestId })
+    .returning();
+  if (!row) throw new DuplicateClientRequest();
   return row;
 }
 
@@ -216,6 +269,18 @@ export async function lockGroup(db: Db, id: string): Promise<GroupRow | undefine
   return row;
 }
 
+export async function findGroupByClientRequestId(
+  db: Db,
+  clientRequestId: string,
+): Promise<GroupRow | undefined> {
+  const [row] = await db
+    .select()
+    .from(modifierGroups)
+    .where(eq(modifierGroups.clientRequestId, clientRequestId))
+    .limit(1);
+  return row;
+}
+
 export async function insertGroup(
   db: Db,
   input: {
@@ -224,10 +289,14 @@ export async function insertGroup(
     minSelect: number;
     maxSelect: number;
     sort: number;
-  },
+  } & RequestKey,
 ): Promise<GroupRow> {
-  const [row] = await db.insert(modifierGroups).values(input).returning();
-  if (!row) throw new Error('group insert returned no row');
+  const [row] = await db
+    .insert(modifierGroups)
+    .values(input)
+    .onConflictDoNothing({ target: modifierGroups.clientRequestId })
+    .returning();
+  if (!row) throw new DuplicateClientRequest();
   return row;
 }
 
@@ -273,12 +342,31 @@ export interface NewOption {
   sort: number;
 }
 
-export async function insertOptions(db: Db, rows: readonly NewOption[]): Promise<OptionRow[]> {
+export async function findOptionByClientRequestId(
+  db: Db,
+  clientRequestId: string,
+): Promise<OptionRow | undefined> {
+  const [row] = await db
+    .select()
+    .from(modifierOptions)
+    .where(eq(modifierOptions.clientRequestId, clientRequestId))
+    .limit(1);
+  return row;
+}
+
+/** Throws `DuplicateClientRequest` when a keyed row loses to a request id that already exists. */
+export async function insertOptions(
+  db: Db,
+  rows: readonly (NewOption & RequestKey)[],
+): Promise<OptionRow[]> {
   if (rows.length === 0) return [];
-  return db
+  const inserted = await db
     .insert(modifierOptions)
     .values([...rows])
+    .onConflictDoNothing({ target: modifierOptions.clientRequestId })
     .returning();
+  if (inserted.length !== rows.length) throw new DuplicateClientRequest();
+  return inserted;
 }
 
 export async function lockOption(db: Db, id: string): Promise<OptionRow | undefined> {

@@ -160,3 +160,68 @@ describe('the public menu', () => {
     expect(menu.options.map((o) => o.id)).not.toContain(off?.id);
   });
 });
+describe('create idempotency keys (migration 0015)', () => {
+  const key = () => crypto.randomUUID();
+  const cat = (n: string, k?: { clientRequestId: string; requestHash: string }) =>
+    repo.insertCategory(db, { nameTh: n, nameEn: null, sort: 0, ...k });
+
+  test('a second row with the same request id is refused with DuplicateClientRequest, in every table', async () => {
+    const clientRequestId = key();
+    const k = { clientRequestId, requestHash: 'h' };
+    await cat('A', k);
+    await expect(cat('B', k)).rejects.toBeInstanceOf(repo.DuplicateClientRequest);
+    const category = await cat('C');
+    const itemKey = { clientRequestId: key(), requestHash: 'h' };
+    await repo.insertItem(db, { ...item(category.id), ...itemKey });
+    await expect(repo.insertItem(db, { ...item(category.id), ...itemKey })).rejects.toBeInstanceOf(
+      repo.DuplicateClientRequest,
+    );
+    const groupKey = { clientRequestId: key(), requestHash: 'h' };
+    const base = { nameTh: 'g', nameEn: null, minSelect: 0, maxSelect: 1, sort: 0 };
+    const group = await repo.insertGroup(db, { ...base, ...groupKey });
+    await expect(repo.insertGroup(db, { ...base, ...groupKey })).rejects.toBeInstanceOf(
+      repo.DuplicateClientRequest,
+    );
+    const option = {
+      groupId: group.id,
+      nameTh: 'o',
+      nameEn: null,
+      priceDeltaSatang: 0,
+      costDeltaSatang: 0,
+      isAvailable: true,
+      sort: 0,
+      clientRequestId: key(),
+      requestHash: 'h',
+    };
+    await repo.insertOptions(db, [option]);
+    await expect(repo.insertOptions(db, [option])).rejects.toBeInstanceOf(
+      repo.DuplicateClientRequest,
+    );
+  });
+
+  test('rows without a request id never clash, and the finder reads the keyed one back', async () => {
+    const before = (await repo.listCategories(db)).length;
+    await cat('N1');
+    await cat('N2');
+    expect((await repo.listCategories(db)).length).toBe(before + 2);
+    const k = { clientRequestId: key(), requestHash: 'abc' };
+    const made = await cat('K', k);
+    expect(await repo.findCategoryByClientRequestId(db, k.clientRequestId)).toMatchObject({
+      id: made.id,
+      requestHash: 'abc',
+    });
+    expect(await repo.findCategoryByClientRequestId(db, key())).toBeUndefined();
+  });
+
+  test('a refused keyed insert inside a transaction leaves nothing behind once the caller rolls back', async () => {
+    const k = { clientRequestId: key(), requestHash: 'h' };
+    await cat('Winner', k);
+    const before = (await repo.listCategories(db)).length;
+    await db
+      .transaction(async (tx) => {
+        await repo.insertCategory(tx, { nameTh: 'Loser', nameEn: null, sort: 0, ...k });
+      })
+      .catch(() => undefined);
+    expect((await repo.listCategories(db)).length).toBe(before);
+  });
+});

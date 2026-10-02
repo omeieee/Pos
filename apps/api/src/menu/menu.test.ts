@@ -833,3 +833,275 @@ describe('every write publishes after commit and is audited', () => {
     expect((await h.auditRows(item.id)).map((a) => a.action)).toContain('menu.item_create');
   });
 });
+// ---------- create is idempotent (CLAUDE.md rule 6) ----------
+
+describe('menu creates take an optional clientRequestId', () => {
+  interface Kind {
+    name: string;
+    table: string;
+    url: (manager: string) => Promise<string>;
+    body: (manager: string) => Promise<Record<string, unknown>>;
+    /** A body that differs from `body` in something the row stores. */
+    other: (body: Record<string, unknown>) => Record<string, unknown>;
+  }
+  const kinds: Kind[] = [
+    {
+      name: 'category',
+      table: 'menu_categories',
+      url: async () => '/v1/menu/categories',
+      body: async () => ({ nameTh: `หมวด ${uid()}`, sort: 3 }),
+      other: (b) => ({ ...b, nameTh: `${String(b.nameTh)} 2` }),
+    },
+    {
+      name: 'item',
+      table: 'menu_items',
+      url: async () => '/v1/menu/items',
+      body: async (manager) => ({
+        categoryId: (await newCategory(manager)).id,
+        nameTh: `เมนู ${uid()}`,
+        priceSatang: 5000,
+        estCostSatang: 2200,
+        channels: ['storefront', 'line'],
+        channelPrices: { grab: 6500 },
+      }),
+      other: (b) => ({ ...b, priceSatang: 5500 }),
+    },
+    {
+      name: 'modifier group',
+      table: 'modifier_groups',
+      url: async () => '/v1/menu/modifier-groups',
+      body: async () => ({
+        nameTh: `กลุ่ม ${uid()}`,
+        minSelect: 1,
+        maxSelect: 1,
+        options: [{ nameTh: 'เส้นเล็ก' }, { nameTh: 'เส้นใหญ่', priceDeltaSatang: 500 }],
+      }),
+      other: (b) => ({ ...b, options: [{ nameTh: 'เส้นเล็ก' }] }),
+    },
+    {
+      name: 'modifier option',
+      table: 'modifier_options',
+      url: async (manager) => `/v1/menu/modifier-groups/${(await newGroup(manager)).id}/options`,
+      body: async () => ({ nameTh: `ตัวเลือก ${uid()}`, priceDeltaSatang: 500 }),
+      other: (b) => ({ ...b, priceDeltaSatang: 600 }),
+    },
+  ];
+
+  const auditCount = async () => (await rows('select 1 from audit_log')).length;
+  const rowsWithKey = async (table: string, key: string) =>
+    rows(`select * from ${table} where client_request_id = $1`, [key]);
+
+  for (const kind of kinds) {
+    describe(kind.name, () => {
+      test('a replay returns the original row with 200 and writes, audits and publishes nothing', async () => {
+        const manager = await as('manager');
+        const url = await kind.url(manager);
+        const body = { ...(await kind.body(manager)), clientRequestId: crypto.randomUUID() };
+        const first = await call('POST', url, manager, body);
+        expect(first.statusCode).toBe(201);
+
+        const auditBefore = await auditCount();
+        const eventsBefore = h.events.length;
+        const again = await call('POST', url, manager, body);
+        expect(again.statusCode).toBe(200);
+        expect(again.json()).toEqual(first.json());
+        expect(await auditCount()).toBe(auditBefore);
+        expect(h.events.length).toBe(eventsBefore);
+        const stored = await rowsWithKey(kind.table, String(body.clientRequestId));
+        expect(stored).toHaveLength(1);
+        expect(stored[0]?.request_hash).toMatch(/^[0-9a-f]{64}$/);
+      });
+
+      test('the same request id with different content is refused, not replayed', async () => {
+        const manager = await as('manager');
+        const url = await kind.url(manager);
+        const body = { ...(await kind.body(manager)), clientRequestId: crypto.randomUUID() };
+        const first = await call('POST', url, manager, body);
+        expect(first.statusCode).toBe(201);
+
+        const auditBefore = await auditCount();
+        const eventsBefore = h.events.length;
+        const clash = await call('POST', url, manager, kind.other(body));
+        expect(clash.statusCode).toBe(409);
+        expect(clash.json()).toMatchObject({ code: 'IDEMPOTENCY_KEY_REUSED' });
+        expect(await auditCount()).toBe(auditBefore);
+        expect(h.events.length).toBe(eventsBefore);
+        expect(await rowsWithKey(kind.table, String(body.clientRequestId))).toHaveLength(1);
+        // The original request still replays.
+        expect((await call('POST', url, manager, body)).statusCode).toBe(200);
+      });
+
+      test('simultaneous requests with one id make one row: one 201, the rest 200', async () => {
+        const manager = await as('manager');
+        const url = await kind.url(manager);
+        const body = { ...(await kind.body(manager)), clientRequestId: crypto.randomUUID() };
+        const results = await Promise.all(
+          Array.from({ length: 4 }, () => call('POST', url, manager, body)),
+        );
+        expect(results.map((r) => r.statusCode).sort()).toEqual([200, 200, 200, 201]);
+        expect(new Set(results.map((r) => JSON.stringify(r.json()))).size).toBe(1);
+        expect(await rowsWithKey(kind.table, String(body.clientRequestId))).toHaveLength(1);
+      });
+
+      test('without a request id every create makes a new row, as before', async () => {
+        const manager = await as('manager');
+        const url = await kind.url(manager);
+        const body = await kind.body(manager);
+        const a = await call('POST', url, manager, body);
+        const b = await call('POST', url, manager, body);
+        expect([a.statusCode, b.statusCode]).toEqual([201, 201]);
+        expect(a.json().id).not.toBe(b.json().id);
+      });
+
+      test('the request id and its fingerprint never appear in a response', async () => {
+        const manager = await as('manager');
+        const url = await kind.url(manager);
+        const key = crypto.randomUUID();
+        const res = await call('POST', url, manager, {
+          ...(await kind.body(manager)),
+          clientRequestId: key,
+        });
+        expect(res.body).not.toContain(key);
+        expect(res.body).not.toMatch(/requestHash|request_hash|clientRequestId/);
+      });
+
+      test('a request id that is not a UUID is a validation error and writes nothing', async () => {
+        const manager = await as('manager');
+        const url = await kind.url(manager);
+        const before = await rows(`select 1 from ${kind.table}`);
+        const res = await call('POST', url, manager, {
+          ...(await kind.body(manager)),
+          clientRequestId: 'not-a-uuid',
+        });
+        expect(res.statusCode).toBe(400);
+        expect(res.json()).toMatchObject({ code: 'VALIDATION_ERROR' });
+        expect(await rows(`select 1 from ${kind.table}`)).toHaveLength(before.length);
+      });
+
+      test('permissions are unchanged: a cashier is refused even with a request id that exists', async () => {
+        const manager = await as('manager');
+        const url = await kind.url(manager);
+        const body = { ...(await kind.body(manager)), clientRequestId: crypto.randomUUID() };
+        expect((await call('POST', url, manager, body)).statusCode).toBe(201);
+        const cashier = await as('cashier');
+        expect((await call('POST', url, cashier, body)).statusCode).toBe(403);
+        expect((await call('POST', url, undefined, body)).statusCode).toBe(401);
+      });
+
+      test('a header that disagrees with the body is refused', async () => {
+        const manager = await as('manager');
+        const url = await kind.url(manager);
+        const key = crypto.randomUUID();
+        const res = await h.app.inject({
+          method: 'POST',
+          url,
+          headers: { authorization: `Bearer ${manager}`, 'idempotency-key': crypto.randomUUID() },
+          payload: { ...(await kind.body(manager)), clientRequestId: key },
+          remoteAddress: h.nextIp(),
+        });
+        expect(res.statusCode).toBe(400);
+        expect(res.json()).toMatchObject({ code: 'IDEMPOTENCY_KEY_MISMATCH' });
+        expect(await rowsWithKey(kind.table, key)).toHaveLength(0);
+      });
+    });
+  }
+
+  test('a replay returns the row as it is now, after an edit', async () => {
+    const manager = await as('manager');
+    const body = { nameTh: `หมวด ${uid()}`, clientRequestId: crypto.randomUUID() };
+    const first = categoryDtoSchema.parse(
+      (await call('POST', '/v1/menu/categories', manager, body)).json(),
+    );
+    await call('PATCH', `/v1/menu/categories/${first.id}`, manager, {
+      expectedVersion: first.version,
+      nameTh: 'เปลี่ยนชื่อ',
+    });
+    const again = await call('POST', '/v1/menu/categories', manager, body);
+    expect(again.statusCode).toBe(200);
+    expect(categoryDtoSchema.parse(again.json())).toMatchObject({
+      id: first.id,
+      nameTh: 'เปลี่ยนชื่อ',
+      version: first.version + 1,
+    });
+  });
+
+  test('defaults do not change the fingerprint: an omitted field and its default are the same request', async () => {
+    const manager = await as('manager');
+    const clientRequestId = crypto.randomUUID();
+    const nameTh = `หมวด ${uid()}`;
+    const first = await call('POST', '/v1/menu/categories', manager, { nameTh, clientRequestId });
+    const same = await call('POST', '/v1/menu/categories', manager, {
+      nameTh,
+      sort: 0,
+      clientRequestId,
+    });
+    expect([first.statusCode, same.statusCode]).toEqual([201, 200]);
+  });
+
+  test('the same option sent to another group is a different request', async () => {
+    const manager = await as('manager');
+    const [g1, g2] = [await newGroup(manager), await newGroup(manager)];
+    const body = { nameTh: `ตัวเลือก ${uid()}`, clientRequestId: crypto.randomUUID() };
+    expect(
+      (await call('POST', `/v1/menu/modifier-groups/${g1.id}/options`, manager, body)).statusCode,
+    ).toBe(201);
+    const other = await call('POST', `/v1/menu/modifier-groups/${g2.id}/options`, manager, body);
+    expect(other.statusCode).toBe(409);
+    expect(other.json()).toMatchObject({ code: 'IDEMPOTENCY_KEY_REUSED' });
+  });
+
+  test('the order of the channel prices keys does not matter, the order of the groups does', async () => {
+    const manager = await as('manager');
+    const category = await newCategory(manager);
+    const [g1, g2] = [await newGroup(manager), await newGroup(manager)];
+    const clientRequestId = crypto.randomUUID();
+    const base = {
+      categoryId: category.id,
+      nameTh: `เมนู ${uid()}`,
+      priceSatang: 5000,
+      channels: ['storefront'],
+      clientRequestId,
+    };
+    const first = await call('POST', '/v1/menu/items', manager, {
+      ...base,
+      channelPrices: { grab: 6500, line: 5500 },
+      modifierGroupIds: [g1.id, g2.id],
+    });
+    expect(first.statusCode).toBe(201);
+    const sameKeysFlipped = await call('POST', '/v1/menu/items', manager, {
+      ...base,
+      channelPrices: { line: 5500, grab: 6500 },
+      modifierGroupIds: [g1.id, g2.id],
+    });
+    expect(sameKeysFlipped.statusCode).toBe(200);
+    const groupsFlipped = await call('POST', '/v1/menu/items', manager, {
+      ...base,
+      channelPrices: { grab: 6500, line: 5500 },
+      modifierGroupIds: [g2.id, g1.id],
+    });
+    expect(groupsFlipped.statusCode).toBe(409);
+  });
+
+  test('a request that fails validation inside the transaction uses up no request id', async () => {
+    const manager = await as('manager');
+    const clientRequestId = crypto.randomUUID();
+    const bad = await call('POST', '/v1/menu/items', manager, {
+      categoryId: crypto.randomUUID(), // no such category
+      nameTh: 'x',
+      priceSatang: 1,
+      channels: ['storefront'],
+      clientRequestId,
+    });
+    expect(bad.statusCode).toBe(422);
+    expect(await rowsWithKey('menu_items', clientRequestId)).toHaveLength(0);
+    const category = await newCategory(manager);
+    const good = await call('POST', '/v1/menu/items', manager, {
+      categoryId: category.id,
+      nameTh: 'x',
+      priceSatang: 1,
+      channels: ['storefront'],
+      clientRequestId,
+    });
+    expect(good.statusCode).toBe(201);
+  });
+});
