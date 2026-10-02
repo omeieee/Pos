@@ -30,6 +30,7 @@ import { createNewOrderAlarm } from './pos/new-order-alarm.ts';
 import { createOrderMovesStore, type OrderMovesStore } from './pos/order-moves-store.ts';
 import { createOutboxStore, type OutboxStore } from './pos/outbox-store.ts';
 import { createPaymentStore, type PaymentStore } from './pos/payment-store.ts';
+import { createPromptpayCache, type PromptpayCache } from './pos/promptpay-cache.ts';
 import { createRecipientStore, type RecipientStore } from './pos/recipient-store.ts';
 import { bindRealtime } from './realtime/bind.ts';
 import { type Connection, createConnection } from './realtime/connection.ts';
@@ -53,6 +54,11 @@ export interface Services {
    * has a menu, kept up to date after each change.
    */
   catalogue: CatalogueCache;
+  /**
+   * The shop's PromptPay ID saved on this device for the offline QR (D-20): its own record, kept
+   * fresh after sign-in, on reconnect and on a change notice. Only `qr()` hands the ID out.
+   */
+  promptpay: PromptpayCache;
   /** The remembered recipients of the order screen, and the list of buildings. */
   recipients: RecipientStore;
   /** The payment calls of the order page: guarded, idempotent, kept across pages. */
@@ -152,6 +158,14 @@ export function createServices(
       ? {}
       : { debounceMs: options.catalogueDebounceMs }),
   });
+  const promptpay = createPromptpayCache({
+    api,
+    entities,
+    auth,
+    connection,
+    lifecycle,
+    localStore: openStore,
+  });
   const cart = createCartStore({ api, entities, activity, outbox });
   const platformCart = createCartStore({ api, entities, activity, outbox, mode: 'platform' });
   const recipients = createRecipientStore({ api, entities });
@@ -187,6 +201,7 @@ export function createServices(
     platformCart,
     outbox,
     catalogue,
+    promptpay,
     recipients,
     payments,
     orderMoves,
@@ -213,6 +228,7 @@ export function createServices(
       // After the line above: its sign-in reset empties the entity store, then this puts the saved
       // menu back (before the network has answered).
       const unbindCatalogue = catalogue.bind();
+      const unbindPromptpay = promptpay.bind();
       void sound.init();
       const stopAlarm = alarm.start();
       // Replays the outbox while someone is signed in; sign-out keeps what is waiting.
@@ -220,6 +236,7 @@ export function createServices(
       return () => {
         unbind();
         unbindCatalogue();
+        unbindPromptpay();
         stopAlarm();
         unbindOutbox();
       };

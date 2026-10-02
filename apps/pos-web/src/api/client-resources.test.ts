@@ -122,6 +122,45 @@ describe('delivery settings', () => {
   });
 });
 
+describe('PromptPay setting (the clear ID, for the offline QR)', () => {
+  test('reads the ID with its rev, with the session, and a never-saved one answers null', async () => {
+    const saved = {
+      value: { idType: 'phone', idValue: '0812345678' },
+      version: 2,
+      rev: 31,
+      updatedAt: '2030-10-15T05:00:00.000Z',
+    };
+    const first = clientWith(() => ({ status: 200, json: saved }));
+    const result = await first.api.settings.promptpay();
+    expect(result.value).toEqual(saved.value);
+    expect(result.rev).toBe(31);
+    expect(first.calls[0]?.url).toBe(`${BASE}/v1/settings/promptpay`);
+    expect(first.calls[0]?.headers.authorization).toBe(`Bearer ${FAKE_SESSION_TOKEN}`);
+    const none = clientWith(() => ({
+      status: 200,
+      json: { value: null, version: 0, rev: 0, updatedAt: null },
+    }));
+    expect((await none.api.settings.promptpay()).value).toBeNull();
+  });
+
+  test('a body that does not fit is RESPONSE_INVALID and the error holds nothing of the body', async () => {
+    const { api } = clientWith(() => ({
+      status: 200,
+      json: {
+        value: { idType: 'phone', idValue: 'SECRET-ID-123' },
+        version: 1,
+        rev: 1,
+        updatedAt: null,
+      },
+    }));
+    const error = await api.settings.promptpay().catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ApiClientError);
+    expect((error as ApiClientError).code).toBe('RESPONSE_INVALID');
+    expect(JSON.stringify(error)).not.toContain('SECRET-ID-123');
+    expect(String(error)).not.toContain('SECRET-ID-123');
+  });
+});
+
 describe('an order to the building entrance', () => {
   test('carries building, name, details and the customer id; the request id as before', async () => {
     const { api, calls } = clientWith(() => ({ status: 201, json: order }));

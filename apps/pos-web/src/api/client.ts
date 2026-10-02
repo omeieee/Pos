@@ -41,6 +41,7 @@ import {
   paymentReasonInputSchema,
   paymentResultSchema,
   pinLoginInputSchema,
+  promptpaySettingsSchema,
   publicMenuQuerySchema,
   publicMenuResponseSchema,
   recipientsQuerySchema,
@@ -519,6 +520,20 @@ export function createApiClient(options: ApiClientOptions) {
         await get({
           path: '/v1/settings/delivery',
           schema: settingResponseSchema(deliverySettingsSchema),
+          session: true,
+          device: 'optional',
+        })
+      ).data,
+    /**
+     * The shop's PromptPay ID IN CLEAR (roles with `settings.view`), for the offline QR (D-20).
+     * Only the saved-ID store calls it. `value` is null when no ID was ever set. The answer is
+     * a secret of the shop's account: never log it, never put it in an error or the page address.
+     */
+    promptpay: async () =>
+      (
+        await get({
+          path: '/v1/settings/promptpay',
+          schema: settingResponseSchema(promptpaySettingsSchema.nullable()),
           session: true,
           device: 'optional',
         })
