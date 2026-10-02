@@ -5,7 +5,8 @@ import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-libra
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import type { ApiClient } from '../api/client.ts';
 import { ApiClientError } from '../api/errors.ts';
-import type { OutboxEntry } from '../platform/localStore.ts';
+import { createMemoryLocalStore, type OutboxEntry } from '../platform/localStore.ts';
+import { IDS } from '../test-support/fixtures.ts';
 import { govCopayFrame, orderDto, paymentDto, uuid } from '../test-support/frames.ts';
 import { MENU, PLATFORM_DISH, seedPlatformDish } from '../test-support/menu-fixtures.ts';
 import { fixClock, loaded, ORDER, orderOf, setup } from '../test-support/payment-env.tsx';
@@ -305,6 +306,115 @@ describe('the orders list with orders waiting', () => {
     await settle();
     expect(screen.getByText(th['outbox.others'].replace('{count}', '1'))).toBeTruthy();
     expect(again.outbox.getState().items).toHaveLength(1);
+  });
+});
+
+describe('the owner and the entries other people left on the device', () => {
+  const strangerRows = (): OutboxEntry[] =>
+    [uuid(71), uuid(72)].map((id, i) => ({
+      id,
+      kind: 'order.create',
+      payload: {
+        body: {
+          channel: 'storefront',
+          fulfillment: 'entrance_delivery',
+          deliveryBuilding: 'B1',
+          recipientName: 'ชื่อลูกค้าลับ',
+          items: [{ menuItemId: MENU.tea, qty: 1, modifierOptionIds: [] }],
+        },
+        label: `XZ-0${i + 1}`,
+        lines: [
+          { name: { th: 'ชาเย็น', en: null }, options: [], qty: 1, note: '', lineTotalSatang: 2500 },
+        ],
+        estimateSatang: 2500,
+      },
+      createdAt: Date.now() - (i + 1) * 1000,
+      attempts: 0,
+      state: 'queued' as const,
+      staffId: uuid(78),
+      deviceId: IDS.device,
+    }));
+
+  async function counterWithStrangers(role: 'owner' | 'cashier') {
+    const { auth } = await createTestAuth(role);
+    const localStore = { ...createMemoryLocalStore(), persistent: true };
+    for (const row of strangerRows()) await localStore.outbox.put(row);
+    const made = createTestServices({ queue: true, offline: true, auth, localStore });
+    renderScreen(<OrdersScreen />, made.services);
+    await settle();
+    return { made, auth, localStore };
+  }
+
+  test('a cashier sees only the count, with nothing to do about it', async () => {
+    await counterWithStrangers('cashier');
+    expect(screen.getByText(th['outbox.others'].replace('{count}', '2'))).toBeTruthy();
+    expect(screen.queryByRole('button', { name: th['outbox.others.takeOver'] })).toBeNull();
+    expect(screen.queryByRole('button', { name: th['outbox.others.clear'] })).toBeNull();
+  });
+
+  test('take over: a confirmation names the count and shows no personal data, the step-up comes first, then they are the owner’s', async () => {
+    const { made, auth } = await counterWithStrangers('owner');
+    const stepUp = vi.spyOn(auth, 'runSensitive');
+    click(screen.getByRole('button', { name: th['outbox.others.takeOver'] }));
+    const dialog = screen.getByRole('dialog');
+    expect(
+      within(dialog).getByText(th['outbox.others.takeOver.title'].replace('{count}', '2')),
+    ).toBeTruthy();
+    expect(dialog.textContent).not.toContain('ชื่อลูกค้าลับ');
+    expect(stepUp).not.toHaveBeenCalled();
+    click(within(dialog).getByRole('button', { name: th['outbox.others.takeOver.confirm'] }));
+    await waitFor(() => expect(stepUp).toHaveBeenCalledTimes(1));
+    // The real step-up dialog is up (the owner's password factor); nothing changed yet.
+    expect(made.outbox.getState().items).toHaveLength(0);
+    expect(made.outbox.getState().othersCount).toBe(2);
+  });
+
+  test('once the step-up passes the entries are taken over and the result is told', async () => {
+    const { made, auth } = await counterWithStrangers('owner');
+    vi.spyOn(auth, 'runSensitive').mockImplementation(async (call) => ({
+      ok: true as const,
+      value: await call(),
+    }));
+    click(screen.getByRole('button', { name: th['outbox.others.takeOver'] }));
+    click(
+      within(screen.getByRole('dialog')).getByRole('button', {
+        name: th['outbox.others.takeOver.confirm'],
+      }),
+    );
+    await waitFor(() =>
+      expect(
+        screen.getByText(th['outbox.others.done.takeOver'].replace('{count}', '2')),
+      ).toBeTruthy(),
+    );
+    expect(made.outbox.getState().items).toHaveLength(2);
+    expect(made.outbox.getState().othersCount).toBe(0);
+  });
+
+  test('clear deletes them after the step-up; a cancelled step-up changes nothing', async () => {
+    const { made, auth, localStore } = await counterWithStrangers('owner');
+    const spy = vi.spyOn(auth, 'runSensitive').mockResolvedValueOnce({ ok: false, error: null });
+    click(screen.getByRole('button', { name: th['outbox.others.clear'] }));
+    const dialog = screen.getByRole('dialog');
+    expect(
+      within(dialog).getByText(th['outbox.others.clear.title'].replace('{count}', '2')),
+    ).toBeTruthy();
+    click(within(dialog).getByRole('button', { name: th['outbox.others.clear.confirm'] }));
+    await waitFor(() => expect(spy).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(await localStore.outbox.count()).toBe(2);
+
+    spy.mockImplementation(async (call) => ({ ok: true as const, value: await call() }));
+    click(screen.getByRole('button', { name: th['outbox.others.clear'] }));
+    click(
+      within(screen.getByRole('dialog')).getByRole('button', {
+        name: th['outbox.others.clear.confirm'],
+      }),
+    );
+    await waitFor(() =>
+      expect(screen.getByText(th['outbox.others.done.clear'].replace('{count}', '2'))).toBeTruthy(),
+    );
+    expect(await localStore.outbox.count()).toBe(0);
+    expect(made.outbox.getState().othersCount).toBe(0);
   });
 });
 

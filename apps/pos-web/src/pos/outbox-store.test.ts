@@ -76,6 +76,7 @@ function setup(
     create?: CreateOrder;
     pay?: CreatePayment;
     staff?: string | null;
+    role?: string;
     online?: boolean;
   } = {},
 ) {
@@ -84,11 +85,14 @@ function setup(
   const life = createFakeLifecycle({ online: options.online ?? true });
   const auth = createStore<{
     phase: 'booting' | 'unregistered' | 'locked' | 'signedIn';
-    session: { staff: { id: string } } | null;
+    session: { staff: { id: string; role?: string } } | null;
     device: { id: string } | null;
   }>({
     phase: options.staff === null ? 'locked' : 'signedIn',
-    session: options.staff === null ? null : { staff: { id: options.staff ?? ME } },
+    session:
+      options.staff === null
+        ? null
+        : { staff: { id: options.staff ?? ME, ...(options.role ? { role: options.role } : {}) } },
     device: { id: DEVICE },
   });
   const connection = createStore<{
@@ -763,6 +767,133 @@ describe('knowing that it is offline', () => {
     expect(outbox.isOffline()).toBe(true);
     connection.setState({ status: 'online' });
     expect(outbox.getState().offline).toBe(false);
+  });
+});
+
+describe('the owner recovers entries left by other people', () => {
+  const stranded = (id: string, over: Partial<OutboxEntry> = {}): OutboxEntry => ({
+    id,
+    kind: 'order.create',
+    payload: { body, label: 'XK-01', lines, estimateSatang: 2500 },
+    createdAt: Date.now(),
+    attempts: 0,
+    state: 'queued',
+    staffId: OTHER,
+    deviceId: DEVICE,
+    ...over,
+  });
+
+  async function withStranded(options: { role?: string; create?: CreateOrder } = {}) {
+    const store = persistentStore();
+    await store.outbox.put(stranded(uuid(10), { createdAt: Date.now() - 2000 }));
+    await store.outbox.put(
+      stranded(uuid(11), {
+        kind: 'payment.cash',
+        createdAt: Date.now() - 1000,
+        payload: {
+          target: { entryId: uuid(10) },
+          tenderedSatang: 10000,
+          label: 'XK-01',
+          totalSatang: 2500,
+        },
+      }),
+    );
+    const made = setup({ store, online: false, ...options });
+    await settle();
+    return made;
+  }
+
+  test('take over: the entries become the owner’s, are shown, and replay under the owner’s session', async () => {
+    const { outbox, store, create, pay, life } = await withStranded({
+      role: 'owner',
+      create: okOrder(uuid(100)),
+    });
+    expect(outbox.getState()).toMatchObject({ othersCount: 2, items: [] });
+    expect(await outbox.takeOverOthers()).toEqual({ ok: true, count: 2, failed: 0 });
+    expect(outbox.getState().othersCount).toBe(0);
+    expect(outbox.getState().recovered).toEqual({ action: 'takeOver', count: 2, failed: 0 });
+    expect(outbox.getState().items.map((i) => i.kind)).toEqual(['order', 'payment']);
+    expect((await store.outbox.list()).map((r) => [r.staffId, r.deviceId])).toEqual([
+      [ME, DEVICE],
+      [ME, DEVICE],
+    ]);
+    life.goOnline();
+    await settle();
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(create.mock.calls[0]?.[1]).toEqual({ clientRequestId: uuid(10) });
+    expect(pay).toHaveBeenCalledTimes(1);
+    expect(await store.outbox.count()).toBe(0);
+  });
+
+  test('take over leaves the owner’s own entries alone', async () => {
+    const { outbox, store } = await withStranded({ role: 'owner' });
+    await outbox.enqueueOrder({
+      clientRequestId: uuid(12),
+      body,
+      lines,
+      estimateSatang: 2500,
+    });
+    await outbox.takeOverOthers();
+    expect(outbox.getState().items).toHaveLength(3);
+    expect(await store.outbox.count()).toBe(3);
+  });
+
+  test('clear: the entries of other people are deleted, nothing of the owner’s', async () => {
+    const { outbox, store, create, life } = await withStranded({ role: 'owner' });
+    await outbox.enqueueOrder({
+      clientRequestId: uuid(12),
+      body,
+      lines,
+      estimateSatang: 2500,
+    });
+    expect(await outbox.clearOthers()).toEqual({ ok: true, count: 2, failed: 0 });
+    expect(outbox.getState().othersCount).toBe(0);
+    expect((await store.outbox.list()).map((r) => r.id)).toEqual([uuid(12)]);
+    life.goOnline();
+    await settle();
+    expect(create.mock.calls.map((c) => c[1]?.clientRequestId)).toEqual([uuid(12)]);
+  });
+
+  test('only the owner role may do either, whoever asks', async () => {
+    for (const role of ['manager', 'cashier', 'kitchen', undefined]) {
+      const { outbox, store } = await withStranded(role ? { role } : {});
+      expect(await outbox.takeOverOthers()).toEqual({ ok: false, reason: 'forbidden' });
+      expect(await outbox.clearOthers()).toEqual({ ok: false, reason: 'forbidden' });
+      expect(await store.outbox.count()).toBe(2);
+      expect(outbox.getState().othersCount).toBe(2);
+    }
+  });
+
+  test('without a signed-in person there is nobody to take over for', async () => {
+    const store = persistentStore();
+    await store.outbox.put(stranded(uuid(10)));
+    const { outbox } = setup({ store, staff: null });
+    await settle();
+    expect(await outbox.takeOverOthers()).toEqual({ ok: false, reason: 'noSession' });
+    expect(await store.outbox.count()).toBe(1);
+  });
+
+  test('a row that cannot be written stays with its owner and is counted as failed', async () => {
+    const { outbox, store } = await withStranded({ role: 'owner' });
+    const realPut = store.outbox.put.bind(store.outbox);
+    store.outbox.put = async (entry) => {
+      if (entry.kind === 'payment.cash') throw new DOMException('full', 'QuotaExceededError');
+      return realPut(entry);
+    };
+    expect(await outbox.takeOverOthers()).toEqual({ ok: true, count: 1, failed: 1 });
+    expect(outbox.getState().othersCount).toBe(1);
+    expect(outbox.getState().items.map((i) => i.kind)).toEqual(['order']);
+  });
+
+  test('a row that cannot be deleted stays and is counted as failed', async () => {
+    const { outbox, store } = await withStranded({ role: 'owner' });
+    const realRemove = store.outbox.remove.bind(store.outbox);
+    store.outbox.remove = async (id) => {
+      if (id === uuid(11)) throw new Error('blocked');
+      return realRemove(id);
+    };
+    expect(await outbox.clearOthers()).toEqual({ ok: true, count: 1, failed: 1 });
+    expect(outbox.getState().othersCount).toBe(1);
   });
 });
 

@@ -76,6 +76,8 @@ export interface OutboxState {
   items: QueueItem[];
   /** Entries on this device that belong to other people: a count, never contents. */
   othersCount: number;
+  /** What the owner's last take-over or clear did on this device (counts only), until sign-out. */
+  recovered: { action: 'takeOver' | 'clear'; count: number; failed: number } | null;
   /** Other people's entries that were older than 14 days and were removed at sign-in (a count only). */
   purgedCount: number;
   /** Order entry id -> the server order id it became, for this run (so its page can follow). */
@@ -86,6 +88,11 @@ export type EnqueueResult =
   | { ok: true; id: string; label: string; replaced?: true }
   | { ok: false; reason: 'storage' | 'full' | 'noSession' | 'orderGone' | 'busy' };
 
+/** The result of the owner's recovery actions: how many entries were handled and how many were not. */
+export type RecoverResult =
+  | { ok: true; count: number; failed: number }
+  | { ok: false; reason: 'forbidden' | 'noSession' };
+
 export interface OutboxDeps {
   api: {
     orders: { create: ApiClient['orders']['create'] };
@@ -94,7 +101,7 @@ export interface OutboxDeps {
   entities: Pick<EntityStore, 'apply' | 'applyMany'>;
   auth: ReadableStore<{
     phase: AuthPhase;
-    session: { staff: { id: string } } | null;
+    session: { staff: { id: string; role?: string } } | null;
     device: { id: string } | null;
   }>;
   lifecycle: Lifecycle;
@@ -136,6 +143,14 @@ export interface OutboxStore extends ReadableStore<OutboxState> {
   discard(id: string): Promise<void>;
   /** Try now (a person tapped "send now"). */
   kick(): void;
+  /**
+   * Owner only (the caller asks for the step-up first): the entries other people left on this device
+   * become the owner's and replay under the owner's session. The server records the owner as the
+   * creator of those orders and the one who took the cash.
+   */
+  takeOverOthers(): Promise<RecoverResult>;
+  /** Owner only (after the step-up): deletes the entries other people left on this device. */
+  clearOthers(): Promise<RecoverResult>;
 }
 
 const SEQ_KEY = 'outbox.seq';
@@ -154,6 +169,7 @@ export function createOutboxStore(deps: OutboxDeps): OutboxStore {
     items: [],
     othersCount: 0,
     purgedCount: 0,
+    recovered: null,
     synced: {},
   });
 
@@ -671,6 +687,75 @@ export function createOutboxStore(deps: OutboxDeps): OutboxStore {
     publish();
   }
 
+  // ---------- The owner's recovery of other people's entries ----------
+
+  /**
+   * One pass over the rows that are not the signed-in owner's, inside the write lock. `act` handles
+   * a row and says whether it worked; a row that fails stays where it is. Only the owner role may
+   * run it: the role is the session's, not the caller's word.
+   */
+  function recoverOthers(
+    action: 'takeOver' | 'clear',
+    act: (opened: LocalStore, row: OutboxEntry, person: Who) => Promise<OutboxEntry | null>,
+  ): Promise<RecoverResult> {
+    return serial(async () => {
+      const person = who;
+      if (person === null) return { ok: false, reason: 'noSession' };
+      if (deps.auth.getState().session?.staff.role !== 'owner') {
+        return { ok: false, reason: 'forbidden' };
+      }
+      const startedIn = epoch;
+      let opened: LocalStore;
+      let others: OutboxEntry[];
+      try {
+        opened = local ?? (await ensureStore());
+        others = (await opened.outbox.list()).filter((row) => !ownsEntry(row, person));
+      } catch {
+        // The device cannot be read: nothing was touched.
+        return { ok: true, count: 0, failed: store.getState().othersCount };
+      }
+      const handled: OutboxEntry[] = [];
+      const handledIds = new Set<string>();
+      for (const row of others) {
+        try {
+          const moved = await act(opened, row, person);
+          handledIds.add(row.id);
+          if (moved) handled.push(moved);
+        } catch {
+          // It stays as it was, with its owner, and is counted as failed.
+        }
+      }
+      if (epoch === startedIn) {
+        mine = [...mine, ...handled].sort(
+          (a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id),
+        );
+        publish({
+          othersCount: store.getState().othersCount - handledIds.size,
+          recovered: {
+            action,
+            count: handledIds.size,
+            failed: others.length - handledIds.size,
+          },
+        });
+        if (handled.length > 0) kick(false);
+      }
+      return { ok: true, count: handledIds.size, failed: others.length - handledIds.size };
+    });
+  }
+
+  const takeOverOthers = () =>
+    recoverOthers('takeOver', async (opened, row, person) => {
+      const taken: OutboxEntry = { ...row, staffId: person.staffId, deviceId: person.deviceId };
+      await opened.outbox.put(taken);
+      return taken;
+    });
+
+  const clearOthers = () =>
+    recoverOthers('clear', async (opened, row) => {
+      await opened.outbox.remove(row.id);
+      return null;
+    });
+
   // ---------- Following sign-in, the network and the app ----------
 
   function stop() {
@@ -683,7 +768,14 @@ export function createOutboxStore(deps: OutboxDeps): OutboxStore {
     timer = null;
     running = false;
     again = false;
-    store.setState({ ready: false, items: [], othersCount: 0, purgedCount: 0, synced: {} });
+    store.setState({
+      ready: false,
+      items: [],
+      othersCount: 0,
+      purgedCount: 0,
+      recovered: null,
+      synced: {},
+    });
   }
 
   function start(person: Who) {
@@ -714,6 +806,8 @@ export function createOutboxStore(deps: OutboxDeps): OutboxStore {
     retry,
     discard,
     kick: () => kick(true),
+    takeOverOthers,
+    clearOthers,
     bind() {
       const unsubscribeAuth = deps.auth.subscribe(follow);
       let lastStatus = deps.connection.getState().status;

@@ -483,6 +483,20 @@ export const en = {
     'Saved on this device and sent automatically when the internet is back. The kitchen and other devices cannot see these orders yet.',
   'outbox.others':
     '{count} items from other staff are on this device. They are sent when their owner signs in.',
+  'outbox.others.takeOver': 'Take these over as mine',
+  'outbox.others.clear': 'Clear these entries',
+  'outbox.others.takeOver.title': 'Take over {count} entries left by other staff?',
+  'outbox.others.takeOver.body':
+    'They will be sent under your name: the server will record you, not the original staff member, as the creator of the orders and the one who took the cash, and you will see their details.',
+  'outbox.others.takeOver.confirm': 'Take over',
+  'outbox.others.clear.title': 'Clear {count} entries left by other staff?',
+  'outbox.others.clear.body':
+    'These orders and cash entries are not in the system yet. If you clear them they are gone for good.',
+  'outbox.others.clear.confirm': 'Clear all',
+  'outbox.others.done.takeOver': 'Took over {count} entries.',
+  'outbox.others.done.clear': 'Cleared {count} entries.',
+  'outbox.others.failed': '{count} could not be done. Try again.',
+  'outbox.others.forbidden': 'Only the owner can do this.',
   'outbox.sendNow': 'Send now',
   'outbox.retry': 'Send again',
   'outbox.discard': 'Remove this',

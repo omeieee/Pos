@@ -2,6 +2,7 @@ import { formatBaht } from '@sds/i18n';
 import { ORDER_NO_PREFIX } from '@sds/shared';
 import { useLocale, useServices, useStoreState, useT } from '../ui/hooks.ts';
 import { Icon } from '../ui/Icon.tsx';
+import { OtherEntries } from './OtherEntries.tsx';
 import type { QueuedOrder, QueuedPayment } from './outbox-model.ts';
 import { QueueActions, QueueStateBadge } from './QueueActions.tsx';
 
@@ -97,7 +98,14 @@ export function QueuedOrders() {
   const loose = payments.filter(
     (p) => p.dependsOn === null || !orders.some((o) => o.id === p.dependsOn),
   );
-  if (state.items.length === 0 && state.othersCount === 0 && state.purgedCount === 0) return null;
+  if (
+    state.items.length === 0 &&
+    state.othersCount === 0 &&
+    state.purgedCount === 0 &&
+    state.recovered === null
+  ) {
+    return null;
+  }
   return (
     <section className="queued" aria-labelledby="queued-title">
       {state.items.length > 0 ? (
@@ -123,12 +131,7 @@ export function QueuedOrders() {
           <span>{tr('outbox.purged', { count: state.purgedCount })}</span>
         </p>
       ) : null}
-      {state.othersCount > 0 ? (
-        <p className="notice" role="status">
-          <Icon name="info" />
-          <span>{tr('outbox.others', { count: state.othersCount })}</span>
-        </p>
-      ) : null}
+      <OtherEntries />
     </section>
   );
 }
