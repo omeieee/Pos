@@ -1,20 +1,110 @@
 /**
- * Rendering helpers for component tests (jsdom + Testing Library). A screen gets the real cart and
- * entity stores and a fake API, so the tests exercise the same code paths as the app.
+ * Rendering helpers for component tests (jsdom + Testing Library). A screen gets the real cart,
+ * payment and entity stores and a fake API, so the tests exercise the same code paths as the app.
+ *
+ * Signing in: `createTestAuth(role)` builds the REAL auth store (with the shared permissions of
+ * that role and a step-up that accepts the PIN `STEP_UP_PIN`) and signs it in. Pass it to
+ * `createTestServices({ auth })`; `renderScreen` then provides it to the screen and mounts the
+ * step-up dialog next to it, as App does.
  */
 import type { Locale } from '@sds/i18n';
+import { ROLE_PERMISSIONS, type StaffRole } from '@sds/shared';
 import { render } from '@testing-library/react';
 import type { ReactElement } from 'react';
 import { vi } from 'vitest';
-import type { ApiClient } from '../api/client.ts';
+import type { ApiClient, createApiClient } from '../api/client.ts';
+import { ApiClientError } from '../api/errors.ts';
+import { type AuthStore, createAuthStore } from '../auth/auth-store.ts';
 import { createActivity } from '../lib/activity.ts';
 import { createStore } from '../lib/store.ts';
+import { createMemoryTokenStore } from '../platform/tokenStore.ts';
 import { createCartStore } from '../pos/cart-store.ts';
+import { createPaymentStore } from '../pos/payment-store.ts';
 import type { ConnectionState } from '../realtime/connection.ts';
 import { createEntityStore } from '../realtime/entity-store.ts';
 import type { Services } from '../services.ts';
-import { LocaleContext, ServicesContext } from '../ui/hooks.ts';
+import { AuthContext, LocaleContext, ServicesContext } from '../ui/hooks.ts';
+import { StepUpDialog } from '../ui/StepUpDialog.tsx';
+import { FAKE_DEVICE_TOKEN, IDS, sessionBody } from './fixtures.ts';
 import { seedMenu } from './menu-fixtures.ts';
+
+/** The PIN the fake step-up accepts. */
+export const STEP_UP_PIN = '4321';
+
+/** A signed-in auth store for a role, over a fake auth API. */
+export async function createTestAuth(role: StaffRole = 'cashier') {
+  const tokens = createMemoryTokenStore();
+  await tokens.saveDevice({
+    device: { id: IDS.device, name: 'iPad ตัวอย่าง', kind: 'ipad' },
+    deviceToken: FAKE_DEVICE_TOKEN,
+  });
+  const stepUp = vi.fn(async ({ pin }: { pin: string }) => {
+    if (pin !== STEP_UP_PIN) throw new ApiClientError('INVALID_CREDENTIALS', { status: 401 });
+    return { stepUpUntil: new Date(Date.now() + 5 * 60_000).toISOString() };
+  });
+  const api = {
+    auth: {
+      listStaff: async () => ({ staff: [] }),
+      pinLogin: async () => ({
+        ...sessionBody(role === 'owner' ? 'owner' : 'cashier'),
+        staff: {
+          id: role === 'owner' ? IDS.owner : IDS.cashier,
+          displayName: 'พนักงานตัวอย่าง',
+          role,
+        },
+        permissions: [...ROLE_PERMISSIONS[role]],
+      }),
+      stepUpStaff: stepUp,
+      logout: async () => undefined,
+    },
+  } as unknown as ReturnType<typeof createApiClient>;
+  const auth = createAuthStore({ api, tokens });
+  await auth.boot();
+  const result = await auth.signInWithPin(IDS.cashier, '1234');
+  if (!result.ok) throw new Error('the test sign-in failed');
+  return { auth, stepUp };
+}
+
+type Orders = ApiClient['orders'];
+type Payments = ApiClient['payments'];
+
+const unexpected = (name: string) => async () => {
+  throw new Error(`${name} was not expected`);
+};
+
+/** An API whose every call fails the test unless the test gave it an answer. */
+export function createFakeApi(
+  overrides: { orders?: Partial<Orders>; payments?: Partial<Payments> } = {},
+) {
+  const orders = {
+    create: vi.fn<Orders['create']>(overrides.orders?.create ?? unexpected('orders.create')),
+    get: vi.fn<Orders['get']>(overrides.orders?.get ?? unexpected('orders.get')),
+    list: vi.fn<Orders['list']>(overrides.orders?.list ?? unexpected('orders.list')),
+    patch: vi.fn<Orders['patch']>(overrides.orders?.patch ?? unexpected('orders.patch')),
+    transition: vi.fn<Orders['transition']>(
+      overrides.orders?.transition ?? unexpected('orders.transition'),
+    ),
+    cancel: vi.fn<Orders['cancel']>(overrides.orders?.cancel ?? unexpected('orders.cancel')),
+  };
+  const payments = {
+    create: vi.fn<Payments['create']>(overrides.payments?.create ?? unexpected('payments.create')),
+    list: vi.fn<Payments['list']>(overrides.payments?.list ?? (async () => ({ payments: [] }))),
+    claim: vi.fn<Payments['claim']>(overrides.payments?.claim ?? unexpected('payments.claim')),
+    confirm: vi.fn<Payments['confirm']>(
+      overrides.payments?.confirm ?? unexpected('payments.confirm'),
+    ),
+    cancelClaimed: vi.fn<Payments['cancelClaimed']>(
+      overrides.payments?.cancelClaimed ?? unexpected('payments.cancelClaimed'),
+    ),
+    void: vi.fn<Payments['void']>(overrides.payments?.void ?? unexpected('payments.void')),
+    refund: vi.fn<Payments['refund']>(overrides.payments?.refund ?? unexpected('payments.refund')),
+    changeMethod: vi.fn<Payments['changeMethod']>(
+      overrides.payments?.changeMethod ?? unexpected('payments.changeMethod'),
+    ),
+    qrUrl: vi.fn<Payments['qrUrl']>(overrides.payments?.qrUrl ?? unexpected('payments.qrUrl')),
+  };
+  return { orders, payments };
+}
 
 export function createTestServices(
   options: {
@@ -22,37 +112,49 @@ export function createTestServices(
     connection?: Partial<ConnectionState>;
     create?: ApiClient['orders']['create'];
     getOrder?: ApiClient['orders']['get'];
+    orders?: Partial<Orders>;
+    payments?: Partial<Payments>;
+    /** Signed-in auth from `createTestAuth`. Without one, screens that need a person cannot render. */
+    auth?: AuthStore;
   } = {},
 ) {
   const entities = createEntityStore();
   if (options.menu !== false) seedMenu(entities);
   const activity = createActivity();
-  const create = vi.fn<ApiClient['orders']['create']>(
-    options.create ??
-      (async () => {
-        throw new Error('create was not expected');
-      }),
-  );
-  const getOrder = vi.fn<ApiClient['orders']['get']>(
-    options.getOrder ??
-      (async () => {
-        throw new Error('get was not expected');
-      }),
-  );
+  const api = createFakeApi({
+    orders: {
+      ...(options.create ? { create: options.create } : {}),
+      ...(options.getOrder ? { get: options.getOrder } : {}),
+      ...options.orders,
+    },
+    payments: options.payments ?? {},
+  });
+  const create = api.orders.create;
+  const getOrder = api.orders.get;
   const cart = createCartStore({ api: { orders: { create } }, entities, activity });
+  const payments = createPaymentStore({
+    api,
+    entities,
+    activity,
+    auth: options.auth ?? {
+      runSensitive: async (call) => ({ ok: true as const, value: await call() }),
+    },
+  });
   const connection = createStore<ConnectionState>({
     status: 'online',
     synced: true,
     ...options.connection,
   });
   const services = {
-    api: { orders: { create, get: getOrder } },
+    api,
     entities,
     activity,
     cart,
+    payments,
+    ...(options.auth ? { auth: options.auth } : {}),
     connection: { ...connection, start: vi.fn(), stop: vi.fn() },
   } as unknown as Services;
-  return { services, entities, cart, activity, create, getOrder, connection };
+  return { services, entities, cart, payments, activity, api, create, getOrder, connection };
 }
 
 export function renderScreen(
@@ -60,9 +162,19 @@ export function renderScreen(
   services: Services,
   locale: Locale = 'th',
 ): ReturnType<typeof render> {
+  const { auth } = services;
   return render(
     <LocaleContext.Provider value={locale}>
-      <ServicesContext.Provider value={services}>{ui}</ServicesContext.Provider>
+      <ServicesContext.Provider value={services}>
+        {auth ? (
+          <AuthContext.Provider value={auth}>
+            {ui}
+            <StepUpDialog />
+          </AuthContext.Provider>
+        ) : (
+          ui
+        )}
+      </ServicesContext.Provider>
     </LocaleContext.Provider>,
   );
 }

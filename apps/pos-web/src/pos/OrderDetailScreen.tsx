@@ -127,7 +127,6 @@ export function OrderDetailScreen({ id }: { id: string }) {
         <span className="money">{formatBaht(order.totalSatang, locale)}</span>
       </div>
 
-      <p className="hint">{tr('order.detail.paymentSoon')}</p>
       {another}
     </section>
   );

@@ -92,8 +92,8 @@ const sameChoices = (a: readonly string[], b: readonly string[]) =>
 const sameLine = (a: CartLine, b: CartLine) =>
   a.itemId === b.itemId && a.note === b.note && sameChoices(a.optionIds, b.optionIds);
 
-/** The request got no usable answer, so the order may exist. */
-function mayHaveBeenCreated(error: ApiClientError): boolean {
+/** The request got no usable answer, so what it asked for (an order, a payment) may exist. */
+export function mayHaveBeenCreated(error: ApiClientError): boolean {
   return (
     error.code === 'NETWORK' ||
     error.code === 'TIMEOUT' ||

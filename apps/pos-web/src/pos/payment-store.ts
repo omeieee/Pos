@@ -1,0 +1,316 @@
+/**
+ * The payment calls of the order page. State and rules live here, outside React, so they run (and
+ * are tested) without a DOM, and so they survive leaving the page: going to the orders list and
+ * back must not lose the request id of a payment whose answer never arrived.
+ *
+ * Money: no amount is ever sent. The server charges the order total; cash sends only the tender.
+ * Nothing is shown as paid, claimed or confirmed from a click: the rows come only from the
+ * server's answer (and from realtime frames), applied after the answer.
+ *
+ * Safely, in the same way as creating an order (cart-store.ts):
+ * - one request at a time (`inFlight`, set in the same tick, so two taps before React re-renders
+ *   send one call). A second call is refused as `busy`;
+ * - `create` and `changeMethod` carry a `clientRequestId` (the idempotency key). It belongs to the
+ *   logical attempt, so it is made at the first attempt and kept until the answer is known. When no
+ *   answer arrived (network, timeout, a garbled body, a 5xx) the payment MAY exist, the phase is
+ *   `unsure`, and a retry with the same body sends the same id: the server then answers the
+ *   original. A different body is a different attempt with a new id;
+ * - the moves (claim, confirm, cancel-claimed, void, refund) have no id: the server answers 200
+ *   without a write when the payment is already in the target status, so pressing the same button
+ *   again is safe. They also go `unsure` when the answer is lost, so the screen can say so;
+ * - void and refund run through `auth.runSensitive`: the step-up dialog opens first, a cancelled
+ *   dialog sends nothing, and a STEP_UP_REQUIRED answer asks again once and retries;
+ * - `reset()` (sign-out) bumps an epoch. An answer to a request sent before it touches nothing: no
+ *   rows into the store, no `unsure` on the next person's session, no clearing of the guard of
+ *   their own request;
+ * - the app counts as busy (an update never reloads the page) while a request runs, while the
+ *   step-up dialog is open, and while the outcome is unsure.
+ */
+import type {
+  ChangePaymentMethodResult,
+  OrderDto,
+  PaymentDto,
+  PaymentResult,
+  RealtimeFrame,
+} from '@sds/shared';
+import type { ApiClient, ChangePaymentInput, NewPaymentInput } from '../api/client.ts';
+import { ApiClientError, isApiClientError } from '../api/errors.ts';
+import type { AuthStore } from '../auth/auth-store.ts';
+import type { Activity } from '../lib/activity.ts';
+import { createStore, type ReadableStore } from '../lib/store.ts';
+import { newUuid } from '../platform/ids.ts';
+import type { EntityStore } from '../realtime/entity-store.ts';
+import { mayHaveBeenCreated } from './cart-store.ts';
+
+export type PaymentAction =
+  | 'create'
+  | 'changeMethod'
+  | 'claim'
+  | 'confirm'
+  | 'cancelClaimed'
+  | 'void'
+  | 'refund';
+
+export interface PaymentFlowState {
+  /** The order the running or last action belongs to. */
+  orderId: string | null;
+  phase: 'idle' | 'sending' | 'unsure';
+  action: PaymentAction | null;
+  /** The last failed attempt, until the next one starts. */
+  error: ApiClientError | null;
+}
+
+export type PaymentOutcome =
+  | { ok: true }
+  | { ok: false; reason: 'busy' | 'stale' | 'cancelled' }
+  | { ok: false; reason: 'error'; error: ApiClientError };
+
+export interface PaymentDeps {
+  api: {
+    payments: Pick<
+      ApiClient['payments'],
+      'create' | 'changeMethod' | 'claim' | 'confirm' | 'cancelClaimed' | 'void' | 'refund' | 'list'
+    >;
+    orders: Pick<ApiClient['orders'], 'get'>;
+  };
+  entities: EntityStore;
+  activity: Activity;
+  auth: Pick<AuthStore, 'runSensitive'>;
+  /** Ids for the request id; tests fix them. */
+  newId?: () => string;
+}
+
+export interface PaymentStore extends ReadableStore<PaymentFlowState> {
+  create(orderId: string, input: NewPaymentInput): Promise<PaymentOutcome>;
+  changeMethod(
+    orderId: string,
+    paymentId: string,
+    input: ChangePaymentInput,
+  ): Promise<PaymentOutcome>;
+  claim(orderId: string, paymentId: string): Promise<PaymentOutcome>;
+  confirm(
+    orderId: string,
+    paymentId: string,
+    input: { referenceNote?: string },
+  ): Promise<PaymentOutcome>;
+  cancelClaimed(orderId: string, paymentId: string, reason: string): Promise<PaymentOutcome>;
+  voidPayment(orderId: string, paymentId: string, reason: string): Promise<PaymentOutcome>;
+  refundPayment(orderId: string, paymentId: string, reason: string): Promise<PaymentOutcome>;
+  /**
+   * The payment this order was waiting for has arrived (a realtime frame or a reload): the
+   * `unsure` state of that order is over. Other orders are left alone.
+   */
+  settled(orderId: string): void;
+  /** Loads the order and its payments into the store. A failure is silent. */
+  refresh(orderId: string): Promise<void>;
+  /** Sign-out: forgets the state and every request id. */
+  reset(): void;
+}
+
+/** A refusal that means "your view of this order or payment is out of date": reload it. */
+const STALE_VIEW_CODES: readonly string[] = [
+  'PAYMENT_ALREADY_OPEN',
+  'ORDER_ALREADY_PAID',
+  'PAYMENT_NOT_PENDING',
+  'INVALID_TRANSITION',
+  'VERSION_CONFLICT',
+];
+
+class StepUpCancelled extends Error {}
+
+const paymentFrame = (p: PaymentDto): RealtimeFrame => ({
+  type: 'payment.upserted',
+  id: p.id,
+  rev: p.rev,
+  data: p,
+});
+const orderFrame = (o: OrderDto): RealtimeFrame => ({
+  type: 'order.upserted',
+  id: o.id,
+  rev: o.rev,
+  data: o,
+});
+const framesOf = (result: PaymentResult | ChangePaymentMethodResult): RealtimeFrame[] => [
+  ...('cancelledPayment' in result ? [paymentFrame(result.cancelledPayment)] : []),
+  paymentFrame(result.payment),
+  orderFrame(result.order),
+];
+
+const initial = (): PaymentFlowState => ({
+  orderId: null,
+  phase: 'idle',
+  action: null,
+  error: null,
+});
+
+/** The parts of a create body that make it the same attempt: method, tender, reference. */
+const bodyKey = (input: NewPaymentInput | ChangePaymentInput) =>
+  `${input.method}:${'tendered' in input ? input.tendered : ''}:${input.referenceNote ?? ''}`;
+
+export function createPaymentStore(deps: PaymentDeps): PaymentStore {
+  const newId = deps.newId ?? newUuid;
+  const store = createStore<PaymentFlowState>(initial());
+  /** `orderId|action|body` -> the request id of an attempt whose answer is not known yet. */
+  const requestIds = new Map<string, string>();
+  let inFlight = false;
+  let epoch = 0;
+  let endBusy: (() => void) | null = null;
+
+  store.subscribe(() => {
+    const busy = store.getState().phase !== 'idle';
+    if (busy && !endBusy) endBusy = deps.activity.begin();
+    if (!busy && endBusy) {
+      endBusy();
+      endBusy = null;
+    }
+  });
+
+  async function refresh(orderId: string): Promise<void> {
+    const startedIn = epoch;
+    const [payments, order] = await Promise.allSettled([
+      deps.api.payments.list(orderId),
+      deps.api.orders.get(orderId),
+    ]);
+    if (epoch !== startedIn) return;
+    deps.entities.applyMany([
+      ...(payments.status === 'fulfilled' ? payments.value.payments.map(paymentFrame) : []),
+      ...(order.status === 'fulfilled' ? [orderFrame(order.value)] : []),
+    ]);
+  }
+
+  /**
+   * One guarded call. `send` returns the frames to show once the server has answered. `idKey` is
+   * set for the calls that carry a request id.
+   */
+  async function run(
+    action: PaymentAction,
+    orderId: string,
+    idKey: string | null,
+    send: (clientRequestId: string) => Promise<RealtimeFrame[]>,
+  ): Promise<PaymentOutcome> {
+    if (inFlight) return { ok: false, reason: 'busy' };
+    inFlight = true;
+    const startedIn = epoch;
+    const fullKey = idKey === null ? null : `${orderId}|${action}|${idKey}`;
+    let clientRequestId = '';
+    if (fullKey !== null) {
+      clientRequestId = requestIds.get(fullKey) ?? newId();
+      requestIds.set(fullKey, clientRequestId);
+    }
+    store.setState({ orderId, action, phase: 'sending', error: null });
+    try {
+      const frames = await send(clientRequestId);
+      if (epoch !== startedIn) return { ok: false, reason: 'stale' };
+      deps.entities.applyMany(frames);
+      if (fullKey !== null) requestIds.delete(fullKey);
+      store.setState({ phase: 'idle', action: null, error: null });
+      return { ok: true };
+    } catch (caught) {
+      if (epoch !== startedIn) return { ok: false, reason: 'stale' };
+      if (caught instanceof StepUpCancelled) {
+        store.setState({ phase: 'idle', action: null, error: null });
+        return { ok: false, reason: 'cancelled' };
+      }
+      const error = isApiClientError(caught) ? caught : new ApiClientError('UNKNOWN');
+      const unsure = mayHaveBeenCreated(error);
+      // A known refusal means nothing was made: the next attempt is a new one.
+      if (!unsure && fullKey !== null) requestIds.delete(fullKey);
+      store.setState({ phase: unsure ? 'unsure' : 'idle', error });
+      if (STALE_VIEW_CODES.includes(error.code)) void refresh(orderId);
+      return { ok: false, reason: 'error', error };
+    } finally {
+      // After a sign-out the guard belongs to whoever has sent a request since.
+      if (epoch === startedIn) inFlight = false;
+    }
+  }
+
+  /** Runs a step-up call; a cancelled dialog and a failure both leave through the catch above. */
+  const sensitive = (call: () => Promise<PaymentResult>) => async (): Promise<RealtimeFrame[]> => {
+    const result = await deps.auth.runSensitive(call);
+    if (result.ok) return framesOf(result.value);
+    throw result.error ?? new StepUpCancelled();
+  };
+
+  const move = (call: () => Promise<PaymentResult>) => async (): Promise<RealtimeFrame[]> =>
+    framesOf(await call());
+
+  return {
+    getState: store.getState,
+    subscribe: store.subscribe,
+
+    create: (orderId, input) =>
+      run('create', orderId, bodyKey(input), async (clientRequestId) =>
+        framesOf((await deps.api.payments.create(orderId, input, { clientRequestId })).result),
+      ),
+
+    changeMethod: (orderId, paymentId, input) =>
+      run('changeMethod', orderId, `${paymentId}:${bodyKey(input)}`, async (clientRequestId) =>
+        framesOf(
+          (await deps.api.payments.changeMethod(paymentId, input, { clientRequestId })).result,
+        ),
+      ),
+
+    claim: (orderId, paymentId) =>
+      run(
+        'claim',
+        orderId,
+        null,
+        move(() => deps.api.payments.claim(paymentId, {})),
+      ),
+
+    confirm: (orderId, paymentId, input) =>
+      run(
+        'confirm',
+        orderId,
+        null,
+        move(() =>
+          deps.api.payments.confirm(
+            paymentId,
+            input.referenceNote ? { referenceNote: input.referenceNote } : {},
+          ),
+        ),
+      ),
+
+    cancelClaimed: (orderId, paymentId, reason) =>
+      run(
+        'cancelClaimed',
+        orderId,
+        null,
+        move(() => deps.api.payments.cancelClaimed(paymentId, { reason })),
+      ),
+
+    voidPayment: (orderId, paymentId, reason) =>
+      run(
+        'void',
+        orderId,
+        null,
+        sensitive(() => deps.api.payments.void(paymentId, { reason })),
+      ),
+
+    refundPayment: (orderId, paymentId, reason) =>
+      run(
+        'refund',
+        orderId,
+        null,
+        sensitive(() => deps.api.payments.refund(paymentId, { reason })),
+      ),
+
+    settled(orderId) {
+      const state = store.getState();
+      if (state.orderId !== orderId || state.phase !== 'unsure') return;
+      for (const key of [...requestIds.keys()]) {
+        if (key.startsWith(`${orderId}|`)) requestIds.delete(key);
+      }
+      store.setState({ phase: 'idle', action: null, error: null });
+    },
+
+    refresh,
+
+    reset() {
+      epoch += 1;
+      inFlight = false;
+      requestIds.clear();
+      store.setState(initial());
+    },
+  };
+}

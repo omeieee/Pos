@@ -118,7 +118,7 @@ describe('government co-pay availability', () => {
     const store = createEntityStore();
     store.apply(govCopayFrame(6, over));
     const entry = store.getState().settings.get('gov_copay');
-    if (!entry || entry.id !== 'gov_copay') throw new Error('no scheme');
+    if (entry?.id !== 'gov_copay') throw new Error('no scheme');
     return entry.data;
   };
 

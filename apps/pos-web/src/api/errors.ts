@@ -145,7 +145,7 @@ export function codeFromStatus(status: number): string {
 export type Translate = (key: MessageKey, params?: MessageParams) => string;
 
 /** Where an error is shown; the sign-in screens say less than the generic text does. */
-export type ErrorContext = 'pin' | 'ownerSignIn' | 'stepUp';
+export type ErrorContext = 'pin' | 'ownerSignIn' | 'stepUp' | 'payment';
 
 /** "5 นาที" / "1 ชั่วโมง": whole minutes below an hour, whole hours above (rounded up). */
 export function waitText(tr: Translate, seconds: number): string {
@@ -180,6 +180,10 @@ export function errorText(tr: Translate, error: unknown, context?: ErrorContext)
     if (context === 'pin') return tr('auth.pin.lockedFor', { wait });
     if (context === 'stepUp') return tr('auth.stepUp.lockedFor', { wait });
     return tr('error.accountLockedFor', { wait });
+  }
+  // The state machine answers INVALID_TRANSITION for orders and payments alike.
+  if (code === 'INVALID_TRANSITION' && context === 'payment') {
+    return tr('error.paymentInvalidTransition');
   }
   if (code === 'ORDER_INVALID') {
     const cause = error.lineErrors[0]?.code;

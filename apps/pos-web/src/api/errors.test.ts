@@ -142,6 +142,19 @@ describe('sign-in messages', () => {
     expect(errorText(th, wrong, 'stepUp')).toBe(t('th', 'auth.stepUp.failed'));
   });
 
+  test('an invalid transition on a payment says payment, not order', () => {
+    const refused = new ApiClientError('INVALID_TRANSITION', { status: 409 });
+    expect(errorText(th, refused)).toBe(t('th', 'error.invalidTransition'));
+    expect(errorText(th, refused, 'payment')).toBe(t('th', 'error.paymentInvalidTransition'));
+    expect(errorText(en, refused, 'payment')).toBe(t('en', 'error.paymentInvalidTransition'));
+  });
+
+  test('PromptPay not configured tells staff to ask the owner', () => {
+    const refused = new ApiClientError('PROMPTPAY_NOT_CONFIGURED', { status: 409 });
+    expect(errorText(th, refused)).toContain('เจ้าของร้าน');
+    expect(errorText(en, refused).toLowerCase()).toContain('owner');
+  });
+
   test('a lock without a wait time still gets a calm message', () => {
     const bare = new ApiClientError('ACCOUNT_LOCKED', { status: 423 });
     expect(errorText(th, bare)).toBe(t('th', 'error.accountLocked'));

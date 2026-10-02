@@ -74,7 +74,6 @@ describe('the order page (a placeholder until the payment screens)', () => {
     expect(screen.getByText(/ห้อง 1204/)).toBeTruthy();
     expect(screen.getByText(th['order.detail.serverTotal'])).toBeTruthy();
     expect(screen.getAllByText('฿65.00').length).toBeGreaterThan(0);
-    expect(screen.getByText(th['order.detail.paymentSoon'])).toBeTruthy();
   });
 
   test('follows the store: a newer frame of the same order updates the page', () => {

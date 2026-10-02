@@ -3,6 +3,7 @@ import { useEffect } from 'react';
 import { allowedRoutes, pathFromHash, resolveRoute } from '../app/routes.ts';
 import { OrderDetailScreen } from '../pos/OrderDetailScreen.tsx';
 import { OrderEntryScreen } from '../pos/OrderEntryScreen.tsx';
+import { OrdersScreen } from '../pos/OrdersScreen.tsx';
 import { Brand } from './Brand.tsx';
 import { ConnectionBadge } from './ConnectionBadge.tsx';
 import { useAuthState, useAuthStore, useHash, useLocale, useNow, useT } from './hooks.ts';
@@ -25,7 +26,8 @@ export function Shell() {
   const resolved = resolveRoute(hash, routes);
   const route = resolved?.route ?? null;
   // The order screens fill the page; the others are still placeholders.
-  const full = resolved?.page === 'new' || resolved?.page === 'order';
+  const full =
+    resolved?.page === 'new' || resolved?.page === 'order' || resolved?.page === 'orders';
 
   // A page this role may not open (or an unknown address) is replaced by the first allowed one.
   // A page with a parameter keeps its own address, so it is compared as a whole.
@@ -86,6 +88,7 @@ export function Shell() {
 
       <main className={full ? 'page page--full' : 'page'}>
         {resolved?.page === 'new' ? <OrderEntryScreen /> : null}
+        {resolved?.page === 'orders' ? <OrdersScreen /> : null}
         {resolved?.page === 'order' ? <OrderDetailScreen id={resolved.params.id ?? ''} /> : null}
         {route && resolved && !full ? (
           <section className="coming-soon">
