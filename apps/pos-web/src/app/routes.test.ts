@@ -27,7 +27,8 @@ describe('who may open what (from the shared role permissions)', () => {
 
   test('every page has a path, a label key and an icon', () => {
     for (const route of ROUTES) {
-      expect(route.path).toBe(`/${route.id}`);
+      // The menu editor sits under Settings in the address.
+      expect(route.path).toBe(route.id === 'menu' ? '/settings/menu' : `/${route.id}`);
       expect(route.labelKey.startsWith('nav.')).toBe(true);
     }
   });
@@ -39,21 +40,21 @@ describe('resolving the address', () => {
   const kitchen = allowedRoutes(permissionsOf('kitchen'));
 
   test('reads the hash path', () => {
-    expect(pathFromHash('#/menu')).toBe('/menu');
-    expect(pathFromHash('#/menu?x=1')).toBe('/menu');
+    expect(pathFromHash('#/settings/menu')).toBe('/settings/menu');
+    expect(pathFromHash('#/settings/menu?x=1')).toBe('/settings/menu');
     expect(pathFromHash('')).toBe('');
     expect(pathFromHash('#nothing')).toBe('');
   });
 
   test('opens the matching page when it is allowed', () => {
     expect(resolveRoute('#/settings', owner)?.page).toBe('settings');
-    expect(resolveRoute('#/menu', owner)?.page).toBe('menu');
+    expect(resolveRoute('#/settings/menu', owner)?.page).toBe('menu');
     expect(resolveRoute('#/new', cashier)?.page).toBe('new');
   });
 
   test('a page the role may not open lands on the first allowed page', () => {
     expect(resolveRoute('#/settings', cashier)?.page).toBe('new');
-    expect(resolveRoute('#/menu', cashier)?.page).toBe('new');
+    expect(resolveRoute('#/settings/menu', cashier)?.page).toBe('new');
     expect(resolveRoute('#/new', kitchen)?.page).toBe('kitchen');
   });
 

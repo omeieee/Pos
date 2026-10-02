@@ -107,7 +107,7 @@ describe('screens (server-rendered, Thai first)', () => {
     expect(page).toContain(th['shell.signOut']);
     expect(page).toContain(th['nav.new']);
     expect(page).toContain(th['nav.orders']);
-    expect(page).not.toContain('href="#/menu"');
+    expect(page).not.toContain('href="#/settings/menu"');
     expect(page).not.toContain('href="#/settings"');
     // A cashier lands on order entry; the menu has not arrived yet.
     expect(page).toContain(th['pos.orderEntry.menuLoading']);
@@ -124,7 +124,7 @@ describe('screens (server-rendered, Thai first)', () => {
     expect(page).toContain('href="#/kitchen"');
     expect(page).toContain('href="#/orders"');
     expect(page).not.toContain('href="#/new"');
-    expect(page).not.toContain('href="#/menu"');
+    expect(page).not.toContain('href="#/settings/menu"');
     expect(page).not.toContain('href="#/settings"');
     // The kitchen view itself (its sound switch is there), not the order board.
     expect(page).toContain(th['kitchen.sound.label']);
@@ -139,7 +139,7 @@ describe('screens (server-rendered, Thai first)', () => {
       totp: '111111',
     });
     const page = html(auth);
-    for (const route of ['new', 'kitchen', 'orders', 'menu', 'settings']) {
+    for (const route of ['new', 'kitchen', 'orders', 'settings/menu', 'settings']) {
       expect(page).toContain(`href="#/${route}"`);
     }
   });

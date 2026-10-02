@@ -72,7 +72,15 @@ export const ROUTES: readonly RouteDef[] = [
     permission: 'order.advance',
   },
   { id: 'orders', path: '/orders', labelKey: 'nav.orders', icon: 'list', permission: null },
-  { id: 'menu', path: '/menu', labelKey: 'nav.menu', icon: 'bowl', permission: 'menu.edit' },
+  // The menu editor lives under Settings in the address, but is gated by its own permission: a
+  // role that may edit the menu need not be able to open the other settings.
+  {
+    id: 'menu',
+    path: '/settings/menu',
+    labelKey: 'nav.menu',
+    icon: 'bowl',
+    permission: 'menu.edit',
+  },
   {
     id: 'settings',
     path: '/settings',
@@ -120,7 +128,7 @@ export function matchPath(pattern: string, path: string): Record<string, string>
 }
 
 /**
- * `#/menu` -> `/menu`, `#/orders/abc?x=1` -> `/orders/abc`; anything else -> ''. Segments are
+ * `#/settings/menu` -> `/settings/menu`, `#/orders/abc?x=1` -> `/orders/abc`; anything else -> ''. Segments are
  * plain URL-safe characters, so an odd address (`%00`, spaces) never reaches a page.
  */
 export function pathFromHash(hash: string): string {
