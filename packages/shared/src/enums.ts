@@ -6,12 +6,20 @@ export type OrderChannel = (typeof ORDER_CHANNELS)[number];
 export const MENU_CHANNELS = ['storefront', 'line', 'grab', 'lineman'] as const;
 export type MenuChannel = (typeof MENU_CHANNELS)[number];
 
+/**
+ * How an order reaches the customer. Since 2026-10-02 the shop only DELIVERS TO THE BUILDING
+ * ENTRANCE (`entrance_delivery`: the condominium bans outside visitors, a guard is stationed at
+ * the entrance and the customer comes down to receive the order, no delivery fee) or hands the
+ * order to a delivery platform (`platform_delivery`). The other values are legacy: they stay valid
+ * so old rows and history keep working, but `allowedFulfillments` never offers them.
+ */
 export const FULFILLMENTS = [
   'dine_in',
   'takeaway',
   'pickup',
   'room_delivery',
   'platform_delivery',
+  'entrance_delivery',
 ] as const;
 export type Fulfillment = (typeof FULFILLMENTS)[number];
 

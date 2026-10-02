@@ -1,4 +1,5 @@
 import type { PGlite } from '@electric-sql/pglite';
+import { FULFILLMENTS } from '@sds/shared';
 import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 import { createPgliteDb, type PgliteDb } from './pglite.ts';
@@ -258,6 +259,20 @@ describe('integrity rules', () => {
         (order_no, business_date, channel, fulfillment, status, subtotal_satang, total_satang, client_request_id)
         values ('S-003', '2026-09-29', 'storefront', 'takeaway', 'paid', 0, 0, uuid_generate_v7())`),
       /orders_status/,
+    );
+  });
+
+  test('the fulfilment check takes the entrance delivery and still takes the legacy values', async () => {
+    for (const fulfillment of FULFILLMENTS) {
+      await db.execute(sql`insert into orders
+        (order_no, business_date, channel, fulfillment, room_no, status, subtotal_satang, total_satang, client_request_id)
+        values ('F-' || uuid_generate_v7(), '2026-09-29', 'storefront', ${fulfillment}, '1204', 'new', 0, 0, uuid_generate_v7())`);
+    }
+    await expectDbError(
+      db.execute(sql`insert into orders
+        (order_no, business_date, channel, fulfillment, status, subtotal_satang, total_satang, client_request_id)
+        values ('F-bad', '2026-09-29', 'storefront', 'teleport', 'new', 0, 0, uuid_generate_v7())`),
+      /orders_fulfillment/,
     );
   });
 

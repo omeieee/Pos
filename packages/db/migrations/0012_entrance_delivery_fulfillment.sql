@@ -1,0 +1,2 @@
+ALTER TABLE "orders" DROP CONSTRAINT "orders_fulfillment";--> statement-breakpoint
+ALTER TABLE "orders" ADD CONSTRAINT "orders_fulfillment" CHECK (fulfillment in ('dine_in', 'takeaway', 'pickup', 'room_delivery', 'platform_delivery', 'entrance_delivery'));

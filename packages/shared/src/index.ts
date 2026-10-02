@@ -2,6 +2,7 @@ export * from './admin.ts';
 export * from './auth.ts';
 export * from './business-date.ts';
 export * from './cash.ts';
+export * from './delivery.ts';
 export * from './enums.ts';
 export * from './gov-copay.ts';
 export * from './menu.ts';
