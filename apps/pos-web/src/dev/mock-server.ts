@@ -26,6 +26,7 @@ import {
   registerDeviceInputSchema,
   staffStepUpInputSchema,
 } from '@sds/shared';
+import type { RawBody } from './mock-menu-admin.ts';
 import { createMockShop } from './mock-shop.ts';
 
 type Role = 'owner' | 'manager' | 'cashier' | 'kitchen';
@@ -215,6 +216,7 @@ export function createMockServer(options: MockServerOptions = {}) {
     headers: Headers,
     body: unknown,
     query: URLSearchParams,
+    raw?: RawBody,
   ): Response {
     const deviceHeader = headers.get('x-device-token') ?? undefined;
     const auth = headers.get('authorization') ?? undefined;
@@ -332,10 +334,17 @@ export function createMockServer(options: MockServerOptions = {}) {
     ) {
       return fail(403, 'FORBIDDEN');
     }
-    const answer = shop.handle(method, path, query, body, {
-      role: session.staff.role,
-      stepUpFresh: (stepUps.get(session.token) ?? 0) > now(),
-    });
+    const answer = shop.handle(
+      method,
+      path,
+      query,
+      body,
+      {
+        role: session.staff.role,
+        stepUpFresh: (stepUps.get(session.token) ?? 0) > now(),
+      },
+      raw,
+    );
     if (answer) return reply(answer.status, answer.body);
 
     return fail(404, 'NOT_FOUND');
@@ -346,13 +355,21 @@ export function createMockServer(options: MockServerOptions = {}) {
     const url = new URL(raw, 'http://mock.local');
     const method = (init?.method ?? 'GET').toUpperCase();
     const body = typeof init?.body === 'string' ? JSON.parse(init.body) : undefined;
+    // A file sent as it is (a menu photo): its bytes and type.
+    const file: RawBody | undefined =
+      init?.body instanceof Blob
+        ? {
+            bytes: new Uint8Array(await init.body.arrayBuffer()),
+            contentType: new Headers(init.headers).get('content-type') ?? '',
+          }
+        : undefined;
     calls.push({ method, path: url.pathname });
     // No network: what a browser does when it cannot reach the server.
     if (shop.isOffline()) throw new TypeError('Failed to fetch');
     if (options.delayMs) await new Promise((resolve) => setTimeout(resolve, options.delayMs));
     const injected = options.intercept?.({ method, path: url.pathname, body });
     if (injected) return injected;
-    return route(method, url.pathname, new Headers(init?.headers), body, url.searchParams);
+    return route(method, url.pathname, new Headers(init?.headers), body, url.searchParams, file);
   }) as typeof fetch;
 
   return {
@@ -366,6 +383,8 @@ export function createMockServer(options: MockServerOptions = {}) {
     /** Dev: change prices or sell a dish out on the server only, as if done while a counter was offline. */
     bumpPrices: shop.bumpPrices,
     soldOut: shop.soldOut,
+    /** Dev and tests: the last menu photo uploaded (type and bytes), as a server would have stored it. */
+    lastPhoto: shop.lastPhoto,
     /** Dev: the owner changes the PromptPay ID, as if done while a counter was offline. */
     setPromptpayId: shop.setPromptpayId,
     calls,

@@ -1,3 +1,4 @@
+import { findMetadata } from '../menu-editor/photo-plan.ts';
 import type { SocketFactory } from '../platform/socket.ts';
 
 const OFFLINE_KEY = 'sds-mock-offline';
@@ -61,6 +62,18 @@ export async function devBackend(): Promise<
         soldOut: server.soldOut,
         // The owner changes the PromptPay ID on the server: __sdsMock.setPromptpayId('0899990000').
         setPromptpayId: server.setPromptpayId,
+        // What the last menu photo upload carried: its type, size and any camera metadata found.
+        lastPhoto: () => {
+          const photo = server.lastPhoto();
+          if (!photo) return null;
+          return {
+            itemId: photo.itemId,
+            type: photo.contentType,
+            size: photo.bytes.length,
+            metadata: findMetadata(photo.bytes),
+            head: Array.from(photo.bytes.slice(0, 12)),
+          };
+        },
       },
     });
     const startOffline = readOffline();

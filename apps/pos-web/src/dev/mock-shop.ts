@@ -32,6 +32,7 @@ import {
   ZERO,
 } from '@sds/shared';
 import type { SocketFactory, SocketHandlers } from '../platform/socket.ts';
+import { createMockMenuAdmin, type RawBody } from './mock-menu-admin.ts';
 import { createMockPayments, type MockCaller } from './mock-payments.ts';
 
 export interface MockShopOptions {
@@ -288,6 +289,14 @@ export function createMockShop(options: MockShopOptions = {}) {
     publish: (frame) => publish(frame as SyncChange),
   });
   for (const frame of payments.settingsFrames()) publish(frame as SyncChange);
+
+  // The menu editor's routes (see mock-menu-admin.ts): they change the rows in `latest`.
+  const menuAdmin = createMockMenuAdmin({
+    rows: () => latest.values(),
+    nextRev: () => ++rev,
+    publish,
+    newUuid,
+  });
 
   /** The catalog the pricing function wants, from the made-up rows (costs are zero). */
   function catalog(): Map<string, CatalogItem> {
@@ -635,8 +644,11 @@ export function createMockShop(options: MockShopOptions = {}) {
     query: URLSearchParams,
     body: unknown,
     caller: MockCaller = { role: 'owner', stepUpFresh: true },
+    raw?: RawBody,
   ): MockAnswer | null {
     if (method === 'GET' && path === '/v1/menu') return publicMenu();
+    const edited = menuAdmin.handle(method, path, query, body, caller.role, raw);
+    if (edited) return edited;
     const paid = payments.handle(method, path, body, caller);
     if (paid) return paid;
     if (method === 'GET' && path === '/v1/sync') return sync(query);
@@ -715,6 +727,8 @@ export function createMockShop(options: MockShopOptions = {}) {
     simulateIncomingOrder,
     setOffline,
     isOffline: () => offline,
+    /** Dev: the last menu photo the app uploaded (what a server would have stored). */
+    lastPhoto: menuAdmin.lastPhoto,
     /** Dev: the owner changes the PromptPay ID (the feed gets a masked notice with a newer rev). */
     setPromptpayId: payments.setPromptpayId,
     /** Dev: every price rises by this many satang on the server only. */
