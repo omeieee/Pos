@@ -99,6 +99,13 @@
       "when": 1790928487656,
       "tag": "0013_orders_delivery_recipient",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1790942139783,
+      "tag": "0014_customers_recipient_memory",
+      "breakpoints": true
     }
   ]
 }

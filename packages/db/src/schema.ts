@@ -186,6 +186,17 @@ export const customers = pgTable(
     phone: text('phone'),
     roomNo: text('room_no'),
     note: text('note'),
+    /**
+     * The recipient the shop last delivered to for this customer (owner, 2026-10-02), remembered
+     * automatically from orders so the next order can show it. Personal data (PDPA): cleared when
+     * the customer is anonymised. `recipientKey` is the name normalised by `recipientKey()` in
+     * `@sds/shared` (case, spacing, Unicode form); counter and phone recipients are matched by
+     * (building, recipientKey), a LINE customer by `lineUserId` only.
+     */
+    building: text('building'),
+    recipientName: text('recipient_name'),
+    deliveryNote: text('delivery_note'),
+    recipientKey: text('recipient_key'),
     firstSeenAt: ts('first_seen_at').notNull().defaultNow(),
     lastOrderAt: ts('last_order_at'),
     orderCount: integer('order_count').notNull().default(0),
@@ -198,6 +209,9 @@ export const customers = pgTable(
   },
   (t) => [
     uniqueIndex('customers_line_user_id_key').on(t.lineUserId),
+    uniqueIndex('customers_recipient_key')
+      .on(t.building, t.recipientKey)
+      .where(sql`line_user_id is null`),
     index('customers_rev_idx').on(t.rev),
   ],
 );

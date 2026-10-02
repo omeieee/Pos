@@ -202,6 +202,10 @@ async function seedWorld() {
       roomNo: '1204',
       pictureUrl: 'https://img.example.test/p.jpg',
       note: 'NOTE-SENTINEL',
+      building: 'BUILDING-SENTINEL',
+      recipientName: 'RECIPIENT-SENTINEL',
+      recipientKey: 'recipient-key-sentinel',
+      deliveryNote: 'DELIVERY-NOTE-SENTINEL',
       orderCount: 3,
       totalSpentSatang: 15000,
     })
@@ -300,6 +304,15 @@ describe('readChanges', () => {
       expect(json, name).not.toContain(String(value));
     }
     expect(json).not.toContain('NOTE-SENTINEL');
+    // The remembered recipient is read through GET /v1/recipients, never through the feed.
+    for (const sentinel of [
+      'BUILDING-SENTINEL',
+      'RECIPIENT-SENTINEL',
+      'recipient-key-sentinel',
+      'DELIVERY-NOTE-SENTINEL',
+    ]) {
+      expect(json).not.toContain(sentinel);
+    }
     expect(json).not.toContain('MODIFIER-SENTINEL');
     expect(json).not.toContain('LINE-SECRET-SENTINEL');
     expect(json).not.toMatch(/cost|hash|token|payload|slip/i);

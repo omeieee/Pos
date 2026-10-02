@@ -275,6 +275,12 @@ export const SYNC_POLICY = {
     'pictureUrl',
     'phone',
     'note',
+    // The remembered recipient (building, name, details) is read through GET /v1/recipients, which
+    // staff who can create orders call; it stays out of the feed.
+    'building',
+    'recipientName',
+    'deliveryNote',
+    'recipientKey',
     'privacyAckAt',
     'marketingConsentAt',
     'unfollowedAt',
