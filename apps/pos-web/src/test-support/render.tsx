@@ -17,6 +17,7 @@ import { ApiClientError } from '../api/errors.ts';
 import { type AuthStore, createAuthStore } from '../auth/auth-store.ts';
 import { createActivity } from '../lib/activity.ts';
 import { createStore } from '../lib/store.ts';
+import { createSound } from '../platform/sound.ts';
 import { createMemoryTokenStore } from '../platform/tokenStore.ts';
 import { createCartStore } from '../pos/cart-store.ts';
 import { createOrderMovesStore } from '../pos/order-moves-store.ts';
@@ -26,6 +27,7 @@ import { createEntityStore } from '../realtime/entity-store.ts';
 import type { Services } from '../services.ts';
 import { AuthContext, LocaleContext, ServicesContext } from '../ui/hooks.ts';
 import { StepUpDialog } from '../ui/StepUpDialog.tsx';
+import { createFakeEngine, createFakePrefs, createFakeWakeLock } from './fake-audio.ts';
 import { createFakeLifecycle } from './fake-realtime.ts';
 import { FAKE_DEVICE_TOKEN, IDS, sessionBody } from './fixtures.ts';
 import { seedMenu } from './menu-fixtures.ts';
@@ -105,7 +107,9 @@ export function createFakeApi(
     ),
     qrUrl: vi.fn<Payments['qrUrl']>(overrides.payments?.qrUrl ?? unexpected('payments.qrUrl')),
   };
-  return { orders, payments };
+  // The keepalive of a kitchen display calls this; it answers like a live session.
+  const auth = { me: vi.fn(async () => ({}) as never) };
+  return { orders, payments, auth };
 }
 
 export function createTestServices(
@@ -143,6 +147,16 @@ export function createTestServices(
     },
   });
   const orderMoves = createOrderMovesStore({ api, entities });
+  // The sound and the wake lock run on doubles: the engine starts only on unlock, like iOS.
+  const life = createFakeLifecycle();
+  const audio = createFakeEngine();
+  const soundPrefs = createFakePrefs();
+  const sound = createSound({
+    engine: audio.engine,
+    prefs: soundPrefs.prefs,
+    lifecycle: life.lifecycle,
+  });
+  const wake = createFakeWakeLock();
   const connection = createStore<ConnectionState>({
     status: 'online',
     synced: true,
@@ -155,7 +169,9 @@ export function createTestServices(
     cart,
     payments,
     orderMoves,
-    lifecycle: createFakeLifecycle().lifecycle,
+    sound,
+    wakeLock: wake.wakeLock,
+    lifecycle: life.lifecycle,
     ...(options.auth ? { auth: options.auth } : {}),
     connection: { ...connection, start: vi.fn(), stop: vi.fn() },
   } as unknown as Services;
@@ -165,6 +181,11 @@ export function createTestServices(
     cart,
     payments,
     orderMoves,
+    sound,
+    audio,
+    soundPrefs,
+    wake,
+    life,
     activity,
     api,
     create,

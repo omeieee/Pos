@@ -6,6 +6,7 @@
  */
 import { type ApiClient, createApiClient } from './api/client.ts';
 import { ApiClientError } from './api/errors.ts';
+import { resetRoute } from './app/navigate.ts';
 import { type AuthStore, createAuthStore } from './auth/auth-store.ts';
 import { type Activity, createActivity } from './lib/activity.ts';
 import {
@@ -15,10 +16,16 @@ import {
 } from './platform/appUpdates.ts';
 import { apiBaseUrl } from './platform/config.ts';
 import { type Lifecycle, webLifecycle } from './platform/lifecycle.ts';
+import { type LocalStore, openLocalStore } from './platform/localStore.ts';
 import { webServiceWorker } from './platform/serviceWorker.ts';
 import { createWebSocket, type SocketFactory, socketUrl } from './platform/socket.ts';
+import { createSound, type SoundPlayer } from './platform/sound.ts';
+import { createSoundPrefs } from './platform/soundPrefs.ts';
 import { createWebTokenStore, type TokenStore } from './platform/tokenStore.ts';
+import { createWebWakeLock, type ScreenWakeLock } from './platform/wakeLock.ts';
+import { createWebAudioEngine } from './platform/webAudio.ts';
 import { type CartStore, createCartStore } from './pos/cart-store.ts';
+import { createNewOrderAlarm } from './pos/new-order-alarm.ts';
 import { createOrderMovesStore, type OrderMovesStore } from './pos/order-moves-store.ts';
 import { createPaymentStore, type PaymentStore } from './pos/payment-store.ts';
 import { bindRealtime } from './realtime/bind.ts';
@@ -38,11 +45,18 @@ export interface Services {
   payments: PaymentStore;
   /** The status moves of an order (order page and kitchen view): guarded, reconciled, epoch-safe. */
   orderMoves: OrderMovesStore;
+  /** The chime for a new order and its remembered on/off choice (a platform seam). */
+  sound: SoundPlayer;
+  /** Keeps the screen awake while a display needs it (a platform seam). */
+  wakeLock: ScreenWakeLock;
   /** The service worker's update state. `updates.start()` registers it (production builds only). */
   updates: AppUpdates;
   /** Is the app in front, is the device online; the web one wraps the browser events. */
   lifecycle: Lifecycle;
-  /** Runs the connection while someone is signed in. Call once at start-up; returns the unbinder. */
+  /**
+   * Runs the connection while someone is signed in, and the new-order sound. Call once at start-up;
+   * returns the unbinder.
+   */
   bindRealtime(): () => void;
 }
 
@@ -54,6 +68,10 @@ export function createServices(
     createSocket?: SocketFactory;
     lifecycle?: Lifecycle;
     serviceWorker?: ServiceWorkerHost;
+    /** Tests give the sound, the wake lock and the local store their own doubles. */
+    sound?: SoundPlayer;
+    wakeLock?: ScreenWakeLock;
+    localStore?: () => Promise<LocalStore>;
   } = {},
 ): Services {
   const baseUrl = options.baseUrl ?? apiBaseUrl;
@@ -98,6 +116,20 @@ export function createServices(
     isBusy: activity.isBusy,
   });
 
+  const sound =
+    options.sound ??
+    createSound({
+      engine: createWebAudioEngine(),
+      prefs: createSoundPrefs(options.localStore ?? (() => openLocalStore())),
+      lifecycle,
+    });
+  const wakeLock = options.wakeLock ?? createWebWakeLock({ lifecycle });
+  const alarm = createNewOrderAlarm({
+    entities,
+    sound,
+    deviceId: () => auth.getState().device?.id ?? null,
+  });
+
   return {
     api,
     auth,
@@ -107,10 +139,12 @@ export function createServices(
     cart,
     payments,
     orderMoves,
+    sound,
+    wakeLock,
     lifecycle,
     updates,
-    bindRealtime: () =>
-      bindRealtime({
+    bindRealtime() {
+      const unbind = bindRealtime({
         auth,
         connection,
         entities,
@@ -119,7 +153,16 @@ export function createServices(
           cart.reset();
           payments.reset();
           orderMoves.reset();
+          // The next person lands on their own first page, not on the one the last person left.
+          resetRoute();
         },
-      }),
+      });
+      void sound.init();
+      const stopAlarm = alarm.start();
+      return () => {
+        unbind();
+        stopAlarm();
+      };
+    },
   };
 }
