@@ -79,8 +79,8 @@ export interface OutboxState {
 }
 
 export type EnqueueResult =
-  | { ok: true; id: string; label: string }
-  | { ok: false; reason: 'storage' | 'full' | 'noSession' | 'orderGone' };
+  | { ok: true; id: string; label: string; replaced?: true }
+  | { ok: false; reason: 'storage' | 'full' | 'noSession' | 'orderGone' | 'busy' };
 
 export interface OutboxDeps {
   api: {
@@ -161,6 +161,8 @@ export function createOutboxStore(deps: OutboxDeps): OutboxStore {
   let mine: OutboxEntry[] = [];
   const attempts = new Map<string, number>();
   const dueAt = new Map<string, number>();
+  /** Entries whose request is on its way right now. */
+  const inFlight = new Set<string>();
   let running = false;
   let again = false;
   let timer: ReturnType<typeof setTimeout> | null = null;
@@ -340,8 +342,25 @@ export function createOutboxStore(deps: OutboxDeps): OutboxStore {
     publish();
   }
 
-  /** One replay. Returns whether the pass may go on to the next entry. */
-  async function replay(entry: OutboxEntry, startedIn: number): Promise<boolean> {
+  /**
+   * One replay. Returns whether the pass may go on to the next entry. Everything that decides what
+   * is sent (the in-flight claim, the sent mark, the body) happens before the first `await`, so a
+   * change to the entry either lands before this or is refused (`inFlight`, `sentAt`).
+   */
+  async function replay(waiting: OutboxEntry, startedIn: number): Promise<boolean> {
+    inFlight.add(waiting.id);
+    const entry = waiting.sentAt === undefined ? { ...waiting, sentAt: now() } : waiting;
+    if (entry !== waiting) replaceMine(entry);
+    try {
+      // Written before the request leaves: from here on the server may have the entry.
+      if (entry !== waiting) await persist(entry);
+      return await send(entry, startedIn);
+    } finally {
+      inFlight.delete(waiting.id);
+    }
+  }
+
+  async function send(entry: OutboxEntry, startedIn: number): Promise<boolean> {
     try {
       if (entry.kind === KIND_ORDER) {
         const payload = orderPayloadOf(entry);
@@ -483,6 +502,42 @@ export function createOutboxStore(deps: OutboxDeps): OutboxStore {
       return saved ?? { ok: true, id: entry.id, label };
     });
 
+  /**
+   * A cash entry is already waiting for this order. The same tender is the same entry. A different
+   * tender replaces it only while the entry has never been sent (no sent mark, not in flight, not
+   * refused): after that the first request may already be on the server, and a changed body under
+   * the same request id would be refused as a reused key. The check and the in-memory change
+   * happen in one step, so a replay cannot pick up the old tender in between.
+   */
+  async function retender(waiting: OutboxEntry, input: NewQueuedCash): Promise<EnqueueResult> {
+    const payload = paymentPayloadOf(waiting);
+    if (payload?.tenderedSatang === input.tenderedSatang) {
+      return { ok: true, id: waiting.id, label: input.label };
+    }
+    const unsent =
+      waiting.state !== 'attention' && waiting.sentAt === undefined && !inFlight.has(waiting.id);
+    if (!payload || !unsent) return { ok: false, reason: 'busy' };
+    const updated: OutboxEntry = {
+      ...waiting,
+      payload: {
+        ...payload,
+        tenderedSatang: input.tenderedSatang,
+        totalSatang: input.totalSatang,
+        changed: true,
+      },
+    };
+    replaceMine(updated);
+    try {
+      await (local ?? (await ensureStore())).outbox.put(updated);
+    } catch {
+      replaceMine(waiting);
+      publish();
+      return { ok: false, reason: 'storage' };
+    }
+    publish();
+    return { ok: true, id: waiting.id, label: input.label, replaced: true };
+  }
+
   const enqueueCash: OutboxStore['enqueueCash'] = (input) =>
     serial(async () => {
       const person = who;
@@ -506,7 +561,7 @@ export function createOutboxStore(deps: OutboxDeps): OutboxStore {
         const payload = paymentPayloadOf(e);
         return payload !== null && JSON.stringify(payload.target) === wanted;
       });
-      if (waiting) return { ok: true, id: waiting.id, label: input.label };
+      if (waiting) return retender(waiting, input);
       const entry = cashEntry(
         newId(),
         {

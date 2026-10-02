@@ -35,6 +35,11 @@ export interface OutboxEntry {
   deviceId?: string;
   /** `queued` waits to be sent; `attention` was refused and waits for a person. */
   state?: 'queued' | 'attention';
+  /**
+   * When a request for this entry first left the device, written BEFORE it leaves. An entry with
+   * this mark may already be on the server (the answer can be lost), so its content is frozen.
+   */
+  sentAt?: number;
 }
 
 export interface LocalStore {

@@ -59,6 +59,8 @@ const paymentPayloadSchema = z.object({
   label: z.string().min(1),
   /** The total the change was shown against: an estimate for an order not synced yet. */
   totalSatang: z.number().int().nullable(),
+  /** The tender was changed after it was first saved (and before it was sent). */
+  changed: z.boolean().optional(),
 });
 export type PaymentPayload = z.infer<typeof paymentPayloadSchema>;
 
@@ -106,6 +108,10 @@ export interface QueuedPayment extends QueueBase {
   dependsOn: string | null;
   tenderedSatang: number;
   totalSatang: number | null;
+  /** The tender was changed after it was first saved. */
+  tenderChanged: boolean;
+  /** Not sent yet and not refused: the amount can still be corrected. */
+  canChangeTender: boolean;
 }
 
 export type QueueItem = QueuedOrder | QueuedPayment;
@@ -195,7 +201,7 @@ export function toQueueItems(
         items.push(unreadable(entry));
         continue;
       }
-      const { target, tenderedSatang, label, totalSatang } = parsed.data;
+      const { target, tenderedSatang, label, totalSatang, changed } = parsed.data;
       const base = toBase(entry, tries, label);
       let state: QueueState = entry.state === 'attention' ? 'attention' : 'queued';
       let error = base.error;
@@ -223,6 +229,8 @@ export function toQueueItems(
         dependsOn,
         tenderedSatang,
         totalSatang,
+        tenderChanged: changed === true,
+        canChangeTender: state === 'queued' && entry.sentAt === undefined && totalSatang !== null,
       });
     } else {
       items.push(unreadable(entry));

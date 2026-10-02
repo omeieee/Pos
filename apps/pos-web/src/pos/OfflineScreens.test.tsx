@@ -152,6 +152,49 @@ describe('the order that is only on the device', () => {
     expect(made.api.payments.create).not.toHaveBeenCalled();
   });
 
+  test('the cash amount can be corrected before it is sent, and the cashier is told', async () => {
+    const made = await offlineCounter();
+    const item = await placeTeaOffline(made);
+    cleanup();
+    renderScreen(<OrderDetailScreen id={item?.id ?? ''} />, made.services);
+    click(screen.getByRole('button', { name: '฿100' }));
+    click(screen.getByRole('button', { name: th['outbox.cash.confirm'] }));
+    await waitFor(() => expect(screen.getByText(th['outbox.cash.waiting'])).toBeTruthy());
+    expect(screen.queryByText(th['outbox.cash.changed'])).toBeNull();
+
+    click(screen.getByRole('button', { name: th['outbox.cash.change'] }));
+    const dialog = screen.getByRole('dialog');
+    click(within(dialog).getByRole('button', { name: th['payment.cash.exact'] }));
+    click(within(dialog).getByRole('button', { name: th['outbox.cash.confirm'] }));
+    await waitFor(() => expect(screen.getByText(th['outbox.cash.changed'])).toBeTruthy());
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(screen.getByText(/^รับ ฿25\.00/)).toBeTruthy();
+    expect(made.outbox.getState().items.filter((i) => i.kind === 'payment')).toHaveLength(1);
+  });
+
+  test('once a send was tried the amount can no longer be corrected', async () => {
+    const made = await offlineCounter({
+      create: okCreate,
+      payments: {
+        create: (async () => {
+          throw new ApiClientError('NETWORK');
+        }) as Pay,
+      },
+    });
+    const item = await placeTeaOffline(made);
+    cleanup();
+    renderScreen(<OrderDetailScreen id={item?.id ?? ''} />, made.services);
+    click(screen.getByRole('button', { name: '฿100' }));
+    click(screen.getByRole('button', { name: th['outbox.cash.confirm'] }));
+    await waitFor(() => expect(screen.getByText(th['outbox.cash.waiting'])).toBeTruthy());
+    expect(screen.getByRole('button', { name: th['outbox.cash.change'] })).toBeTruthy();
+    act(() => made.life.goOnline());
+    await waitFor(() => expect(made.api.payments.create).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: th['outbox.cash.change'] })).toBeNull(),
+    );
+  });
+
   test('when the connection returns the order and the cash sync once, and the page follows the real order', async () => {
     const calls: string[] = [];
     const made = await offlineCounter({

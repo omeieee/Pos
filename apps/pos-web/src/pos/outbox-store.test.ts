@@ -652,6 +652,130 @@ describe('knowing that it is offline', () => {
   });
 });
 
+describe('a second cash tender for the same order', () => {
+  const cash = (tendered: number) => ({
+    target: { orderId: uuid(100) },
+    tenderedSatang: tendered,
+    totalSatang: 2500,
+    label: 'S-001',
+  });
+
+  test('replaces the waiting tender while it has not been sent, and says so', async () => {
+    const { outbox, store, pay, life } = setup({ online: false });
+    await settle();
+    const first = await outbox.enqueueCash(cash(10000));
+    const second = await outbox.enqueueCash(cash(20000));
+    expect(second).toMatchObject({ ok: true, replaced: true });
+    expect(first.ok && second.ok && first.id === second.id).toBe(true);
+    expect(await store.outbox.count()).toBe(1);
+    expect(outbox.getState().items[0]).toMatchObject({
+      tenderedSatang: 20000,
+      tenderChanged: true,
+    });
+    life.goOnline();
+    await settle();
+    expect(pay).toHaveBeenCalledTimes(1);
+    expect(pay.mock.calls[0]?.[1]).toEqual({ method: 'cash', tendered: 20000 });
+  });
+
+  test('the same tender again is the same entry and changes nothing', async () => {
+    const { outbox } = setup({ online: false });
+    await settle();
+    await outbox.enqueueCash(cash(10000));
+    const again = await outbox.enqueueCash(cash(10000));
+    expect(again).toMatchObject({ ok: true });
+    expect('replaced' in again).toBe(false);
+    expect(outbox.getState().items[0]).toMatchObject({ tenderChanged: false });
+  });
+
+  test('the new tender is on the device before it is acknowledged; a failed write changes nothing', async () => {
+    const store = persistentStore();
+    const { outbox } = setup({ store, online: false });
+    await settle();
+    await outbox.enqueueCash(cash(10000));
+    const realPut = store.outbox.put.bind(store.outbox);
+    store.outbox.put = async () => {
+      throw new DOMException('full', 'QuotaExceededError');
+    };
+    expect(await outbox.enqueueCash(cash(20000))).toEqual({ ok: false, reason: 'storage' });
+    expect(outbox.getState().items[0]).toMatchObject({ tenderedSatang: 10000 });
+    store.outbox.put = realPut;
+    expect((await store.outbox.list())[0]?.payload).toMatchObject({ tenderedSatang: 10000 });
+  });
+
+  test('marks the entry as sent on the device BEFORE the request leaves', async () => {
+    const store = persistentStore();
+    let markedWhenSent: unknown;
+    const { outbox, life } = setup({
+      store,
+      online: false,
+      pay: async (orderId, input, options) => {
+        markedWhenSent = (await store.outbox.list())[0]?.sentAt;
+        return okPayment(orderId, input, options);
+      },
+    });
+    await settle();
+    await outbox.enqueueCash(cash(10000));
+    life.goOnline();
+    await settle();
+    expect(typeof markedWhenSent).toBe('number');
+  });
+
+  test('once a send was tried (no answer), a different tender is refused: the first may have landed', async () => {
+    const { outbox, pay, life } = setup({
+      online: false,
+      pay: async () => {
+        throw network();
+      },
+    });
+    await settle();
+    await outbox.enqueueCash(cash(10000));
+    life.goOnline();
+    await settle();
+    expect(pay).toHaveBeenCalledTimes(1);
+    expect(await outbox.enqueueCash(cash(20000))).toEqual({ ok: false, reason: 'busy' });
+    expect(outbox.getState().items[0]).toMatchObject({ tenderedSatang: 10000 });
+    // The same tender is still just the same entry.
+    expect((await outbox.enqueueCash(cash(10000))).ok).toBe(true);
+  });
+
+  test('while the request is on its way, a different tender is refused and the sent one stands', async () => {
+    let release: () => void = () => undefined;
+    const { outbox, store, pay } = setup({
+      pay: (orderId, _input, options) =>
+        new Promise((resolve) => {
+          release = () =>
+            resolve({
+              result: paidResult(orderId),
+              replay: false,
+              clientRequestId: options?.clientRequestId ?? '',
+            });
+        }),
+    });
+    await settle();
+    await outbox.enqueueCash(cash(10000));
+    await settle();
+    expect(pay).toHaveBeenCalledTimes(1);
+    expect(await outbox.enqueueCash(cash(20000))).toEqual({ ok: false, reason: 'busy' });
+    release();
+    await settle();
+    expect(await store.outbox.count()).toBe(0);
+    expect(pay.mock.calls[0]?.[1]).toEqual({ method: 'cash', tendered: 10000 });
+  });
+
+  test('a refused entry cannot be edited either (send again or remove it)', async () => {
+    const { outbox } = setup({
+      pay: async () => {
+        throw refused('PAYMENT_NOT_ALLOWED');
+      },
+    });
+    await settle();
+    await outbox.enqueueCash(cash(10000));
+    await settle();
+    expect(await outbox.enqueueCash(cash(20000))).toEqual({ ok: false, reason: 'busy' });
+  });
+});
+
 describe('a payment never loses its order (the order syncs while cash is being saved)', () => {
   const cashFor = (entryId: string, tendered = 10000) => ({
     target: { entryId },

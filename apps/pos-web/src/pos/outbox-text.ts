@@ -18,6 +18,8 @@ export function saveErrorText(tr: Translate, reason: SaveError): string {
       return tr('outbox.error.noSession');
     case 'orderGone':
       return tr('outbox.error.orderGone');
+    case 'busy':
+      return tr('outbox.error.busy');
   }
 }
 

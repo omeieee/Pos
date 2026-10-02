@@ -512,6 +512,11 @@ export const en = {
   'outbox.cash.summary': 'Received {tendered} · change {change}',
   'outbox.cash.waiting':
     'The cash is saved on this device. It does not count as paid until the server confirms it.',
+  'outbox.cash.changed': 'The amount received was corrected. The latest amount will be sent.',
+  'outbox.cash.change': 'Correct the amount',
+  'outbox.cash.change.title': 'Correct the cash received',
+  'outbox.error.busy':
+    'This cash entry was already sent or is being sent, so the amount cannot be changed. Wait for the server first.',
   'outbox.cash.estimate': 'Change is worked out from the estimated total',
   'outbox.onlineOnly': 'Offline: cash works. PromptPay and ไทยช่วยไทย need the internet.',
   'payment.copay.reason.needsInternet': 'Needs the internet',
