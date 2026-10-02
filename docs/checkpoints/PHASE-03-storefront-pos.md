@@ -76,3 +76,4 @@ Tasks 1 (except the TOTP app choice) and 4 need no owner answers. Tasks 1–6 ar
 - 2026-10-02 · Offline outbox and manual Grab/LINE MAN entry QA-reviewed, pushed and deployed as 6fb34f0 ([PROGRESS](../PROGRESS.md))
 - 2026-10-02 · Menu photos in Postgres (D-21) QA-reviewed, pushed and deployed as 4720363 ([PROGRESS](../PROGRESS.md))
 - 2026-10-02 · Outbox fixes, owner recovery and offline menu cache QA-reviewed, pushed and deployed as 5172486 ([PROGRESS](../PROGRESS.md))
+- 2026-10-03 · Menu-editor backend (682a542) and offline PromptPay D-20 (2ecc210) QA-reviewed, pushed and deployed ([PROGRESS](../PROGRESS.md))
