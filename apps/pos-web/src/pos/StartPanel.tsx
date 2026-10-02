@@ -19,6 +19,7 @@ export function StartPanel({
   changeFrom,
   onAttempt,
   onDone,
+  label,
   children,
 }: {
   order: OrderDto;
@@ -27,6 +28,8 @@ export function StartPanel({
   changeFrom?: string;
   onAttempt?: (method: PayMethod) => void;
   onDone?: () => void;
+  /** The button text; the start text of the method when not given. */
+  label?: string;
   children?: ReactNode;
 }) {
   const { payments } = useServices();
@@ -67,7 +70,7 @@ export function StartPanel({
         onClick={() => void start()}
       >
         <Icon name={method === 'promptpay' ? 'qr' : 'hands'} />
-        {sending ? tr('payment.sending') : tr(`payment.start.${method}`)}
+        {sending ? tr('payment.sending') : (label ?? tr(`payment.start.${method}`))}
       </button>
     </div>
   );

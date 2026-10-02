@@ -1,17 +1,22 @@
 import type { OrderDto, PaymentDto } from '@sds/shared';
 import { useAuthState, useT } from '../ui/hooks.ts';
+import { ChangeMethod } from './ChangeMethod.tsx';
 import { GovCopayPanel } from './GovCopayPanel.tsx';
 import { PaymentMoves } from './PaymentMoves.tsx';
 import { PromptPayPanel } from './PromptPayPanel.tsx';
-import { paymentActions } from './payment-model.ts';
+import { type PayMethod, paymentActions } from './payment-model.ts';
 
 /** The screen of a payment that is waiting (pending or claimed), by method. */
 export function OpenPayment({
   order,
   payment,
+  hidden,
+  onAttempt,
 }: {
   order: OrderDto;
   payment: PaymentDto | undefined;
+  hidden: ReadonlySet<PayMethod>;
+  onAttempt: (method: PayMethod) => void;
 }) {
   const tr = useT();
   const role = useAuthState().session?.staff.role;
@@ -25,20 +30,37 @@ export function OpenPayment({
     );
   }
   const actions = paymentActions(role, payment);
-  if (payment.method === 'promptpay') {
-    return <PromptPayPanel order={order} payment={payment} actions={actions} />;
-  }
-  if (payment.method === 'gov_copay') {
-    return <GovCopayPanel order={order} payment={payment} actions={actions} />;
-  }
+  const change = actions.changeMethod ? (
+    <ChangeMethod order={order} payment={payment} hidden={hidden} onAttempt={onAttempt} />
+  ) : null;
+  // A claimed payment cannot change method until the claim is cancelled.
+  const claimedHint =
+    payment.status === 'claimed' ? (
+      <p className="hint">{tr('payment.change.claimedFirst')}</p>
+    ) : null;
   return (
-    <PaymentMoves
-      order={order}
-      payment={payment}
-      actions={actions}
-      referenceLabel="payment.reference"
-      showClaim={false}
-      notFoundLabel="payment.promptpay.notFound"
-    />
+    <>
+      {payment.method === 'promptpay' ? (
+        <PromptPayPanel order={order} payment={payment} actions={actions}>
+          {change}
+        </PromptPayPanel>
+      ) : payment.method === 'gov_copay' ? (
+        <GovCopayPanel order={order} payment={payment} actions={actions}>
+          {change}
+        </GovCopayPanel>
+      ) : (
+        <PaymentMoves
+          order={order}
+          payment={payment}
+          actions={actions}
+          referenceLabel="payment.reference"
+          showClaim={false}
+          notFoundLabel="payment.promptpay.notFound"
+        >
+          {change}
+        </PaymentMoves>
+      )}
+      {claimedHint}
+    </>
   );
 }

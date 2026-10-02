@@ -13,6 +13,7 @@ import {
 import { Icon } from '../ui/Icon.tsx';
 import { CashPanel } from './CashPanel.tsx';
 import { GovCopaySteps } from './GovCopayPanel.tsx';
+import { MethodTiles } from './MethodTiles.tsx';
 import { OpenPayment } from './OpenPayment.tsx';
 import { PaymentHistory } from './PaymentHistory.tsx';
 import {
@@ -151,42 +152,10 @@ function PaymentPanelBody({ orderId }: { orderId: string }) {
           <p className="hint">{tr('payment.change.confirmedLocked')}</p>
         </div>
       ) : phase === 'open' ? (
-        <OpenPayment order={order} payment={waiting} />
+        <OpenPayment order={order} payment={waiting} hidden={hidden} onAttempt={remember} />
       ) : (
         <div className="choose">
-          <fieldset className="methods">
-            <legend className="label">{tr('payment.methodsLabel')}</legend>
-            {options.map((option) => (
-              <label
-                key={option.method}
-                className={`method${choice === option.method ? ' method--on' : ''}${option.enabled ? '' : ' method--off'}`}
-              >
-                <input
-                  className="visually-hidden"
-                  type="radio"
-                  name="pay-method"
-                  disabled={!option.enabled}
-                  checked={choice === option.method}
-                  onChange={() => setSelected(option.method)}
-                />
-                <Icon name={METHOD_ICON[option.method]} />
-                <span className="method__name">
-                  {tr(`payment.method.${option.method}`)}
-                  {!option.enabled ? (
-                    <span className="method__sub">
-                      {tr(`payment.copay.reason.${option.reason}`)}
-                    </span>
-                  ) : option.method === 'gov_copay' && scheme ? (
-                    <span className="method__sub">
-                      {tr('payment.method.govCopaySub', {
-                        date: formatDate(scheme.activeTo, locale, 'date'),
-                      })}
-                    </span>
-                  ) : null}
-                </span>
-              </label>
-            ))}
-          </fieldset>
+          <MethodTiles options={options} choice={choice} name="pay-method" onChoose={setSelected} />
           {choice === 'cash' ? <CashPanel order={order} onAttempt={remember} /> : null}
           {choice === 'promptpay' ? (
             <StartPanel order={order} method="promptpay" onAttempt={remember} />
