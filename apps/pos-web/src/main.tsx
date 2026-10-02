@@ -6,6 +6,7 @@ import { supportsServiceWorker } from './platform/serviceWorker.ts';
 import { createServices } from './services.ts';
 import './styles.css';
 import './pos.css';
+import './order-entry.css';
 
 const root = document.getElementById('root');
 if (!root) throw new Error('#root not found');

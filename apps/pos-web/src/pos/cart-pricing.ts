@@ -10,6 +10,7 @@
 import {
   type CatalogGroup,
   type CatalogItem,
+  lineTotal,
   type MenuChannel,
   menuChannelFor,
   type OrderChannel,
@@ -164,4 +165,28 @@ export function checkSelection(
   const order = state.items.get(itemId)?.modifierGroupIds ?? [];
   missing.sort((a, b) => order.indexOf(a) - order.indexOf(b));
   return { ok: false, missingGroupIds: missing };
+}
+
+/**
+ * The line total for the choices made so far, WITHOUT checking that the required groups are
+ * chosen (`priceCart` refuses such a line). The options sheet shows it on its button while the
+ * person is still choosing. The arithmetic is the shared `lineTotal`.
+ */
+export function estimateLineTotal(
+  state: EntityState,
+  line: { itemId: string; optionIds: readonly string[]; qty: number },
+  channel: OrderChannel = 'storefront',
+): number {
+  const item = state.items.get(line.itemId);
+  if (!item) return 0;
+  const menuChannel = menuChannelFor(channel);
+  const deltas = line.optionIds.flatMap((id) => {
+    const option = state.options.get(id);
+    return option ? [option.priceDeltaSatang] : [];
+  });
+  return lineTotal({
+    unitPrice: item.channelPrices[menuChannel] ?? item.priceSatang,
+    qty: line.qty,
+    modifierDeltas: deltas,
+  });
 }

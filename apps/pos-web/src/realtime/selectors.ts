@@ -11,7 +11,9 @@ export interface GroupWithOptions extends GroupEntity {
  * Modifier groups by id, each with its options joined by `groupId` and sorted for display. The
  * options come from the option rows themselves, never from a group frame's embedded copy.
  */
-export function groupsWithOptions(state: EntityState): Map<string, GroupWithOptions> {
+export function groupsWithOptions(
+  state: Pick<EntityState, 'groups' | 'options'>,
+): Map<string, GroupWithOptions> {
   const byGroup = new Map<string, OptionDto[]>();
   for (const option of state.options.values()) {
     const list = byGroup.get(option.groupId) ?? [];

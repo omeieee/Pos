@@ -96,7 +96,7 @@ describe('screens (server-rendered, Thai first)', () => {
     expect(page).toContain(th['auth.pin.ownerLink']);
   });
 
-  test('signed in as a cashier: shop, device, person, role, sign out, and only the Orders page', async () => {
+  test('signed in as a cashier: shop, device, person, role, sign out, and only the order pages', async () => {
     const { auth } = await lockedDevice();
     const cashier = MOCK_STAFF.find((s) => s.role === 'cashier');
     await auth.signInWithPin(cashier?.id ?? '', cashier?.pin ?? '');
@@ -105,10 +105,12 @@ describe('screens (server-rendered, Thai first)', () => {
     expect(page).toContain(cashier?.displayName);
     expect(page).toContain(th['role.cashier']);
     expect(page).toContain(th['shell.signOut']);
+    expect(page).toContain(th['nav.new']);
     expect(page).toContain(th['nav.orders']);
     expect(page).not.toContain('href="#/menu"');
     expect(page).not.toContain('href="#/settings"');
-    expect(page).toContain(th['comingSoon.title']);
+    // A cashier lands on order entry; the menu has not arrived yet.
+    expect(page).toContain(th['pos.orderEntry.menuLoading']);
     // Buddhist Era year (2026 -> 2569 and later).
     expect(page).toMatch(/25[6-9]\d/);
   });
@@ -121,7 +123,7 @@ describe('screens (server-rendered, Thai first)', () => {
       totp: '111111',
     });
     const page = html(auth);
-    for (const route of ['orders', 'menu', 'settings']) {
+    for (const route of ['new', 'orders', 'menu', 'settings']) {
       expect(page).toContain(`href="#/${route}"`);
     }
   });

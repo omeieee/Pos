@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { createEntityStore } from '../realtime/entity-store.ts';
 import { optionFrame } from '../test-support/frames.ts';
 import { MENU, seedMenu } from '../test-support/menu-fixtures.ts';
-import { type CartLine, checkSelection, priceCart } from './cart-pricing.ts';
+import { type CartLine, checkSelection, estimateLineTotal, priceCart } from './cart-pricing.ts';
 
 function state() {
   const store = createEntityStore();
@@ -131,5 +131,32 @@ describe('checkSelection (can this dish be added with these choices?)', () => {
   test('any other problem is not ok but names no group', () => {
     const { get } = state();
     expect(checkSelection(get(), MENU.seafood, [])).toEqual({ ok: false, missingGroupIds: [] });
+  });
+});
+
+describe('estimateLineTotal (the sheet button, before every required choice is made)', () => {
+  test('prices the dish and the choices made so far, for the quantity', () => {
+    const { get } = state();
+    expect(estimateLineTotal(get(), { itemId: MENU.tomYum, optionIds: [], qty: 2 })).toBe(10000);
+    expect(
+      estimateLineTotal(get(), {
+        itemId: MENU.tomYum,
+        optionIds: [MENU.egg, MENU.meatball],
+        qty: 2,
+      }),
+    ).toBe(2 * (5000 + 1000 + 1500));
+  });
+
+  test('uses the channel price and ignores unknown choices', () => {
+    const { get } = state();
+    expect(estimateLineTotal(get(), { itemId: MENU.water, optionIds: [], qty: 1 }, 'line')).toBe(
+      2500,
+    );
+    expect(estimateLineTotal(get(), { itemId: MENU.tea, optionIds: ['nope'], qty: 1 })).toBe(2500);
+  });
+
+  test('an unknown dish is 0', () => {
+    const { get } = state();
+    expect(estimateLineTotal(get(), { itemId: 'nope', optionIds: [], qty: 1 })).toBe(0);
   });
 });

@@ -11,10 +11,13 @@ const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), a[href], [tabi
 export function Modal({
   labelledBy,
   onClose,
+  variant,
   children,
 }: {
   labelledBy: string;
   onClose: () => void;
+  /** A layout variant (`options`, `cart`): a wide card on iPad, a bottom sheet on a phone. */
+  variant?: 'options' | 'cart';
   children: ReactNode;
 }) {
   const sheet = useRef<HTMLDivElement>(null);
@@ -57,13 +60,13 @@ export function Modal({
   }
 
   return (
-    <div ref={overlay} className="overlay">
+    <div ref={overlay} className={variant ? `overlay overlay--${variant}` : 'overlay'}>
       <div
         ref={sheet}
         role="dialog"
         aria-modal="true"
         aria-labelledby={labelledBy}
-        className="sheet"
+        className={variant ? `sheet sheet--${variant}` : 'sheet'}
         onKeyDown={onKeyDown}
       >
         {children}

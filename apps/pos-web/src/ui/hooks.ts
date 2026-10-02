@@ -86,7 +86,11 @@ const COARSE = '(pointer: coarse)';
 
 function readViewport(): ViewportInfo {
   if (typeof window === 'undefined') return { width: 1180, coarsePointer: true };
-  return { width: window.innerWidth, coarsePointer: window.matchMedia(COARSE).matches };
+  return {
+    width: window.innerWidth,
+    // jsdom and very old browsers have no matchMedia: no touch assumed.
+    coarsePointer: typeof window.matchMedia === 'function' && window.matchMedia(COARSE).matches,
+  };
 }
 
 export function useViewport(): ViewportInfo {
@@ -99,12 +103,12 @@ export function useViewport(): ViewportInfo {
           ? previous
           : next;
       });
-    const pointer = window.matchMedia(COARSE);
+    const pointer = typeof window.matchMedia === 'function' ? window.matchMedia(COARSE) : null;
     window.addEventListener('resize', update);
-    pointer.addEventListener('change', update);
+    pointer?.addEventListener('change', update);
     return () => {
       window.removeEventListener('resize', update);
-      pointer.removeEventListener('change', update);
+      pointer?.removeEventListener('change', update);
     };
   }, []);
   return viewport;

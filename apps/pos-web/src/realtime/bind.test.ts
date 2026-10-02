@@ -44,6 +44,20 @@ describe('bindRealtime', () => {
     expect(connection.start).toHaveBeenCalledTimes(2);
   });
 
+  test('sign-out also tells the screens to drop the order on the counter', () => {
+    const auth = createStore<{ phase: 'locked' | 'signedIn' }>({ phase: 'signedIn' });
+    const onSignedOut = vi.fn();
+    bindRealtime({
+      auth,
+      connection: { start: vi.fn(), stop: vi.fn() },
+      entities: createEntityStore(),
+      onSignedOut,
+    });
+    expect(onSignedOut).not.toHaveBeenCalled();
+    auth.setState({ phase: 'locked' });
+    expect(onSignedOut).toHaveBeenCalledTimes(1);
+  });
+
   test('other changes of the auth state do nothing', () => {
     const { auth, connection } = setup('signedIn');
     auth.setState({ phase: 'signedIn' });

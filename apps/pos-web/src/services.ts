@@ -18,6 +18,7 @@ import { type Lifecycle, webLifecycle } from './platform/lifecycle.ts';
 import { webServiceWorker } from './platform/serviceWorker.ts';
 import { createWebSocket, type SocketFactory, socketUrl } from './platform/socket.ts';
 import { createWebTokenStore, type TokenStore } from './platform/tokenStore.ts';
+import { type CartStore, createCartStore } from './pos/cart-store.ts';
 import { bindRealtime } from './realtime/bind.ts';
 import { type Connection, createConnection } from './realtime/connection.ts';
 import { createEntityStore, type EntityStore } from './realtime/entity-store.ts';
@@ -29,6 +30,8 @@ export interface Services {
   connection: Connection;
   /** Work a page reload would lose; the app applies a waiting update only while it is idle. */
   activity: Activity;
+  /** The order being rung up at the counter. */
+  cart: CartStore;
   /** The service worker's update state. `updates.start()` registers it (production builds only). */
   updates: AppUpdates;
   /** Runs the connection while someone is signed in. Call once at start-up; returns the unbinder. */
@@ -77,6 +80,7 @@ export function createServices(
   });
 
   const activity = createActivity();
+  const cart = createCartStore({ api, entities, activity });
   const updates = createAppUpdates({
     host: options.serviceWorker ?? webServiceWorker,
     lifecycle: options.lifecycle ?? webLifecycle,
@@ -89,7 +93,9 @@ export function createServices(
     entities,
     connection,
     activity,
+    cart,
     updates,
-    bindRealtime: () => bindRealtime({ auth, connection, entities }),
+    bindRealtime: () =>
+      bindRealtime({ auth, connection, entities, onSignedOut: () => cart.reset() }),
   };
 }

@@ -59,8 +59,11 @@ export interface MenuCategoryView {
 const bySort = (a: { sort: number; id: string }, b: { sort: number; id: string }) =>
   a.sort - b.sort || a.id.localeCompare(b.id);
 
+/** The rows the menu is made of: a new order frame does not change them. */
+export type MenuRows = Pick<EntityState, 'categories' | 'items' | 'groups' | 'options'>;
+
 export function buildMenu(
-  state: EntityState,
+  state: MenuRows,
   channel: OrderChannel = 'storefront',
 ): MenuCategoryView[] {
   const menuChannel: MenuChannel = menuChannelFor(channel);

@@ -11,6 +11,8 @@ export function bindRealtime(deps: {
   auth: ReadableStore<{ phase: AuthPhase }>;
   connection: { start(): void; stop(): void };
   entities: Pick<EntityStore, 'reset'>;
+  /** Called when the person leaves, to drop what belongs to them (the order on the screen). */
+  onSignedOut?: () => void;
 }): () => void {
   let active = false;
 
@@ -24,6 +26,7 @@ export function bindRealtime(deps: {
     } else {
       deps.connection.stop();
       deps.entities.reset();
+      deps.onSignedOut?.();
     }
   }
 

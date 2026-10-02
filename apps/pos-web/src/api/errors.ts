@@ -153,6 +153,13 @@ export function waitText(tr: Translate, seconds: number): string {
   return tr('duration.minutes', { count: Math.max(1, Math.ceil(seconds / 60)) });
 }
 
+/** The message for one code on its own (a refused order line), or the generic one. */
+export function codeText(tr: Translate, code: string): string {
+  if (isKnownApiCode(code)) return tr(API_ERROR_KEYS[code]);
+  if (isClientErrorCode(code)) return tr(CLIENT_ERROR_KEYS[code]);
+  return tr('common.error');
+}
+
 /**
  * The message to show for any thrown value. Owner sign-in answers the same for a wrong detail,
  * a locked account and an unknown e-mail, so the screen gives no hint whether the account exists.
