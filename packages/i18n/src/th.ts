@@ -75,6 +75,12 @@ export const th = {
   'pos.orderEntry.editLine': 'แก้ไข {name}',
   'pos.orderEntry.inCart': 'ในออเดอร์ {count}',
   'pos.orderEntry.unsure': 'ยังไม่แน่ใจว่าสร้างออเดอร์สำเร็จหรือไม่ กดสร้างอีกครั้งได้ ระบบจะไม่สร้างซ้ำ',
+  'pos.orderEntry.clearUnsure.title': 'ล้างออเดอร์ที่ยังไม่แน่ใจ?',
+  'pos.orderEntry.clearUnsure.body':
+    'ออเดอร์นี้อาจถูกสร้างไปแล้ว ให้ดูในรายการออเดอร์ก่อน ถ้ามีอยู่แล้ว ไม่ต้องสร้างซ้ำ',
+  'pos.orderEntry.clearUnsure.check': 'ดูรายการออเดอร์',
+  'pos.orderEntry.clearUnsure.keep': 'เก็บไว้ก่อน',
+  'pos.orderEntry.clearUnsure.discard': 'ล้างทิ้ง',
   'pos.orderEntry.lineProblem': 'รายการนี้มีปัญหา',
   'pos.modifier.required': 'ต้องเลือก',
   'pos.modifier.optional': 'ไม่บังคับ',

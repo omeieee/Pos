@@ -72,6 +72,12 @@ export const en = {
   'pos.orderEntry.inCart': 'In the order: {count}',
   'pos.orderEntry.unsure':
     'Not sure the order was created. Tap again: it will not be created twice.',
+  'pos.orderEntry.clearUnsure.title': 'Clear an order we are not sure about?',
+  'pos.orderEntry.clearUnsure.body':
+    'This order may already have been created. Look in the orders list first. If it is there, do not create it again.',
+  'pos.orderEntry.clearUnsure.check': 'Look at the orders list',
+  'pos.orderEntry.clearUnsure.keep': 'Keep it for now',
+  'pos.orderEntry.clearUnsure.discard': 'Clear it',
   'pos.orderEntry.lineProblem': 'Check this line',
   'pos.modifier.required': 'Required',
   'pos.modifier.optional': 'Optional',

@@ -4,7 +4,7 @@ import { satang } from '@sds/shared';
 import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { ApiClientError } from '../api/errors.ts';
-import { orderDto, uuid } from '../test-support/frames.ts';
+import { itemFrame, orderDto, uuid } from '../test-support/frames.ts';
 import { MENU } from '../test-support/menu-fixtures.ts';
 import { createTestServices, renderScreen } from '../test-support/render.tsx';
 import { OrderEntryScreen } from './OrderEntryScreen.tsx';
@@ -402,8 +402,76 @@ describe('creating the order', () => {
       (screen.getByRole('button', { name: 'เพิ่มจำนวน ชาเย็น' }) as HTMLButtonElement).disabled,
     ).toBe(true);
     expect((tile('ชาเย็น') as HTMLButtonElement).disabled).toBe(true);
-    // The order can still be discarded.
+  });
+
+  test('the retry button of an unsure order is labelled retry and sends even if the menu changed', async () => {
+    let calls = 0;
+    const { services, cart, entities, create } = createTestServices({
+      create: async () => {
+        calls += 1;
+        if (calls === 1) throw new ApiClientError('TIMEOUT');
+        return created();
+      },
+    });
+    renderScreen(<OrderEntryScreen />, services);
+    click(tile('ชาเย็น'));
+    click(screen.getByRole('button', { name: new RegExp(th['pos.orderEntry.place']) }));
+    await screen.findByText(th['pos.orderEntry.unsure']);
+    // The tea sold out meanwhile: the cart is no longer valid, but this order may exist.
+    act(() => {
+      entities.apply(itemFrame(MENU.tea, 900, { isAvailable: false }));
+    });
+    const retry = screen.getByRole('button', { name: th['common.retry'] }) as HTMLButtonElement;
+    expect(retry.disabled).toBe(false);
+    expect(
+      screen.queryByRole('button', { name: new RegExp(th['pos.orderEntry.place']) }),
+    ).toBeNull();
+    click(retry);
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(cart.getState().lines).toHaveLength(0));
+  });
+
+  test('clearing an unsure order first says to look in the orders list, and only then discards it', async () => {
+    const { services, cart } = createTestServices({
+      create: async () => {
+        throw new ApiClientError('TIMEOUT');
+      },
+    });
+    renderScreen(<OrderEntryScreen />, services);
+    click(tile('ชาเย็น'));
+    click(screen.getByRole('button', { name: new RegExp(th['pos.orderEntry.place']) }));
+    await screen.findByText(th['pos.orderEntry.unsure']);
+
     click(screen.getByRole('button', { name: th['pos.orderEntry.clear'] }));
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByText(th['pos.orderEntry.clearUnsure.body'])).toBeTruthy();
+    expect(
+      within(dialog)
+        .getByRole('link', { name: th['pos.orderEntry.clearUnsure.check'] })
+        .getAttribute('href'),
+    ).toBe('#/orders');
+    // Nothing was discarded yet; "keep" closes the question.
+    expect(cart.getState().lines).toHaveLength(1);
+    click(within(dialog).getByRole('button', { name: th['pos.orderEntry.clearUnsure.keep'] }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(cart.getState().lines).toHaveLength(1);
+
+    click(screen.getByRole('button', { name: th['pos.orderEntry.clear'] }));
+    click(
+      within(screen.getByRole('dialog')).getByRole('button', {
+        name: th['pos.orderEntry.clearUnsure.discard'],
+      }),
+    );
+    expect(cart.getState().lines).toHaveLength(0);
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  test('an ordinary cart is cleared at once, with no question', () => {
+    const { services, cart } = createTestServices();
+    renderScreen(<OrderEntryScreen />, services);
+    click(tile('ชาเย็น'));
+    click(screen.getByRole('button', { name: th['pos.orderEntry.clear'] }));
+    expect(screen.queryByRole('dialog')).toBeNull();
     expect(cart.getState().lines).toHaveLength(0);
   });
 });

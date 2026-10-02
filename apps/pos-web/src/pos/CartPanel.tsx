@@ -1,9 +1,10 @@
 import { formatBaht } from '@sds/i18n';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { codeText, errorText } from '../api/errors.ts';
 import { goTo } from '../app/navigate.ts';
 import { useEntities, useLocale, useServices, useStoreState, useT } from '../ui/hooks.ts';
 import { Icon } from '../ui/Icon.tsx';
+import { Modal } from '../ui/Modal.tsx';
 import { priceCart } from './cart-pricing.ts';
 import type { CounterFulfillment } from './cart-store.ts';
 import { localName } from './names.ts';
@@ -32,8 +33,11 @@ export function CartPanel({
   const priced = new Map(pricing.lines.map((l) => [l.key, l]));
   const locked = state.phase !== 'editing';
   const sending = state.phase === 'sending';
+  const unsure = state.phase === 'unsure';
   const needsRoom = state.fulfillment === 'room_delivery' && state.roomNo.trim() === '';
-  const canPlace = state.lines.length > 0 && !sending && pricing.valid && !needsRoom;
+  // An order we are unsure about is retried as it was sent, whatever the menu says now.
+  const canPlace = state.lines.length > 0 && !sending && (unsure || (pricing.valid && !needsRoom));
+  const [confirmingClear, setConfirmingClear] = useState(false);
 
   async function place() {
     const outcome = await cart.submit();
@@ -227,7 +231,7 @@ export function CartPanel({
             type="button"
             className="btn btn-soft"
             disabled={state.lines.length === 0 || sending}
-            onClick={() => cart.clear()}
+            onClick={() => (unsure ? setConfirmingClear(true) : cart.clear())}
           >
             {tr('pos.orderEntry.clear')}
           </button>
@@ -238,10 +242,37 @@ export function CartPanel({
             aria-busy={sending}
             onClick={() => void place()}
           >
-            {tr(sending ? 'pos.orderEntry.placing' : 'pos.orderEntry.place')}
+            {tr(
+              sending ? 'pos.orderEntry.placing' : unsure ? 'common.retry' : 'pos.orderEntry.place',
+            )}
           </button>
         </div>
       </footer>
+
+      {confirmingClear && unsure ? (
+        <Modal labelledBy="clear-unsure-title" onClose={() => setConfirmingClear(false)}>
+          <h2 id="clear-unsure-title" className="sheet__title">
+            {tr('pos.orderEntry.clearUnsure.title')}
+          </h2>
+          <p>{tr('pos.orderEntry.clearUnsure.body')}</p>
+          <a className="btn btn-primary btn-block" href="#/orders">
+            {tr('pos.orderEntry.clearUnsure.check')}
+          </a>
+          <button type="button" className="btn btn-block" onClick={() => setConfirmingClear(false)}>
+            {tr('pos.orderEntry.clearUnsure.keep')}
+          </button>
+          <button
+            type="button"
+            className="btn btn-soft btn-block"
+            onClick={() => {
+              setConfirmingClear(false);
+              cart.clear();
+            }}
+          >
+            {tr('pos.orderEntry.clearUnsure.discard')}
+          </button>
+        </Modal>
+      ) : null}
     </section>
   );
 }

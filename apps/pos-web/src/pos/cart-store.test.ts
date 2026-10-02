@@ -2,7 +2,7 @@ import { describe, expect, test, vi } from 'vitest';
 import { ApiClientError } from '../api/errors.ts';
 import { createActivity } from '../lib/activity.ts';
 import { createEntityStore } from '../realtime/entity-store.ts';
-import { orderDto, uuid } from '../test-support/frames.ts';
+import { itemFrame, orderDto, uuid } from '../test-support/frames.ts';
 import { MENU, seedMenu } from '../test-support/menu-fixtures.ts';
 import { type CartDeps, createCartStore } from './cart-store.ts';
 
@@ -307,6 +307,30 @@ describe('when the request fails', () => {
     expect(create.mock.calls[1]?.[1]?.clientRequestId).not.toBe(
       create.mock.calls[0]?.[1]?.clientRequestId,
     );
+  });
+
+  test('retrying an unsure order ignores a menu that changed meanwhile: same body, same id', async () => {
+    const { cart, create, entities } = setup();
+    create.mockRejectedValueOnce(new ApiClientError('TIMEOUT'));
+    cart.addItem(tomYum);
+    await cart.submit();
+    const failedId = create.mock.calls[0]?.[1]?.clientRequestId;
+    const firstBody = create.mock.calls[0]?.[0];
+    // The dish sold out while we waited: a fresh order would be refused, but this one may exist.
+    entities.apply(itemFrame(MENU.tomYum, 900, { isAvailable: false }));
+    const outcome = await cart.submit();
+    expect(outcome.ok).toBe(true);
+    expect(create).toHaveBeenCalledTimes(2);
+    expect(create.mock.calls[1]?.[1]?.clientRequestId).toBe(failedId);
+    expect(create.mock.calls[1]?.[0]).toEqual(firstBody);
+  });
+
+  test('a fresh order that is no longer valid is still not sent', async () => {
+    const { cart, create, entities } = setup();
+    cart.addItem(tomYum);
+    entities.apply(itemFrame(MENU.tomYum, 900, { isAvailable: false }));
+    expect(await cart.submit()).toEqual({ ok: false, reason: 'invalid' });
+    expect(create).not.toHaveBeenCalled();
   });
 
   test('clearing a locked order discards it and its request id', async () => {

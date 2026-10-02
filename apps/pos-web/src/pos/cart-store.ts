@@ -211,11 +211,16 @@ export function createCartStore(deps: CartDeps): CartStore {
       if (inFlight) return { ok: false, reason: 'busy' };
       const state = store.getState();
       if (state.lines.length === 0) return { ok: false, reason: 'empty' };
-      if (state.fulfillment === 'room_delivery' && state.roomNo.trim() === '') {
-        return { ok: false, reason: 'roomRequired' };
-      }
-      if (!priceCart(deps.entities.getState(), state.lines).valid) {
-        return { ok: false, reason: 'invalid' };
+      // An `unsure` order was already sent, so it may exist: it is retried exactly as it was
+      // (same body, same id) even if the menu has changed since. A refusal then comes from the
+      // server, which answers the original order for a known id.
+      if (state.phase !== 'unsure') {
+        if (state.fulfillment === 'room_delivery' && state.roomNo.trim() === '') {
+          return { ok: false, reason: 'roomRequired' };
+        }
+        if (!priceCart(deps.entities.getState(), state.lines).valid) {
+          return { ok: false, reason: 'invalid' };
+        }
       }
 
       inFlight = true;
