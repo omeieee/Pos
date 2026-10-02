@@ -9,6 +9,8 @@ export interface LifecycleHandlers {
   offline?: () => void;
   /** The page came back to the front. */
   visible?: () => void;
+  /** The page went to the background (the best moment to apply an update). */
+  hidden?: () => void;
 }
 
 export interface Lifecycle {
@@ -24,7 +26,8 @@ export const webLifecycle: Lifecycle = {
     const onOnline = () => handlers.online?.();
     const onOffline = () => handlers.offline?.();
     const onVisibility = () => {
-      if (document.visibilityState !== 'hidden') handlers.visible?.();
+      if (document.visibilityState === 'hidden') handlers.hidden?.();
+      else handlers.visible?.();
     };
     window.addEventListener('online', onOnline);
     window.addEventListener('offline', onOffline);

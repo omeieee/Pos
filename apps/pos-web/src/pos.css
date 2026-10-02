@@ -72,3 +72,25 @@
   background: var(--sds-color-warning-subtle);
   color: var(--sds-color-warning-text);
 }
+
+/* ---------- Banners (the shell's strip under the top bar) ---------- */
+.banner {
+  grid-area: banner;
+  display: flex;
+  align-items: center;
+  gap: var(--sds-space-md);
+  padding: var(--sds-space-sm) var(--sds-layout-gutter);
+}
+.banner--info {
+  background: var(--sds-color-info-subtle);
+  color: var(--sds-color-info-text);
+}
+.banner--offline {
+  background: var(--sds-color-warning-subtle);
+  color: var(--sds-color-warning-text);
+}
+.banner__text {
+  flex: 1;
+  min-width: 0;
+  font-weight: var(--sds-font-weight-medium);
+}

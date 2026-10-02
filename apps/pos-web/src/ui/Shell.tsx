@@ -5,6 +5,7 @@ import { Brand } from './Brand.tsx';
 import { ConnectionBadge } from './ConnectionBadge.tsx';
 import { useAuthState, useAuthStore, useHash, useLocale, useNow, useT } from './hooks.ts';
 import { Icon } from './Icon.tsx';
+import { UpdateBanner } from './UpdateBanner.tsx';
 
 /**
  * The signed-in frame: top bar (shop, device, person, role, sign out), navigation limited to
@@ -62,6 +63,8 @@ export function Shell() {
           <span className="topbar__signout-label">{signOutLabel}</span>
         </button>
       </header>
+
+      <UpdateBanner />
 
       <nav className="nav" aria-label={tr('nav.label')}>
         {routes.map((item) => (

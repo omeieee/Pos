@@ -8,3 +8,6 @@
   X-Content-Type-Options: nosniff
   Referrer-Policy: no-referrer
   Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://__API_HOST__; font-src 'self'; connect-src 'self' https://__API_HOST__ wss://__API_HOST__; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
+# The service worker file must always be revalidated, or a new version is found late.
+/sw.js
+  Cache-Control: no-cache

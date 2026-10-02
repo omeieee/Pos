@@ -7,8 +7,15 @@
 import { type ApiClient, createApiClient } from './api/client.ts';
 import { ApiClientError } from './api/errors.ts';
 import { type AuthStore, createAuthStore } from './auth/auth-store.ts';
+import { type Activity, createActivity } from './lib/activity.ts';
+import {
+  type AppUpdates,
+  createAppUpdates,
+  type ServiceWorkerHost,
+} from './platform/appUpdates.ts';
 import { apiBaseUrl } from './platform/config.ts';
 import { type Lifecycle, webLifecycle } from './platform/lifecycle.ts';
+import { webServiceWorker } from './platform/serviceWorker.ts';
 import { createWebSocket, type SocketFactory, socketUrl } from './platform/socket.ts';
 import { createWebTokenStore, type TokenStore } from './platform/tokenStore.ts';
 import { bindRealtime } from './realtime/bind.ts';
@@ -20,6 +27,10 @@ export interface Services {
   auth: AuthStore;
   entities: EntityStore;
   connection: Connection;
+  /** Work a page reload would lose; the app applies a waiting update only while it is idle. */
+  activity: Activity;
+  /** The service worker's update state. `updates.start()` registers it (production builds only). */
+  updates: AppUpdates;
   /** Runs the connection while someone is signed in. Call once at start-up; returns the unbinder. */
   bindRealtime(): () => void;
 }
@@ -31,6 +42,7 @@ export function createServices(
     baseUrl?: string;
     createSocket?: SocketFactory;
     lifecycle?: Lifecycle;
+    serviceWorker?: ServiceWorkerHost;
   } = {},
 ): Services {
   const baseUrl = options.baseUrl ?? apiBaseUrl;
@@ -64,11 +76,20 @@ export function createServices(
       ),
   });
 
+  const activity = createActivity();
+  const updates = createAppUpdates({
+    host: options.serviceWorker ?? webServiceWorker,
+    lifecycle: options.lifecycle ?? webLifecycle,
+    isBusy: activity.isBusy,
+  });
+
   return {
     api,
     auth,
     entities,
     connection,
+    activity,
+    updates,
     bindRealtime: () => bindRealtime({ auth, connection, entities }),
   };
 }

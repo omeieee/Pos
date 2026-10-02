@@ -84,6 +84,7 @@ export function createFakeLifecycle(initial: { online?: boolean; visible?: boole
     },
     hide() {
       visible = false;
+      for (const l of [...listeners]) l.hidden?.();
     },
   };
 }
