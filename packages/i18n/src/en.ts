@@ -497,6 +497,8 @@ export const en = {
   'outbox.others.done.clear': 'Cleared {count} entries.',
   'outbox.others.failed': '{count} could not be done. Try again.',
   'outbox.others.forbidden': 'Only the owner can do this.',
+  'catalogue.offline':
+    'Using the saved menu (offline), saved {time}. Prices are an estimate; the system prices the order when it is sent.',
   'outbox.sendNow': 'Send now',
   'outbox.retry': 'Send again',
   'outbox.discard': 'Remove this',

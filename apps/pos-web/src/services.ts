@@ -25,6 +25,7 @@ import { createWebTokenStore, type TokenStore } from './platform/tokenStore.ts';
 import { createWebWakeLock, type ScreenWakeLock } from './platform/wakeLock.ts';
 import { createWebAudioEngine } from './platform/webAudio.ts';
 import { type CartStore, createCartStore } from './pos/cart-store.ts';
+import { type CatalogueCache, createCatalogueCache } from './pos/catalogue-cache.ts';
 import { createNewOrderAlarm } from './pos/new-order-alarm.ts';
 import { createOrderMovesStore, type OrderMovesStore } from './pos/order-moves-store.ts';
 import { createOutboxStore, type OutboxStore } from './pos/outbox-store.ts';
@@ -47,6 +48,11 @@ export interface Services {
   platformCart: CartStore;
   /** Orders and cash that could not reach the server: kept on the device, replayed when it can. */
   outbox: OutboxStore;
+  /**
+   * The saved copy of the menu and settings: read at sign-in so a reload with no connection still
+   * has a menu, kept up to date after each change.
+   */
+  catalogue: CatalogueCache;
   /** The remembered recipients of the order screen, and the list of buildings. */
   recipients: RecipientStore;
   /** The payment calls of the order page: guarded, idempotent, kept across pages. */
@@ -89,6 +95,8 @@ export function createServices(
     sound?: SoundPlayer;
     wakeLock?: ScreenWakeLock;
     localStore?: () => Promise<LocalStore>;
+    /** Tests shorten the wait before the saved menu is written. */
+    catalogueDebounceMs?: number;
   } = {},
 ): Services {
   const baseUrl = options.baseUrl ?? apiBaseUrl;
@@ -134,6 +142,15 @@ export function createServices(
     connection,
     localStore: openStore,
   });
+  const catalogue = createCatalogueCache({
+    entities,
+    auth,
+    connection,
+    localStore: openStore,
+    ...(options.catalogueDebounceMs === undefined
+      ? {}
+      : { debounceMs: options.catalogueDebounceMs }),
+  });
   const cart = createCartStore({ api, entities, activity, outbox });
   const platformCart = createCartStore({ api, entities, activity, outbox, mode: 'platform' });
   const recipients = createRecipientStore({ api, entities });
@@ -168,6 +185,7 @@ export function createServices(
     cart,
     platformCart,
     outbox,
+    catalogue,
     recipients,
     payments,
     orderMoves,
@@ -191,12 +209,16 @@ export function createServices(
           resetRoute();
         },
       });
+      // After the line above: its sign-in reset empties the entity store, then this puts the saved
+      // menu back (before the network has answered).
+      const unbindCatalogue = catalogue.bind();
       void sound.init();
       const stopAlarm = alarm.start();
       // Replays the outbox while someone is signed in; sign-out keeps what is waiting.
       const unbindOutbox = outbox.bind();
       return () => {
         unbind();
+        unbindCatalogue();
         stopAlarm();
         unbindOutbox();
       };

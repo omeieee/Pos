@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { catalogs } from '@sds/i18n';
+import { catalogs, formatDate } from '@sds/i18n';
 import { satang } from '@sds/shared';
 import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
@@ -306,6 +306,47 @@ describe('the orders list with orders waiting', () => {
     await settle();
     expect(screen.getByText(th['outbox.others'].replace('{count}', '1'))).toBeTruthy();
     expect(again.outbox.getState().items).toHaveLength(1);
+  });
+});
+
+describe('the saved menu notice', () => {
+  const SAVED_AT = Date.UTC(2026, 9, 2, 3, 30);
+  const text = () =>
+    th['catalogue.offline'].replace('{time}', formatDate(SAVED_AT, 'th', 'dateTime'));
+
+  test('shows, with the time it was saved, when the menu is the saved copy and the device is offline', async () => {
+    const { auth } = await createTestAuth();
+    const made = createTestServices({
+      queue: true,
+      offline: true,
+      auth,
+      catalogue: { fromCache: true, savedAt: SAVED_AT },
+    });
+    made.cart.setBuilding('B1');
+    made.cart.setRecipientName('Fah ตัวอย่าง');
+    renderScreen(<OrderEntryScreen />, made.services);
+    await settle();
+    expect(screen.getByText(text())).toBeTruthy();
+    // The menu itself works: a dish can be added and the order is queued.
+    click(tile('ชาเย็น'));
+    click(screen.getByRole('button', { name: th['pos.orderEntry.placeOffline'] }));
+    await waitFor(() => expect(made.outbox.getState().items).toHaveLength(1));
+  });
+
+  test('is not there when online, nor when the menu is not from the saved copy', async () => {
+    const { auth } = await createTestAuth();
+    const online = createTestServices({
+      auth,
+      catalogue: { fromCache: true, savedAt: SAVED_AT },
+    });
+    renderScreen(<OrderEntryScreen />, online.services);
+    await settle();
+    expect(screen.queryByText(text())).toBeNull();
+    cleanup();
+    const live = createTestServices({ auth, offline: true, catalogue: { fromCache: false } });
+    renderScreen(<OrderEntryScreen />, live.services);
+    await settle();
+    expect(screen.queryByText(text())).toBeNull();
   });
 });
 

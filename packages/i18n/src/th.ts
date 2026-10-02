@@ -477,6 +477,8 @@ export const th = {
   'outbox.others.done.clear': 'ล้างแล้ว {count} รายการ',
   'outbox.others.failed': 'ทำไม่ได้ {count} รายการ ลองใหม่อีกครั้ง',
   'outbox.others.forbidden': 'เฉพาะเจ้าของร้านเท่านั้นที่ทำสิ่งนี้ได้',
+  'catalogue.offline':
+    'ใช้เมนูที่บันทึกไว้ในเครื่อง (ออฟไลน์) บันทึกเมื่อ {time} ราคาเป็นราคาโดยประมาณ ระบบจะคิดราคาจริงตอนส่งออเดอร์',
   'outbox.sendNow': 'ส่งตอนนี้',
   'outbox.retry': 'ส่งใหม่',
   'outbox.discard': 'ลบรายการนี้',

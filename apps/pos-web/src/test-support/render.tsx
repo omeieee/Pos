@@ -21,6 +21,7 @@ import { createMemoryLocalStore, type LocalStore } from '../platform/localStore.
 import { createSound } from '../platform/sound.ts';
 import { createMemoryTokenStore } from '../platform/tokenStore.ts';
 import { createCartStore } from '../pos/cart-store.ts';
+import type { CatalogueState } from '../pos/catalogue-cache.ts';
 import { createOrderMovesStore } from '../pos/order-moves-store.ts';
 import { createOutboxStore } from '../pos/outbox-store.ts';
 import { createPaymentStore } from '../pos/payment-store.ts';
@@ -159,6 +160,8 @@ export function createTestServices(
     offline?: boolean;
     /** The local store behind the outbox; default a persistent in-memory one. */
     localStore?: LocalStore;
+    /** The saved-menu notice's state (default: the menu did not come from a saved copy). */
+    catalogue?: Partial<CatalogueState>;
   } = {},
 ) {
   const entities = createEntityStore();
@@ -226,9 +229,15 @@ export function createTestServices(
     lifecycle: life.lifecycle,
   });
   const wake = createFakeWakeLock();
+  const catalogue = createStore<CatalogueState>({
+    fromCache: false,
+    savedAt: null,
+    ...options.catalogue,
+  });
   const services = {
     api,
     entities,
+    catalogue,
     activity,
     cart,
     platformCart,
@@ -245,6 +254,7 @@ export function createTestServices(
   return {
     services,
     entities,
+    catalogue,
     cart,
     platformCart,
     outbox,

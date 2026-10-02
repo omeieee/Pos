@@ -12,6 +12,7 @@ import {
 import { Icon } from '../ui/Icon.tsx';
 import { Modal } from '../ui/Modal.tsx';
 import { CartPanel } from './CartPanel.tsx';
+import { CatalogueNotice } from './CatalogueNotice.tsx';
 import { checkSelection, priceCart } from './cart-pricing.ts';
 import type { CartMode } from './cart-store.ts';
 import { ModifierSheet, type SheetTarget } from './ModifierSheet.tsx';
@@ -118,6 +119,7 @@ export function OrderEntryScreen({ mode = 'storefront' }: { mode?: CartMode }) {
         className="oe__menu"
         aria-label={tr(platform ? 'platform.title' : 'pos.orderEntry.title')}
       >
+        <CatalogueNotice />
         {platform ? (
           <fieldset className="seg oe__platform">
             <legend className="visually-hidden">{tr('platform.channel')}</legend>
