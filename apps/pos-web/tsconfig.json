@@ -5,5 +5,5 @@
     "jsx": "react-jsx",
     "types": ["vite/client", "vite-plugin-pwa/client"]
   },
-  "include": ["src", "vite.config.ts", "pwa-options.ts"]
+  "include": ["src", "vite.config.ts", "vitest.config.ts", "pwa-options.ts"]
 }
