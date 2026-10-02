@@ -226,6 +226,25 @@ describe('Sentry requests', () => {
     expect(String(event.breadcrumbs?.[0]?.data?.url)).toBe('https://x.test/qr.png');
   });
 
+  test('scrubSentryEvent drops the query a breadcrumb carries under http.query', () => {
+    const event = scrubSentryEvent({
+      breadcrumbs: [
+        {
+          data: {
+            url: 'https://x.test/qr.png',
+            'http.query': `exp=1&sig=${SIG}`,
+            'http.method': 'GET',
+          },
+        },
+      ],
+    });
+    expect(JSON.stringify(event)).not.toContain(SIG);
+    expect(event.breadcrumbs?.[0]?.data).toEqual({
+      url: 'https://x.test/qr.png',
+      'http.method': 'GET',
+    });
+  });
+
   test('scrubSentryEvent leaves a URL without a query alone', () => {
     const event = scrubSentryEvent({ request: { url: 'https://x.test/v1/menu' } });
     expect(event.request?.url).toBe('https://x.test/v1/menu');

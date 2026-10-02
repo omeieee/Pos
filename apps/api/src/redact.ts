@@ -161,6 +161,8 @@ export function scrubSentryEvent<T extends SentryEventLike>(event: T): T {
     if (typeof crumb.message === 'string') crumb.message = withoutSig(crumb.message);
     const url = crumb.data?.url;
     if (crumb.data && typeof url === 'string') crumb.data.url = withoutQuery(url);
+    // Sentry's HTTP integrations put the query string under this key, apart from the URL.
+    if (crumb.data) delete crumb.data['http.query'];
   }
   const request = event.request;
   if (request) {
