@@ -1,85 +1,43 @@
 // @vitest-environment jsdom
-import { catalogs } from '@sds/i18n';
-import { type OrderDto, type PaymentDto, type StaffRole, satang } from '@sds/shared';
+import { satang } from '@sds/shared';
 import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import type { ApiClient } from '../api/client.ts';
 import { ApiClientError } from '../api/errors.ts';
 import {
-  orderDto,
   orderFrame,
   paymentDto,
   paymentFrame,
   paymentMethodsFrame,
   uuid,
 } from '../test-support/frames.ts';
-import { createTestAuth, createTestServices, renderScreen } from '../test-support/render.tsx';
+import {
+  created,
+  en,
+  fixClock,
+  loaded,
+  methodTile,
+  ORDER,
+  orderOf,
+  PAYMENT,
+  paymentOf,
+  type SetupOptions,
+  setup,
+  TOTAL,
+  th,
+} from '../test-support/payment-env.tsx';
+import { renderScreen } from '../test-support/render.tsx';
 import { PaymentPanel } from './PaymentPanel.tsx';
 
-const th = catalogs.th;
-const en = catalogs.en;
-
-/** 12:00 in Bangkok on 15 Oct 2030, inside the test co-pay scheme (1 Oct - 30 Nov 2030). */
-const NOON = new Date('2030-10-15T05:00:00Z');
-const ORDER = uuid(900);
-const PAYMENT = uuid(500);
-const TOTAL = satang(7500);
-
-beforeEach(() => {
-  vi.useFakeTimers({ toFake: ['Date'] });
-  vi.setSystemTime(NOON);
-});
+beforeEach(fixClock);
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
 });
 
-const orderOf = (over: Partial<OrderDto> = {}, rev = 10) =>
-  orderDto(ORDER, rev, { totalSatang: TOTAL, orderNo: 'S-013', ...over });
-const paymentOf = (over: Partial<PaymentDto> = {}, rev = 100) =>
-  paymentDto(PAYMENT, ORDER, rev, { amountSatang: TOTAL, ...over });
-
-const created = (payment: PaymentDto, order: OrderDto) => ({
-  result: { payment, order },
-  replay: false,
-  clientRequestId: uuid(1),
-});
-
-interface SetupOptions {
-  role?: StaffRole;
-  order?: OrderDto;
-  payments?: PaymentDto[];
-  frames?: Parameters<ReturnType<typeof createTestServices>['entities']['apply']>[0][];
-  api?: Partial<ApiClient['payments']>;
-  list?: PaymentDto[];
-}
-
-async function setup(options: SetupOptions = {}) {
-  const { auth } = await createTestAuth(options.role ?? 'cashier');
-  const env = createTestServices({
-    auth,
-    payments: {
-      list: async () => ({ payments: options.list ?? options.payments ?? [] }),
-      ...(options.api ?? {}),
-    },
-  });
-  const order = options.order ?? orderOf();
-  env.entities.apply({ type: 'order.upserted', id: order.id, rev: order.rev, data: order });
-  for (const p of options.payments ?? []) {
-    env.entities.apply({ type: 'payment.upserted', id: p.id, rev: p.rev, data: p });
-  }
-  for (const frame of options.frames ?? []) env.entities.apply(frame);
-  return env;
-}
-
 const key = (name: string) => screen.getByRole('button', { name });
 const press = (...keys: string[]) => {
   for (const k of keys) fireEvent.click(key(k));
 };
-const methodTile = (name: string) => screen.getByRole('radio', { name: new RegExp(name) });
-
-/** Waits until the first load of the payments has finished. */
-const loaded = () => waitFor(() => expect(screen.queryByText(th['payment.loading'])).toBeNull());
 
 describe('the payment panel: before anything is paid', () => {
   test('shows the SERVER total as the amount due, and the methods on offer', async () => {

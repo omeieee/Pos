@@ -22,6 +22,7 @@ import {
   paymentPhase,
   paymentsOf,
 } from './payment-model.ts';
+import { StartPanel } from './StartPanel.tsx';
 
 const METHOD_ICON = { cash: 'cash', promptpay: 'qr', gov_copay: 'hands' } as const;
 
@@ -106,6 +107,9 @@ function PaymentPanelBody({ orderId }: { orderId: string }) {
     : (options.find((o) => o.enabled)?.method ?? null);
   const money = (value: number) => formatBaht(value, locale);
   const received = confirmedPayment(list);
+  const remember = (method: PayMethod) => {
+    attempted.current = method;
+  };
 
   return (
     <section className="ppanel" aria-labelledby="pay-title">
@@ -174,13 +178,9 @@ function PaymentPanelBody({ orderId }: { orderId: string }) {
               </label>
             ))}
           </fieldset>
-          {choice === 'cash' ? (
-            <CashPanel
-              order={order}
-              onAttempt={(method) => {
-                attempted.current = method;
-              }}
-            />
+          {choice === 'cash' ? <CashPanel order={order} onAttempt={remember} /> : null}
+          {choice === 'promptpay' ? (
+            <StartPanel order={order} method="promptpay" onAttempt={remember} />
           ) : null}
         </div>
       )}

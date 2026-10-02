@@ -37,6 +37,8 @@ export interface Services {
   payments: PaymentStore;
   /** The service worker's update state. `updates.start()` registers it (production builds only). */
   updates: AppUpdates;
+  /** Is the app in front, is the device online; the web one wraps the browser events. */
+  lifecycle: Lifecycle;
   /** Runs the connection while someone is signed in. Call once at start-up; returns the unbinder. */
   bindRealtime(): () => void;
 }
@@ -82,6 +84,7 @@ export function createServices(
       ),
   });
 
+  const lifecycle = options.lifecycle ?? webLifecycle;
   const activity = createActivity();
   const cart = createCartStore({ api, entities, activity });
   const payments = createPaymentStore({ api, entities, activity, auth });
@@ -99,6 +102,7 @@ export function createServices(
     activity,
     cart,
     payments,
+    lifecycle,
     updates,
     bindRealtime: () =>
       bindRealtime({

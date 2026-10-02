@@ -315,3 +315,130 @@ fieldset.methods {
   margin-left: auto;
   font-weight: var(--sds-font-weight-bold);
 }
+
+/* ---------- The steps after choosing a method ---------- */
+.start,
+.pp,
+.pmoves {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sds-space-md);
+}
+.pp__title {
+  font-size: var(--sds-font-size-lg);
+}
+.pmoves__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sds-space-sm);
+}
+.pmoves .notice {
+  align-items: center;
+}
+
+/* ---------- PromptPay QR ---------- */
+.qrbox {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sds-space-md);
+}
+.qr {
+  display: block;
+  width: min(100%, 320px);
+  aspect-ratio: 1;
+  border: 1px solid var(--sds-color-border);
+  border-radius: var(--sds-radius-md);
+  background: var(--sds-color-surface);
+  /* A long press on the picture must not open the iOS image menu. */
+  -webkit-touch-callout: none;
+  user-select: none;
+}
+.qr--loading,
+.qr--failed {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sds-space-md);
+  padding: var(--sds-space-lg);
+  margin: 0 auto;
+  text-align: center;
+}
+.qrbox__target {
+  width: 100%;
+  text-align: center;
+}
+
+/* ---------- The iPad turned to the customer ---------- */
+.overlay--customer {
+  padding: 0;
+  place-items: stretch;
+}
+.sheet--customer {
+  width: 100%;
+  max-height: 100%;
+  justify-content: space-between;
+  border-radius: 0;
+  padding: max(var(--sds-space-xl), var(--safe-top)) max(var(--sds-space-xl), var(--safe-right))
+    max(var(--sds-space-xl), var(--safe-bottom)) max(var(--sds-space-xl), var(--safe-left));
+}
+.cust {
+  flex: 1;
+  display: grid;
+  gap: var(--sds-space-xl);
+  align-items: center;
+}
+@media (min-width: 720px) {
+  .cust {
+    grid-template-columns: 1fr 1fr;
+    padding: var(--sds-space-xl);
+  }
+}
+.cust__info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sds-space-xl);
+}
+.cust__label {
+  font-size: var(--sds-font-size-xl);
+  font-weight: var(--sds-font-weight-medium);
+  color: var(--sds-color-text-muted);
+}
+.cust__big {
+  font-size: calc(var(--sds-font-size-amount) * 1.7);
+  font-weight: var(--sds-font-weight-bold);
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+}
+@media (max-width: 719px) {
+  .cust__big {
+    font-size: calc(var(--sds-font-size-amount) * 1.2);
+  }
+}
+.cust__hints {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sds-space-md);
+  font-size: var(--sds-font-size-lg);
+}
+.cust__hints li {
+  display: flex;
+  align-items: center;
+  gap: var(--sds-space-sm);
+}
+.cust__qr {
+  display: grid;
+  place-items: center;
+}
+.cust__qr .qr {
+  width: min(100%, 440px);
+}
+.cust__exit {
+  /* Held, not tapped: a long press must not select text or open the iOS menu. */
+  -webkit-touch-callout: none;
+  user-select: none;
+}

@@ -16,8 +16,11 @@ export function Modal({
 }: {
   labelledBy: string;
   onClose: () => void;
-  /** A layout variant (`options`, `cart`): a wide card on iPad, a bottom sheet on a phone. */
-  variant?: 'options' | 'cart';
+  /**
+   * A layout variant: `options` and `cart` are a wide card on iPad and a bottom sheet on a phone;
+   * `customer` fills the screen (the PromptPay QR turned to the customer).
+   */
+  variant?: 'options' | 'cart' | 'customer';
   children: ReactNode;
 }) {
   const sheet = useRef<HTMLDivElement>(null);

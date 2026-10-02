@@ -25,6 +25,7 @@ import { createEntityStore } from '../realtime/entity-store.ts';
 import type { Services } from '../services.ts';
 import { AuthContext, LocaleContext, ServicesContext } from '../ui/hooks.ts';
 import { StepUpDialog } from '../ui/StepUpDialog.tsx';
+import { createFakeLifecycle } from './fake-realtime.ts';
 import { FAKE_DEVICE_TOKEN, IDS, sessionBody } from './fixtures.ts';
 import { seedMenu } from './menu-fixtures.ts';
 
@@ -151,6 +152,7 @@ export function createTestServices(
     activity,
     cart,
     payments,
+    lifecycle: createFakeLifecycle().lifecycle,
     ...(options.auth ? { auth: options.auth } : {}),
     connection: { ...connection, start: vi.fn(), stop: vi.fn() },
   } as unknown as Services;
