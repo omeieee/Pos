@@ -665,7 +665,7 @@ export const en = {
   'menuEditor.field.price': 'Price (baht)',
   'menuEditor.field.cost': 'Estimated cost (baht)',
   'menuEditor.field.costHint':
-    'Only people who can see reports see this. It never shows at the till or in the kitchen.',
+    'Only people who can see reports see this. It never shows at the till or in the kitchen. Leaving it empty when editing clears the cost (0).',
   'menuEditor.field.channels': 'Sold on',
   'menuEditor.field.channelPrice': '{channel} price (empty = normal price)',
   'menuEditor.field.groups': 'Option groups for this dish',

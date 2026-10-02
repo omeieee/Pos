@@ -219,6 +219,20 @@ describe('buildItemPatch: only what changed', () => {
     expect(buildItemPatch(item, null, { ...blind, cost: '20' }, { withCost: false })).toBeNull();
   });
 
+  test('a blank cost clears a known cost (sends 0); it sends nothing when there was no cost or a role cannot see costs', () => {
+    expect(buildItemPatch(item, cost, { ...same(), cost: '' }, opts)).toEqual({
+      expectedVersion: 4,
+      estCostSatang: 0,
+    });
+    // Already 0: blank changes nothing.
+    const zero = itemFormFrom(item, CATEGORY, satang(0));
+    expect(buildItemPatch(item, satang(0), { ...zero, cost: '' }, opts)).toBeNull();
+    // The cost was never read (null): blank is "not touched", never a silent overwrite.
+    const unknown = itemFormFrom(item, CATEGORY, null);
+    expect(buildItemPatch(item, null, { ...unknown, cost: '' }, opts)).toBeNull();
+    expect(buildItemPatch(item, cost, { ...same(), cost: '' }, { withCost: false })).toBeNull();
+  });
+
   test('group order matters; an unchanged list is not sent', () => {
     expect(
       buildItemPatch(item, cost, { ...same(), modifierGroupIds: [uuid(3), uuid(2)] }, opts),
@@ -335,6 +349,24 @@ describe('options: the price change is signed money', () => {
     expect(
       buildOptionPatch(option, satang(300), { ...form, costDelta: '4' }, { withCost: true }),
     ).toEqual({ ok: true, input: { expectedVersion: 3, costDeltaSatang: 400 } });
+  });
+
+  test('patch: a blank cost change clears a known one (sends 0), and only then', () => {
+    const form = optionFormFrom(option, satang(300));
+    expect(
+      buildOptionPatch(option, satang(300), { ...form, costDelta: '' }, { withCost: true }),
+    ).toEqual({ ok: true, input: { expectedVersion: 3, costDeltaSatang: 0 } });
+    const none = optionFormFrom(option, satang(0));
+    expect(
+      buildOptionPatch(option, satang(0), { ...none, costDelta: '' }, { withCost: true }),
+    ).toEqual({ ok: true, input: null });
+    const unknown = optionFormFrom(option, null);
+    expect(
+      buildOptionPatch(option, null, { ...unknown, costDelta: '' }, { withCost: true }),
+    ).toEqual({ ok: true, input: null });
+    expect(
+      buildOptionPatch(option, satang(300), { ...form, costDelta: '' }, { withCost: false }),
+    ).toEqual({ ok: true, input: null });
   });
 });
 

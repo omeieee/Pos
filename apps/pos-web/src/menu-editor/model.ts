@@ -242,9 +242,10 @@ export function buildItemPatch(
   const price = satangOf(form.price);
   if (price !== item.priceSatang) set('priceSatang', satang(price));
 
-  if (options.withCost && form.cost.trim() !== '') {
-    const cost = satangOf(form.cost);
-    if (cost !== originalCost) set('estCostSatang', satang(cost));
+  if (options.withCost) {
+    // A blank box clears a cost that was known (0); with no known cost it is "not touched".
+    const cost = form.cost.trim() !== '' ? satangOf(form.cost) : originalCost === null ? null : 0;
+    if (cost !== null && cost !== originalCost) set('estCostSatang', satang(cost));
   }
 
   const channels = inChannelOrder(form.channels);
@@ -465,9 +466,15 @@ export function buildOptionPatch(
   if (nullable(form.nameEn) !== option.nameEn) patch.nameEn = nullable(form.nameEn);
   const price = signedSatang(form.priceDelta);
   if (price !== option.priceDeltaSatang) patch.priceDeltaSatang = satang(price);
-  if (options.withCost && form.costDelta.trim() !== '') {
-    const cost = signedSatang(form.costDelta);
-    if (cost !== originalCost) patch.costDeltaSatang = satang(cost);
+  if (options.withCost) {
+    // A blank box clears a cost change that was known (0); with no known one it is "not touched".
+    const cost =
+      form.costDelta.trim() !== ''
+        ? signedSatang(form.costDelta)
+        : originalCost === null
+          ? null
+          : 0;
+    if (cost !== null && cost !== originalCost) patch.costDeltaSatang = satang(cost);
   }
   return { ok: true, input: Object.keys(patch).length > 1 ? patch : null };
 }

@@ -627,7 +627,8 @@ export const th = {
   'menuEditor.field.optional': 'ไม่ใส่ก็ได้',
   'menuEditor.field.price': 'ราคา (บาท)',
   'menuEditor.field.cost': 'ต้นทุนโดยประมาณ (บาท)',
-  'menuEditor.field.costHint': 'เห็นเฉพาะผู้ที่ดูรายงานได้ ไม่ปรากฏที่หน้าขายหรือครัว',
+  'menuEditor.field.costHint':
+    'เห็นเฉพาะผู้ที่ดูรายงานได้ ไม่ปรากฏที่หน้าขายหรือครัว ปล่อยว่างตอนแก้ไข = ล้างต้นทุน (0)',
   'menuEditor.field.channels': 'ช่องทางที่ขาย',
   'menuEditor.field.channelPrice': 'ราคา {channel} (เว้นว่าง = ราคาปกติ)',
   'menuEditor.field.groups': 'ตัวเลือกเสริมของอาหารนี้',
