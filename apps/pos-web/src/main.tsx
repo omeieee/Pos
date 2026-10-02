@@ -4,16 +4,18 @@ import { App } from './App.tsx';
 import { devFetch } from './dev/enable.ts';
 import { createServices } from './services.ts';
 import './styles.css';
+import './pos.css';
 
 const root = document.getElementById('root');
 if (!root) throw new Error('#root not found');
 
 const fetchOverride = await devFetch();
-const { auth } = createServices(fetchOverride ? { fetch: fetchOverride } : {});
-void auth.boot();
+const services = createServices(fetchOverride ? { fetch: fetchOverride } : {});
+services.bindRealtime();
+void services.auth.boot();
 
 createRoot(root).render(
   <StrictMode>
-    <App auth={auth} />
+    <App services={services} />
   </StrictMode>,
 );

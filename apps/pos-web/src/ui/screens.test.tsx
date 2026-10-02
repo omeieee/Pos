@@ -4,37 +4,44 @@ import { baseTokens } from '@sds/ui';
 import { renderToString } from 'react-dom/server';
 import { describe, expect, test } from 'vitest';
 import { App } from '../App.tsx';
-import { createApiClient } from '../api/client.ts';
 import { ApiClientError } from '../api/errors.ts';
-import { type AuthStore, createAuthStore } from '../auth/auth-store.ts';
+import type { AuthStore } from '../auth/auth-store.ts';
 import { createMockServer, MOCK_OWNER, MOCK_STAFF } from '../dev/mock-server.ts';
 import { createMemoryTokenStore } from '../platform/tokenStore.ts';
+import { createServices, type Services } from '../services.ts';
+import { createFakeLifecycle, createFakeSockets } from '../test-support/fake-realtime.ts';
 import { LocaleContext } from './hooks.ts';
 
 const th = catalogs.th;
 const en = catalogs.en;
 
+/** The page is rendered from the full services; the tests keep working with the auth store. */
+const servicesByAuth = new WeakMap<AuthStore, Services>();
+
 function build() {
   const server = createMockServer();
   const tokens = createMemoryTokenStore();
-  let auth!: AuthStore;
-  const api = createApiClient({
+  const sockets = createFakeSockets();
+  const services = createServices({
     baseUrl: 'https://api.example.test',
     fetch: server.fetch,
-    getSessionToken: () => auth.sessionToken(),
-    getDeviceToken: () => auth.deviceToken(),
-    onAuthFailure: (e) => auth.handleAuthFailure(e),
+    tokens,
+    createSocket: sockets.factory,
+    lifecycle: createFakeLifecycle().lifecycle,
   });
-  auth = createAuthStore({ api, tokens });
-  return { auth, server, tokens };
+  servicesByAuth.set(services.auth, services);
+  return { auth: services.auth, services, server, tokens };
 }
 
-const html = (auth: AuthStore, locale: 'th' | 'en' = 'th') =>
-  renderToString(
+const html = (auth: AuthStore, locale: 'th' | 'en' = 'th') => {
+  const services = servicesByAuth.get(auth);
+  if (!services) throw new Error('build() the environment first');
+  return renderToString(
     <LocaleContext.Provider value={locale}>
-      <App auth={auth} />
+      <App services={services} />
     </LocaleContext.Provider>,
   );
+};
 
 async function lockedDevice() {
   const env = build();

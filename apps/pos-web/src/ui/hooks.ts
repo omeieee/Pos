@@ -10,6 +10,9 @@ import {
 import type { AuthState, AuthStore } from '../auth/auth-store.ts';
 import { subscribeTicks } from '../lib/clock.ts';
 import type { ReadableStore } from '../lib/store.ts';
+import type { ConnectionState } from '../realtime/connection.ts';
+import type { EntityState } from '../realtime/entity-store.ts';
+import type { Services } from '../services.ts';
 import type { ViewportInfo } from '../theme/device.ts';
 
 export function useStoreState<S>(store: ReadableStore<S>): S {
@@ -28,6 +31,25 @@ export function useAuthStore(): AuthStore {
 
 export function useAuthState(): AuthState {
   return useStoreState(useAuthStore());
+}
+
+// ---------- Services (API, entity store, realtime connection) ----------
+
+export const ServicesContext = createContext<Services | null>(null);
+
+export function useServices(): Services {
+  const services = useContext(ServicesContext);
+  if (!services) throw new Error('ServicesContext is missing');
+  return services;
+}
+
+/** The synced rows (orders, payments, menu, settings), re-rendering when any of them change. */
+export function useEntities(): EntityState {
+  return useStoreState(useServices().entities);
+}
+
+export function useConnection(): ConnectionState {
+  return useStoreState(useServices().connection);
 }
 
 // ---------- Language ----------

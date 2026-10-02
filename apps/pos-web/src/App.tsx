@@ -1,8 +1,8 @@
 import { useEffect } from 'react';
-import type { AuthStore } from './auth/auth-store.ts';
+import type { Services } from './services.ts';
 import { pickDevice, tokensCss } from './theme/device.ts';
 import { Brand } from './ui/Brand.tsx';
-import { AuthContext, useAuthState, useT, useViewport } from './ui/hooks.ts';
+import { AuthContext, ServicesContext, useAuthState, useT, useViewport } from './ui/hooks.ts';
 import { PinScreen } from './ui/PinScreen.tsx';
 import { RegisterDeviceScreen } from './ui/RegisterDeviceScreen.tsx';
 import { Shell } from './ui/Shell.tsx';
@@ -50,11 +50,13 @@ function Screen() {
   }
 }
 
-export function App({ auth }: { auth: AuthStore }) {
+export function App({ services }: { services: Services }) {
   return (
-    <AuthContext.Provider value={auth}>
-      <Screen />
-      <StepUpDialog />
-    </AuthContext.Provider>
+    <ServicesContext.Provider value={services}>
+      <AuthContext.Provider value={services.auth}>
+        <Screen />
+        <StepUpDialog />
+      </AuthContext.Provider>
+    </ServicesContext.Provider>
   );
 }

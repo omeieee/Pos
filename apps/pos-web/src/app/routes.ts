@@ -27,7 +27,9 @@ export type IconName =
   | 'wifi-off'
   | 'sync'
   | 'circle'
-  | 'clock';
+  | 'clock'
+  | 'check-circle'
+  | 'info';
 
 /** The entries of the navigation: one per top-level page. */
 export type RouteId = 'new' | 'orders' | 'menu' | 'settings';

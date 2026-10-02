@@ -2,6 +2,7 @@ import { formatDate } from '@sds/i18n';
 import { useEffect } from 'react';
 import { allowedRoutes, pathFromHash, resolveRoute } from '../app/routes.ts';
 import { Brand } from './Brand.tsx';
+import { ConnectionBadge } from './ConnectionBadge.tsx';
 import { useAuthState, useAuthStore, useHash, useLocale, useNow, useT } from './hooks.ts';
 import { Icon } from './Icon.tsx';
 
@@ -23,11 +24,10 @@ export function Shell() {
 
   // A page this role may not open (or an unknown address) is replaced by the first allowed one.
   // A page with a parameter keeps its own address, so it is compared as a whole.
+  const target = resolved?.path ?? null;
   useEffect(() => {
-    if (resolved && pathFromHash(hash) !== resolved.path) {
-      window.location.replace(`#${resolved.path}`);
-    }
-  }, [hash, resolved]);
+    if (target !== null && pathFromHash(hash) !== target) window.location.replace(`#${target}`);
+  }, [hash, target]);
 
   if (!session) return null;
   const signOutLabel = tr('shell.signOut');
@@ -42,6 +42,7 @@ export function Shell() {
           {state.device ? (
             <span className="chip">{tr('shell.device', { name: state.device.name })}</span>
           ) : null}
+          <ConnectionBadge />
           <span className="chip chip--person">
             <Icon name="user" />
             <span>{session.staff.displayName}</span>
