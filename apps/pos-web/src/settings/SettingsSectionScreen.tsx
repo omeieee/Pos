@@ -2,12 +2,14 @@ import { useAuthState, useT } from '../ui/hooks.ts';
 import { Icon } from '../ui/Icon.tsx';
 import { CopayForm } from './CopayForm.tsx';
 import { DeliveryForm } from './DeliveryForm.tsx';
+import { DevicesScreen } from './DevicesScreen.tsx';
 import { HoursForm } from './HoursForm.tsx';
 import { NumberingForm } from './NumberingForm.tsx';
 import { PaymentsForm } from './PaymentsForm.tsx';
 import { PromptpayForm } from './PromptpayForm.tsx';
 import { SettingSection } from './SettingSection.tsx';
 import { ShopForm } from './ShopForm.tsx';
+import { StaffScreen } from './StaffScreen.tsx';
 import { type SectionDef, sectionById } from './sections.ts';
 
 function BackLink() {
@@ -66,6 +68,10 @@ function SectionBody({ def, editable }: { def: SectionDef; editable: boolean }) 
           {(p) => <CopayForm {...p} />}
         </SettingSection>
       );
+    case 'devices':
+      return <DevicesScreen />;
+    case 'staff':
+      return <StaffScreen />;
     default:
       return <p className="muted">{tr('settings.soon')}</p>;
   }

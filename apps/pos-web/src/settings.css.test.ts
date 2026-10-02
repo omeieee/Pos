@@ -28,4 +28,8 @@ describe('the settings styles follow the design tokens and the touch rules', () 
   test('the building chips are pills, told apart by a border and not by colour alone', () => {
     expect(css).toMatch(/\.sset__chip\s*{[^}]*border:\s*1\.5px solid/);
   });
+
+  test('a removed device or a deactivated person is told apart by a dashed border, not by colour alone', () => {
+    expect(css).toMatch(/\.sset__row--off\s*{[^}]*dashed/);
+  });
 });

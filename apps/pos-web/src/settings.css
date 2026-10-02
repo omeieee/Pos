@@ -116,6 +116,7 @@ fieldset.sset__window {
 .sset__row {
   display: flex;
   align-items: flex-start;
+  justify-content: space-between;
   gap: var(--sds-space-sm);
   padding: var(--sds-space-md);
   border: 1px solid var(--sds-color-border);
@@ -175,4 +176,38 @@ fieldset.group {
   .sset__row {
     flex-wrap: wrap;
   }
+}
+
+/* Device and staff rows. */
+.sset__row--off {
+  border-style: dashed;
+  background: var(--sds-color-surface-sunken);
+}
+.sset__row-main {
+  flex: 1 1 220px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sds-space-xs);
+}
+.sset__row-name {
+  font-weight: var(--sds-font-weight-bold);
+  overflow-wrap: anywhere;
+}
+.sset__row-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sds-space-xs) var(--sds-space-sm);
+  font-size: var(--sds-font-size-sm);
+}
+.sset__row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sds-space-sm);
+}
+.sset__account {
+  font-size: var(--sds-font-size-xl);
+  font-weight: var(--sds-font-weight-bold);
+  overflow-wrap: anywhere;
 }

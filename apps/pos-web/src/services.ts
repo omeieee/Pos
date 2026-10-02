@@ -37,6 +37,7 @@ import { createRecipientStore, type RecipientStore } from './pos/recipient-store
 import { bindRealtime } from './realtime/bind.ts';
 import { type Connection, createConnection } from './realtime/connection.ts';
 import { createEntityStore, type EntityStore } from './realtime/entity-store.ts';
+import { type AdminStore, createAdminStore } from './settings/admin-store.ts';
 import { createSettingsStore, type SettingsStore } from './settings/settings-store.ts';
 
 export interface Services {
@@ -76,6 +77,8 @@ export interface Services {
    * step-up first.
    */
   settingsEditor: SettingsStore;
+  /** The devices and staff screens (owner only): every call needs a step-up, a PIN is never kept. */
+  adminEditor: AdminStore;
   /** The status moves of an order (order page and kitchen view): guarded, reconciled, epoch-safe. */
   orderMoves: OrderMovesStore;
   /** The chime for a new order and its remembered on/off choice (a platform seam). */
@@ -192,6 +195,7 @@ export function createServices(
     photoEngine: createWebPhotoEngine(),
   });
   const settingsEditor = createSettingsStore({ api, lifecycle, auth });
+  const adminEditor = createAdminStore({ api, lifecycle, auth });
   const updates = createAppUpdates({
     host: options.serviceWorker ?? webServiceWorker,
     lifecycle: options.lifecycle ?? webLifecycle,
@@ -228,6 +232,7 @@ export function createServices(
     orderMoves,
     menuEditor,
     settingsEditor,
+    adminEditor,
     sound,
     wakeLock,
     lifecycle,
@@ -246,6 +251,7 @@ export function createServices(
           orderMoves.reset();
           menuEditor.reset();
           settingsEditor.reset();
+          adminEditor.reset();
           // The next person lands on their own first page, not on the one the last person left.
           resetRoute();
         },

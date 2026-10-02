@@ -64,3 +64,28 @@ export function createFakeSettingsApi(overrides: SettingsOverrides = {}) {
     };
   };
 }
+
+const ADMIN_NAMES = [
+  'devices',
+  'revokeDevice',
+  'staff',
+  'createStaff',
+  'patchStaff',
+  'setStaffPin',
+] as const;
+
+/** A fake devices-and-staff API: every call fails the test unless the test gave it an answer. */
+export function createFakeAdminApi(overrides: Partial<ApiClient['admin']> = {}) {
+  const admin = {} as Record<string, unknown>;
+  for (const name of ADMIN_NAMES) {
+    admin[name] = vi.fn(
+      (overrides[name] as ((...args: never[]) => unknown) | undefined) ??
+        (async () => {
+          throw new Error(`admin.${name} was not expected`);
+        }),
+    );
+  }
+  return admin as {
+    [K in (typeof ADMIN_NAMES)[number]]: ReturnType<typeof vi.fn<ApiClient['admin'][K]>>;
+  };
+}

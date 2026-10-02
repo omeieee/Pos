@@ -232,3 +232,108 @@ describe('the co-pay scheme', () => {
     ).rejects.toMatchObject({ code: 'STEP_UP_REQUIRED' });
   });
 });
+
+describe('devices and staff (owner only; the API asks for a step-up on every call)', () => {
+  const device = {
+    id: '0192f3a0-0000-7000-8000-000000000001',
+    name: 'iPad เคาน์เตอร์',
+    kind: 'ipad',
+    lastSeenAt: NOW,
+    revokedAt: null,
+    version: 1,
+  };
+  const person = {
+    id: '0192f3a0-0000-7000-8000-000000000002',
+    displayName: 'น้องเอ',
+    role: 'cashier',
+    active: true,
+    hasPin: true,
+    pinLockedUntil: null,
+    version: 2,
+  };
+
+  test('lists devices and revokes one with a POST and no body', async () => {
+    const { api, calls } = clientWith((call) =>
+      call.method === 'GET'
+        ? { status: 200, json: { devices: [device] } }
+        : { status: 200, json: { ...device, revokedAt: NOW, version: 2 } },
+    );
+    expect((await api.admin.devices()).devices[0]?.name).toBe('iPad เคาน์เตอร์');
+    const revoked = await api.admin.revokeDevice(device.id);
+    expect(revoked.revokedAt).toBe(NOW);
+    expect(calls[1]).toMatchObject({
+      method: 'POST',
+      url: `${BASE}/v1/devices/${device.id}/revoke`,
+    });
+    expect(calls[1]?.body).toBeUndefined();
+  });
+
+  test('a device id that is not a UUID never reaches the network', async () => {
+    const { api, calls } = clientWith(() => ({ status: 200, json: device }));
+    await expect(api.admin.revokeDevice('../staff')).rejects.toMatchObject({
+      code: 'REQUEST_INVALID',
+    });
+    expect(calls).toHaveLength(0);
+  });
+
+  test('lists staff and creates one: 201, the body is exactly the shared create schema, with no request id because the API refuses extra fields', async () => {
+    const { api, calls } = clientWith((call) =>
+      call.method === 'GET'
+        ? { status: 200, json: { staff: [person] } }
+        : { status: 201, json: person },
+    );
+    expect((await api.admin.staff()).staff).toHaveLength(1);
+    const created = await api.admin.createStaff({
+      displayName: 'น้องเอ',
+      role: 'cashier',
+      pin: '1234',
+    });
+    expect(created.displayName).toBe('น้องเอ');
+    expect(calls[1]).toMatchObject({ method: 'POST', url: `${BASE}/v1/staff` });
+    expect(bodyOf(calls[1])).toEqual({ displayName: 'น้องเอ', role: 'cashier', pin: '1234' });
+    expect(calls[1]?.headers['idempotency-key']).toBeUndefined();
+  });
+
+  test('a manager PIN under 6 digits, or an owner role, never reaches the network', async () => {
+    const { api, calls } = clientWith(() => ({ status: 201, json: person }));
+    await expect(
+      api.admin.createStaff({ displayName: 'ผู้จัดการ', role: 'manager', pin: '1234' }),
+    ).rejects.toMatchObject({ code: 'REQUEST_INVALID' });
+    await expect(
+      api.admin.createStaff({ displayName: 'x', role: 'owner' as never, pin: '123456' }),
+    ).rejects.toMatchObject({ code: 'REQUEST_INVALID' });
+    expect(calls).toHaveLength(0);
+  });
+
+  test('a rename or deactivation is a PATCH with the version; a PIN is a POST to its own route', async () => {
+    const { api, calls } = clientWith(() => ({ status: 200, json: person }));
+    await api.admin.patchStaff(person.id, { expectedVersion: 2, active: false });
+    await api.admin.setStaffPin(person.id, { pin: '654321' });
+    expect(calls[0]).toMatchObject({ method: 'PATCH', url: `${BASE}/v1/staff/${person.id}` });
+    expect(bodyOf(calls[0])).toEqual({ expectedVersion: 2, active: false });
+    expect(calls[1]).toMatchObject({ method: 'POST', url: `${BASE}/v1/staff/${person.id}/pin` });
+    expect(bodyOf(calls[1])).toEqual({ pin: '654321' });
+  });
+
+  test('a patch with no change is refused before the network; OWNER_PROTECTED keeps its code', async () => {
+    const none = clientWith(() => ({ status: 200, json: person }));
+    await expect(
+      none.api.admin.patchStaff(person.id, { expectedVersion: 2 }),
+    ).rejects.toMatchObject({
+      code: 'REQUEST_INVALID',
+    });
+    expect(none.calls).toHaveLength(0);
+    const owner = clientWith(() => apiError(409, 'OWNER_PROTECTED'));
+    await expect(
+      owner.api.admin.patchStaff(person.id, { expectedVersion: 2, active: false }),
+    ).rejects.toMatchObject({ code: 'OWNER_PROTECTED' });
+  });
+
+  test('a PIN is never in an error', async () => {
+    const { api } = clientWith(() => apiError(403, 'STEP_UP_REQUIRED'));
+    const error = await api.admin
+      .setStaffPin(person.id, { pin: '654321' })
+      .catch((e: unknown) => e as Error);
+    expect(JSON.stringify(error) + String((error as Error).message)).not.toContain('654321');
+  });
+});

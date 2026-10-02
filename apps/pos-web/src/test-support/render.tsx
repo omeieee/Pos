@@ -33,6 +33,7 @@ import { createRecipientStore } from '../pos/recipient-store.ts';
 import type { ConnectionState } from '../realtime/connection.ts';
 import { createEntityStore } from '../realtime/entity-store.ts';
 import type { Services } from '../services.ts';
+import { createAdminStore } from '../settings/admin-store.ts';
 import { createSettingsStore } from '../settings/settings-store.ts';
 import { AuthContext, LocaleContext, ServicesContext } from '../ui/hooks.ts';
 import { StepUpDialog } from '../ui/StepUpDialog.tsx';
@@ -42,7 +43,11 @@ import { FAKE_DEVICE_TOKEN, IDS, sessionBody } from './fixtures.ts';
 import { deliveryFrame } from './frames.ts';
 import { cleanEngine, createFakeMenuApi } from './menu-editor-env.ts';
 import { seedMenu } from './menu-fixtures.ts';
-import { createFakeSettingsApi, type SettingsOverrides } from './settings-env.ts';
+import {
+  createFakeAdminApi,
+  createFakeSettingsApi,
+  type SettingsOverrides,
+} from './settings-env.ts';
 
 /** The PIN the fake step-up accepts. */
 export const STEP_UP_PIN = '4321';
@@ -189,6 +194,8 @@ export function createTestServices(
     menuApi?: Partial<ApiClient['menu']>;
     /** What the settings screens' calls answer (every other call fails the test). */
     settingsApi?: SettingsOverrides;
+    /** What the devices and staff screens' calls answer (every other call fails the test). */
+    adminApi?: Partial<ApiClient['admin']>;
     /** The browser's picture engine for a menu photo (default: one that returns a clean WebP). */
     photoEngine?: PhotoEngine;
   } = {},
@@ -294,6 +301,14 @@ export function createTestServices(
       runSensitive: async (call) => ({ ok: true as const, value: await call() }),
     },
   });
+  const adminApi = createFakeAdminApi(options.adminApi);
+  const adminEditor = createAdminStore({
+    api: { admin: adminApi as unknown as ApiClient['admin'] },
+    lifecycle: life.lifecycle,
+    auth: options.auth ?? {
+      runSensitive: async (call) => ({ ok: true as const, value: await call() }),
+    },
+  });
   // The sound and the wake lock run on doubles: the engine starts only on unlock, like iOS.
   const audio = createFakeEngine();
   const soundPrefs = createFakePrefs();
@@ -322,6 +337,7 @@ export function createTestServices(
     orderMoves,
     menuEditor,
     settingsEditor,
+    adminEditor,
     sound,
     wakeLock: wake.wakeLock,
     lifecycle: life.lifecycle,
@@ -347,6 +363,8 @@ export function createTestServices(
     menuApi,
     settingsEditor,
     settingsApi,
+    adminEditor,
+    adminApi,
     sound,
     audio,
     soundPrefs,
