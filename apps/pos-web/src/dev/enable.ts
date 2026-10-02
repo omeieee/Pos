@@ -59,6 +59,8 @@ export async function devBackend(): Promise<
         setOffline,
         bumpPrices: server.bumpPrices,
         soldOut: server.soldOut,
+        // The owner changes the PromptPay ID on the server: __sdsMock.setPromptpayId('0899990000').
+        setPromptpayId: server.setPromptpayId,
       },
     });
     const startOffline = readOffline();

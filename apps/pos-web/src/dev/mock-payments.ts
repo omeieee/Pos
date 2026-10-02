@@ -22,6 +22,7 @@ import {
   estimateGovCopaySplit,
   type GovCopayDto,
   isCopayAvailable,
+  maskPromptpayId,
   type OrderDto,
   orderMachine,
   type PaymentDto,
@@ -30,6 +31,7 @@ import {
   paymentReasonInputSchema,
   paymentsSettingsSchema,
   type RealtimeFrame,
+  ROLE_PERMISSIONS,
   type StaffRole,
   satang,
   transitionOrderInputSchema,
@@ -64,11 +66,18 @@ const fail = (status: number, code: string, details: Record<string, unknown> = {
   body: errorBody(code, details),
 });
 
-/** The made-up PromptPay target the dev shop pays to (last digits only, like the real API). */
-export const MOCK_PROMPTPAY_MASKED = '******1234';
+/** The made-up PromptPay ID the dev shop pays to: a 0 and nine digits, never a real account. */
+export const MOCK_PROMPTPAY_ID = '0800001234';
+/** What the shop shows of it (last digits only, like the real API). */
+export const MOCK_PROMPTPAY_MASKED = maskPromptpayId(MOCK_PROMPTPAY_ID);
 
 export function createMockPayments(deps: Deps) {
   const payments = new Map<string, PaymentDto>();
+  // The ID the dev shop pays to now, and the rev/version of its setting row (see `setPromptpayId`).
+  let promptpayId = MOCK_PROMPTPAY_ID;
+  let promptpayRev = 0;
+  let promptpayVersion = 1;
+  const promptpayMasked = () => maskPromptpayId(promptpayId);
   const byRequest = new Map<string, { paymentId: string; requestKey: string }>();
 
   /** Open all day, so the guided steps can be tried at any hour in the dev shop. */
@@ -98,17 +107,12 @@ export function createMockPayments(deps: Deps) {
   const settingsFrames = (): RealtimeFrame[] => {
     const frames: RealtimeFrame[] = [];
     const methods = paymentsSettingsSchema.parse({});
-    for (const [id, data] of [
-      ['payment_methods', methods],
-      ['promptpay', { idType: 'phone', idMasked: MOCK_PROMPTPAY_MASKED }],
+    promptpayRev = deps.nextRev();
+    for (const [id, data, rev] of [
+      ['payment_methods', methods, deps.nextRev()],
+      ['promptpay', { idType: 'phone', idMasked: promptpayMasked() }, promptpayRev],
     ] as const) {
-      frames.push({
-        type: 'settings.updated',
-        id,
-        rev: deps.nextRev(),
-        version: 1,
-        data,
-      } as RealtimeFrame);
+      frames.push({ type: 'settings.updated', id, rev, version: 1, data } as RealtimeFrame);
     }
     const rev = deps.nextRev();
     frames.push({
@@ -259,7 +263,7 @@ export function createMockPayments(deps: Deps) {
       };
     }
     if (input.method === 'promptpay') {
-      return { ...draft, promptpayTargetMasked: MOCK_PROMPTPAY_MASKED };
+      return { ...draft, promptpayTargetMasked: promptpayMasked() };
     }
     if (input.method === 'gov_copay') {
       if (
@@ -417,9 +421,40 @@ export function createMockPayments(deps: Deps) {
       body: {
         url: `/v1/payments/${paymentId}/qr.png?exp=${exp}&sig=MOCKSIGNATUREMOCKSIGNATUREMOCKSIGNATUREMOCK`,
         expiresAt: new Date(exp * 1000).toISOString(),
-        promptpayTargetMasked: MOCK_PROMPTPAY_MASKED,
+        promptpayTargetMasked: promptpayMasked(),
       },
     };
+  }
+
+  /** `GET /v1/settings/promptpay`: the clear ID, for a role that may view settings (403 otherwise). */
+  function readPromptpay(caller: MockCaller): MockAnswer {
+    if (!ROLE_PERMISSIONS[caller.role].has('settings.view')) return fail(403, 'FORBIDDEN');
+    return {
+      status: 200,
+      body: {
+        value: { idType: 'phone', idValue: promptpayId },
+        version: promptpayVersion,
+        rev: promptpayRev,
+        updatedAt: new Date(deps.now()).toISOString(),
+      },
+    };
+  }
+
+  /**
+   * Dev: the owner changes the PromptPay ID. The feed carries the masked notice with a newer rev,
+   * exactly like the real server, and later payments pay to the new account.
+   */
+  function setPromptpayId(next: string) {
+    promptpayId = next;
+    promptpayVersion += 1;
+    promptpayRev = deps.nextRev();
+    deps.publish({
+      type: 'settings.updated',
+      id: 'promptpay',
+      rev: promptpayRev,
+      version: promptpayVersion,
+      data: { idType: 'phone', idMasked: promptpayMasked() },
+    } as RealtimeFrame & { rev: number });
   }
 
   /** Answers the order-status and payment routes (null: not one of them). */
@@ -430,6 +465,7 @@ export function createMockPayments(deps: Deps) {
     caller: MockCaller,
   ): MockAnswer | null {
     if (method === 'GET' && path === '/v1/orders') return listOrders();
+    if (method === 'GET' && path === '/v1/settings/promptpay') return readPromptpay(caller);
     const orderRoute = /^\/v1\/orders\/([^/]+)\/(transition|cancel|payments)$/.exec(path);
     if (orderRoute) {
       const [, id = '', what] = orderRoute;
@@ -470,5 +506,5 @@ export function createMockPayments(deps: Deps) {
     return null;
   }
 
-  return { handle, settingsFrames };
+  return { handle, settingsFrames, setPromptpayId };
 }

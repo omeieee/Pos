@@ -715,6 +715,8 @@ export function createMockShop(options: MockShopOptions = {}) {
     simulateIncomingOrder,
     setOffline,
     isOffline: () => offline,
+    /** Dev: the owner changes the PromptPay ID (the feed gets a masked notice with a newer rev). */
+    setPromptpayId: payments.setPromptpayId,
     /** Dev: every price rises by this many satang on the server only. */
     bumpPrices(satangMore: number) {
       silent.priceBump = satangMore;

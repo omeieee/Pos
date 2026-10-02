@@ -366,6 +366,8 @@ export function createMockServer(options: MockServerOptions = {}) {
     /** Dev: change prices or sell a dish out on the server only, as if done while a counter was offline. */
     bumpPrices: shop.bumpPrices,
     soldOut: shop.soldOut,
+    /** Dev: the owner changes the PromptPay ID, as if done while a counter was offline. */
+    setPromptpayId: shop.setPromptpayId,
     calls,
     /** A device token the server accepts, as if the owner had registered it earlier. */
     issueDeviceToken(name = 'iPad ตัวอย่าง', kind: 'ipad' | 'iphone' | 'laptop' = 'ipad') {

@@ -277,3 +277,57 @@ describe('the dev shop: payments', () => {
     expect(parsed.changes.some((c) => c.type === 'payment.upserted')).toBe(true);
   });
 });
+
+describe('the dev shop: the PromptPay ID for the offline QR', () => {
+  const read = (call: ReturnType<typeof setup>['call'], role: StaffRole = 'cashier') =>
+    call('GET', '/v1/settings/promptpay', undefined, role);
+
+  test('a role that may view settings reads a made-up ID whose rev is the sync feed’s', () => {
+    const { shop, call } = setup();
+    const answer = read(call);
+    expect(answer.status).toBe(200);
+    const body = answer.body as { value: { idType: string; idValue: string }; rev: number };
+    expect(body.value).toEqual({ idType: 'phone', idValue: '0800001234' });
+    const feed = syncResponseSchema.parse(
+      shop.handle('GET', '/v1/sync', new URLSearchParams({ since: '0', limit: '500' }), undefined)
+        ?.body,
+    );
+    const frame = feed.changes.find((c) => c.type === 'settings.updated' && c.id === 'promptpay');
+    expect(frame?.rev).toBe(body.rev);
+  });
+
+  test('a kitchen device may not read it', () => {
+    const { call } = setup();
+    expect(read(call, 'kitchen').status).toBe(403);
+  });
+
+  test('changing it publishes a MASKED notice with a newer rev and the clear ID answers the new one', () => {
+    const { shop, call } = setup();
+    const before = (read(call).body as { rev: number }).rev;
+    shop.setPromptpayId('0899990000');
+    const after = read(call).body as { rev: number; value: { idValue: string } };
+    expect(after.value.idValue).toBe('0899990000');
+    expect(after.rev).toBeGreaterThan(before);
+    const feed = syncResponseSchema.parse(
+      shop.handle('GET', '/v1/sync', new URLSearchParams({ since: '0', limit: '500' }), undefined)
+        ?.body,
+    );
+    const frame = feed.changes.find((c) => c.type === 'settings.updated' && c.id === 'promptpay');
+    expect(frame?.rev).toBe(after.rev);
+    expect(JSON.stringify(frame)).not.toContain('0899990000');
+    expect(JSON.stringify(frame)).toContain('******0000');
+  });
+
+  test('a PromptPay payment records the masked account the shop pays to now', () => {
+    const { shop, call, newOrder } = setup();
+    shop.setPromptpayId('0899990000');
+    const order = newOrder();
+    const made = paymentResultSchema.parse(
+      call('POST', `/v1/orders/${order.id}/payments`, {
+        clientRequestId: requestId(),
+        method: 'promptpay',
+      }).body,
+    );
+    expect(made.payment.promptpayTargetMasked).toBe('******0000');
+  });
+});
