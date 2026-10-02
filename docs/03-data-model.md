@@ -142,6 +142,7 @@ stateDiagram-v2
 - Reports are computed on the fly from `orders`, `order_items`, `payments` and `expenses`, grouped by `business_date`. At this data size that is fast.
 - Materialised daily rollups come later, only if a query exceeds about 300 ms.
 - Revenue is recognised on the order's business date, for **paid** orders only.
+- A void or refund counts against **the original order's business date**, even when it is done after midnight (owner, 2026-10-02).
 - Gov co-pay money counts as revenue on the sale date and as a receivable until it is settled the next day.
 - Platform orders count the platform price as revenue and the commission as an expense.
 - Cost of goods = Σ(`unit_cost_satang × qty`) from item snapshots, until P7 adds recipes.
