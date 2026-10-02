@@ -1,10 +1,10 @@
 import type { OrderDto, PaymentDto } from '@sds/shared';
 import { useState } from 'react';
-import { useActivityHold, useEntities, useT } from '../ui/hooks.ts';
+import { useActivityHold, useEntities, useNow, useT } from '../ui/hooks.ts';
 import { Modal } from '../ui/Modal.tsx';
 import { CashPanel } from './CashPanel.tsx';
 import { MethodTiles } from './MethodTiles.tsx';
-import { methodOptions, type PayMethod } from './payment-model.ts';
+import { COPAY_TICK_MS, methodOptions, type PayMethod } from './payment-model.ts';
 import { StartPanel } from './StartPanel.tsx';
 
 /**
@@ -62,7 +62,8 @@ function ChangeSheet({
   const [selected, setSelected] = useState<PayMethod | null>(null);
   useActivityHold(true);
 
-  const options = methodOptions(order, settings, Date.now(), hidden).filter(
+  const now = useNow(COPAY_TICK_MS);
+  const options = methodOptions(order, settings, now, hidden).filter(
     (option) => option.method !== payment.method,
   );
   const choice = options.some((o) => o.method === selected && o.enabled) ? selected : null;

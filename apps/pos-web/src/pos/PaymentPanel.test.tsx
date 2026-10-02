@@ -244,6 +244,77 @@ describe('cash', () => {
     expect(ids[1]).toBe(ids[0]);
   });
 
+  describe('while the outcome is unsure, leaving the screen and coming back', () => {
+    /** A cash create whose first answer is lost, then a normal one. */
+    async function unsureCash() {
+      let calls = 0;
+      const env = await cashPanel({
+        create: async () => {
+          calls += 1;
+          if (calls === 1) throw new ApiClientError('TIMEOUT');
+          return created(
+            paymentOf({ status: 'confirmed' }),
+            orderOf({ paymentStatus: 'paid' }, 11),
+          );
+        },
+      });
+      fireEvent.click(screen.getByRole('button', { name: '฿100' }));
+      fireEvent.click(confirmButton());
+      await screen.findByText(th['payment.unsure']);
+      return env;
+    }
+    const keypadDisabled = () =>
+      (screen.getByRole('button', { name: '1' }) as HTMLButtonElement).disabled;
+
+    test('a remount restores the tender, keeps the keypad locked and retries with the same body and id', async () => {
+      const env = await unsureCash();
+      cleanup();
+      renderScreen(<PaymentPanel orderId={ORDER} />, env.services);
+      await loaded();
+      expect(screen.getByText('฿100.00', { selector: 'output' })).toBeTruthy();
+      expect(screen.getByText(th['payment.unsure'])).toBeTruthy();
+      expect(keypadDisabled()).toBe(true);
+      expect(confirmButton().disabled).toBe(false);
+      fireEvent.click(confirmButton());
+      await screen.findByText(th['payment.paid.title']);
+      const [first, second] = env.api.payments.create.mock.calls;
+      expect(second?.[2]?.clientRequestId).toBe(first?.[2]?.clientRequestId);
+      expect(second?.[1]).toEqual(first?.[1]);
+    });
+
+    test('flipping to another method and back restores the tender', async () => {
+      const env = await unsureCash();
+      fireEvent.click(methodTile(th['payment.method.promptpay']));
+      // The earlier attempt was cash: the PromptPay start says an earlier attempt may exist.
+      expect(screen.getByText(th['payment.unsureOtherMethod'])).toBeTruthy();
+      fireEvent.click(methodTile(th['payment.method.cash']));
+      expect(screen.getByText('฿100.00', { selector: 'output' })).toBeTruthy();
+      expect(keypadDisabled()).toBe(true);
+      expect(env.api.payments.create).toHaveBeenCalledTimes(1);
+    });
+
+    test('an unsure attempt of another method does not lock the cash keypad, and is called out', async () => {
+      let calls = 0;
+      const env = await setup({
+        api: {
+          create: async () => {
+            calls += 1;
+            if (calls === 1) throw new ApiClientError('TIMEOUT');
+            return created(paymentOf({ status: 'pending' }), orderOf({}, 11));
+          },
+        },
+      });
+      renderScreen(<PaymentPanel orderId={ORDER} />, env.services);
+      await loaded();
+      fireEvent.click(methodTile(th['payment.method.promptpay']));
+      fireEvent.click(screen.getByRole('button', { name: th['payment.start.promptpay'] }));
+      await screen.findByText(th['payment.unsure']);
+      fireEvent.click(methodTile(th['payment.method.cash']));
+      expect(screen.getByText(th['payment.unsureOtherMethod'])).toBeTruthy();
+      expect(keypadDisabled()).toBe(false);
+    });
+  });
+
   test('the app is held busy while a tender is being typed, so an update cannot reload the page', async () => {
     const env = await cashPanel();
     expect(env.activity.isBusy()).toBe(false);
@@ -259,6 +330,32 @@ describe('cash', () => {
     renderScreen(<PaymentPanel orderId={ORDER} />, env.services);
     expect(screen.queryByRole('radio', { name: new RegExp(th['payment.method.cash']) })).toBeNull();
     expect(env.api.payments.list).not.toHaveBeenCalled();
+  });
+});
+
+describe('a call for another order is still running', () => {
+  const OTHER = uuid(901);
+
+  test('says so and switches the controls off, instead of ignoring a tap', async () => {
+    const env = await setup();
+    env.entities.apply(orderFrame(OTHER, 30, { orderNo: 'S-014', totalSatang: TOTAL }));
+    // A payment for the other order that is still on its way.
+    let answer!: () => void;
+    env.api.payments.create.mockImplementationOnce(
+      () =>
+        new Promise((_resolve, reject) => {
+          answer = () => reject(new ApiClientError('FORBIDDEN', { status: 403 }));
+        }),
+    );
+    void env.payments.create(OTHER, { method: 'promptpay' });
+    renderScreen(<PaymentPanel orderId={ORDER} />, env.services);
+    await loaded();
+    expect(screen.getByText(th['payment.busyElsewhere'])).toBeTruthy();
+    fireEvent.click(methodTile(th['payment.method.cash']));
+    expect(key('1').matches(':disabled')).toBe(true);
+    await act(async () => answer());
+    await waitFor(() => expect(screen.queryByText(th['payment.busyElsewhere'])).toBeNull());
+    expect(key('1').matches(':disabled')).toBe(false);
   });
 });
 

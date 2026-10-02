@@ -211,6 +211,40 @@ describe('the co-pay split shown to staff', () => {
     });
   });
 
+  test('the capped note stays once the payment exists: the stored share is below the uncapped one', () => {
+    const made = pay(1, {
+      method: 'gov_copay',
+      status: 'pending',
+      estGovShareSatang: satang(20000),
+      estCustomerShareSatang: satang(30000),
+    });
+    expect(copayEstimate(satang(50000), made, scheme())).toEqual({
+      govShare: 20000,
+      customerShare: 30000,
+      capped: true,
+    });
+  });
+
+  test('a stored share equal to the uncapped one is not called capped', () => {
+    const made = pay(1, {
+      method: 'gov_copay',
+      status: 'pending',
+      estGovShareSatang: satang(5700),
+      estCustomerShareSatang: satang(3800),
+    });
+    expect(copayEstimate(satang(9500), made, scheme())?.capped).toBe(false);
+  });
+
+  test('without the scheme on file a stored estimate is shown without a capped note', () => {
+    const made = pay(1, {
+      method: 'gov_copay',
+      status: 'pending',
+      estGovShareSatang: satang(20000),
+      estCustomerShareSatang: satang(30000),
+    });
+    expect(copayEstimate(satang(50000), made, undefined)?.capped).toBe(false);
+  });
+
   test('without a scheme nor a payment there is nothing to show', () => {
     expect(copayEstimate(satang(9500), undefined, undefined)).toBeNull();
   });

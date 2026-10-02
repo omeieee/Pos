@@ -7,6 +7,7 @@ import { useActivityHold, useLocale, useServices, useStoreState, useT } from '..
 import { Icon } from '../ui/Icon.tsx';
 import { Modal } from '../ui/Modal.tsx';
 import type { PaymentActions } from './payment-model.ts';
+import { flowFor } from './payment-store.ts';
 
 const MOVE_ACTIONS = ['claim', 'confirm', 'cancelClaimed'] as const;
 
@@ -49,7 +50,8 @@ export function PaymentMoves({
   const mine = flow.orderId === order.id;
   const moveAction = (MOVE_ACTIONS as readonly string[]).includes(flow.action ?? '');
   const sending = mine && flow.phase === 'sending' && moveAction;
-  const unsure = mine && flow.phase === 'unsure' && moveAction;
+  const lost = flowFor(flow, order.id).unsure;
+  const unsure = lost !== null && (MOVE_ACTIONS as readonly string[]).includes(lost.action);
   const failure = mine && !sending && flow.error && moveAction ? flow.error : null;
   // A reference being typed must not be lost to a page reload.
   useActivityHold(reference !== '');

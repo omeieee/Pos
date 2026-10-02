@@ -59,6 +59,7 @@
 }
 
 /* Groups of buttons are fieldsets (so they have a name); strip the browser's box. */
+fieldset.ppanel__body,
 fieldset.chips,
 fieldset.keypad,
 fieldset.omoves__row {

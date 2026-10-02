@@ -72,6 +72,9 @@ export function paymentPhase(order: OrderDto, payments: readonly PaymentDto[]): 
 
 export type PayMethod = 'cash' | 'promptpay' | 'gov_copay';
 
+/** How often a screen re-reads the clock to see whether the co-pay window has closed. */
+export const COPAY_TICK_MS = 30_000;
+
 export type CopayReason = 'notConfigured' | 'off' | 'notAtCounter' | 'outsideWindow';
 export type CopayVerdict = { available: true } | { available: false; reason: CopayReason };
 
@@ -143,6 +146,20 @@ export interface CopayEstimate {
   capped: boolean;
 }
 
+function wasCapped(total: Satang, govShare: Satang, scheme: GovCopayDto): boolean {
+  try {
+    const uncapped = estimateGovCopaySplit(total, {
+      govShareBp: scheme.govShareBp,
+      govDailyCapSatang: null,
+      govTotalCapSatang: null,
+    });
+    return govShare < uncapped.govShare;
+  } catch (error) {
+    if (error instanceof RangeError) return false;
+    throw error;
+  }
+}
+
 /**
  * The ESTIMATED split to show next to the full amount staff type into ถุงเงิน. Once the payment
  * exists, the server's own estimate on it is shown; before that, the shared estimate for the
@@ -158,7 +175,9 @@ export function copayEstimate(
     return {
       govShare: payment.estGovShareSatang,
       customerShare: payment.estCustomerShareSatang,
-      capped: false,
+      // The payment does not say whether a cap applied: it did if the share on file is lower than
+      // the same estimate without the caps. Not knowable without the scheme.
+      capped: scheme ? wasCapped(total, payment.estGovShareSatang, scheme) : false,
     };
   }
   if (!scheme) return null;

@@ -5,7 +5,7 @@ import { ApiClientError } from '../api/errors.ts';
 import { createActivity } from '../lib/activity.ts';
 import { createEntityStore } from '../realtime/entity-store.ts';
 import { orderDto, paymentDto, uuid } from '../test-support/frames.ts';
-import { createPaymentStore, type PaymentDeps } from './payment-store.ts';
+import { createPaymentStore, flowFor, type PaymentDeps } from './payment-store.ts';
 
 const ORDER = uuid(900);
 const PAYMENT = uuid(500);
@@ -426,5 +426,91 @@ describe('refresh', () => {
     const { store, api } = setup();
     api.payments.list.mockRejectedValueOnce(new ApiClientError('NETWORK'));
     await expect(store.refresh(ORDER)).resolves.toBeUndefined();
+  });
+});
+
+describe('an unsure attempt is kept per order, with the body that was sent', () => {
+  const OTHER = uuid(901);
+
+  test('remembers the action, the error and the exact body (the tender) of the lost call', async () => {
+    const { store, api } = setup();
+    api.payments.create.mockRejectedValueOnce(new ApiClientError('TIMEOUT'));
+    await store.create(ORDER, cash);
+    const flow = flowFor(store.getState(), ORDER);
+    expect(flow.unsure).toMatchObject({ action: 'create', input: cash });
+    expect(flow.unsure?.error.code).toBe('TIMEOUT');
+    expect(flow.sending).toBeNull();
+  });
+
+  test('starting a payment on a second order does not lose the first order’s unsure state', async () => {
+    const { store, api, activity } = setup();
+    api.payments.create.mockRejectedValueOnce(new ApiClientError('TIMEOUT'));
+    await store.create(ORDER, cash);
+    await store.create(OTHER, { method: 'promptpay' });
+    expect(flowFor(store.getState(), ORDER).unsure).toMatchObject({ input: cash });
+    expect(flowFor(store.getState(), OTHER).unsure).toBeNull();
+    // Still work a reload would lose, although the last call finished well.
+    expect(store.getState().phase).toBe('idle');
+    expect(activity.isBusy()).toBe(true);
+  });
+
+  test('the retry of the first order still sends the same request id after the detour', async () => {
+    const { store, api } = setup();
+    api.payments.create.mockRejectedValueOnce(new ApiClientError('TIMEOUT'));
+    await store.create(ORDER, cash);
+    await store.create(OTHER, { method: 'promptpay' });
+    await store.create(ORDER, cash);
+    const ids = api.payments.create.mock.calls.map((c) => c[2]?.clientRequestId);
+    expect(ids[2]).toBe(ids[0]);
+    expect(flowFor(store.getState(), ORDER).unsure).toBeNull();
+  });
+
+  test('a definite refusal of the retry ends the unsure state of that order', async () => {
+    const { store, api } = setup();
+    api.payments.create
+      .mockRejectedValueOnce(new ApiClientError('TIMEOUT'))
+      .mockRejectedValueOnce(new ApiClientError('FORBIDDEN', { status: 403 }));
+    await store.create(ORDER, cash);
+    await store.create(ORDER, cash);
+    expect(flowFor(store.getState(), ORDER).unsure).toBeNull();
+    expect(flowFor(store.getState(), ORDER).refused?.error.code).toBe('FORBIDDEN');
+  });
+
+  test('settled() ends the unsure state of its order even while another order is current', async () => {
+    const { store, api, activity } = setup();
+    api.payments.create.mockRejectedValueOnce(new ApiClientError('TIMEOUT'));
+    await store.create(ORDER, cash);
+    await store.create(OTHER, { method: 'promptpay' });
+    store.settled(ORDER);
+    expect(flowFor(store.getState(), ORDER).unsure).toBeNull();
+    expect(activity.isBusy()).toBe(false);
+  });
+
+  test('reset() forgets every unsure order', async () => {
+    const { store, api } = setup();
+    api.payments.create.mockRejectedValueOnce(new ApiClientError('TIMEOUT'));
+    await store.create(ORDER, cash);
+    store.reset();
+    expect(flowFor(store.getState(), ORDER).unsure).toBeNull();
+  });
+
+  test('a lost move (claim) is remembered without a body', async () => {
+    const { store, api } = setup();
+    api.payments.claim.mockRejectedValueOnce(new ApiClientError('NETWORK'));
+    await store.claim(ORDER, PAYMENT);
+    expect(flowFor(store.getState(), ORDER).unsure).toMatchObject({ action: 'claim', input: null });
+  });
+
+  test('flowFor tells the running call of this order from another order’s', async () => {
+    const first = deferred<Awaited<ReturnType<PaymentDeps['api']['payments']['create']>>>();
+    const { store, api } = setup();
+    api.payments.create.mockReturnValueOnce(first.promise);
+    const running = store.create(ORDER, cash);
+    expect(flowFor(store.getState(), ORDER).sending).toBe('create');
+    expect(flowFor(store.getState(), OTHER).sending).toBeNull();
+    expect(flowFor(store.getState(), OTHER).busyElsewhere).toBe(true);
+    first.reject(new ApiClientError('FORBIDDEN', { status: 403 }));
+    await running;
+    expect(flowFor(store.getState(), OTHER).busyElsewhere).toBe(false);
   });
 });

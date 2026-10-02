@@ -2,7 +2,7 @@
 import { formatDate } from '@sds/i18n';
 import type { PaymentDto } from '@sds/shared';
 import { satang } from '@sds/shared';
-import { cleanup, fireEvent, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { ApiClientError } from '../api/errors.ts';
 import { govCopayFrame } from '../test-support/frames.ts';
@@ -69,6 +69,26 @@ describe('ไทยช่วยไทย: the option', () => {
     expect(screen.getByText(th['payment.copay.reason.outsideWindow'])).toBeTruthy();
   });
 
+  test('switches itself off when the window closes while the panel stays open', async () => {
+    // Timers are faked too, so the tick can be advanced; `waitFor` would hang, hence act().
+    vi.useRealTimers();
+    vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] });
+    // 22:59:50 in Bangkok: ten seconds before the scheme closes.
+    vi.setSystemTime(new Date('2030-10-15T15:59:50Z'));
+    const env = await setup({ frames: [govCopayFrame(6)] });
+    renderScreen(<PaymentPanel orderId={ORDER} />, env.services);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    const tile = () => methodTile(th['payment.method.gov_copay']) as HTMLInputElement;
+    expect(tile().disabled).toBe(false);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30_000);
+    });
+    expect(tile().disabled).toBe(true);
+    expect(screen.getByText(th['payment.copay.reason.outsideWindow'])).toBeTruthy();
+  });
+
   test('is disabled after the scheme’s last day', async () => {
     vi.setSystemTime(new Date('2030-12-01T05:00:00Z'));
     await panel();
@@ -132,6 +152,22 @@ describe('ไทยช่วยไทย: the guided steps', () => {
     // 60% of ฿500 is ฿300, cut to the ฿200 daily cap.
     expect(screen.getByText('฿200.00', { selector: '.copay__figure' })).toBeTruthy();
     expect(screen.getByText(th['payment.govCopay.capped'])).toBeTruthy();
+  });
+
+  test('keeps the capped note once the payment exists, with the server’s own figures', async () => {
+    await panel({
+      order: orderOf({ totalSatang: satang(50000) }),
+      payments: [
+        pending({
+          amountSatang: satang(50000),
+          estGovShareSatang: satang(20000),
+          estCustomerShareSatang: satang(30000),
+        }),
+      ],
+    });
+    const section = screen.getByRole('region', { name: th['payment.govCopay.title'] });
+    expect(within(section).getByText('฿200.00', { selector: '.copay__figure' })).toBeTruthy();
+    expect(within(section).getByText(th['payment.govCopay.capped'])).toBeTruthy();
   });
 
   test('tells staff to create the ถุงเงิน QR themselves: this app never makes or sends it', async () => {

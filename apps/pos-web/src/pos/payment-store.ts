@@ -18,6 +18,9 @@
  * - the moves (claim, confirm, cancel-claimed, void, refund) have no id: the server answers 200
  *   without a write when the payment is already in the target status, so pressing the same button
  *   again is safe. They also go `unsure` when the answer is lost, so the screen can say so;
+ * - an `unsure` attempt is kept PER ORDER, together with the body that was sent (the cash tender).
+ *   A screen that is left and opened again restores the tender from it, so the retry sends the
+ *   same body under the same id; and starting a payment on another order does not lose it;
  * - void and refund run through `auth.runSensitive`: the step-up dialog opens first, a cancelled
  *   dialog sends nothing, and a STEP_UP_REQUIRED answer asks again once and retries;
  * - `reset()` (sign-out) bumps an epoch. An answer to a request sent before it touches nothing: no
@@ -51,6 +54,14 @@ export type PaymentAction =
   | 'void'
   | 'refund';
 
+/** A call whose answer never arrived: what was asked, and what the person has to wait for. */
+export interface UnsureAttempt {
+  action: PaymentAction;
+  error: ApiClientError;
+  /** The body of a create or change-method call (to restore the tender); null for a move. */
+  input: NewPaymentInput | ChangePaymentInput | null;
+}
+
 export interface PaymentFlowState {
   /** The order the running or last action belongs to. */
   orderId: string | null;
@@ -58,6 +69,33 @@ export interface PaymentFlowState {
   action: PaymentAction | null;
   /** The last failed attempt, until the next one starts. */
   error: ApiClientError | null;
+  /** Orders with a lost answer, by order id. Cleared by an answer, `settled` or `reset`. */
+  unsure: Readonly<Record<string, UnsureAttempt>>;
+}
+
+/** What one order's screen needs to know about the flow (see `flowFor`). */
+export interface OrderFlow {
+  /** The kind of call that is running for this order, or null. */
+  sending: PaymentAction | null;
+  /** The answer to a call for this order was lost: it may have been saved. */
+  unsure: UnsureAttempt | null;
+  /** The server's refusal of the last call for this order, until the next call starts. */
+  refused: { action: PaymentAction; error: ApiClientError } | null;
+  /** A call for ANOTHER order is running; new calls are refused until it ends. */
+  busyElsewhere: boolean;
+}
+
+export function flowFor(state: PaymentFlowState, orderId: string): OrderFlow {
+  const mine = state.orderId === orderId;
+  return {
+    sending: mine && state.phase === 'sending' ? state.action : null,
+    unsure: state.unsure[orderId] ?? null,
+    refused:
+      mine && state.phase === 'idle' && state.action !== null && state.error
+        ? { action: state.action, error: state.error }
+        : null,
+    busyElsewhere: !mine && state.phase === 'sending',
+  };
 }
 
 export type PaymentOutcome =
@@ -141,7 +179,14 @@ const initial = (): PaymentFlowState => ({
   phase: 'idle',
   action: null,
   error: null,
+  unsure: {},
 });
+
+const without = (map: PaymentFlowState['unsure'], orderId: string): PaymentFlowState['unsure'] => {
+  if (!(orderId in map)) return map;
+  const { [orderId]: _gone, ...rest } = map;
+  return rest;
+};
 
 /** The parts of a create body that make it the same attempt: method, tender, reference. */
 const bodyKey = (input: NewPaymentInput | ChangePaymentInput) =>
@@ -157,7 +202,8 @@ export function createPaymentStore(deps: PaymentDeps): PaymentStore {
   let endBusy: (() => void) | null = null;
 
   store.subscribe(() => {
-    const busy = store.getState().phase !== 'idle';
+    const state = store.getState();
+    const busy = state.phase === 'sending' || Object.keys(state.unsure).length > 0;
     if (busy && !endBusy) endBusy = deps.activity.begin();
     if (!busy && endBusy) {
       endBusy();
@@ -186,6 +232,7 @@ export function createPaymentStore(deps: PaymentDeps): PaymentStore {
     action: PaymentAction,
     orderId: string,
     idKey: string | null,
+    input: UnsureAttempt['input'],
     send: (clientRequestId: string) => Promise<RealtimeFrame[]>,
   ): Promise<PaymentOutcome> {
     if (inFlight) return { ok: false, reason: 'busy' };
@@ -203,11 +250,17 @@ export function createPaymentStore(deps: PaymentDeps): PaymentStore {
       if (epoch !== startedIn) return { ok: false, reason: 'stale' };
       deps.entities.applyMany(frames);
       if (fullKey !== null) requestIds.delete(fullKey);
-      store.setState({ phase: 'idle', action: null, error: null });
+      store.setState({
+        phase: 'idle',
+        action: null,
+        error: null,
+        unsure: without(store.getState().unsure, orderId),
+      });
       return { ok: true };
     } catch (caught) {
       if (epoch !== startedIn) return { ok: false, reason: 'stale' };
       if (caught instanceof StepUpCancelled) {
+        // Nothing was sent, so an earlier unsure attempt (if any) stays exactly as it was.
         store.setState({ phase: 'idle', action: null, error: null });
         return { ok: false, reason: 'cancelled' };
       }
@@ -215,7 +268,13 @@ export function createPaymentStore(deps: PaymentDeps): PaymentStore {
       const unsure = mayHaveBeenCreated(error);
       // A known refusal means nothing was made: the next attempt is a new one.
       if (!unsure && fullKey !== null) requestIds.delete(fullKey);
-      store.setState({ phase: unsure ? 'unsure' : 'idle', error });
+      const kept = store.getState().unsure;
+      store.setState({
+        phase: unsure ? 'unsure' : 'idle',
+        error,
+        // A definite answer ends the doubt about this order; a lost one starts or renews it.
+        unsure: unsure ? { ...kept, [orderId]: { action, error, input } } : without(kept, orderId),
+      });
       if (STALE_VIEW_CODES.includes(error.code)) void refresh(orderId);
       return { ok: false, reason: 'error', error };
     } finally {
@@ -239,21 +298,27 @@ export function createPaymentStore(deps: PaymentDeps): PaymentStore {
     subscribe: store.subscribe,
 
     create: (orderId, input) =>
-      run('create', orderId, bodyKey(input), async (clientRequestId) =>
+      run('create', orderId, bodyKey(input), input, async (clientRequestId) =>
         framesOf((await deps.api.payments.create(orderId, input, { clientRequestId })).result),
       ),
 
     changeMethod: (orderId, paymentId, input) =>
-      run('changeMethod', orderId, `${paymentId}:${bodyKey(input)}`, async (clientRequestId) =>
-        framesOf(
-          (await deps.api.payments.changeMethod(paymentId, input, { clientRequestId })).result,
-        ),
+      run(
+        'changeMethod',
+        orderId,
+        `${paymentId}:${bodyKey(input)}`,
+        input,
+        async (clientRequestId) =>
+          framesOf(
+            (await deps.api.payments.changeMethod(paymentId, input, { clientRequestId })).result,
+          ),
       ),
 
     claim: (orderId, paymentId) =>
       run(
         'claim',
         orderId,
+        null,
         null,
         move(() => deps.api.payments.claim(paymentId, {})),
       ),
@@ -262,6 +327,7 @@ export function createPaymentStore(deps: PaymentDeps): PaymentStore {
       run(
         'confirm',
         orderId,
+        null,
         null,
         move(() =>
           deps.api.payments.confirm(
@@ -276,6 +342,7 @@ export function createPaymentStore(deps: PaymentDeps): PaymentStore {
         'cancelClaimed',
         orderId,
         null,
+        null,
         move(() => deps.api.payments.cancelClaimed(paymentId, { reason })),
       ),
 
@@ -283,6 +350,7 @@ export function createPaymentStore(deps: PaymentDeps): PaymentStore {
       run(
         'void',
         orderId,
+        null,
         null,
         sensitive(() => deps.api.payments.void(paymentId, { reason })),
       ),
@@ -292,16 +360,21 @@ export function createPaymentStore(deps: PaymentDeps): PaymentStore {
         'refund',
         orderId,
         null,
+        null,
         sensitive(() => deps.api.payments.refund(paymentId, { reason })),
       ),
 
     settled(orderId) {
       const state = store.getState();
-      if (state.orderId !== orderId || state.phase !== 'unsure') return;
+      if (!(orderId in state.unsure)) return;
       for (const key of [...requestIds.keys()]) {
         if (key.startsWith(`${orderId}|`)) requestIds.delete(key);
       }
-      store.setState({ phase: 'idle', action: null, error: null });
+      const current = state.orderId === orderId && state.phase === 'unsure';
+      store.setState({
+        unsure: without(state.unsure, orderId),
+        ...(current ? { phase: 'idle' as const, action: null, error: null } : {}),
+      });
     },
 
     refresh,

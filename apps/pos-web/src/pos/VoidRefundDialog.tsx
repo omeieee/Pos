@@ -4,6 +4,7 @@ import { errorText } from '../api/errors.ts';
 import { useActivityHold, useServices, useStoreState, useT } from '../ui/hooks.ts';
 import { Icon } from '../ui/Icon.tsx';
 import { Modal } from '../ui/Modal.tsx';
+import { flowFor } from './payment-store.ts';
 
 type Kind = 'void' | 'refund';
 const KINDS: readonly Kind[] = ['void', 'refund'];
@@ -30,7 +31,8 @@ export function VoidRefundDialog({
   const inFlight = useRef(false);
   const sending = flow.orderId === order.id && flow.phase === 'sending';
   const moveAction = flow.action === 'void' || flow.action === 'refund';
-  const unsure = flow.orderId === order.id && flow.phase === 'unsure' && moveAction;
+  const lost = flowFor(flow, order.id).unsure;
+  const unsure = lost?.action === 'void' || lost?.action === 'refund';
   const failure = flow.orderId === order.id && !sending && moveAction ? flow.error : null;
   // The reason being typed and the step-up that follows must not be lost to a page reload.
   useActivityHold(true);

@@ -163,8 +163,6 @@ export const en = {
   'payment.govCopay.step1': 'Open Thung Ngern and create a QR for {amount}',
   'payment.govCopay.step2': 'The customer scans it with Pao Tang at the counter',
   'payment.govCopay.step3': 'When the payment shows in Thung Ngern, confirm it here',
-  'payment.govCopay.estimatedSplit': 'Estimate: government {gov} · customer {customer}',
-  'payment.govCopay.storefrontOnly': 'Storefront payment only',
   'payment.claimed': 'Customer says they paid · check the transfer',
   'payment.reference': 'Reference (optional)',
   'payment.confirm': 'Confirm payment',
@@ -184,6 +182,10 @@ export const en = {
   'payment.nothingToPay': 'This order has nothing to pay',
   'payment.closed': 'A cancelled order cannot be paid',
   'payment.unsure': 'Not sure it was saved. Tap again: it will not be saved twice.',
+  'payment.unsureOtherMethod':
+    'An earlier attempt with another method may have been saved. Check the order before starting again.',
+  'payment.busyElsewhere':
+    'A payment for another order is still being saved. Wait a moment, then try again.',
   'payment.unsureMove':
     'Not sure the action worked. Check the status above, then tap again: it will not be saved twice.',
   'payment.start.promptpay': 'Show the PromptPay QR',
@@ -220,7 +222,6 @@ export const en = {
   'payment.notFound.reasonPlaceholder': 'e.g. checked the bank app, nothing arrived',
   'payment.notFound.confirm': 'Cancel the claim',
   'payment.govCopay.title': 'Thai Chuay Thai Plus',
-  'payment.govCopay.inWindow': 'Within the scheme period',
   'payment.govCopay.typeAmount': 'Type this amount into Thung Ngern (the full amount)',
   'payment.govCopay.estimateLabel': 'Estimate only · the real split is in Thung Ngern',
   'payment.govCopay.govShare': 'Government pays (estimate)',

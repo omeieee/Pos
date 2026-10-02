@@ -4,6 +4,7 @@ import { errorText } from '../api/errors.ts';
 import { useServices, useStoreState, useT } from '../ui/hooks.ts';
 import { Icon } from '../ui/Icon.tsx';
 import type { PayMethod } from './payment-model.ts';
+import { flowFor } from './payment-store.ts';
 
 type Starter = Exclude<PayMethod, 'cash'>;
 
@@ -35,11 +36,11 @@ export function StartPanel({
   const { payments } = useServices();
   const flow = useStoreState(payments);
   const tr = useT();
-  const mine = flow.orderId === order.id;
-  const sending = mine && flow.phase === 'sending';
-  const startAction = flow.action === 'create' || flow.action === 'changeMethod';
-  const unsure = mine && flow.phase === 'unsure' && startAction;
-  const failure = mine && !sending && flow.error && startAction ? flow.error : null;
+  const mine = flowFor(flow, order.id);
+  const action = changeFrom ? 'changeMethod' : 'create';
+  const sending = mine.sending !== null;
+  const unsure = mine.unsure?.action === action ? mine.unsure : null;
+  const failure = !sending && mine.refused?.action === action ? mine.refused.error : null;
 
   async function start() {
     if (sending) return;
@@ -55,7 +56,7 @@ export function StartPanel({
       {children}
       {unsure ? (
         <p className="error" role="alert">
-          {tr('payment.unsure')}
+          {tr(unsure.input?.method === method ? 'payment.unsure' : 'payment.unsureOtherMethod')}
         </p>
       ) : failure ? (
         <p className="error" role="alert">

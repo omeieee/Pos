@@ -6,6 +6,7 @@ import {
   useAuthState,
   useEntities,
   useLocale,
+  useNow,
   useServices,
   useStoreState,
   useT,
@@ -17,6 +18,7 @@ import { MethodTiles } from './MethodTiles.tsx';
 import { OpenPayment } from './OpenPayment.tsx';
 import { PaymentHistory } from './PaymentHistory.tsx';
 import {
+  COPAY_TICK_MS,
   confirmedPayment,
   methodOptions,
   openPayment,
@@ -25,6 +27,7 @@ import {
   paymentPhase,
   paymentsOf,
 } from './payment-model.ts';
+import { flowFor } from './payment-store.ts';
 import { StartPanel } from './StartPanel.tsx';
 import { VoidRefundDialog } from './VoidRefundDialog.tsx';
 
@@ -75,11 +78,16 @@ function PaymentPanelBody({ orderId }: { orderId: string }) {
   const list = paymentsOf(entities, orderId);
   const maxRev = list.reduce((most, p) => Math.max(most, p.rev), 0);
   const mine = flowState.orderId === orderId;
+  const lost = flowFor(flowState, orderId);
+  const isUnsure = lost.unsure !== null;
+  // The clock of this device decides when ไทยช่วยไทย closes for the day, so it ticks: a tile must
+  // not stay enabled after the window ends. The server decides for real.
+  const now = useNow(COPAY_TICK_MS);
 
   // A payment frame for this order after the outcome became unsure: the answer is known now.
   const unsureAt = useRef<number | null>(null);
   useEffect(() => {
-    if (!(mine && flowState.phase === 'unsure')) {
+    if (!isUnsure) {
       unsureAt.current = null;
       return;
     }
@@ -89,7 +97,7 @@ function PaymentPanelBody({ orderId }: { orderId: string }) {
       unsureAt.current = null;
       flow.settled(orderId);
     }
-  }, [mine, flowState.phase, maxRev, flow, orderId]);
+  }, [isUnsure, maxRev, flow, orderId]);
 
   // The server says a method is switched off: stop offering it (until the page is reloaded).
   useEffect(() => {
@@ -105,7 +113,7 @@ function PaymentPanelBody({ orderId }: { orderId: string }) {
   useActivityHold(phase === 'open');
 
   if (!order) return null;
-  const options = methodOptions(order, entities.settings, Date.now(), hidden);
+  const options = methodOptions(order, entities.settings, now, hidden);
   const choice = options.find((o) => o.method === selected && o.enabled)
     ? selected
     : (options.find((o) => o.enabled)?.method ?? null);
@@ -127,54 +135,76 @@ function PaymentPanelBody({ orderId }: { orderId: string }) {
         </div>
       </header>
 
-      {!loaded ? (
-        <p className="muted" role="status">
-          {tr('payment.loading')}
+      {lost.busyElsewhere ? (
+        <p className="notice" role="status">
+          <Icon name="clock" />
+          <span>{tr('payment.busyElsewhere')}</span>
         </p>
-      ) : phase === 'closed' ? (
-        <p className="notice">{tr('payment.closed')}</p>
-      ) : phase === 'nothingToPay' ? (
-        <p className="notice">{tr('payment.nothingToPay')}</p>
-      ) : phase === 'paid' ? (
-        <div className="paid">
-          <span className="status status--success paid__badge">
-            <Icon name="check-circle" />
-            {tr('payment.paid.title')}
-          </span>
-          {received ? (
-            <p className="muted">
-              {tr('payment.paid.detail', {
-                method: tr(`payment.method.${received.method}`),
-                time: received.confirmedAt ? formatDate(received.confirmedAt, locale, 'time') : '',
-              })}
-            </p>
-          ) : null}
-          <p className="hint">{tr('payment.change.confirmedLocked')}</p>
-          {received && role && paymentActions(role, received).voidRefund ? (
-            <button type="button" className="btn btn-danger" onClick={() => setVoiding(true)}>
-              {tr('payment.void.button')}
-            </button>
-          ) : null}
-          {voiding && received ? (
-            <VoidRefundDialog order={order} payment={received} onClose={() => setVoiding(false)} />
-          ) : null}
-        </div>
-      ) : phase === 'open' ? (
-        <OpenPayment order={order} payment={waiting} hidden={hidden} onAttempt={remember} />
-      ) : (
-        <div className="choose">
-          <MethodTiles options={options} choice={choice} name="pay-method" onChoose={setSelected} />
-          {choice === 'cash' ? <CashPanel order={order} onAttempt={remember} /> : null}
-          {choice === 'promptpay' ? (
-            <StartPanel order={order} method="promptpay" onAttempt={remember} />
-          ) : null}
-          {choice === 'gov_copay' ? (
-            <StartPanel order={order} method="gov_copay" onAttempt={remember}>
-              <GovCopaySteps order={order} payment={undefined} />
-            </StartPanel>
-          ) : null}
-        </div>
-      )}
+      ) : null}
+
+      {/* A call for another order is still running: the server calls here would be refused, so
+          the controls are off (a disabled fieldset disables every button inside it). */}
+      <fieldset className="ppanel__body" disabled={lost.busyElsewhere}>
+        {!loaded ? (
+          <p className="muted" role="status">
+            {tr('payment.loading')}
+          </p>
+        ) : phase === 'closed' ? (
+          <p className="notice">{tr('payment.closed')}</p>
+        ) : phase === 'nothingToPay' ? (
+          <p className="notice">{tr('payment.nothingToPay')}</p>
+        ) : phase === 'paid' ? (
+          <div className="paid">
+            <span className="status status--success paid__badge">
+              <Icon name="check-circle" />
+              {tr('payment.paid.title')}
+            </span>
+            {received ? (
+              <p className="muted">
+                {tr('payment.paid.detail', {
+                  method: tr(`payment.method.${received.method}`),
+                  time: received.confirmedAt
+                    ? formatDate(received.confirmedAt, locale, 'time')
+                    : '',
+                })}
+              </p>
+            ) : null}
+            <p className="hint">{tr('payment.change.confirmedLocked')}</p>
+            {received && role && paymentActions(role, received).voidRefund ? (
+              <button type="button" className="btn btn-danger" onClick={() => setVoiding(true)}>
+                {tr('payment.void.button')}
+              </button>
+            ) : null}
+            {voiding && received ? (
+              <VoidRefundDialog
+                order={order}
+                payment={received}
+                onClose={() => setVoiding(false)}
+              />
+            ) : null}
+          </div>
+        ) : phase === 'open' ? (
+          <OpenPayment order={order} payment={waiting} hidden={hidden} onAttempt={remember} />
+        ) : (
+          <div className="choose">
+            <MethodTiles
+              options={options}
+              choice={choice}
+              name="pay-method"
+              onChoose={setSelected}
+            />
+            {choice === 'cash' ? <CashPanel order={order} onAttempt={remember} /> : null}
+            {choice === 'promptpay' ? (
+              <StartPanel order={order} method="promptpay" onAttempt={remember} />
+            ) : null}
+            {choice === 'gov_copay' ? (
+              <StartPanel order={order} method="gov_copay" onAttempt={remember}>
+                <GovCopaySteps order={order} payment={undefined} />
+              </StartPanel>
+            ) : null}
+          </div>
+        )}
+      </fieldset>
 
       <PaymentHistory payments={list} />
     </section>
