@@ -6,7 +6,9 @@ import {
   createItemInputSchema,
   createOptionInputSchema,
   itemDtoSchema,
+  menuPhotoPath,
   patchItemInputSchema,
+  photoQuerySchema,
   publicMenuQuerySchema,
   publicMenuResponseSchema,
 } from './menu.ts';
@@ -191,5 +193,50 @@ describe('clientRequestId on the create inputs', () => {
       patchItemInputSchema.safeParse({ expectedVersion: 1, priceSatang: 1, clientRequestId: id })
         .success,
     ).toBe(false);
+  });
+});
+
+describe('photo URLs (D-21)', () => {
+  test('the path carries the version, so a new photo is a new URL', () => {
+    expect(menuPhotoPath(uuid(1), 7)).toBe(`/v1/menu/items/${uuid(1)}/photo?v=7`);
+    expect(menuPhotoPath(uuid(1), 8)).not.toBe(menuPhotoPath(uuid(1), 7));
+  });
+
+  test('the query takes a positive integer version only', () => {
+    expect(photoQuerySchema.parse({ v: '12' })).toEqual({ v: 12 });
+    for (const v of ['0', '-1', '1.5', 'abc', '', '99999999999']) {
+      expect(photoQuerySchema.safeParse({ v }).success, v).toBe(false);
+    }
+    expect(photoQuerySchema.safeParse({}).success).toBe(false);
+  });
+
+  test('a photo version is optional on a staff item: older clients and rows without a photo parse', () => {
+    const base = {
+      id: uuid(1),
+      categoryId: uuid(2),
+      nameTh: 'x',
+      nameEn: null,
+      descriptionTh: null,
+      descriptionEn: null,
+      priceSatang: 100,
+      imageUrl: null,
+      isAvailable: true,
+      channels: ['storefront'],
+      channelPrices: {},
+      modifierGroupIds: [],
+      sort: 0,
+      archived: false,
+      version: 1,
+      rev: 1,
+    };
+    expect(itemDtoSchema.safeParse(base).success).toBe(true);
+    expect(itemDtoSchema.safeParse({ ...base, photoVersion: null, photoUrl: null }).success).toBe(
+      true,
+    );
+    expect(
+      itemDtoSchema.safeParse({ ...base, photoVersion: 3, photoUrl: menuPhotoPath(uuid(1), 3) })
+        .success,
+    ).toBe(true);
+    expect(itemDtoSchema.safeParse({ ...base, photoVersion: 0 }).success).toBe(false);
   });
 });

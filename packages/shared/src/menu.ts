@@ -1,7 +1,7 @@
 /**
  * Menu API shapes (02 §6, 03 §3 "Menu"). Prices are integer satang. Costs (`est_cost_satang`,
  * `cost_delta_satang`) can be written by managers but are never in any response: a kitchen tablet
- * or a customer must not see what a bowl costs. Photos are a plain https URL for now.
+ * or a customer must not see what a bowl costs. Photos are stored by the API (D-21): `photoUrl`.
  */
 import { z } from 'zod';
 import { MENU_CHANNELS } from './enums.ts';
@@ -48,6 +48,18 @@ const groupIdsSchema = z
   .refine((ids) => new Set(ids).size === ids.length, { message: 'each group once' });
 
 export const groupIdParamSchema = z.object({ groupId: z.uuid() });
+
+/**
+ * Where an item's photo is served (D-21): a path under the API, public to read. `v` is the item's
+ * `photoVersion`; it makes the URL change whenever the photo does, which is why the response can be
+ * cached forever. Clients prefix their API base.
+ */
+export function menuPhotoPath(itemId: string, photoVersion: number): string {
+  return `/v1/menu/items/${itemId}/photo?v=${photoVersion}`;
+}
+
+/** The query of `GET /v1/menu/items/:id/photo`. A wrong or stale `v` is a 404, never a 400. */
+export const photoQuerySchema = z.object({ v: z.coerce.number().int().min(1).max(2_147_483_647) });
 
 // ---------- Categories ----------
 
@@ -182,6 +194,10 @@ export const itemDtoSchema = z.object({
   descriptionEn: z.string().nullable(),
   priceSatang: nonNegativeSatangSchema,
   imageUrl: z.string().nullable(),
+  /** The photo's version (D-21), null or absent when the item has none. Refetch when it changes. */
+  photoVersion: z.number().int().min(1).nullish(),
+  /** `menuPhotoPath(id, photoVersion)`: relative to the API base, null or absent without a photo. */
+  photoUrl: z.string().nullish(),
   isAvailable: z.boolean(),
   channels: z.array(menuChannel),
   channelPrices: z.partialRecord(menuChannel, nonNegativeSatangSchema),
@@ -295,6 +311,8 @@ const publicItemSchema = z.object({
   /** The price on the requested channel: the channel override if there is one, else the base price. */
   priceSatang: nonNegativeSatangSchema,
   imageUrl: z.string().nullable(),
+  /** The photo's path (`menuPhotoPath`), relative to the API base; null or absent without one. */
+  photoUrl: z.string().nullish(),
   modifierGroups: z.array(publicGroupSchema),
 });
 export const publicMenuResponseSchema = z.object({
