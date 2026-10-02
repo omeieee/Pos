@@ -16,6 +16,8 @@ export function saveErrorText(tr: Translate, reason: SaveError): string {
       return tr('outbox.error.full', { max: MAX_QUEUE });
     case 'noSession':
       return tr('outbox.error.noSession');
+    case 'orderGone':
+      return tr('outbox.error.orderGone');
   }
 }
 

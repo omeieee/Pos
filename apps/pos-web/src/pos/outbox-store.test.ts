@@ -651,3 +651,165 @@ describe('knowing that it is offline', () => {
     expect(outbox.getState().offline).toBe(false);
   });
 });
+
+describe('a payment never loses its order (the order syncs while cash is being saved)', () => {
+  const cashFor = (entryId: string, tendered = 10000) => ({
+    target: { entryId },
+    tenderedSatang: tendered,
+    totalSatang: 2500,
+    label: 'XK-01',
+  });
+
+  /** A gate: while armed, the next `list` waits for `release()`. */
+  function gatedList(store: LocalStore) {
+    const realList = store.outbox.list.bind(store.outbox);
+    let release: (() => void) | null = null;
+    let armed = false;
+    store.outbox.list = async () => {
+      if (armed) {
+        armed = false;
+        await new Promise<void>((resolve) => {
+          release = resolve;
+        });
+      }
+      return realList();
+    };
+    return {
+      arm: () => {
+        armed = true;
+      },
+      release: () => release?.(),
+    };
+  }
+
+  test('cash asked for while the order is being linked goes to the server order, once', async () => {
+    const store = persistentStore();
+    const gate = gatedList(store);
+    const { outbox, pay, life } = setup({ store, online: false, create: okOrder(uuid(100)) });
+    await settle();
+    await queueOrder(outbox, uuid(10));
+    gate.arm();
+    life.goOnline();
+    await settle(); // the order was created; its bookkeeping waits on the gated list
+    const late = outbox.enqueueCash(cashFor(uuid(10)));
+    await settle();
+    gate.release();
+    const result = await late;
+    await settle();
+    expect(result.ok).toBe(true);
+    expect(pay).toHaveBeenCalledTimes(1);
+    expect(pay.mock.calls[0]?.[0]).toBe(uuid(100));
+    expect(await store.outbox.count()).toBe(0);
+  });
+
+  test('cash saved while the order is on its way is linked by the order sync', async () => {
+    let release: () => void = () => undefined;
+    const { outbox, pay, store } = setup({
+      create: (_input, options) =>
+        new Promise((resolve) => {
+          release = () =>
+            resolve({
+              order: placed(uuid(100)),
+              replay: false,
+              clientRequestId: options?.clientRequestId ?? '',
+            });
+        }),
+    });
+    await settle();
+    await queueOrder(outbox, uuid(10));
+    await settle();
+    expect((await outbox.enqueueCash(cashFor(uuid(10)))).ok).toBe(true);
+    release();
+    await settle();
+    expect(pay).toHaveBeenCalledTimes(1);
+    expect(pay.mock.calls[0]?.[0]).toBe(uuid(100));
+    expect(await store.outbox.count()).toBe(0);
+  });
+
+  test('cash for an order entry that is gone and was never synced here is refused', async () => {
+    const { outbox, store } = setup({ online: false });
+    await settle();
+    expect(await outbox.enqueueCash(cashFor(uuid(10)))).toEqual({
+      ok: false,
+      reason: 'orderGone',
+    });
+    expect(await store.outbox.count()).toBe(0);
+  });
+
+  test('asking again for an order that synced meanwhile does not make a second cash entry', async () => {
+    const { outbox, store, life } = setup({
+      online: false,
+      create: okOrder(uuid(100)),
+      pay: async () => {
+        throw network();
+      },
+    });
+    await settle();
+    await queueOrder(outbox, uuid(10));
+    const first = await outbox.enqueueCash(cashFor(uuid(10)));
+    life.goOnline();
+    await settle();
+    // The order is on the server and its cash still waits (now pointed at the server order).
+    // A late second tap with the old order entry id finds that cash instead of making another.
+    const second = await outbox.enqueueCash(cashFor(uuid(10)));
+    expect(first.ok && second.ok).toBe(true);
+    expect(first.ok && second.ok && first.id === second.id).toBe(true);
+    expect(await store.outbox.count()).toBe(1);
+  });
+
+  test('a failed read keeps the order entry (nothing is removed) and the retry links the payment', async () => {
+    const store = persistentStore();
+    const { outbox, pay, create, life } = setup({
+      store,
+      online: false,
+      create: okOrder(uuid(100)),
+    });
+    await settle();
+    await queueOrder(outbox, uuid(10));
+    await outbox.enqueueCash(cashFor(uuid(10)));
+    const realList = store.outbox.list.bind(store.outbox);
+    let fail = true;
+    store.outbox.list = async () => {
+      if (fail) throw new Error('read failed');
+      return realList();
+    };
+    life.goOnline();
+    await settle();
+    expect(await store.outbox.count()).toBe(2); // order and cash still there
+    expect(pay).not.toHaveBeenCalled();
+    expect(create).toHaveBeenCalledTimes(1); // backs off: no hot loop
+    fail = false;
+    await vi.advanceTimersByTimeAsync(10_000);
+    await settle();
+    expect(create).toHaveBeenCalledTimes(2); // an idempotent replay of the same order
+    expect(pay).toHaveBeenCalledTimes(1);
+    expect(pay.mock.calls[0]?.[0]).toBe(uuid(100));
+    expect(await store.outbox.count()).toBe(0);
+    expect(outbox.getState().items).toHaveLength(0);
+  });
+
+  test('a failed rewrite of the payment keeps the order entry, and nothing shows as missing', async () => {
+    const store = persistentStore();
+    const { outbox, pay, life } = setup({ store, online: false, create: okOrder(uuid(100)) });
+    await settle();
+    await queueOrder(outbox, uuid(10));
+    await outbox.enqueueCash(cashFor(uuid(10)));
+    const realPut = store.outbox.put.bind(store.outbox);
+    let fail = true;
+    store.outbox.put = async (entry) => {
+      if (fail && entry.kind === 'payment.cash') {
+        throw new DOMException('full', 'QuotaExceededError');
+      }
+      return realPut(entry);
+    };
+    life.goOnline();
+    await settle();
+    expect(await store.outbox.count()).toBe(2);
+    expect(outbox.getState().items.map((i) => i.state)).toEqual(['queued', 'queued']);
+    fail = false;
+    await vi.advanceTimersByTimeAsync(10_000);
+    await settle();
+    expect(pay).toHaveBeenCalledTimes(1);
+    expect(await store.outbox.count()).toBe(0);
+  });
+});

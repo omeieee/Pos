@@ -494,6 +494,8 @@ export const en = {
     'Could not save on this device. This order was not sent and was not kept. Write it down and try again when the internet is back.',
   'outbox.error.full': 'The queue on this device is full ({max} items). Wait for it to sync first.',
   'outbox.error.noSession': 'Not signed in, so it cannot be saved.',
+  'outbox.error.orderGone':
+    'The order for this cash is no longer waiting here. Open it from the Orders page and take the cash there.',
   'outbox.error.unreadable': 'This item cannot be read. Remove it and enter it again.',
   'outbox.error.orderMissing':
     'The order for this item was not found. Remove it and check the orders page.',

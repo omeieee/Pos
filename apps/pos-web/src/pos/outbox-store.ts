@@ -80,7 +80,7 @@ export interface OutboxState {
 
 export type EnqueueResult =
   | { ok: true; id: string; label: string }
-  | { ok: false; reason: 'storage' | 'full' | 'noSession' };
+  | { ok: false; reason: 'storage' | 'full' | 'noSession' | 'orderGone' };
 
 export interface OutboxDeps {
   api: {
@@ -274,42 +274,56 @@ export function createOutboxStore(deps: OutboxDeps): OutboxStore {
     publish();
   }
 
-  /** The order reached the server: link its payments to it, then forget the entry. */
-  async function orderSynced(entry: OutboxEntry, order: OrderDto, startedIn: number) {
-    const all = (await local?.outbox.list().catch(() => [] as OutboxEntry[])) ?? [];
-    const dependents: OutboxEntry[] = [];
-    for (const row of all) {
-      if (row.kind !== KIND_CASH) continue;
-      const payload = paymentPayloadOf(row);
-      if (!payload || !('entryId' in payload.target) || payload.target.entryId !== entry.id) {
-        continue;
+  /** The same payment, pointed at the server order instead of the order entry. */
+  const relinked = (row: OutboxEntry, entryId: string, orderId: string): OutboxEntry => {
+    if (row.kind !== KIND_CASH) return row;
+    const payload = paymentPayloadOf(row);
+    if (!payload || !('entryId' in payload.target) || payload.target.entryId !== entryId)
+      return row;
+    return { ...row, payload: { ...payload, target: { orderId } } };
+  };
+
+  /**
+   * The order reached the server: link its payments to it, then forget the entry. It runs inside
+   * `serial()`, so saving cash for this order cannot land between the read and the removal: it
+   * either is read here and linked, or it comes after and is pointed at the server order. If the
+   * device cannot be read or a rewrite fails, the order entry STAYS (a replay of it is harmless,
+   * the server answers the order it already has) and is tried again after a backoff.
+   */
+  function orderSynced(entry: OutboxEntry, order: OrderDto, startedIn: number): Promise<void> {
+    return serial(async () => {
+      try {
+        const opened = local ?? (await ensureStore());
+        for (const row of await opened.outbox.list()) {
+          const linked = relinked(row, entry.id, order.id);
+          if (linked !== row) await opened.outbox.put(linked);
+        }
+      } catch {
+        if (epoch !== startedIn) return;
+        const tries = (attempts.get(entry.id) ?? entry.attempts) + 1;
+        attempts.set(entry.id, tries);
+        dueAt.set(entry.id, now() + backoffMs(tries, random));
+        publish();
+        return;
       }
-      const linked: OutboxEntry = {
-        ...row,
-        payload: { ...payload, target: { orderId: order.id } },
+      try {
+        await local?.outbox.remove(entry.id);
+      } catch {
+        // It stays on the device and is answered as a replay next time.
+      }
+      if (epoch !== startedIn) return;
+      const frame: RealtimeFrame = {
+        type: 'order.upserted',
+        id: order.id,
+        rev: order.rev,
+        data: order,
       };
-      dependents.push(linked);
-      await persist(linked);
-    }
-    try {
-      await local?.outbox.remove(entry.id);
-    } catch {
-      // It stays on the device and is answered as a replay next time.
-    }
-    if (epoch !== startedIn) return;
-    const frame: RealtimeFrame = {
-      type: 'order.upserted',
-      id: order.id,
-      rev: order.rev,
-      data: order,
-    };
-    deps.entities.apply(frame);
-    mine = mine
-      .filter((e) => e.id !== entry.id)
-      .map((e) => dependents.find((d) => d.id === e.id) ?? e);
-    attempts.delete(entry.id);
-    dueAt.delete(entry.id);
-    publish({ synced: { ...store.getState().synced, [entry.id]: order.id } });
+      deps.entities.apply(frame);
+      mine = mine.filter((e) => e.id !== entry.id).map((e) => relinked(e, entry.id, order.id));
+      attempts.delete(entry.id);
+      dueAt.delete(entry.id);
+      publish({ synced: { ...store.getState().synced, [entry.id]: order.id } });
+    });
   }
 
   async function paymentSynced(entry: OutboxEntry, frames: RealtimeFrame[], startedIn: number) {
@@ -474,17 +488,29 @@ export function createOutboxStore(deps: OutboxDeps): OutboxStore {
       const person = who;
       if (person === null) return { ok: false, reason: 'noSession' };
       const startedIn = epoch;
+      // An order entry that has synced since the screen was drawn is the server's order now. One
+      // that is neither here nor known to have synced is gone: the cash would wait for nothing.
+      let target = input.target;
+      if ('entryId' in target) {
+        const { entryId } = target;
+        if (!mine.some((e) => e.id === entryId)) {
+          const orderId = store.getState().synced[entryId];
+          if (orderId === undefined) return { ok: false, reason: 'orderGone' };
+          target = { orderId };
+        }
+      }
       // One cash payment per order: asking again answers the one that is waiting.
+      const wanted = JSON.stringify(target);
       const waiting = mine.find((e) => {
         if (e.kind !== KIND_CASH) return false;
         const payload = paymentPayloadOf(e);
-        return payload !== null && JSON.stringify(payload.target) === JSON.stringify(input.target);
+        return payload !== null && JSON.stringify(payload.target) === wanted;
       });
       if (waiting) return { ok: true, id: waiting.id, label: input.label };
       const entry = cashEntry(
         newId(),
         {
-          target: input.target,
+          target,
           tenderedSatang: input.tenderedSatang,
           label: input.label,
           totalSatang: input.totalSatang,
