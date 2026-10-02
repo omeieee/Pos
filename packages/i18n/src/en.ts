@@ -542,6 +542,50 @@ export const en = {
     'This cash entry was already sent or is being sent, so the amount cannot be changed. Wait for the server first.',
   'outbox.cash.estimate': 'Change is worked out from the estimated total',
   'outbox.onlineOnly': 'Offline: cash works. PromptPay and ไทยช่วยไทย need the internet.',
+  'outbox.onlineOnlyCopay':
+    'Offline: cash and PromptPay (QR drawn on this device) work. ไทยช่วยไทย needs the internet.',
+  'payment.copay.reason.qrNone': 'Connect once so the PromptPay ID can be saved on this device',
+  'payment.copay.reason.qrStale': 'The shop changed the PromptPay ID: connect to update',
+  'payment.copay.reason.qrTooOld': 'The saved PromptPay ID is over 24 hours old: connect to update',
+  'payment.offlineQr.title': 'PromptPay (offline)',
+  'payment.offlineQr.banner':
+    'Offline QR: account ending …{last4}, saved at {time}. Before accepting, check that the masked account in the shop’s bank app ends the same way.',
+  'payment.offlineQr.amount.estimate': 'Estimate from the saved menu',
+  'payment.offlineQr.amount.server': 'Total from the server',
+  'payment.offlineQr.estimateWarning':
+    'The amount in the QR is an ESTIMATE. The server works out the real total when it syncs; if prices changed the amount may differ and the entry will need attention.',
+  'payment.offlineQr.alt': 'Offline PromptPay QR, amount {amount}',
+  'payment.offlineQr.loading': 'Making the QR…',
+  'payment.offlineQr.failed': 'The QR could not be made. Try opening this page again.',
+  'payment.offlineQr.refused.none':
+    'No PromptPay ID is saved on this device. Connect to the internet once, then the QR can be shown.',
+  'payment.offlineQr.refused.stale':
+    'The shop just changed the PromptPay ID. Connect to the internet to update it before showing a QR.',
+  'payment.offlineQr.refused.tooOld':
+    'The saved PromptPay ID is more than 24 hours old. Connect to the internet to update it before showing a QR.',
+  'payment.offlineQr.refused.badAmount': 'The amount is not valid, so no QR can be made.',
+  'payment.offlineQr.confirm': 'The customer paid and I checked the money in the bank app',
+  'payment.offlineQr.confirmHint':
+    'Press only after you see the money in the bank app. It is saved on this device and sent when the internet is back. It does not count as paid until the server confirms.',
+  'outbox.promptpay.title': 'PromptPay (offline)',
+  'outbox.promptpay.summary': 'QR amount {amount} ({kind})',
+  'outbox.promptpay.waiting':
+    'Saved: the customer paid and staff checked the bank app. It is kept on this device and does not count as paid until the server confirms.',
+  'outbox.promptpay.confirmOnly':
+    'The payment is made in the system. Only the confirmation is left to send.',
+  'outbox.promptpay.serverAmount': 'The server’s total is {amount}',
+  'outbox.promptpay.moneyTaken':
+    'The customer has paid, but the system has not recorded it as paid. Check the bank app, then deal with it on the order page. Do not let the customer pay again.',
+  'outbox.discard.promptpay':
+    'This PromptPay payment is not recorded as paid. If you remove it, deal with the order yourself, and if the customer already transferred the money, reconcile it by hand.',
+  'outbox.error.qrAmount':
+    'The server’s total is not the amount in the QR, so it was not confirmed. The customer has already transferred the money: reconcile by hand.',
+  'outbox.error.qrId':
+    'The shop changed the PromptPay ID after this QR was shown. The money may have gone to the old account. Check the bank app and deal with it by hand.',
+  'outbox.error.alreadyPaid':
+    'This order was already paid from another device. The customer may have paid twice: check, and refund if needed.',
+  'outbox.error.alreadyOpen':
+    'This order already has a payment waiting in the system. Check on the order page whether the money was taken twice.',
   'payment.copay.reason.needsInternet': 'Needs the internet',
   'pos.orderEntry.placeOffline': 'Save order (offline)',
   'pos.orderEntry.offlineHint':
