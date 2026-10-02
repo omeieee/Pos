@@ -26,6 +26,7 @@ import {
   registerDeviceInputSchema,
   staffStepUpInputSchema,
 } from '@sds/shared';
+import { createMockAdmin, type MockDevice, type MockPerson } from './mock-admin.ts';
 import type { RawBody } from './mock-menu-admin.ts';
 import { createMockShop } from './mock-shop.ts';
 
@@ -131,6 +132,48 @@ export function createMockServer(options: MockServerOptions = {}) {
   /** Sessions issued at or before this counter value are treated as ended. */
   let revokedUpTo = 0;
   const calls: { method: string; path: string }[] = [];
+  // Staff and devices the owner manages from Settings (see mock-admin.ts). The staff start as
+  // MOCK_STAFF; a person added, renamed, deactivated or given a new PIN there is what signs in here.
+  const people: MockPerson[] = MOCK_STAFF.map((s) => ({ ...s, active: true, version: 1 }));
+  /** Sessions of this person issued at or before this counter value are treated as ended. */
+  const sessionsEndedAt = new Map<string, number>();
+  const deviceTokens = new Map<string, string>();
+  const devices: MockDevice[] = [
+    {
+      id: '0192f3a0-0000-7000-8000-0000000009a1',
+      name: 'iPhone ครัว (ตัวอย่าง)',
+      kind: 'iphone',
+      lastSeenAt: new Date(now() - 3 * 3600_000).toISOString(),
+      revokedAt: null,
+      version: 1,
+    },
+    {
+      id: '0192f3a0-0000-7000-8000-0000000009a2',
+      name: 'iPad เก่า (ตัวอย่าง)',
+      kind: 'ipad',
+      lastSeenAt: new Date(now() - 40 * 86_400_000).toISOString(),
+      revokedAt: new Date(now() - 30 * 86_400_000).toISOString(),
+      version: 2,
+    },
+  ];
+  /** The calling device is in the list: a token the dev server accepts is a device it knows. */
+  function noteDevice(token: string | undefined) {
+    const device = token ? deviceOf(token) : null;
+    if (!token || !device) return;
+    deviceTokens.set(device.id, token);
+    const known = devices.find((d) => d.id === device.id);
+    if (known) known.lastSeenAt = new Date(now()).toISOString();
+    else {
+      devices.push({
+        id: device.id,
+        name: device.name,
+        kind: device.kind as MockDevice['kind'],
+        lastSeenAt: new Date(now()).toISOString(),
+        revokedAt: null,
+        version: 1,
+      });
+    }
+  }
   // The menu, orders, sync and the socket: see mock-shop.ts.
   const shop = createMockShop({ now });
 
@@ -155,7 +198,8 @@ export function createMockServer(options: MockServerOptions = {}) {
     if (claims.deviceToken && revoked.has(claims.deviceToken)) return null;
     // A PIN session only works with the device token it was opened on.
     if (claims.kind === 'pin' && claims.deviceToken !== (deviceToken ?? null)) return 'mismatch';
-    const staff = MOCK_STAFF.find((s) => s.id === claims.staffId);
+    if (claims.n <= (sessionsEndedAt.get(claims.staffId) ?? 0)) return null;
+    const staff = people.find((s) => s.id === claims.staffId && s.active);
     return staff ? { token, staff, claims } : null;
   };
   const mintSession = (staff: MockStaff, kind: 'pin' | 'owner', deviceToken: string | null) => {
@@ -230,7 +274,9 @@ export function createMockServer(options: MockServerOptions = {}) {
     if (method === 'GET' && path === '/v1/auth/staff') {
       if (!deviceOf(deviceHeader)) return fail(401, 'DEVICE_UNREGISTERED');
       return reply(200, {
-        staff: MOCK_STAFF.map(({ id, displayName, role }) => ({ id, displayName, role })),
+        staff: people
+          .filter((p) => p.active)
+          .map(({ id, displayName, role }) => ({ id, displayName, role })),
       });
     }
 
@@ -238,7 +284,7 @@ export function createMockServer(options: MockServerOptions = {}) {
       if (!deviceOf(deviceHeader)) return fail(401, 'DEVICE_UNREGISTERED');
       const input = pinLoginInputSchema.safeParse(body);
       if (!input.success) return validation();
-      const staff = MOCK_STAFF.find((s) => s.id === input.data.staffId);
+      const staff = people.find((s) => s.id === input.data.staffId && s.active);
       const verdict = checkPin(staff, input.data.pin);
       if (verdict !== 'ok' || !staff)
         return verdict === 'ok' ? fail(401, 'INVALID_CREDENTIALS') : verdict;
@@ -251,7 +297,7 @@ export function createMockServer(options: MockServerOptions = {}) {
         return fail(401, 'DEVICE_UNREGISTERED');
       const input = ownerLoginInputSchema.safeParse(body);
       if (!input.success) return validation();
-      const owner = MOCK_STAFF.find((s) => s.role === 'owner');
+      const owner = people.find((s) => s.role === 'owner');
       const ok =
         owner !== undefined &&
         input.data.email === MOCK_OWNER.email &&
@@ -321,11 +367,17 @@ export function createMockServer(options: MockServerOptions = {}) {
       if (!input.success) return validation();
       counter += 1;
       const device = { id: crypto.randomUUID(), name: input.data.name, kind: input.data.kind };
-      return reply(201, {
-        device,
-        deviceToken: `${DEVICE_PREFIX}${encode({ ...device, n: counter })}`,
-      });
+      const deviceToken = `${DEVICE_PREFIX}${encode({ ...device, n: counter })}`;
+      noteDevice(deviceToken);
+      return reply(201, { device, deviceToken });
     }
+
+    noteDevice(deviceHeader);
+    const managed = admin.handle(method, path, body, {
+      role: session.staff.role,
+      stepUpFresh: (stepUps.get(session.token) ?? 0) > now(),
+    });
+    if (managed) return reply(managed.status, managed.body);
 
     if (
       method === 'POST' &&
@@ -349,6 +401,22 @@ export function createMockServer(options: MockServerOptions = {}) {
 
     return fail(404, 'NOT_FOUND');
   }
+
+  const admin = createMockAdmin({
+    now,
+    newUuid: () => crypto.randomUUID(),
+    people,
+    devices,
+    lockedUntil: (staffId) => pinFailures.get(staffId)?.lockedUntil ?? 0,
+    endSessions(staffId) {
+      sessionsEndedAt.set(staffId, counter);
+      pinFailures.delete(staffId);
+    },
+    revokeDevice(id) {
+      const token = deviceTokens.get(id);
+      if (token) revoked.add(token);
+    },
+  });
 
   const mockFetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const raw = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
@@ -392,7 +460,9 @@ export function createMockServer(options: MockServerOptions = {}) {
     issueDeviceToken(name = 'iPad ตัวอย่าง', kind: 'ipad' | 'iphone' | 'laptop' = 'ipad') {
       counter += 1;
       const device = { id: crypto.randomUUID(), name, kind };
-      return { device, deviceToken: `${DEVICE_PREFIX}${encode({ ...device, n: counter })}` };
+      const deviceToken = `${DEVICE_PREFIX}${encode({ ...device, n: counter })}`;
+      noteDevice(deviceToken);
+      return { device, deviceToken };
     },
     /** The server forgets this device (the owner removed it). */
     revoke(token: string) {

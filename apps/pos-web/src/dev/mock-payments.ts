@@ -21,15 +21,20 @@ import {
   derivePaymentStatus,
   estimateGovCopaySplit,
   type GovCopayDto,
+  govCopayPatchInputSchema,
+  govCopaySchemeSchema,
   isCopayAvailable,
   maskPromptpayId,
   type OrderDto,
   orderMachine,
   type PaymentDto,
   type PaymentStatus,
+  type PromptpaySettings,
   paymentMachine,
   paymentReasonInputSchema,
+  paymentsPatchInputSchema,
   paymentsSettingsSchema,
+  promptpayPatchInputSchema,
   type RealtimeFrame,
   ROLE_PERMISSIONS,
   type StaffRole,
@@ -77,6 +82,11 @@ export function createMockPayments(deps: Deps) {
   let promptpayId = MOCK_PROMPTPAY_ID;
   let promptpayRev = 0;
   let promptpayVersion = 1;
+  let promptpayType: PromptpaySettings['idType'] = 'phone';
+  // The payment methods the shop offers, changed from the settings screen (version 1: it is in the feed).
+  let methods = paymentsSettingsSchema.parse({});
+  let methodsVersion = 1;
+  let methodsRev = 0;
   const promptpayMasked = () => maskPromptpayId(promptpayId);
   const byRequest = new Map<string, { paymentId: string; requestKey: string }>();
 
@@ -103,14 +113,14 @@ export function createMockPayments(deps: Deps) {
       enabled: true,
     };
   };
-  const copayScheme = scheme();
+  let copayScheme = scheme();
   const settingsFrames = (): RealtimeFrame[] => {
     const frames: RealtimeFrame[] = [];
-    const methods = paymentsSettingsSchema.parse({});
+    methodsRev = deps.nextRev();
     promptpayRev = deps.nextRev();
     for (const [id, data, rev] of [
-      ['payment_methods', methods, deps.nextRev()],
-      ['promptpay', { idType: 'phone', idMasked: promptpayMasked() }, promptpayRev],
+      ['payment_methods', methods, methodsRev],
+      ['promptpay', { idType: promptpayType, idMasked: promptpayMasked() }, promptpayRev],
     ] as const) {
       frames.push({ type: 'settings.updated', id, rev, version: 1, data } as RealtimeFrame);
     }
@@ -213,7 +223,6 @@ export function createMockPayments(deps: Deps) {
   ): MockAnswer | PaymentDto {
     if (order.status === 'cancelled') return fail(409, 'ORDER_CLOSED');
     if (order.totalSatang <= 0) return fail(422, 'NOTHING_TO_PAY');
-    const methods = paymentsSettingsSchema.parse({});
     if (input.method !== 'gov_copay' && !methods[input.method]) return fail(422, 'METHOD_DISABLED');
     const existing = forOrder(order.id);
     if (existing.some((p) => p.status === 'confirmed')) return fail(409, 'ORDER_ALREADY_PAID');
@@ -432,7 +441,7 @@ export function createMockPayments(deps: Deps) {
     return {
       status: 200,
       body: {
-        value: { idType: 'phone', idValue: promptpayId },
+        value: { idType: promptpayType, idValue: promptpayId },
         version: promptpayVersion,
         rev: promptpayRev,
         updatedAt: new Date(deps.now()).toISOString(),
@@ -453,8 +462,116 @@ export function createMockPayments(deps: Deps) {
       id: 'promptpay',
       rev: promptpayRev,
       version: promptpayVersion,
-      data: { idType: 'phone', idMasked: promptpayMasked() },
+      data: { idType: promptpayType, idMasked: promptpayMasked() },
     } as RealtimeFrame & { rev: number });
+  }
+
+  // ---------- Settings that live with the payments ----------
+
+  const settingsError = (status: number, code: string, details: Record<string, unknown> = {}) =>
+    fail(status, code, details);
+  const conflict = (version: number) =>
+    settingsError(409, 'VERSION_CONFLICT', { currentVersion: version });
+  const stamp = () => new Date(deps.now()).toISOString();
+
+  function readMethods(caller: MockCaller): MockAnswer {
+    if (!ROLE_PERMISSIONS[caller.role].has('settings.view')) return fail(403, 'FORBIDDEN');
+    return {
+      status: 200,
+      body: { value: methods, version: methodsVersion, rev: methodsRev, updatedAt: stamp() },
+    };
+  }
+
+  /** `PATCH /v1/settings/payments`: settings.edit, no step-up. */
+  function patchMethods(body: unknown, caller: MockCaller): MockAnswer {
+    if (!ROLE_PERMISSIONS[caller.role].has('settings.edit')) return fail(403, 'FORBIDDEN');
+    const input = paymentsPatchInputSchema.safeParse(body);
+    if (!input.success) return fail(400, 'VALIDATION_ERROR');
+    if (input.data.expectedVersion !== methodsVersion) return conflict(methodsVersion);
+    const { expectedVersion: _version, ...given } = input.data;
+    const next = paymentsSettingsSchema.parse({
+      ...methods,
+      ...Object.fromEntries(Object.entries(given).filter(([, v]) => v !== undefined)),
+    });
+    if (JSON.stringify(next) !== JSON.stringify(methods)) {
+      methods = next;
+      methodsVersion += 1;
+      methodsRev = deps.nextRev();
+      deps.publish({
+        type: 'settings.updated',
+        id: 'payment_methods',
+        rev: methodsRev,
+        version: methodsVersion,
+        data: methods,
+      } as RealtimeFrame & { rev: number });
+    }
+    return readMethods(caller);
+  }
+
+  /** `PATCH /v1/settings/promptpay`: the owner, with a fresh step-up. The answer carries the ID in clear, like the real one. */
+  function patchPromptpay(body: unknown, caller: MockCaller): MockAnswer {
+    if (!ROLE_PERMISSIONS[caller.role].has('settings.promptpay')) return fail(403, 'FORBIDDEN');
+    if (!caller.stepUpFresh) return fail(403, 'STEP_UP_REQUIRED');
+    const input = promptpayPatchInputSchema.safeParse(body);
+    if (!input.success) return fail(400, 'VALIDATION_ERROR');
+    if (input.data.expectedVersion !== promptpayVersion) return conflict(promptpayVersion);
+    promptpayType = input.data.idType;
+    setPromptpayId(input.data.idValue);
+    return readPromptpay(caller);
+  }
+
+  const schemeRev = () => copayScheme.rev;
+  const copayFrame = () =>
+    ({
+      type: 'settings.updated',
+      id: 'gov_copay',
+      rev: schemeRev(),
+      version: copayScheme.version,
+      data: copayScheme,
+    }) as RealtimeFrame & { rev: number };
+
+  function readCopay(caller: MockCaller): MockAnswer {
+    if (!ROLE_PERMISSIONS[caller.role].has('settings.view')) return fail(403, 'FORBIDDEN');
+    return { status: 200, body: { scheme: copayScheme } };
+  }
+
+  /** `PATCH /v1/settings/gov-copay`: the owner, with a fresh step-up; the whole scheme is checked again. */
+  function patchCopay(body: unknown, caller: MockCaller): MockAnswer {
+    if (!ROLE_PERMISSIONS[caller.role].has('settings.gov_copay')) return fail(403, 'FORBIDDEN');
+    if (!caller.stepUpFresh) return fail(403, 'STEP_UP_REQUIRED');
+    const input = govCopayPatchInputSchema.safeParse(body);
+    if (!input.success) return fail(400, 'VALIDATION_ERROR');
+    const { expectedVersion, code: _code, nameTh, nameEn, settlementNote, ...rest } = input.data;
+    if (expectedVersion !== copayScheme.version) return conflict(copayScheme.version);
+    const given = Object.fromEntries(Object.entries(rest).filter(([, v]) => v !== undefined));
+    const merged = govCopaySchemeSchema.safeParse({
+      govShareBp: copayScheme.govShareBp,
+      govDailyCapSatang: copayScheme.govDailyCapSatang,
+      govTotalCapSatang: copayScheme.govTotalCapSatang,
+      activeFrom: copayScheme.activeFrom,
+      activeTo: copayScheme.activeTo,
+      activeFromMinute: copayScheme.activeFromMinute,
+      activeToMinute: copayScheme.activeToMinute,
+      channels: copayScheme.channels,
+      enabled: copayScheme.enabled,
+      ...given,
+    });
+    if (!merged.success) return fail(400, 'VALIDATION_ERROR');
+    if (merged.data.enabled && (merged.data.channels.length === 0 || merged.data.govShareBp <= 0)) {
+      return fail(400, 'VALIDATION_ERROR');
+    }
+    const rev = deps.nextRev();
+    copayScheme = {
+      ...copayScheme,
+      ...merged.data,
+      ...(nameTh === undefined ? {} : { nameTh }),
+      ...(nameEn === undefined ? {} : { nameEn }),
+      ...(settlementNote === undefined ? {} : { settlementNote }),
+      version: copayScheme.version + 1,
+      rev,
+    };
+    deps.publish(copayFrame());
+    return readCopay(caller);
   }
 
   /** Answers the order-status and payment routes (null: not one of them). */
@@ -466,6 +583,12 @@ export function createMockPayments(deps: Deps) {
   ): MockAnswer | null {
     if (method === 'GET' && path === '/v1/orders') return listOrders();
     if (method === 'GET' && path === '/v1/settings/promptpay') return readPromptpay(caller);
+    if (method === 'PATCH' && path === '/v1/settings/promptpay')
+      return patchPromptpay(body, caller);
+    if (method === 'GET' && path === '/v1/settings/payments') return readMethods(caller);
+    if (method === 'PATCH' && path === '/v1/settings/payments') return patchMethods(body, caller);
+    if (method === 'GET' && path === '/v1/settings/gov-copay') return readCopay(caller);
+    if (method === 'PATCH' && path === '/v1/settings/gov-copay') return patchCopay(body, caller);
     const orderRoute = /^\/v1\/orders\/([^/]+)\/(transition|cancel|payments)$/.exec(path);
     if (orderRoute) {
       const [, id = '', what] = orderRoute;

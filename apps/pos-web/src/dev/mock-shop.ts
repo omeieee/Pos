@@ -34,6 +34,7 @@ import {
 import type { SocketFactory, SocketHandlers } from '../platform/socket.ts';
 import { createMockMenuAdmin, type RawBody } from './mock-menu-admin.ts';
 import { createMockPayments, type MockCaller } from './mock-payments.ts';
+import { createMockSettings } from './mock-settings.ts';
 
 export interface MockShopOptions {
   now?: () => number;
@@ -289,6 +290,14 @@ export function createMockShop(options: MockShopOptions = {}) {
     publish: (frame) => publish(frame as SyncChange),
   });
   for (const frame of payments.settingsFrames()) publish(frame as SyncChange);
+
+  // Shop, hours, numbering and the building list (see mock-settings.ts). Never saved, they read as
+  // their defaults at version 0 and are not in the sync feed until someone saves them.
+  const settings = createMockSettings({
+    now,
+    nextRev: () => ++rev,
+    publish: (frame) => publish(frame as SyncChange),
+  });
 
   // The menu editor's routes (see mock-menu-admin.ts): they change the rows in `latest`.
   const menuAdmin = createMockMenuAdmin({
@@ -653,13 +662,8 @@ export function createMockShop(options: MockShopOptions = {}) {
     if (paid) return paid;
     if (method === 'GET' && path === '/v1/sync') return sync(query);
     if (method === 'GET' && path === '/v1/recipients') return listRecipients(query);
-    if (method === 'GET' && path === '/v1/settings/delivery') {
-      // Never saved: the default list, version 0 (so it is not in the sync feed either).
-      return {
-        status: 200,
-        body: { value: DEFAULT_DELIVERY_SETTINGS, version: 0, rev: 0, updatedAt: null },
-      };
-    }
+    const settled = settings.handle(method, path, body, caller);
+    if (settled) return settled;
     if (method === 'POST' && path === '/v1/orders') return createOrder(body);
     const one = /^\/v1\/orders\/([^/]+)$/.exec(path);
     if (method === 'GET' && one) {
