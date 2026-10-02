@@ -693,6 +693,8 @@ export const en = {
   'menuEditor.photo.working': 'Preparing the photo…',
   'menuEditor.photo.hint':
     'The photo is shrunk and saved again on this device before it is uploaded. Location and camera data are not sent.',
+  'menuEditor.photo.savedNow':
+    'A photo you change or remove is saved at once. You do not need to press Save, and closing this window does not undo it.',
   'menuEditor.photo.saveFirst': 'Save the dish first, then add a photo.',
   'menuEditor.photo.alt': 'Photo of {name}',
   'menuEditor.photo.error.unreadable':

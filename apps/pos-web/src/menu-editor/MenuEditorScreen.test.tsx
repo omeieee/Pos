@@ -387,6 +387,18 @@ describe('photo', () => {
     expect((sent as Blob).size).toBeLessThan(original.size);
   });
 
+  test('says that a photo change is saved at once, not with the Save button', async () => {
+    await open();
+    await screen.findByText('ก๋วยเตี๋ยวต้มยำ');
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: tr('menuEditor.edit.for', { name: 'ก๋วยเตี๋ยวต้มยำ' }),
+      }),
+    );
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByText(tr('menuEditor.photo.savedNow'))).toBeTruthy();
+  });
+
   test('a new dish says to save it before adding a photo', async () => {
     await open();
     await screen.findByText('ก๋วยเตี๋ยวต้มยำ');

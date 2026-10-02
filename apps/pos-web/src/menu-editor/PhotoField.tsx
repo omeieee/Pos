@@ -90,6 +90,7 @@ export function PhotoField({
         </div>
       </div>
       <p className="hint">{tr('menuEditor.photo.hint')}</p>
+      <p className="hint">{tr('menuEditor.photo.savedNow')}</p>
       {error ? (
         <p className="error" role="alert">
           {error}

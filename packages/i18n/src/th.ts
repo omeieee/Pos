@@ -654,6 +654,7 @@ export const th = {
   'menuEditor.photo.remove': 'ลบรูป',
   'menuEditor.photo.working': 'กำลังเตรียมรูป…',
   'menuEditor.photo.hint': 'รูปจะถูกย่อและบันทึกใหม่ในเครื่องนี้ก่อนอัปโหลด ข้อมูลตำแหน่งและข้อมูลกล้องจะไม่ถูกส่งไป',
+  'menuEditor.photo.savedNow': 'เปลี่ยนหรือลบรูปแล้วบันทึกทันที ไม่ต้องกด “บันทึก” และไม่ถูกยกเลิกถ้าปิดหน้าต่างนี้',
   'menuEditor.photo.saveFirst': 'บันทึกอาหารก่อน แล้วจึงเพิ่มรูปได้',
   'menuEditor.photo.alt': 'รูปของ {name}',
   'menuEditor.photo.error.unreadable': 'เปิดรูปนี้ไม่ได้ ลองรูปอื่น (JPEG หรือ PNG)',
