@@ -129,7 +129,7 @@ export async function registerMenuRoutes(
       parse(listItemsQuerySchema, request.query).includeArchived,
     ),
   );
-  app.get('/items/:id', view, async (request) => getItem(ctx, idOf(request)));
+  app.get('/items/:id', view, async (request) => getItem(ctx, principalOf(request), idOf(request)));
   app.post('/items', edit, async (request, reply) => {
     const input = parse(createItemInputSchema, request.body);
     checkIdempotencyHeader(request, input.clientRequestId);

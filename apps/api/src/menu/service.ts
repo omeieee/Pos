@@ -235,9 +235,12 @@ export async function listItems(
   return { items: rows.map((r) => toItem(r, extras)) };
 }
 
-export async function getItem(ctx: AuthContext, id: string): Promise<ItemDto> {
+/** An archived item is the same 404 as an unknown one unless the caller can edit the menu. */
+export async function getItem(ctx: AuthContext, actor: Principal, id: string): Promise<ItemDto> {
   const row = await menuRepo.findItem(ctx.db, id);
-  if (!row) throw notFound('Menu item');
+  if (!row || (row.archivedAt !== null && !hasPermission(actor.role, 'menu.edit'))) {
+    throw notFound('Menu item');
+  }
   return itemDto(ctx.db, row);
 }
 
@@ -595,6 +598,7 @@ function insertOptionOnce(
   return withTransaction(ctx, async (tx, emit) => {
     const group = await menuRepo.lockGroup(tx, groupId);
     if (!group) throw notFound('Modifier group');
+    if (group.archivedAt !== null) throw unknownGroup(); // restore the group first
     const [row] = await menuRepo.insertOptions(tx, [
       {
         groupId,
