@@ -6,13 +6,14 @@ const orderEntry = read('order-entry.css');
 const base = read('styles.css');
 const pos = read('pos.css');
 const orders = read('orders.css');
+const payment = read('payment.css');
 
 /** The icon rules carry SVG data URIs; everything else must be plain CSS. */
 const withoutIcons = (css: string) => css.replace(/url\("data:[^"]*"\)/g, 'url()');
 
 describe('the order screens follow the design tokens and the touch rules', () => {
   test('no colour is typed into the stylesheets', () => {
-    for (const css of [orderEntry, pos, orders].map(withoutIcons)) {
+    for (const css of [orderEntry, pos, orders, payment].map(withoutIcons)) {
       expect(css).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
       expect(css).not.toMatch(/\b(rgb|rgba|hsl|hsla)\(/);
     }
@@ -22,10 +23,17 @@ describe('the order screens follow the design tokens and the touch rules', () =>
     expect(orderEntry).not.toContain(':hover');
     expect(pos).not.toContain(':hover');
     expect(orders).not.toContain(':hover');
+    expect(payment).not.toContain(':hover');
   });
 
-  test('an order card is a tap target of at least 44 px', () => {
+  test('an order card and a payment method tile are tap targets of at least 44 px', () => {
     expect(orders).toMatch(/\.ocard\s*{[^}]*var\(--tap\)/);
+    expect(payment).toMatch(/\.method\s*{[^}]*var\(--tap\)/);
+    expect(payment).toMatch(/\.change\s*{[^}]*var\(--tap\)/);
+  });
+
+  test('the cash keypad keys use the comfortable touch size', () => {
+    expect(payment).toMatch(/\.keypad__key\s*{[^}]*var\(--sds-touch-comfortable\)/);
   });
 
   test('text fields are at least 16 px, so iOS Safari does not zoom the page on focus', () => {

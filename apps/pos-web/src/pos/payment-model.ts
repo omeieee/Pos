@@ -16,6 +16,7 @@ import {
   CashPaymentError,
   calculateCashChange,
   cashChange,
+  estimateGovCopaySplit,
   type GovCopayDto,
   isCopayAvailable,
   MAX_CASH_SATANG,
@@ -36,6 +37,11 @@ export function paymentsOf(state: Pick<EntityState, 'payments'>, orderId: string
   return [...state.payments.values()]
     .filter((p) => p.orderId === orderId)
     .sort((a, b) => a.rev - b.rev || a.id.localeCompare(b.id));
+}
+
+/** The payment that was received (the latest confirmed one). */
+export function confirmedPayment(payments: readonly PaymentDto[]): PaymentDto | undefined {
+  return [...payments].reverse().find((p) => p.status === 'confirmed');
 }
 
 /** The payment still waiting (pending or claimed). The server allows at most one per order. */
@@ -130,6 +136,41 @@ export function methodOptions(
   return options;
 }
 
+export interface CopayEstimate {
+  govShare: Satang;
+  customerShare: Satang;
+  /** The government share was cut back to a cap. */
+  capped: boolean;
+}
+
+/**
+ * The ESTIMATED split to show next to the full amount staff type into ถุงเงิน. Once the payment
+ * exists, the server's own estimate on it is shown; before that, the shared estimate for the
+ * order total. Either way it is an estimate: the app decides the real split. Null when there is
+ * neither a payment nor a scheme.
+ */
+export function copayEstimate(
+  total: Satang,
+  payment: Pick<PaymentDto, 'estGovShareSatang' | 'estCustomerShareSatang'> | undefined,
+  scheme: GovCopayDto | undefined,
+): CopayEstimate | null {
+  if (payment?.estGovShareSatang != null && payment.estCustomerShareSatang != null) {
+    return {
+      govShare: payment.estGovShareSatang,
+      customerShare: payment.estCustomerShareSatang,
+      capped: false,
+    };
+  }
+  if (!scheme) return null;
+  try {
+    const split = estimateGovCopaySplit(total, scheme);
+    return { govShare: split.govShare, customerShare: split.customerShare, capped: split.capped };
+  } catch (error) {
+    if (error instanceof RangeError) return null;
+    throw error;
+  }
+}
+
 // ---------- Cash ----------
 
 /** One key of the keypad: a digit, "00", or one of the two editing keys. */
@@ -163,9 +204,18 @@ export interface CashView {
   canConfirm: boolean;
 }
 
+/**
+ * The tender after a key press. Digits continue from whole baht; an exact tender with satang
+ * (฿75.50 on a total that has satang) cannot be edited digit by digit, so the next key starts a
+ * new amount.
+ */
+export function keyToTender(current: Satang | null, key: CashKey): Satang | null {
+  const digits = current === null || current % 100 !== 0 ? '' : String(current / 100);
+  return tenderedFromDigits(pressKey(digits, key));
+}
+
 /** Change and the confirm gate, from the shared cash function and the SERVER's order total. */
-export function cashView(total: Satang, digits: string): CashView {
-  const tendered = tenderedFromDigits(digits);
+export function cashView(total: Satang, tendered: Satang | null): CashView {
   if (tendered === null) return { tendered: null, change: null, shortBy: null, canConfirm: false };
   try {
     const result = calculateCashChange(total, tendered);

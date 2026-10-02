@@ -248,7 +248,7 @@ export const th = {
   'payment.void.audited': 'รายการนี้บันทึกใน audit log และแจ้งเตือนเจ้าของร้านทันที ต้องยืนยันตัวตนอีกครั้ง',
   'payment.void.confirmVoid': 'ยืนยันยกเลิกรายการ',
   'payment.void.confirmRefund': 'ยืนยันคืนเงิน',
-  'payment.paid.title': 'รับเงินแล้ว',
+  'payment.paid.title': 'รับเงินเรียบร้อยแล้ว',
   'payment.paid.detail': '{method} · {time}',
   'payment.history.title': 'ประวัติการชำระเงิน',
   'payment.history.empty': 'ยังไม่มีรายการชำระเงิน',

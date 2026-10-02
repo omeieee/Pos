@@ -74,8 +74,11 @@ export function elapsedParts(minutes: number): { hours: number; minutes: number 
   return { hours: Math.floor(minutes / 60), minutes: minutes % 60 };
 }
 
+/** Every status an order can be moved to (nothing moves back to "new"). */
+export type MoveTarget = Exclude<OrderStatus, 'new'>;
+
 export interface OrderMove {
-  to: OrderStatus;
+  to: MoveTarget;
   /** A cancel goes to `/cancel`, every other move to `/transition`. */
   kind: 'transition' | 'cancel';
   needsReason: boolean;
@@ -84,15 +87,15 @@ export interface OrderMove {
 /** The moves this role may make on an order in this status, from the shared order machine. */
 export function orderMoves(status: OrderStatus, role: StaffRole): OrderMove[] {
   const actor = { kind: 'staff', role } as const;
-  return orderMachine.rules
-    .filter((rule) => rule.from === status)
-    .filter((rule) => {
-      const verdict = orderMachine.transition(rule.from, rule.to, { actor, reason: 'x' });
-      return verdict.ok;
-    })
-    .map((rule) => ({
+  const moves: OrderMove[] = [];
+  for (const rule of orderMachine.rules) {
+    if (rule.from !== status || rule.to === 'new') continue;
+    if (!orderMachine.transition(rule.from, rule.to, { actor, reason: 'x' }).ok) continue;
+    moves.push({
       to: rule.to,
-      kind: rule.to === 'cancelled' ? ('cancel' as const) : ('transition' as const),
+      kind: rule.to === 'cancelled' ? 'cancel' : 'transition',
       needsReason: rule.reasonRequired === true,
-    }));
+    });
+  }
+  return moves;
 }

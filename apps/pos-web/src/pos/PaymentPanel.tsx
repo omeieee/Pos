@@ -1,0 +1,191 @@
+import { formatBaht, formatDate } from '@sds/i18n';
+import { useEffect, useRef, useState } from 'react';
+import { can } from '../auth/auth-store.ts';
+import {
+  useActivityHold,
+  useAuthState,
+  useEntities,
+  useLocale,
+  useServices,
+  useStoreState,
+  useT,
+} from '../ui/hooks.ts';
+import { Icon } from '../ui/Icon.tsx';
+import { CashPanel } from './CashPanel.tsx';
+import { OpenPayment } from './OpenPayment.tsx';
+import { PaymentHistory } from './PaymentHistory.tsx';
+import {
+  confirmedPayment,
+  methodOptions,
+  openPayment,
+  type PayMethod,
+  paymentPhase,
+  paymentsOf,
+} from './payment-model.ts';
+
+const METHOD_ICON = { cash: 'cash', promptpay: 'qr', gov_copay: 'hands' } as const;
+
+/**
+ * The payment part of the order page. Whatever it shows comes from the store, which holds only what
+ * the server has said (its answers and realtime frames): nothing is shown as claimed, confirmed or
+ * paid from a tap. The amount is always the server's order total; staff never type it.
+ *
+ * Phases: closed (cancelled order), nothing to pay, paid, open (a payment is waiting: its own
+ * screen), and choose (pick a method). The unsure state of a request whose answer was lost lives in
+ * the payment store, so it survives leaving the page; it ends when the answer is retried or when a
+ * payment frame for this order arrives.
+ */
+export function PaymentPanel({ orderId }: { orderId: string }) {
+  const authState = useAuthState();
+  const order = useEntities().orders.get(orderId);
+  const role = authState.session?.staff.role;
+  if (!order || !role || !can(authState, 'payment.record')) return null;
+  return <PaymentPanelBody orderId={orderId} />;
+}
+
+function PaymentPanelBody({ orderId }: { orderId: string }) {
+  const { payments: flow } = useServices();
+  const entities = useEntities();
+  const flowState = useStoreState(flow);
+  const tr = useT();
+  const locale = useLocale();
+  const order = entities.orders.get(orderId);
+  const [loaded, setLoaded] = useState(false);
+  const [selected, setSelected] = useState<PayMethod>('cash');
+  const [hidden, setHidden] = useState<ReadonlySet<PayMethod>>(new Set());
+  const attempted = useRef<PayMethod | null>(null);
+
+  // The payments of this order: loaded once here, then kept live by the realtime frames.
+  useEffect(() => {
+    let live = true;
+    setLoaded(false);
+    void flow.refresh(orderId).then(() => {
+      if (live) setLoaded(true);
+    });
+    return () => {
+      live = false;
+    };
+  }, [flow, orderId]);
+
+  const list = paymentsOf(entities, orderId);
+  const maxRev = list.reduce((most, p) => Math.max(most, p.rev), 0);
+  const mine = flowState.orderId === orderId;
+
+  // A payment frame for this order after the outcome became unsure: the answer is known now.
+  const unsureAt = useRef<number | null>(null);
+  useEffect(() => {
+    if (!(mine && flowState.phase === 'unsure')) {
+      unsureAt.current = null;
+      return;
+    }
+    if (unsureAt.current === null) {
+      unsureAt.current = maxRev;
+    } else if (maxRev > unsureAt.current) {
+      unsureAt.current = null;
+      flow.settled(orderId);
+    }
+  }, [mine, flowState.phase, maxRev, flow, orderId]);
+
+  // The server says a method is switched off: stop offering it (until the page is reloaded).
+  useEffect(() => {
+    const method = attempted.current;
+    if (mine && method && flowState.error?.code === 'METHOD_DISABLED') {
+      setHidden((previous) => new Set(previous).add(method));
+    }
+  }, [mine, flowState.error]);
+
+  const phase = order ? paymentPhase(order, list) : 'closed';
+  const waiting = openPayment(list);
+  // A payment that is open, or a request in flight, must not be lost to a page reload.
+  useActivityHold(phase === 'open');
+
+  if (!order) return null;
+  const options = methodOptions(order, entities.settings, Date.now(), hidden);
+  const choice = options.find((o) => o.method === selected && o.enabled)
+    ? selected
+    : (options.find((o) => o.enabled)?.method ?? null);
+  const money = (value: number) => formatBaht(value, locale);
+  const received = confirmedPayment(list);
+
+  return (
+    <section className="ppanel" aria-labelledby="pay-title">
+      <header className="ppanel__head">
+        <h2 id="pay-title" className="ppanel__title">
+          {tr('payment.title')}
+        </h2>
+        <div className="due">
+          <span className="lbl">{tr('payment.amountDue')}</span>
+          <span className="amount-hero money">{money(order.totalSatang)}</span>
+        </div>
+      </header>
+
+      {!loaded ? (
+        <p className="muted" role="status">
+          {tr('payment.loading')}
+        </p>
+      ) : phase === 'closed' ? (
+        <p className="notice">{tr('payment.closed')}</p>
+      ) : phase === 'nothingToPay' ? (
+        <p className="notice">{tr('payment.nothingToPay')}</p>
+      ) : phase === 'paid' ? (
+        <div className="paid">
+          <span className="status status--success paid__badge">
+            <Icon name="check-circle" />
+            {tr('payment.paid.title')}
+          </span>
+          {received ? (
+            <p className="muted">
+              {tr('payment.paid.detail', {
+                method: tr(`payment.method.${received.method}`),
+                time: received.confirmedAt ? formatDate(received.confirmedAt, locale, 'time') : '',
+              })}
+            </p>
+          ) : null}
+          <p className="hint">{tr('payment.change.confirmedLocked')}</p>
+        </div>
+      ) : phase === 'open' ? (
+        <OpenPayment order={order} payment={waiting} />
+      ) : (
+        <div className="choose">
+          <fieldset className="methods">
+            <legend className="label">{tr('payment.methodsLabel')}</legend>
+            {options.map((option) => (
+              <label
+                key={option.method}
+                className={`method${choice === option.method ? ' method--on' : ''}${option.enabled ? '' : ' method--off'}`}
+              >
+                <input
+                  className="visually-hidden"
+                  type="radio"
+                  name="pay-method"
+                  disabled={!option.enabled}
+                  checked={choice === option.method}
+                  onChange={() => setSelected(option.method)}
+                />
+                <Icon name={METHOD_ICON[option.method]} />
+                <span className="method__name">
+                  {tr(`payment.method.${option.method}`)}
+                  {!option.enabled ? (
+                    <span className="method__sub">
+                      {tr(`payment.copay.reason.${option.reason}`)}
+                    </span>
+                  ) : null}
+                </span>
+              </label>
+            ))}
+          </fieldset>
+          {choice === 'cash' ? (
+            <CashPanel
+              order={order}
+              onAttempt={(method) => {
+                attempted.current = method;
+              }}
+            />
+          ) : null}
+        </div>
+      )}
+
+      <PaymentHistory payments={list} />
+    </section>
+  );
+}

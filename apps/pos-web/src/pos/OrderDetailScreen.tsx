@@ -2,8 +2,11 @@ import { formatBaht, formatDate } from '@sds/i18n';
 import { orderIdParamSchema } from '@sds/shared';
 import { useEffect, useState } from 'react';
 import { errorText, isApiClientError } from '../api/errors.ts';
-import { useEntities, useLocale, useServices, useT } from '../ui/hooks.ts';
+import { useAuthState, useEntities, useLocale, useServices, useT } from '../ui/hooks.ts';
+import { Icon } from '../ui/Icon.tsx';
 import { localName } from './names.ts';
+import { OrderMoves } from './OrderMoves.tsx';
+import { PaymentPanel } from './PaymentPanel.tsx';
 import { OrderStatusBadge, PaymentStatusBadge } from './StatusBadge.tsx';
 
 type Load = { state: 'idle' | 'loading' | 'notFound' } | { state: 'error'; error: unknown };
@@ -15,6 +18,7 @@ type Load = { state: 'idle' | 'loading' | 'notFound' } | { state: 'error'; error
  */
 export function OrderDetailScreen({ id }: { id: string }) {
   const { api, entities: store } = useServices();
+  const auth = useAuthState();
   const order = useEntities().orders.get(id);
   const tr = useT();
   const locale = useLocale();
@@ -85,8 +89,14 @@ export function OrderDetailScreen({ id }: { id: string }) {
     );
   }
 
+  const role = auth.session?.staff.role;
+
   return (
-    <section className="odetail" aria-labelledby="order-title">
+    <section className="odetail odetail--wide" aria-labelledby="order-title">
+      <a className="link link--back" href="#/orders">
+        <Icon name="back" />
+        {tr('order.detail.back')}
+      </a>
       <header className="odetail__head">
         <h1 id="order-title" className="order-no">
           {tr('order.detail.title', { orderNo: order.orderNo })}
@@ -100,31 +110,42 @@ export function OrderDetailScreen({ id }: { id: string }) {
           {order.roomNo ? ` · ${tr('order.detail.room', { room: order.roomNo })}` : ''}
           {` · ${formatDate(order.placedAt, locale, 'dateTime')}`}
         </p>
+        {order.status === 'cancelled' && order.cancelReason ? (
+          <p className="muted">{tr('order.cancel.reasonShown', { reason: order.cancelReason })}</p>
+        ) : null}
       </header>
 
-      <h2 className="odetail__h">{tr('order.detail.items')}</h2>
-      <ul className="odetail__lines">
-        {order.items.map((item) => (
-          <li key={item.id} className="oline">
-            <span className="oline__qty">{tr('order.detail.qty', { count: item.qty })}</span>
-            <span className="oline__what">
-              <span>{localName(locale, item.nameTh, item.nameEn)}</span>
-              {item.modifiers.length > 0 ? (
-                <span className="muted">
-                  {item.modifiers.map((m) => localName(locale, m.nameTh, m.nameEn)).join(' · ')}
-                </span>
-              ) : null}
-              {item.note ? <span className="line__note">{item.note}</span> : null}
-            </span>
-            <span className="money">{formatBaht(item.lineTotalSatang, locale)}</span>
-          </li>
-        ))}
-      </ul>
-      {order.note ? <p className="muted">{`${tr('common.note')}: ${order.note}`}</p> : null}
+      {role ? <OrderMoves order={order} role={role} /> : null}
 
-      <div className="sumrow total odetail__total">
-        <span>{tr('order.detail.serverTotal')}</span>
-        <span className="money">{formatBaht(order.totalSatang, locale)}</span>
+      <div className="opay">
+        <div className="opay__order">
+          <h2 className="odetail__h">{tr('order.detail.items')}</h2>
+          <ul className="odetail__lines">
+            {order.items.map((item) => (
+              <li key={item.id} className="oline">
+                <span className="oline__qty">{tr('order.detail.qty', { count: item.qty })}</span>
+                <span className="oline__what">
+                  <span>{localName(locale, item.nameTh, item.nameEn)}</span>
+                  {item.modifiers.length > 0 ? (
+                    <span className="muted">
+                      {item.modifiers.map((m) => localName(locale, m.nameTh, m.nameEn)).join(' · ')}
+                    </span>
+                  ) : null}
+                  {item.note ? <span className="line__note">{item.note}</span> : null}
+                </span>
+                <span className="money">{formatBaht(item.lineTotalSatang, locale)}</span>
+              </li>
+            ))}
+          </ul>
+          {order.note ? <p className="muted">{`${tr('common.note')}: ${order.note}`}</p> : null}
+
+          <div className="sumrow total odetail__total">
+            <span>{tr('order.detail.serverTotal')}</span>
+            <span className="money">{formatBaht(order.totalSatang, locale)}</span>
+          </div>
+        </div>
+
+        <PaymentPanel orderId={order.id} />
       </div>
 
       {another}

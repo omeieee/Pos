@@ -29,7 +29,11 @@ export type IconName =
   | 'circle'
   | 'clock'
   | 'check-circle'
-  | 'info';
+  | 'info'
+  | 'cash'
+  | 'qr'
+  | 'hands'
+  | 'store';
 
 /** The entries of the navigation: one per top-level page. */
 export type RouteId = 'new' | 'orders' | 'menu' | 'settings';

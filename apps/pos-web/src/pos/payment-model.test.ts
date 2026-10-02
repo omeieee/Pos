@@ -11,7 +11,10 @@ import {
 } from '../test-support/frames.ts';
 import {
   cashView,
+  confirmedPayment,
+  copayEstimate,
   copayVerdict,
+  keyToTender,
   methodOptions,
   openPayment,
   paymentActions,
@@ -169,6 +172,62 @@ describe('government co-pay availability', () => {
   });
 });
 
+describe('the co-pay split shown to staff', () => {
+  const scheme = () => {
+    const store = createEntityStore();
+    store.apply(govCopayFrame(6));
+    const entry = store.getState().settings.get('gov_copay');
+    if (entry?.id !== 'gov_copay') throw new Error('no scheme');
+    return entry.data;
+  };
+
+  test('before a payment exists it is the shared ESTIMATE for the server total', () => {
+    expect(copayEstimate(satang(9500), undefined, scheme())).toEqual({
+      govShare: 5700,
+      customerShare: 3800,
+      capped: false,
+    });
+  });
+
+  test('the government share is cut back to the daily cap, and says so', () => {
+    expect(copayEstimate(satang(50000), undefined, scheme())).toEqual({
+      govShare: 20000,
+      customerShare: 30000,
+      capped: true,
+    });
+  });
+
+  test('once the payment exists, the server’s own estimate on it is shown', () => {
+    const made = pay(1, {
+      method: 'gov_copay',
+      status: 'pending',
+      estGovShareSatang: satang(5701),
+      estCustomerShareSatang: satang(3799),
+    });
+    expect(copayEstimate(satang(9500), made, scheme())).toEqual({
+      govShare: 5701,
+      customerShare: 3799,
+      capped: false,
+    });
+  });
+
+  test('without a scheme nor a payment there is nothing to show', () => {
+    expect(copayEstimate(satang(9500), undefined, undefined)).toBeNull();
+  });
+});
+
+describe('the confirmed payment', () => {
+  test('is the latest confirmed one', () => {
+    const list = [
+      pay(1, { status: 'voided' }),
+      pay(2, { status: 'confirmed', method: 'cash' }),
+      pay(3, { status: 'cancelled' }),
+    ];
+    expect(confirmedPayment(list)?.id).toBe(uuid(502));
+    expect(confirmedPayment([pay(1, { status: 'pending' })])).toBeUndefined();
+  });
+});
+
 describe('the cash keypad', () => {
   test('digits build a whole-baht amount; "00" adds two zeros', () => {
     let digits = '';
@@ -195,8 +254,19 @@ describe('the cash keypad', () => {
     expect(tenderedFromDigits('')).toBeNull();
   });
 
+  test('a key press works on the tender: it continues from whole baht and restarts after satang', () => {
+    expect(keyToTender(null, '5')).toBe(500);
+    expect(keyToTender(satang(500), '00')).toBe(50000);
+    expect(keyToTender(satang(50000), 'back')).toBe(5000);
+    expect(keyToTender(satang(500), 'back')).toBeNull();
+    expect(keyToTender(satang(50000), 'clear')).toBeNull();
+    // An exact tender of ฿75.50 has satang: the next key starts a new amount.
+    expect(keyToTender(satang(7550), '2')).toBe(200);
+    expect(keyToTender(satang(7550), 'back')).toBeNull();
+  });
+
   test('change is the shared cash change: tendered minus the server total', () => {
-    expect(cashView(satang(20000), '500')).toEqual({
+    expect(cashView(satang(20000), satang(50000))).toEqual({
       tendered: 50000,
       change: 30000,
       shortBy: null,
@@ -204,12 +274,13 @@ describe('the cash keypad', () => {
     });
   });
 
-  test('an exact tender gives no change', () => {
-    expect(cashView(satang(7500), '75')).toMatchObject({ change: 0, canConfirm: true });
+  test('an exact tender gives no change, even with satang in the total', () => {
+    expect(cashView(satang(7500), satang(7500))).toMatchObject({ change: 0, canConfirm: true });
+    expect(cashView(satang(7550), satang(7550))).toMatchObject({ change: 0, canConfirm: true });
   });
 
   test('a tender below the total blocks confirming and says how much is missing', () => {
-    expect(cashView(satang(20000), '150')).toEqual({
+    expect(cashView(satang(20000), satang(15000))).toEqual({
       tendered: 15000,
       change: null,
       shortBy: 5000,
@@ -218,10 +289,16 @@ describe('the cash keypad', () => {
   });
 
   test('before anything is typed there is nothing to confirm', () => {
-    expect(cashView(satang(20000), '')).toEqual({
+    expect(cashView(satang(20000), null)).toEqual({
       tendered: null,
       change: null,
       shortBy: null,
+      canConfirm: false,
+    });
+  });
+
+  test('a total above the cash limit can never be confirmed in cash', () => {
+    expect(cashView(satang(200_000_000), satang(100_000_000))).toMatchObject({
       canConfirm: false,
     });
   });

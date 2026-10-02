@@ -8,6 +8,7 @@ import './styles.css';
 import './pos.css';
 import './order-entry.css';
 import './orders.css';
+import './payment.css';
 
 const root = document.getElementById('root');
 if (!root) throw new Error('#root not found');

@@ -43,6 +43,18 @@ export function useServices(): Services {
   return services;
 }
 
+/**
+ * Marks the app busy (no waiting update may reload the page) while `active` is true: a payment
+ * that is open, a tender being typed, a dialog that asks for a reason or a step-up.
+ */
+export function useActivityHold(active: boolean): void {
+  const { activity } = useServices();
+  useEffect(() => {
+    if (!active) return;
+    return activity.begin();
+  }, [active, activity]);
+}
+
 /** The synced rows (orders, payments, menu, settings), re-rendering when any of them change. */
 export function useEntities(): EntityState {
   return useStoreState(useServices().entities);
