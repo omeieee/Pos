@@ -31,6 +31,7 @@ test('kitchen can accept and advance orders and mark menu items sold out, nothin
 
 test('every role may mark an item sold out, but only managers and the owner edit the menu', () => {
   for (const role of STAFF_ROLES) expect(hasPermission(role, 'menu.availability'), role).toBe(true);
+  expect(hasPermission('owner', 'menu.edit')).toBe(true);
   expect(hasPermission('manager', 'menu.edit')).toBe(true);
   expect(hasPermission('cashier', 'menu.edit')).toBe(false);
   expect(hasPermission('kitchen', 'menu.edit')).toBe(false);
