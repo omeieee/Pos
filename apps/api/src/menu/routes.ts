@@ -42,6 +42,7 @@ import {
   patchOption,
   publicMenu,
   publicPhoto,
+  publicPhotoBytes,
   setItemAvailability,
   setItemPhoto,
   setOptionAvailability,
@@ -199,14 +200,22 @@ export async function registerMenuRoutes(
       if (!found) throw notFound('Photo'); // unreachable: the hook above sets it or throws
       const { itemId, photo } = found;
       const etag = `"${itemId}.${photo.version}"`;
-      reply
-        .header('x-content-type-options', 'nosniff')
-        .header('content-security-policy', "default-src 'none'")
-        .header('cross-origin-resource-policy', 'cross-origin')
-        .header('cache-control', 'public, max-age=31536000, immutable')
-        .header('etag', etag);
-      if (request.headers['if-none-match'] === etag) return reply.status(304).send();
-      return reply.header('content-type', photo.contentType).send(photo.bytes);
+      const headers = {
+        'x-content-type-options': 'nosniff',
+        'content-security-policy': "default-src 'none'",
+        'cross-origin-resource-policy': 'cross-origin',
+        'cache-control': 'public, max-age=31536000, immutable',
+        etag,
+      };
+      if (request.headers['if-none-match'] === etag)
+        return reply.headers(headers).status(304).send();
+      // Only a 200 reads the image. If the photo changed since the lookup, it is a miss like any other.
+      const bytes = await publicPhotoBytes(ctx, itemId, photo.version);
+      if (!bytes) {
+        reply.header('cache-control', 'no-store');
+        throw notFound('Photo');
+      }
+      return reply.headers(headers).header('content-type', photo.contentType).send(bytes);
     },
   );
 

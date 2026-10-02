@@ -3,7 +3,7 @@
  * items in active categories, checked by magic bytes and size, cached forever by version.
  */
 import { type ItemDto, itemDtoSchema, publicMenuResponseSchema } from '@sds/shared';
-import { afterAll, beforeAll, describe, expect, test } from 'vitest';
+import { afterAll, beforeAll, describe, expect, test, vi } from 'vitest';
 import { createHarness, type Harness } from '../test-support/harness.ts';
 
 let h: Harness;
@@ -272,6 +272,45 @@ describe('upload and the public read', () => {
     expect(again.statusCode).toBe(304);
     expect(again.rawPayload.length).toBe(0);
     expect(String(again.headers['cache-control'])).toContain('immutable');
+  });
+
+  test('the bytes column is selected only to serve a 200: never for a 304 or a 404', async () => {
+    const { item, dto } = await itemWithPhoto(await as('manager'));
+    const v = dto.photoVersion ?? 0;
+    const etag = String((await getPhoto(item.id, v)).headers.etag);
+
+    const selectsBytes = async (run: () => Promise<{ statusCode: number }>) => {
+      const seen: string[] = [];
+      const real = h.client.query.bind(h.client);
+      const spy = vi.spyOn(h.client, 'query').mockImplementation(((
+        sql: string,
+        ...rest: unknown[]
+      ) => {
+        seen.push(String(sql));
+        return (real as (...a: unknown[]) => unknown)(sql, ...rest);
+      }) as typeof h.client.query);
+      try {
+        const res = await run();
+        const bytes = seen.some((q) => /^\s*select\b[\s\S]*"bytes"/i.test(q));
+        return { status: res.statusCode, bytes, queries: seen.length };
+      } finally {
+        spy.mockRestore();
+      }
+    };
+
+    const ok = await selectsBytes(() => getPhoto(item.id, v));
+    expect(ok).toMatchObject({ status: 200, bytes: true }); // the probe really sees the column
+    const notModified = await selectsBytes(() => getPhoto(item.id, v, { 'if-none-match': etag }));
+    expect(notModified).toMatchObject({ status: 304, bytes: false });
+    expect(notModified.queries).toBeGreaterThan(0);
+    expect(await selectsBytes(() => getPhoto(item.id, v + 1))).toMatchObject({
+      status: 404,
+      bytes: false,
+    });
+    expect(await selectsBytes(() => getPhoto(crypto.randomUUID(), v))).toMatchObject({
+      status: 404,
+      bytes: false,
+    });
   });
 
   test('the stored type is the detected one: a JPEG is served as image/jpeg', async () => {

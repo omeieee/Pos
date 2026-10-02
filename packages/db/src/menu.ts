@@ -290,9 +290,9 @@ export async function deletePhoto(db: Db, itemId: string): Promise<boolean> {
   return removed.length > 0;
 }
 
+/** What decides whether a photo may be served and which ETag it has: never the bytes. */
 export interface ServablePhoto {
   contentType: string;
-  bytes: Buffer;
   version: number;
 }
 
@@ -300,7 +300,8 @@ export interface ServablePhoto {
  * What the PUBLIC photo route may serve (no session): the photo the item points at (`photo_version`
  * equals the stored version), for an item that is not archived and sits in an active category.
  * Sold-out items count: staff tills show their tiles with the picture. One query, so a caller cannot
- * tell "no such item" from "archived" from "no photo".
+ * tell "no such item" from "archived" from "no photo". It leaves the 200 KB `bytes` column alone, so
+ * a 304 costs no image read; `findPhotoBytes` loads them once the answer is a 200.
  */
 export async function findServablePhoto(
   db: Db,
@@ -309,7 +310,6 @@ export async function findServablePhoto(
   const [row] = await db
     .select({
       contentType: menuItemPhotos.contentType,
-      bytes: menuItemPhotos.bytes,
       version: menuItemPhotos.version,
     })
     .from(menuItems)
@@ -326,6 +326,20 @@ export async function findServablePhoto(
     )
     .limit(1);
   return row;
+}
+
+/** The image bytes at exactly this version (undefined when the photo changed or went meanwhile). */
+export async function findPhotoBytes(
+  db: Db,
+  itemId: string,
+  version: number,
+): Promise<Buffer | undefined> {
+  const [row] = await db
+    .select({ bytes: menuItemPhotos.bytes })
+    .from(menuItemPhotos)
+    .where(and(eq(menuItemPhotos.menuItemId, itemId), eq(menuItemPhotos.version, version)))
+    .limit(1);
+  return row?.bytes;
 }
 
 // ---------- Modifier groups and options ----------

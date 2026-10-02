@@ -1017,3 +1017,7 @@ export async function publicPhoto(ctx: AuthContext, id: string, version: number)
   const photo = await menuRepo.findServablePhoto(ctx.db, id);
   return photo && photo.version === version ? photo : undefined;
 }
+
+/** The bytes of a photo `publicPhoto` just approved; `undefined` if it changed in between. */
+export const publicPhotoBytes = (ctx: AuthContext, id: string, version: number) =>
+  menuRepo.findPhotoBytes(ctx.db, id, version);
