@@ -51,7 +51,9 @@ describe('the mock server serves the order screens', () => {
     await expect(
       services.api.orders.create({
         channel: 'storefront',
-        fulfillment: 'dine_in',
+        fulfillment: 'entrance_delivery',
+        deliveryBuilding: 'B1',
+        recipientName: 'Tester',
         items: [{ menuItemId: '0192f3a0-0000-7000-8000-000000000208', qty: 1 }],
       }),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });

@@ -79,7 +79,9 @@ describe('the dev shop (a made-up menu, orders and sync, in the shapes the API s
     expect(tea).toBeTruthy();
     const { order, replay } = await api.orders.create({
       channel: 'storefront',
-      fulfillment: 'dine_in',
+      fulfillment: 'entrance_delivery',
+      deliveryBuilding: 'B1',
+      recipientName: 'Tester',
       items: [{ menuItemId: tea?.id ?? '', qty: 2, modifierOptionIds: [] }],
     });
     expect(replay).toBe(false);
@@ -97,7 +99,9 @@ describe('the dev shop (a made-up menu, orders and sync, in the shapes the API s
       .find((i) => i.orderable && i.groups.length === 0);
     const input = {
       channel: 'storefront' as const,
-      fulfillment: 'dine_in' as const,
+      fulfillment: 'entrance_delivery' as const,
+      deliveryBuilding: 'B1',
+      recipientName: 'Tester',
       items: [{ menuItemId: item?.id ?? '', qty: 1, modifierOptionIds: [] }],
     };
     const first = await api.orders.create(input, {
@@ -122,7 +126,9 @@ describe('the dev shop (a made-up menu, orders and sync, in the shapes the API s
     const error = await api.orders
       .create({
         channel: 'storefront',
-        fulfillment: 'dine_in',
+        fulfillment: 'entrance_delivery',
+        deliveryBuilding: 'B1',
+        recipientName: 'Tester',
         items: [{ menuItemId: soldOut?.id ?? '', qty: 1, modifierOptionIds: [] }],
       })
       .catch((e: unknown) => e);
@@ -142,13 +148,129 @@ describe('the dev shop (a made-up menu, orders and sync, in the shapes the API s
       .find((i) => i.orderable && i.groups.length === 0);
     const { order } = await api.orders.create({
       channel: 'storefront',
-      fulfillment: 'takeaway',
+      fulfillment: 'entrance_delivery',
+      deliveryBuilding: 'A1',
+      recipientName: 'Tester',
       items: [{ menuItemId: item?.id ?? '', qty: 1, modifierOptionIds: [] }],
     });
     expect((await api.orders.get(order.id)).orderNo).toBe(order.orderNo);
     await expect(api.orders.get('0192f3a0-0000-7000-8000-00000000bbbb')).rejects.toMatchObject({
       code: 'NOT_FOUND',
     });
+  });
+});
+
+describe('the dev shop: entrance deliveries and remembered recipients', () => {
+  async function tea(api: ReturnType<typeof setup>['api']) {
+    const store = createEntityStore();
+    store.applyMany((await api.sync.changes({ since: 0, limit: 500 })).changes);
+    const found = buildMenu(store.getState())
+      .flatMap((c) => c.items)
+      .find((i) => i.nameEn === 'Thai iced tea');
+    return { menuItemId: found?.id ?? '', qty: 1, modifierOptionIds: [] as string[] };
+  }
+  const base = { channel: 'storefront' as const, fulfillment: 'entrance_delivery' as const };
+
+  test('the delivery setting is the default building list, never saved (version 0)', async () => {
+    const { api } = setup();
+    const setting = await api.settings.delivery();
+    expect(setting.value.buildings).toEqual(['A1', 'A2', 'B1', 'B2', 'C1', 'C2', 'D1', 'D2']);
+    expect(setting.version).toBe(0);
+  });
+
+  test('a few made-up recipients are remembered, the most recent first, at most the limit', async () => {
+    const { api } = setup();
+    const all = (await api.recipients.list({})).recipients;
+    expect(all.length).toBeGreaterThanOrEqual(3);
+    const times = all.map((r) => Date.parse(r.lastOrderAt ?? ''));
+    expect([...times].sort((a, b) => b - a)).toEqual(times);
+    expect((await api.recipients.list({ limit: 2 })).recipients).toHaveLength(2);
+  });
+
+  test('a search matches the name as "contains", ignoring case and spacing; a building narrows', async () => {
+    const { api } = setup();
+    const first = (await api.recipients.list({})).recipients[0];
+    const fragment = (first?.recipientName ?? '').slice(0, 2).toUpperCase();
+    const found = (await api.recipients.list({ q: fragment })).recipients;
+    expect(found.map((r) => r.id)).toContain(first?.id);
+    const inBuilding = (await api.recipients.list({ building: first?.building ?? '' })).recipients;
+    expect(inBuilding.every((r) => r.building === first?.building)).toBe(true);
+    expect((await api.recipients.list({ q: 'zzzz-nobody' })).recipients).toEqual([]);
+  });
+
+  test('an entrance order carries building, name and details, and remembers the recipient', async () => {
+    const { api } = setup();
+    const item = await tea(api);
+    const { order } = await api.orders.create({
+      ...base,
+      deliveryBuilding: 'D2',
+      recipientName: 'Newcomer ตัวอย่าง',
+      deliveryNote: 'ชั้น 9',
+      items: [item],
+    });
+    expect(order).toMatchObject({
+      fulfillment: 'entrance_delivery',
+      deliveryBuilding: 'D2',
+      recipientName: 'Newcomer ตัวอย่าง',
+      deliveryNote: 'ชั้น 9',
+    });
+    expect(order.customerId).toBeTruthy();
+    const latest = (await api.recipients.list({ limit: 1 })).recipients[0];
+    expect(latest).toMatchObject({
+      id: order.customerId,
+      building: 'D2',
+      recipientName: 'Newcomer ตัวอย่าง',
+      deliveryNote: 'ชั้น 9',
+    });
+  });
+
+  test('the same building and name, typed another way, is the same recipient and the details follow', async () => {
+    const { api } = setup();
+    const item = await tea(api);
+    const first = await api.orders.create({
+      ...base,
+      deliveryBuilding: 'C2',
+      recipientName: 'Tala Example',
+      items: [item],
+    });
+    const second = await api.orders.create({
+      ...base,
+      deliveryBuilding: 'C2',
+      recipientName: '  tala   example ',
+      deliveryNote: 'ใหม่',
+      items: [item],
+    });
+    expect(second.order.customerId).toBe(first.order.customerId);
+    const mine = (await api.recipients.list({ q: 'tala example' })).recipients;
+    expect(mine).toHaveLength(1);
+    expect(mine[0]?.deliveryNote).toBe('ใหม่');
+  });
+
+  test('refuses a building the shop does not deliver to, and way of serving it does not offer', async () => {
+    const { api } = setup();
+    const item = await tea(api);
+    await expect(
+      api.orders.create({ ...base, deliveryBuilding: 'Z9', recipientName: 'X', items: [item] }),
+    ).rejects.toMatchObject({ code: 'UNKNOWN_BUILDING', status: 422 });
+    await expect(
+      api.orders.create({
+        channel: 'storefront',
+        fulfillment: 'dine_in',
+        items: [item],
+      }),
+    ).rejects.toMatchObject({ code: 'FULFILLMENT_NOT_OFFERED', status: 422 });
+  });
+
+  test('a LINE order that arrives by itself is an entrance delivery to a made-up recipient', async () => {
+    const { shop } = setup();
+    const a = shop.simulateIncomingOrder();
+    const b = shop.simulateIncomingOrder();
+    for (const order of [a, b]) {
+      expect(orderDtoSchema.safeParse(order).success).toBe(true);
+      expect(order.fulfillment).toBe('entrance_delivery');
+      expect(order.deliveryBuilding).toBeTruthy();
+      expect(order.recipientName).toBeTruthy();
+    }
   });
 });
 
@@ -178,7 +300,9 @@ describe('the dev shop socket', () => {
       .find((i) => i.orderable && i.groups.length === 0);
     const { order } = await api.orders.create({
       channel: 'storefront',
-      fulfillment: 'dine_in',
+      fulfillment: 'entrance_delivery',
+      deliveryBuilding: 'B1',
+      recipientName: 'Tester',
       items: [{ menuItemId: item?.id ?? '', qty: 1, modifierOptionIds: [] }],
     });
     await vi.advanceTimersByTimeAsync(0);

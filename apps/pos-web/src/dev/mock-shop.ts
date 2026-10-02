@@ -8,10 +8,12 @@
  * show after "create order" are real ones. Everything here is made up; nothing is persisted.
  */
 import {
+  allowedFulfillments,
   type CatalogGroup,
   type CatalogItem,
   type CategoryDto,
   createOrderInputSchema,
+  DEFAULT_DELIVERY_SETTINGS,
   type GroupDto,
   type ItemDto,
   initialOrderStatus,
@@ -21,6 +23,9 @@ import {
   type PricingError,
   priceOrder,
   type RealtimeFrame,
+  type RecipientDto,
+  recipientKey,
+  recipientsQuerySchema,
   type SyncChange,
   satang,
   syncQuerySchema,
@@ -155,7 +160,7 @@ const item = (
   nameEn,
   priceSatang: satang(price),
   isAvailable: true,
-  channels: ['storefront', 'line'],
+  channels: ['storefront', 'line', 'grab'],
   modifierGroupIds: [],
   sort: n,
   ...over,
@@ -321,11 +326,89 @@ export function createMockShop(options: MockShopOptions = {}) {
     );
   }
 
+  // ---------- Remembered recipients (made up) ----------
+
+  interface Remembered extends RecipientDto {
+    nameKey: string;
+  }
+  const remembered = new Map<string, Remembered>();
+  const BUILDINGS: readonly string[] = DEFAULT_DELIVERY_SETTINGS.buildings;
+  const ago = (minutes: number) => new Date(now() - minutes * 60_000).toISOString();
+  for (const [building, name, note, minutes] of [
+    ['B1', 'Fah Example', 'ชั้น 3 เสื้อแดง', 20],
+    ['A2', 'Nok Example', null, 90],
+    ['C1', 'Mali Example', 'ฝากไว้กับ รปภ.', 1500],
+  ] as const) {
+    const row = {
+      id: newUuid(),
+      building,
+      recipientName: name,
+      nameKey: recipientKey(name),
+      deliveryNote: note,
+      lastOrderAt: ago(minutes),
+    };
+    remembered.set(row.id, row);
+  }
+
+  /** What the server does for an entrance order: find or create the recipient, keep the latest details. */
+  function recordRecipient(
+    building: string,
+    name: string,
+    note: string | null,
+    customerId?: string,
+  ): string {
+    const nameKey = recipientKey(name);
+    const stamp = new Date(now()).toISOString();
+    const twin = [...remembered.values()].find(
+      (r) => r.building === building && r.nameKey === nameKey,
+    );
+    // Given an id, the server renames that customer to what the order says (unless that is
+    // somebody else already): which is why the screen sends it only for an unchanged recipient.
+    const named = customerId ? remembered.get(customerId) : undefined;
+    const row =
+      named && (!twin || twin.id === named.id) ? named : (twin ?? { id: newUuid(), nameKey });
+    const next: Remembered = {
+      id: row.id,
+      building,
+      recipientName: name,
+      nameKey,
+      deliveryNote: note,
+      lastOrderAt: stamp,
+    };
+    remembered.set(next.id, next);
+    return next.id;
+  }
+
+  function listRecipients(query: URLSearchParams): MockAnswer {
+    const parsed = recipientsQuerySchema.safeParse(Object.fromEntries(query));
+    if (!parsed.success) return { status: 400, body: errorBody('VALIDATION_ERROR') };
+    const { q, building, limit } = parsed.data;
+    const wanted = q ? recipientKey(q) : '';
+    const rows = [...remembered.values()]
+      .filter((r) => (!building || r.building === building) && r.nameKey.includes(wanted))
+      .sort((a, b) => Date.parse(b.lastOrderAt ?? '') - Date.parse(a.lastOrderAt ?? ''))
+      .slice(0, limit)
+      .map(({ nameKey: _key, ...dto }) => dto);
+    return { status: 200, body: { recipients: rows } };
+  }
+
   function createOrder(body: unknown): MockAnswer {
     const input = createOrderInputSchema.safeParse(body);
     if (!input.success) return { status: 400, body: errorBody('VALIDATION_ERROR') };
     const existing = byRequest.get(input.data.clientRequestId);
     if (existing) return { status: 200, body: existing };
+
+    // Like the server: only entrance deliveries (and platform orders for their channels), and
+    // only to a building on the list.
+    if (!allowedFulfillments(input.data.channel).includes(input.data.fulfillment)) {
+      return { status: 422, body: errorBody('FULFILLMENT_NOT_OFFERED') };
+    }
+    if (
+      input.data.deliveryBuilding !== undefined &&
+      !BUILDINGS.includes(input.data.deliveryBuilding)
+    ) {
+      return { status: 422, body: errorBody('UNKNOWN_BUILDING') };
+    }
 
     const priced = priceOrder(input.data.channel, input.data.items, catalog());
     if (!priced.ok) {
@@ -352,8 +435,16 @@ export function createMockShop(options: MockShopOptions = {}) {
       roomNo: input.data.roomNo ?? null,
       deliveryBuilding: input.data.deliveryBuilding ?? null,
       recipientName: input.data.recipientName ?? null,
-      deliveryNote: input.data.deliveryNote ?? null,
-      customerId: null,
+      deliveryNote: input.data.deliveryNote || null,
+      customerId:
+        input.data.deliveryBuilding !== undefined && input.data.recipientName !== undefined
+          ? recordRecipient(
+              input.data.deliveryBuilding,
+              input.data.recipientName,
+              input.data.deliveryNote || null,
+              input.data.customerId,
+            )
+          : (input.data.customerId ?? null),
       status: initialOrderStatus(input.data.channel),
       paymentStatus: 'unpaid',
       subtotalSatang: priced.totals.subtotal,
@@ -414,9 +505,10 @@ export function createMockShop(options: MockShopOptions = {}) {
   function simulateIncomingOrder(): OrderDto {
     const samples = [
       {
-        fulfillment: 'room_delivery' as const,
-        roomNo: '1204',
-        note: 'ฝากไว้หน้าห้อง',
+        building: 'D1',
+        name: 'Pim Example',
+        details: 'ชั้น 5 ใส่เสื้อสีเขียว',
+        note: 'ไม่ใส่ผักชี',
         items: [
           {
             menuItemId: id(201),
@@ -428,8 +520,9 @@ export function createMockShop(options: MockShopOptions = {}) {
         ],
       },
       {
-        fulfillment: 'takeaway' as const,
-        roomNo: undefined,
+        building: 'A1',
+        name: 'Ton Example',
+        details: undefined,
         note: undefined,
         items: [
           { menuItemId: id(204), qty: 1, modifierOptionIds: [id(402), id(408)] },
@@ -442,8 +535,10 @@ export function createMockShop(options: MockShopOptions = {}) {
     const answer = createOrder({
       clientRequestId: newUuid(),
       channel: 'line',
-      fulfillment: sample.fulfillment,
-      ...(sample.roomNo ? { roomNo: sample.roomNo } : {}),
+      fulfillment: 'entrance_delivery',
+      deliveryBuilding: sample.building,
+      recipientName: sample.name,
+      ...(sample.details ? { deliveryNote: sample.details } : {}),
       ...(sample.note ? { note: sample.note } : {}),
       items: sample.items,
     });
@@ -522,6 +617,14 @@ export function createMockShop(options: MockShopOptions = {}) {
     const paid = payments.handle(method, path, body, caller);
     if (paid) return paid;
     if (method === 'GET' && path === '/v1/sync') return sync(query);
+    if (method === 'GET' && path === '/v1/recipients') return listRecipients(query);
+    if (method === 'GET' && path === '/v1/settings/delivery') {
+      // Never saved: the default list, version 0 (so it is not in the sync feed either).
+      return {
+        status: 200,
+        body: { value: DEFAULT_DELIVERY_SETTINGS, version: 0, rev: 0, updatedAt: null },
+      };
+    }
     if (method === 'POST' && path === '/v1/orders') return createOrder(body);
     const one = /^\/v1\/orders\/([^/]+)$/.exec(path);
     if (method === 'GET' && one) {

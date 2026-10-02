@@ -34,8 +34,11 @@ const orderBody = {
   orderNo: 'S-001',
   businessDate: '2030-01-01',
   channel: 'storefront',
-  fulfillment: 'dine_in',
+  fulfillment: 'entrance_delivery',
   roomNo: null,
+  deliveryBuilding: 'B1',
+  recipientName: 'Tester',
+  deliveryNote: null,
   customerId: null,
   status: 'new',
   paymentStatus: 'unpaid',
@@ -58,7 +61,9 @@ const orderBody = {
 
 const newOrder = {
   channel: 'storefront' as const,
-  fulfillment: 'dine_in' as const,
+  fulfillment: 'entrance_delivery' as const,
+  deliveryBuilding: 'B1',
+  recipientName: 'Tester',
   items: [{ menuItemId: IDS.menuItem, qty: 1 }],
 };
 

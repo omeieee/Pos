@@ -25,12 +25,14 @@ function setup() {
     if (!answer) throw new Error(`no route: ${method} ${path}`);
     return answer;
   };
-  const newOrder = (fulfillment = 'dine_in', channel = 'storefront') => {
+  const newOrder = (fulfillment = 'entrance_delivery', channel = 'storefront') => {
     const answer = call('POST', '/v1/orders', {
       clientRequestId: requestId(),
       channel,
       fulfillment,
-      ...(fulfillment === 'room_delivery' ? { roomNo: '1204' } : {}),
+      ...(fulfillment === 'entrance_delivery'
+        ? { deliveryBuilding: 'B1', recipientName: 'Tester' }
+        : {}),
       items: [{ menuItemId: TEA, qty: 1, modifierOptionIds: [] }],
     });
     return orderDtoSchema.parse(answer.body);
@@ -177,7 +179,7 @@ describe('the dev shop: payments', () => {
     expect(done.order.paymentStatus).toBe('unpaid');
   });
 
-  test('ไทยช่วยไทย: an estimate on the payment for a counter order, refused for room delivery', () => {
+  test('ไทยช่วยไทย: an estimate on the payment for an entrance delivery, refused for a Grab order', () => {
     const { call, newOrder } = setup();
     const order = newOrder();
     const made = paymentResultSchema.parse(
@@ -188,8 +190,8 @@ describe('the dev shop: payments', () => {
     );
     expect(made.payment.estGovShareSatang).toBe(1500);
     expect(made.payment.estCustomerShareSatang).toBe(1000);
-    const room = newOrder('room_delivery');
-    const refused = call('POST', `/v1/orders/${room.id}/payments`, {
+    const grab = newOrder('platform_delivery', 'grab');
+    const refused = call('POST', `/v1/orders/${grab.id}/payments`, {
       clientRequestId: requestId(),
       method: 'gov_copay',
     });
