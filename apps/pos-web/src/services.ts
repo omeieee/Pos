@@ -28,6 +28,7 @@ import { type CartStore, createCartStore } from './pos/cart-store.ts';
 import { createNewOrderAlarm } from './pos/new-order-alarm.ts';
 import { createOrderMovesStore, type OrderMovesStore } from './pos/order-moves-store.ts';
 import { createPaymentStore, type PaymentStore } from './pos/payment-store.ts';
+import { createRecipientStore, type RecipientStore } from './pos/recipient-store.ts';
 import { bindRealtime } from './realtime/bind.ts';
 import { type Connection, createConnection } from './realtime/connection.ts';
 import { createEntityStore, type EntityStore } from './realtime/entity-store.ts';
@@ -41,6 +42,8 @@ export interface Services {
   activity: Activity;
   /** The order being rung up at the counter. */
   cart: CartStore;
+  /** The remembered recipients of the order screen, and the list of buildings. */
+  recipients: RecipientStore;
   /** The payment calls of the order page: guarded, idempotent, kept across pages. */
   payments: PaymentStore;
   /** The status moves of an order (order page and kitchen view): guarded, reconciled, epoch-safe. */
@@ -108,6 +111,7 @@ export function createServices(
   const lifecycle = options.lifecycle ?? webLifecycle;
   const activity = createActivity();
   const cart = createCartStore({ api, entities, activity });
+  const recipients = createRecipientStore({ api, entities });
   const payments = createPaymentStore({ api, entities, activity, auth });
   const orderMoves = createOrderMovesStore({ api, entities });
   const updates = createAppUpdates({
@@ -137,6 +141,7 @@ export function createServices(
     connection,
     activity,
     cart,
+    recipients,
     payments,
     orderMoves,
     sound,
@@ -151,6 +156,7 @@ export function createServices(
         // What belongs to the person who left, including requests still on their way.
         onSignedOut: () => {
           cart.reset();
+          recipients.reset();
           payments.reset();
           orderMoves.reset();
           // The next person lands on their own first page, not on the one the last person left.

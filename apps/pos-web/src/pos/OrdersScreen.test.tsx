@@ -67,6 +67,22 @@ describe('the orders board', () => {
     await waitFor(() => expect(env.api.orders.list).toHaveBeenCalled());
   });
 
+  test('a card says where the order goes: building and name, and the other details', () => {
+    const env = setup([
+      today(1, {
+        status: 'new',
+        fulfillment: 'entrance_delivery',
+        deliveryBuilding: 'B1',
+        recipientName: 'Fah ตัวอย่าง',
+        deliveryNote: 'ชั้น 3',
+      }),
+    ]);
+    renderScreen(<OrdersScreen />, env.services);
+    const card = screen.getByRole('link', { name: /S-001/ });
+    expect(within(card).getByText(/B1 · Fah ตัวอย่าง/)).toBeTruthy();
+    expect(within(card).getByText(/ชั้น 3/)).toBeTruthy();
+  });
+
   test('leaves out other days and, by default, finished and cancelled orders', () => {
     const env = setup([
       today(1, { status: 'preparing' }),
@@ -208,6 +224,8 @@ describe('the way out of an unsure order', () => {
 
   test('a cart whose order may exist says to look here, with a way back to it', async () => {
     const env = unsureEnv();
+    env.cart.setBuilding('B1');
+    env.cart.setRecipientName('Tester');
     env.cart.addItem({ itemId: MENU.tea });
     await env.cart.submit();
     expect(env.cart.getState().phase).toBe('unsure');

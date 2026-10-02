@@ -25,6 +25,8 @@ export const API_ERROR_KEYS = {
   ORDER_INVALID: 'error.orderInvalid',
   ORDER_CLOSED: 'error.orderClosed',
   ROOM_REQUIRED: 'error.roomRequired',
+  FULFILLMENT_NOT_OFFERED: 'error.fulfillmentNotOffered',
+  UNKNOWN_BUILDING: 'error.unknownBuilding',
   REASON_REQUIRED: 'error.reasonRequired',
   UNKNOWN_CUSTOMER: 'error.unknownCustomer',
   IDEMPOTENCY_KEY_MISMATCH: 'error.idempotencyKeyMismatch',

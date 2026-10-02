@@ -25,6 +25,7 @@ import {
   confirmPaymentInputSchema,
   createOrderInputSchema,
   createPaymentInputSchema,
+  deliverySettingsSchema,
   groupDtoSchema,
   itemDtoSchema,
   listOrdersQuerySchema,
@@ -42,9 +43,12 @@ import {
   pinLoginInputSchema,
   publicMenuQuerySchema,
   publicMenuResponseSchema,
+  recipientsQuerySchema,
+  recipientsResponseSchema,
   registerDeviceInputSchema,
   registerDeviceResponseSchema,
   sessionResponseSchema,
+  settingResponseSchema,
   staffStepUpInputSchema,
   stepUpResponseSchema,
   syncQuerySchema,
@@ -485,6 +489,42 @@ export function createApiClient(options: ApiClientOptions) {
     },
   };
 
+  const recipients = {
+    /**
+     * Remembered recipients, most recent first, for the order screen. `q` is the name staff typed
+     * (personal data): it travels in the query only, and no error or log line ever repeats it.
+     */
+    list: async (query: z.input<typeof recipientsQuerySchema> = {}) => {
+      const parsed = checked(recipientsQuerySchema, query);
+      return (
+        await get({
+          path: '/v1/recipients',
+          query: {
+            ...(parsed.q ? { q: parsed.q } : {}),
+            ...(parsed.building ? { building: parsed.building } : {}),
+            limit: String(parsed.limit),
+          },
+          schema: recipientsResponseSchema,
+          session: true,
+          device: 'optional',
+        })
+      ).data;
+    },
+  };
+
+  const settings = {
+    /** The buildings the shop delivers to (never-saved settings answer the default, version 0). */
+    delivery: async () =>
+      (
+        await get({
+          path: '/v1/settings/delivery',
+          schema: settingResponseSchema(deliverySettingsSchema),
+          session: true,
+          device: 'optional',
+        })
+      ).data,
+  };
+
   const paymentPath = (id: string) => `/v1/payments/${checked(paymentIdParamSchema, { id }).id}`;
 
   /**
@@ -582,7 +622,7 @@ export function createApiClient(options: ApiClientOptions) {
     ).data;
   }
 
-  return { auth, orders, menu, sync, payments };
+  return { auth, orders, menu, sync, payments, recipients, settings };
 }
 
 export type ApiClient = ReturnType<typeof createApiClient>;

@@ -1,5 +1,5 @@
 import { formatBaht } from '@sds/i18n';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   useConnection,
   useEntities,
@@ -27,7 +27,7 @@ const PHONE_MAX_WIDTH = 719;
  * added at once; one with them repeats the last choices made for it, or opens the options sheet.
  */
 export function OrderEntryScreen() {
-  const { cart } = useServices();
+  const { cart, recipients } = useServices();
   const entities = useEntities();
   const connection = useConnection();
   const cartState = useStoreState(cart);
@@ -39,6 +39,12 @@ export function OrderEntryScreen() {
   const [query, setQuery] = useState('');
   const [sheet, setSheet] = useState<SheetTarget | null>(null);
   const [cartOpen, setCartOpen] = useState(false);
+
+  // The remembered recipients and the buildings are read when the screen opens.
+  useEffect(() => {
+    void recipients.refresh();
+    void recipients.ensureBuildings();
+  }, [recipients]);
 
   const { categories, items, groups, options } = entities;
   const menu = useMemo(

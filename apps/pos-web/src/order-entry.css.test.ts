@@ -42,7 +42,15 @@ describe('the order screens follow the design tokens and the touch rules', () =>
 
   test('tap targets are at least 44 px: the tap floor is applied to the controls', () => {
     expect(base).toMatch(/--tap:\s*max\(44px/);
-    for (const selector of ['.cat', '.pick', '.seg__item', '.line__main', '.stepper .btn']) {
+    for (const selector of [
+      '.cat',
+      '.pick',
+      '.seg__item',
+      '.line__main',
+      '.stepper .btn',
+      '.bld__item',
+      '.rchip',
+    ]) {
       const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       expect(orderEntry, selector).toMatch(new RegExp(`${escaped}\\s*{[^}]*var\\(--tap\\)`));
     }

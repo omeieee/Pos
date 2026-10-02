@@ -64,6 +64,103 @@ describe('menu', () => {
   });
 });
 
+describe('recipients', () => {
+  const saved = {
+    id: uuid(40),
+    building: 'B1',
+    recipientName: 'Fah',
+    deliveryNote: null,
+    lastOrderAt: null,
+  };
+
+  test('lists the latest ones with the session, asking for a limit and nothing else', async () => {
+    const { api, calls } = clientWith(() => ({ status: 200, json: { recipients: [saved] } }));
+    expect((await api.recipients.list({ limit: 8 })).recipients).toEqual([saved]);
+    expect(calls[0]?.url).toBe(`${BASE}/v1/recipients?limit=8`);
+    expect(calls[0]?.headers.authorization).toBe(`Bearer ${FAKE_SESSION_TOKEN}`);
+  });
+
+  test('a search sends the typed text as q, encoded', async () => {
+    const { api, calls } = clientWith(() => ({ status: 200, json: { recipients: [] } }));
+    await api.recipients.list({ q: 'ฟ้า a&b', limit: 8 });
+    const url = new URL(calls[0]?.url ?? '');
+    expect(url.searchParams.get('q')).toBe('ฟ้า a&b');
+    expect(url.searchParams.get('limit')).toBe('8');
+  });
+
+  test('an answer that is not a list of recipients is RESPONSE_INVALID', async () => {
+    const { api } = clientWith(() => ({ status: 200, json: { recipients: [{ id: 1 }] } }));
+    await expect(api.recipients.list({})).rejects.toMatchObject({ code: 'RESPONSE_INVALID' });
+  });
+
+  test('a failed search keeps the code only: the typed name is not in the error', async () => {
+    const { api } = clientWith(() => {
+      throw new TypeError('failed to fetch https://api.example.test/v1/recipients?q=SECRETNAME');
+    });
+    const error = await api.recipients.list({ q: 'SECRETNAME' }).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ApiClientError);
+    expect(JSON.stringify(error)).not.toContain('SECRETNAME');
+    expect((error as ApiClientError).message).toBe('NETWORK');
+  });
+});
+
+describe('delivery settings', () => {
+  test('reads the building list with its rev, for the order screen', async () => {
+    const { api, calls } = clientWith(() => ({
+      status: 200,
+      json: {
+        value: { buildings: ['A1', 'B1'] },
+        version: 0,
+        rev: 0,
+        updatedAt: null,
+      },
+    }));
+    const result = await api.settings.delivery();
+    expect(result.value.buildings).toEqual(['A1', 'B1']);
+    expect(calls[0]?.url).toBe(`${BASE}/v1/settings/delivery`);
+    expect(calls[0]?.headers.authorization).toBe(`Bearer ${FAKE_SESSION_TOKEN}`);
+  });
+});
+
+describe('an order to the building entrance', () => {
+  test('carries building, name, details and the customer id; the request id as before', async () => {
+    const { api, calls } = clientWith(() => ({ status: 201, json: order }));
+    await api.orders.create(
+      {
+        channel: 'storefront',
+        fulfillment: 'entrance_delivery',
+        deliveryBuilding: 'B1',
+        recipientName: 'Fah',
+        deliveryNote: 'ชั้น 3',
+        customerId: uuid(40),
+        items: [{ menuItemId: uuid(7), qty: 1, modifierOptionIds: [] }],
+      },
+      { clientRequestId: KEY },
+    );
+    expect(bodyOf(calls[0])).toMatchObject({
+      fulfillment: 'entrance_delivery',
+      deliveryBuilding: 'B1',
+      recipientName: 'Fah',
+      deliveryNote: 'ชั้น 3',
+      customerId: uuid(40),
+      clientRequestId: KEY,
+    });
+  });
+
+  test('an entrance order without a name is refused before the network', async () => {
+    const { api, calls } = clientWith(() => ({ status: 201, json: order }));
+    await expect(
+      api.orders.create({
+        channel: 'storefront',
+        fulfillment: 'entrance_delivery',
+        deliveryBuilding: 'B1',
+        items: [{ menuItemId: uuid(7), qty: 1, modifierOptionIds: [] }],
+      }),
+    ).rejects.toMatchObject({ code: 'REQUEST_INVALID' });
+    expect(calls).toHaveLength(0);
+  });
+});
+
 describe('sync', () => {
   test('asks for changes since a rev, with a limit', async () => {
     const { api, calls } = clientWith(() => ({
@@ -201,7 +298,9 @@ describe('a refused order', () => {
     const error = await api.orders
       .create({
         channel: 'storefront',
-        fulfillment: 'dine_in',
+        fulfillment: 'entrance_delivery',
+        deliveryBuilding: 'B1',
+        recipientName: 'Tester',
         items: [{ menuItemId: uuid(8), qty: 1 }],
       })
       .catch((e: unknown) => e);

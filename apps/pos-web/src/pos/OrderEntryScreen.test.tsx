@@ -2,7 +2,7 @@
 import { catalogs } from '@sds/i18n';
 import { satang } from '@sds/shared';
 import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, test } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { ApiClientError } from '../api/errors.ts';
 import { itemFrame, orderDto, uuid } from '../test-support/frames.ts';
 import { MENU } from '../test-support/menu-fixtures.ts';
@@ -23,6 +23,25 @@ const click = (element: HTMLElement) => fireEvent.click(element);
 
 const radio = (scope: HTMLElement, name: RegExp) =>
   within(scope).getByRole('radio', { name }) as HTMLInputElement;
+
+type Created = Awaited<ReturnType<import('../api/client.ts').ApiClient['orders']['create']>>;
+const createdOrder = (orderNo = 'S-007'): Created => ({
+  order: orderDto(uuid(900), 500, {
+    orderNo,
+    subtotalSatang: satang(2500),
+    totalSatang: satang(2500),
+  }),
+  replay: false,
+  clientRequestId: uuid(1),
+});
+
+/** Test services with the recipient already typed (these tests are about the order itself). */
+function readyServices(options: Parameters<typeof createTestServices>[0] = {}) {
+  const made = createTestServices(options);
+  made.cart.setBuilding('B1');
+  made.cart.setRecipientName('Fah ตัวอย่าง');
+  return made;
+}
 
 async function pickNoodleChoices(noodle = 'เส้นเล็ก', spice = 'เผ็ดน้อย') {
   const dialog = screen.getByRole('dialog');
@@ -303,37 +322,243 @@ describe('the order panel', () => {
     expect(create).not.toHaveBeenCalled();
   });
 
-  test('room delivery asks for the room number and will not send without it', async () => {
-    const { services, create } = createTestServices();
-    renderScreen(<OrderEntryScreen />, services);
-    click(tile('ชาเย็น'));
-    click(screen.getByRole('radio', { name: th['pos.orderEntry.fulfilment.room_delivery'] }));
-    const room = screen.getByLabelText(th['pos.orderEntry.roomNo']) as HTMLInputElement;
-    expect(room).toBeTruthy();
-    const place = screen.getByRole('button', {
+  test('offers no dine-in, takeaway or room delivery: every order goes to the entrance', () => {
+    renderScreen(<OrderEntryScreen />, createTestServices().services);
+    expect(
+      screen.queryByRole('radio', { name: th['pos.orderEntry.fulfilment.dine_in'] }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole('radio', { name: th['pos.orderEntry.fulfilment.takeaway'] }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole('radio', { name: th['pos.orderEntry.fulfilment.room_delivery'] }),
+    ).toBeNull();
+    expect(screen.queryByLabelText(th['pos.orderEntry.roomNo'])).toBeNull();
+    expect(screen.getAllByText(th['pos.delivery.title']).length).toBeGreaterThan(0);
+  });
+});
+
+describe('where the order goes', () => {
+  const place = () =>
+    screen.getByRole('button', {
       name: new RegExp(th['pos.orderEntry.place']),
     }) as HTMLButtonElement;
-    expect(place.disabled).toBe(true);
-    fireEvent.change(room, { target: { value: '1204' } });
-    expect(place.disabled).toBe(false);
-    expect(create).not.toHaveBeenCalled();
+  const nameField = () => screen.getByLabelText(th['pos.delivery.name']) as HTMLInputElement;
+  const noteField = () => screen.getByLabelText(th['pos.delivery.note']) as HTMLInputElement;
+  const building = (b: string) => screen.getByRole('radio', { name: b }) as HTMLInputElement;
+
+  test('offers the buildings of the synced list, as choices of at least 44 px to tap', () => {
+    renderScreen(<OrderEntryScreen />, createTestServices().services);
+    const group = screen.getByRole('group', { name: th['pos.delivery.building'] });
+    expect(
+      within(group)
+        .getAllByRole('radio')
+        .map((r) => (r as HTMLInputElement).value),
+    ).toEqual(['A1', 'A2', 'B1', 'B2', 'C1', 'C2', 'D1', 'D2']);
+  });
+
+  test('the create button waits for a building and a name', () => {
+    const { services } = createTestServices();
+    renderScreen(<OrderEntryScreen />, services);
+    click(tile('ชาเย็น'));
+    expect(place().disabled).toBe(true);
+    expect(screen.getByText(th['pos.delivery.needed'])).toBeTruthy();
+    click(building('B1'));
+    expect(place().disabled).toBe(true);
+    fireEvent.change(nameField(), { target: { value: '   ' } });
+    expect(place().disabled).toBe(true);
+    fireEvent.change(nameField(), { target: { value: 'Fah ตัวอย่าง' } });
+    expect(place().disabled).toBe(false);
+    expect(screen.queryByText(th['pos.delivery.needed'])).toBeNull();
+  });
+
+  test('the name is limited to 60 characters; the details to 200; the kitchen note stays apart', () => {
+    renderScreen(<OrderEntryScreen />, createTestServices().services);
+    expect(nameField().maxLength).toBe(60);
+    expect(noteField().maxLength).toBe(200);
+    expect(screen.getByLabelText(th['pos.orderEntry.orderNote'])).not.toBe(noteField());
+    expect(th['pos.orderEntry.orderNote']).not.toBe(th['pos.delivery.note']);
+  });
+
+  test('says so when the buildings could not be loaded, and a retry reads them', async () => {
+    const { services, api } = createTestServices({ buildings: false });
+    api.settings.delivery.mockRejectedValueOnce(new ApiClientError('NETWORK'));
+    renderScreen(<OrderEntryScreen />, services);
+    await screen.findByText(th['pos.delivery.buildingMissing']);
+    expect(screen.queryAllByRole('radio', { name: /^[A-D][12]$/ })).toHaveLength(0);
+    click(screen.getByRole('button', { name: th['common.retry'] }));
+    await waitFor(() => expect(building('A1')).toBeTruthy());
+    expect(api.settings.delivery).toHaveBeenCalledTimes(2);
+  });
+
+  test('reads the buildings from the setting when the feed has none yet', async () => {
+    const { services, api } = createTestServices({ buildings: false });
+    renderScreen(<OrderEntryScreen />, services);
+    await waitFor(() => expect(building('D2')).toBeTruthy());
+    expect(api.settings.delivery).toHaveBeenCalledTimes(1);
+  });
+
+  test('sends building, name and details trimmed, and the kitchen note as it was', async () => {
+    const { services, create } = createTestServices({ create: async () => createdOrder() });
+    renderScreen(<OrderEntryScreen />, services);
+    click(tile('ชาเย็น'));
+    click(building('B2'));
+    fireEvent.change(nameField(), { target: { value: ' Tester ' } });
+    fireEvent.change(noteField(), { target: { value: ' ชั้น 3 ' } });
+    fireEvent.change(screen.getByLabelText(th['pos.orderEntry.orderNote']), {
+      target: { value: 'ไม่เผ็ด' },
+    });
+    click(place());
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
+    expect(create.mock.calls[0]?.[0]).toMatchObject({
+      fulfillment: 'entrance_delivery',
+      deliveryBuilding: 'B2',
+      recipientName: 'Tester',
+      deliveryNote: 'ชั้น 3',
+      note: 'ไม่เผ็ด',
+    });
+    expect(create.mock.calls[0]?.[0]).not.toHaveProperty('customerId');
+  });
+});
+
+describe('remembered recipients', () => {
+  const saved = (n: number, building: string, name: string, note: string | null = null) => ({
+    id: uuid(600 + n),
+    building,
+    recipientName: name,
+    deliveryNote: note,
+    lastOrderAt: null,
+  });
+  const recent = [saved(1, 'B1', 'Fah ตัวอย่าง', 'ชั้น 3'), saved(2, 'A2', 'Nok ตัวอย่าง')];
+  const withRecent = (over: Partial<Parameters<typeof createTestServices>[0]> = {}) =>
+    createTestServices({
+      recipients: { list: async () => ({ recipients: recent }) },
+      create: async () => createdOrder(),
+      ...over,
+    });
+  const chip = (label: string) => screen.findByRole('button', { name: new RegExp(label) });
+  const nameField = () => screen.getByLabelText(th['pos.delivery.name']) as HTMLInputElement;
+  const noteField = () => screen.getByLabelText(th['pos.delivery.note']) as HTMLInputElement;
+
+  test('shows the latest as "building · name" chips with the saved details as a hint', async () => {
+    const { services, api } = withRecent();
+    renderScreen(<OrderEntryScreen />, services);
+    const fah = await chip('B1 · Fah ตัวอย่าง');
+    expect(fah.textContent).toContain('ชั้น 3');
+    expect(await chip('A2 · Nok ตัวอย่าง')).toBeTruthy();
+    expect(api.recipients.list).toHaveBeenCalledWith({ limit: 8 });
+    expect((fah as HTMLButtonElement).type).toBe('button');
+  });
+
+  test('shows no chip section while nobody is remembered', async () => {
+    const { services, api } = createTestServices();
+    renderScreen(<OrderEntryScreen />, services);
+    await waitFor(() => expect(api.recipients.list).toHaveBeenCalled());
+    expect(screen.queryByText(th['pos.delivery.recent'])).toBeNull();
+  });
+
+  test('tapping one fills building, name and details, still editable, and sends the customer id', async () => {
+    const { services, create } = withRecent();
+    renderScreen(<OrderEntryScreen />, services);
+    click(tile('ชาเย็น'));
+    click(await chip('B1 · Fah ตัวอย่าง'));
+    expect((screen.getByRole('radio', { name: 'B1' }) as HTMLInputElement).checked).toBe(true);
+    expect(nameField().value).toBe('Fah ตัวอย่าง');
+    expect(noteField().value).toBe('ชั้น 3');
+    fireEvent.change(noteField(), { target: { value: 'ชั้น 4' } });
+    click(screen.getByRole('button', { name: new RegExp(th['pos.orderEntry.place']) }));
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
+    expect(create.mock.calls[0]?.[0]).toMatchObject({
+      deliveryBuilding: 'B1',
+      recipientName: 'Fah ตัวอย่าง',
+      deliveryNote: 'ชั้น 4',
+      customerId: recent[0]?.id,
+    });
+  });
+
+  test('editing the name or the building after a tap drops the customer id', async () => {
+    const { services, create } = withRecent();
+    renderScreen(<OrderEntryScreen />, services);
+    click(tile('ชาเย็น'));
+    click(await chip('B1 · Fah ตัวอย่าง'));
+    fireEvent.change(nameField(), { target: { value: 'Fah Other' } });
+    click(screen.getByRole('radio', { name: 'C1' }));
+    click(screen.getByRole('button', { name: new RegExp(th['pos.orderEntry.place']) }));
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
+    expect(create.mock.calls[0]?.[0]).toMatchObject({
+      deliveryBuilding: 'C1',
+      recipientName: 'Fah Other',
+    });
+    expect(create.mock.calls[0]?.[0]).not.toHaveProperty('customerId');
+  });
+
+  test('typing a name searches after a pause and shows the matches in place of the latest', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const list = vi.fn(async (query?: { q?: string | undefined }) => ({
+        recipients: query?.q ? [saved(3, 'D1', 'Fahsai ตัวอย่าง')] : recent,
+      }));
+      const { services } = withRecent({ recipients: { list } });
+      renderScreen(<OrderEntryScreen />, services);
+      await chip('B1 · Fah ตัวอย่าง');
+      fireEvent.change(nameField(), { target: { value: 'Fah' } });
+      expect(list).not.toHaveBeenCalledWith(expect.objectContaining({ q: 'Fah' }));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(250);
+      });
+      expect(list).toHaveBeenCalledWith({ q: 'Fah', limit: 8 });
+      await chip('D1 · Fahsai ตัวอย่าง');
+      expect(screen.getByText(th['pos.delivery.matches'])).toBeTruthy();
+      expect(screen.queryByRole('button', { name: /A2 · Nok/ })).toBeNull();
+      // Clearing the field brings the latest back.
+      fireEvent.change(nameField(), { target: { value: '' } });
+      await chip('A2 · Nok ตัวอย่าง');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test('after an order is placed the latest are read again and the recipient is cleared', async () => {
+    const { services, api, cart } = withRecent();
+    renderScreen(<OrderEntryScreen />, services);
+    click(tile('ชาเย็น'));
+    click(await chip('B1 · Fah ตัวอย่าง'));
+    expect(api.recipients.list).toHaveBeenCalledTimes(1);
+    click(screen.getByRole('button', { name: new RegExp(th['pos.orderEntry.place']) }));
+    await waitFor(() => expect(window.location.hash).toBe(`#/orders/${uuid(900)}`));
+    await waitFor(() => expect(api.recipients.list).toHaveBeenCalledTimes(2));
+    expect(cart.getState().recipientName).toBe('');
+  });
+
+  test('a refused building is explained, and the order stays', async () => {
+    const { services, cart } = withRecent({
+      create: async () => {
+        throw new ApiClientError('UNKNOWN_BUILDING', { status: 422 });
+      },
+    });
+    renderScreen(<OrderEntryScreen />, services);
+    click(tile('ชาเย็น'));
+    click(await chip('B1 · Fah ตัวอย่าง'));
+    click(screen.getByRole('button', { name: new RegExp(th['pos.orderEntry.place']) }));
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toContain(th['error.unknownBuilding']);
+    expect(cart.getState().recipientName).toBe('Fah ตัวอย่าง');
+  });
+
+  test('never writes a name into the address bar', async () => {
+    const { services } = withRecent();
+    renderScreen(<OrderEntryScreen />, services);
+    click(await chip('B1 · Fah ตัวอย่าง'));
+    fireEvent.change(nameField(), { target: { value: 'Somebody' } });
+    expect(decodeURIComponent(window.location.href)).not.toMatch(/Fah|Somebody/);
   });
 });
 
 describe('creating the order', () => {
-  const created = (orderNo = 'S-007') =>
-    ({
-      order: orderDto(uuid(900), 500, {
-        orderNo,
-        subtotalSatang: satang(2500),
-        totalSatang: satang(2500),
-      }),
-      replay: false,
-      clientRequestId: uuid(1),
-    }) as Awaited<ReturnType<import('../api/client.ts').ApiClient['orders']['create']>>;
+  const created = createdOrder;
 
   test('sends the order once, and goes to the order page with the number from the server', async () => {
-    const { services, create } = createTestServices({ create: async () => created() });
+    const { services, create } = readyServices({ create: async () => created() });
     renderScreen(<OrderEntryScreen />, services);
     click(tile('ชาเย็น'));
     click(screen.getByRole('button', { name: new RegExp(th['pos.orderEntry.place']) }));
@@ -341,14 +566,16 @@ describe('creating the order', () => {
     expect(create).toHaveBeenCalledTimes(1);
     expect(create.mock.calls[0]?.[0]).toMatchObject({
       channel: 'storefront',
-      fulfillment: 'dine_in',
+      fulfillment: 'entrance_delivery',
+      deliveryBuilding: 'B1',
+      recipientName: 'Fah ตัวอย่าง',
       items: [{ menuItemId: MENU.tea, qty: 1, modifierOptionIds: [] }],
     });
   });
 
   test('a double tap creates one order; the button is off while the request runs', async () => {
     let release!: () => void;
-    const { services, create } = createTestServices({
+    const { services, create } = readyServices({
       create: () =>
         new Promise((resolve) => {
           release = () => resolve(created());
@@ -370,7 +597,7 @@ describe('creating the order', () => {
   });
 
   test('a refusal is explained in Thai, from our own text, and the order stays', async () => {
-    const { services, cart } = createTestServices({
+    const { services, cart } = readyServices({
       create: async () => {
         throw new ApiClientError('ORDER_INVALID', {
           status: 422,
@@ -388,7 +615,7 @@ describe('creating the order', () => {
   });
 
   test('an unanswered request locks the order and says a retry will not create it twice', async () => {
-    const { services, cart } = createTestServices({
+    const { services, cart } = readyServices({
       create: async () => {
         throw new ApiClientError('TIMEOUT');
       },
@@ -406,7 +633,7 @@ describe('creating the order', () => {
 
   test('the retry button of an unsure order is labelled retry and sends even if the menu changed', async () => {
     let calls = 0;
-    const { services, cart, entities, create } = createTestServices({
+    const { services, cart, entities, create } = readyServices({
       create: async () => {
         calls += 1;
         if (calls === 1) throw new ApiClientError('TIMEOUT');
@@ -432,7 +659,7 @@ describe('creating the order', () => {
   });
 
   test('clearing an unsure order first says to look in the orders list, and only then discards it', async () => {
-    const { services, cart } = createTestServices({
+    const { services, cart } = readyServices({
       create: async () => {
         throw new ApiClientError('TIMEOUT');
       },
@@ -467,7 +694,7 @@ describe('creating the order', () => {
   });
 
   test('an ordinary cart is cleared at once, with no question', () => {
-    const { services, cart } = createTestServices();
+    const { services, cart } = readyServices();
     renderScreen(<OrderEntryScreen />, services);
     click(tile('ชาเย็น'));
     click(screen.getByRole('button', { name: th['pos.orderEntry.clear'] }));

@@ -32,10 +32,10 @@ export function orderDto(id: string, rev: number, over: Partial<OrderDto> = {}):
     orderNo: 'S-001',
     businessDate: '2030-01-01',
     channel: 'storefront',
-    fulfillment: 'dine_in',
+    fulfillment: 'entrance_delivery',
     roomNo: null,
-    deliveryBuilding: null,
-    recipientName: null,
+    deliveryBuilding: 'B1',
+    recipientName: 'Tester',
     deliveryNote: null,
     customerId: null,
     status: 'new',
@@ -244,6 +244,20 @@ export function settingsFrame(
 }
 
 type SettingsFrame = Extract<SyncChange, { type: 'settings.updated' }>;
+
+/** `delivery`: the buildings the shop delivers to (the shared default list unless given). */
+export function deliveryFrame(
+  rev: number,
+  buildings: string[] = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2', 'D1', 'D2'],
+): SettingsFrame {
+  return parse<SettingsFrame>({
+    type: 'settings.updated',
+    id: 'delivery',
+    rev,
+    version: 1,
+    data: { buildings },
+  });
+}
 
 /** `payment_methods`: cash, PromptPay and platform on, other off (the shared defaults). */
 export function paymentMethodsFrame(

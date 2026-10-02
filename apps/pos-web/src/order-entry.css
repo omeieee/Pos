@@ -311,10 +311,103 @@ fieldset.group {
   height: 40px;
   color: var(--sds-color-border-strong);
 }
-.cart__lines {
+/* Delivery details and the lines scroll together, so the sheet on a phone never loses the lines. */
+.cart__body {
   flex: 1;
   min-height: 0;
   overflow: auto;
+  display: flex;
+  flex-direction: column;
+}
+.deliv {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sds-space-md);
+  padding: var(--sds-space-lg);
+  border-bottom: 1px solid var(--sds-color-border);
+}
+.deliv__title {
+  font-size: var(--sds-font-size-lg, 1.125rem);
+  line-height: var(--sds-line-height-tight);
+}
+.deliv__recent {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sds-space-xs);
+}
+.deliv__missing {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sds-space-md);
+}
+/* A saved recipient: "B1 · Fah", with the saved details under it, small. */
+.rchip {
+  flex: none;
+  min-height: var(--tap);
+  max-width: 220px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  padding: var(--sds-space-xs) var(--sds-space-lg);
+  border-radius: var(--sds-radius-lg, 16px);
+  border: 1.5px solid var(--sds-color-border);
+  background: var(--sds-color-surface);
+  text-align: left;
+}
+.rchip__name {
+  font-weight: var(--sds-font-weight-medium);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.rchip__hint {
+  font-size: var(--sds-font-size-sm);
+  color: var(--sds-color-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+/* The buildings: four to a row, each a target of at least 44 px. */
+fieldset.bld {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--sds-space-sm);
+}
+.bld > legend {
+  grid-column: 1 / -1;
+  padding: 0;
+  margin-bottom: var(--sds-space-xs);
+}
+.bld__item {
+  position: relative;
+  min-height: var(--tap);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--sds-radius-md, 12px);
+  border: 1.5px solid var(--sds-color-border);
+  background: var(--sds-color-surface);
+  font-weight: var(--sds-font-weight-medium);
+}
+.bld__item--on {
+  background: var(--sds-color-text);
+  border-color: var(--sds-color-text);
+  color: var(--sds-color-text-inverse);
+}
+.bld__item:focus-within {
+  outline: 3px solid var(--sds-color-focus);
+  outline-offset: 2px;
+}
+.cart__lines {
+  flex: none;
   list-style: none;
   margin: 0;
   padding: 0;

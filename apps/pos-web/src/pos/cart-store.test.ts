@@ -2,11 +2,12 @@ import { describe, expect, test, vi } from 'vitest';
 import { ApiClientError } from '../api/errors.ts';
 import { createActivity } from '../lib/activity.ts';
 import { createEntityStore } from '../realtime/entity-store.ts';
-import { itemFrame, orderDto, uuid } from '../test-support/frames.ts';
+import { deliveryFrame, itemFrame, orderDto, uuid } from '../test-support/frames.ts';
 import { MENU, seedMenu } from '../test-support/menu-fixtures.ts';
 import { type CartDeps, createCartStore } from './cart-store.ts';
 
-function setup(overrides: Partial<CartDeps> = {}) {
+/** `filled`: the delivery details are already typed (most tests are about something else). */
+function setup(overrides: Partial<CartDeps> = {}, filled = true) {
   const entities = createEntityStore();
   seedMenu(entities);
   const activity = createActivity();
@@ -23,8 +24,20 @@ function setup(overrides: Partial<CartDeps> = {}) {
     newId: () => uuid(1000 + ++n),
     ...overrides,
   });
+  if (filled) {
+    cart.setBuilding('B1');
+    cart.setRecipientName('Fah ตัวอย่าง');
+  }
   return { cart, entities, activity, create };
 }
+
+const FAH = {
+  id: uuid(700),
+  building: 'B1',
+  recipientName: 'Fah ตัวอย่าง',
+  deliveryNote: 'ชั้น 3',
+  lastOrderAt: null,
+};
 
 const tomYum = { itemId: MENU.tomYum, optionIds: [MENU.thin, MENU.mild] };
 
@@ -97,18 +110,67 @@ describe('building the order', () => {
     expect(cart.lastChoice(MENU.tomYum)).toEqual([MENU.thin, MENU.mild]);
   });
 
-  test('clear() empties the order and the fields', () => {
+  test('clear() empties the order and the fields, the recipient too', () => {
     const { cart } = setup();
     cart.addItem(tomYum);
     cart.setNote('ไม่เอาถุง');
-    cart.setFulfillment('room_delivery');
-    cart.setRoomNo('1204');
+    cart.setDeliveryNote('ชั้น 3');
     cart.clear();
-    expect(cart.getState()).toMatchObject({ lines: [], note: '', roomNo: '', phase: 'editing' });
+    expect(cart.getState()).toMatchObject({
+      lines: [],
+      note: '',
+      deliveryBuilding: '',
+      recipientName: '',
+      deliveryNote: '',
+      phase: 'editing',
+    });
   });
 
-  test('starts as dine-in', () => {
-    expect(setup().cart.getState().fulfillment).toBe('dine_in');
+  test('starts with no building and no name: nobody is assumed', () => {
+    expect(setup({}, false).cart.getState()).toMatchObject({
+      deliveryBuilding: '',
+      recipientName: '',
+      deliveryNote: '',
+    });
+  });
+});
+
+describe('the recipient', () => {
+  test('choosing a saved recipient fills building, name and details, all still editable', () => {
+    const { cart } = setup({}, false);
+    cart.chooseRecipient(FAH);
+    expect(cart.getState()).toMatchObject({
+      deliveryBuilding: 'B1',
+      recipientName: 'Fah ตัวอย่าง',
+      deliveryNote: 'ชั้น 3',
+    });
+    cart.setDeliveryNote('ชั้น 4');
+    expect(cart.getState().deliveryNote).toBe('ชั้น 4');
+  });
+
+  test('a saved recipient with no details clears the details field', () => {
+    const { cart } = setup({}, false);
+    cart.setDeliveryNote('old');
+    cart.chooseRecipient({ ...FAH, deliveryNote: null });
+    expect(cart.getState().deliveryNote).toBe('');
+  });
+
+  test('a saved recipient whose building is no longer offered leaves the building unselected', () => {
+    const { cart, entities } = setup({}, false);
+    entities.apply(deliveryFrame(900, ['A1', 'A2']));
+    cart.chooseRecipient(FAH);
+    expect(cart.getState()).toMatchObject({ deliveryBuilding: '', recipientName: 'Fah ตัวอย่าง' });
+  });
+
+  test('is not an editing step while the order is locked', async () => {
+    const { cart, create } = setup();
+    create.mockRejectedValueOnce(new ApiClientError('TIMEOUT'));
+    cart.addItem(tomYum);
+    await cart.submit();
+    cart.chooseRecipient({ ...FAH, building: 'D2', recipientName: 'Other' });
+    cart.setBuilding('A1');
+    cart.setRecipientName('Someone');
+    expect(cart.getState()).toMatchObject({ deliveryBuilding: 'B1', recipientName: 'Fah ตัวอย่าง' });
   });
 });
 
@@ -117,7 +179,6 @@ describe('submitting', () => {
     const { cart, create } = setup();
     cart.addItem({ ...tomYum, qty: 2, note: 'ไม่ใส่ผัก' });
     cart.addItem({ itemId: MENU.tea });
-    cart.setFulfillment('takeaway');
     cart.setNote('รีบ');
     const outcome = await cart.submit();
     expect(outcome.ok).toBe(true);
@@ -125,7 +186,9 @@ describe('submitting', () => {
     const [input, options] = create.mock.calls[0] ?? [];
     expect(input).toEqual({
       channel: 'storefront',
-      fulfillment: 'takeaway',
+      fulfillment: 'entrance_delivery',
+      deliveryBuilding: 'B1',
+      recipientName: 'Fah ตัวอย่าง',
       note: 'รีบ',
       items: [
         {
@@ -141,26 +204,83 @@ describe('submitting', () => {
     expect(options?.clientRequestId).toMatch(/^[0-9a-f-]{36}$/);
   });
 
-  test('room delivery sends the room number', async () => {
-    const { cart, create } = setup();
+  test('building, name and details are trimmed; empty details are not sent', async () => {
+    const { cart, create } = setup({}, false);
     cart.addItem({ itemId: MENU.tea });
-    cart.setFulfillment('room_delivery');
-    cart.setRoomNo(' 1204 ');
+    cart.setBuilding('A2');
+    cart.setRecipientName('  Nok  ');
+    cart.setDeliveryNote('   ');
     await cart.submit();
-    expect(create.mock.calls[0]?.[0]).toMatchObject({
-      fulfillment: 'room_delivery',
-      roomNo: '1204',
-    });
+    const body = create.mock.calls[0]?.[0];
+    expect(body).toMatchObject({ deliveryBuilding: 'A2', recipientName: 'Nok' });
+    expect(body).not.toHaveProperty('deliveryNote');
+    expect(body).not.toHaveProperty('customerId');
+    expect(body).not.toHaveProperty('roomNo');
   });
 
-  test('other fulfilments never send a room number left over in the field', async () => {
+  test('details are sent trimmed, apart from the kitchen note', async () => {
     const { cart, create } = setup();
     cart.addItem({ itemId: MENU.tea });
-    cart.setFulfillment('room_delivery');
-    cart.setRoomNo('1204');
-    cart.setFulfillment('dine_in');
+    cart.setDeliveryNote(' ชั้น 3 ');
+    cart.setNote('ไม่เผ็ด');
     await cart.submit();
-    expect(create.mock.calls[0]?.[0]).not.toHaveProperty('roomNo');
+    expect(create.mock.calls[0]?.[0]).toMatchObject({ deliveryNote: 'ชั้น 3', note: 'ไม่เผ็ด' });
+  });
+
+  describe('the customer id of a chosen recipient', () => {
+    async function placeAfter(change: (cart: ReturnType<typeof setup>['cart']) => void) {
+      const { cart, create } = setup({}, false);
+      cart.addItem({ itemId: MENU.tea });
+      cart.chooseRecipient(FAH);
+      change(cart);
+      await cart.submit();
+      return create.mock.calls[0]?.[0];
+    }
+
+    test('is sent while building and name are as chosen', async () => {
+      expect(await placeAfter(() => {})).toMatchObject({
+        customerId: FAH.id,
+        deliveryBuilding: 'B1',
+        deliveryNote: 'ชั้น 3',
+      });
+    });
+
+    test('is still sent when only the other details are edited', async () => {
+      expect(await placeAfter((c) => c.setDeliveryNote('ชั้น 4'))).toMatchObject({
+        customerId: FAH.id,
+        deliveryNote: 'ชั้น 4',
+      });
+    });
+
+    test('is still sent for the same name typed with other case or spacing', async () => {
+      expect(await placeAfter((c) => c.setRecipientName('  fah   ตัวอย่าง '))).toMatchObject({
+        customerId: FAH.id,
+      });
+    });
+
+    test('is dropped when the building is edited (the server would rename the customer)', async () => {
+      expect(await placeAfter((c) => c.setBuilding('B2'))).not.toHaveProperty('customerId');
+    });
+
+    test('is dropped when the name is edited', async () => {
+      expect(await placeAfter((c) => c.setRecipientName('Fah Other'))).not.toHaveProperty(
+        'customerId',
+      );
+    });
+
+    test('an unsure retry sends the very same body and id', async () => {
+      const { cart, create } = setup({}, false);
+      create.mockRejectedValueOnce(new ApiClientError('TIMEOUT'));
+      cart.addItem({ itemId: MENU.tea });
+      cart.chooseRecipient(FAH);
+      await cart.submit();
+      await cart.submit();
+      expect(create.mock.calls[1]?.[0]).toEqual(create.mock.calls[0]?.[0]);
+      expect(create.mock.calls[1]?.[1]?.clientRequestId).toBe(
+        create.mock.calls[0]?.[1]?.clientRequestId,
+      );
+      expect(create.mock.calls[1]?.[0]).toMatchObject({ customerId: FAH.id });
+    });
   });
 
   test('success: the order goes into the store, the cart empties, and the order is returned', async () => {
@@ -239,12 +359,15 @@ describe('submitting', () => {
     expect(create).not.toHaveBeenCalled();
   });
 
-  test('room delivery without a room number is not sent', async () => {
-    const { cart, create } = setup();
+  test('an order without a building or without a name is not sent', async () => {
+    const { cart, create } = setup({}, false);
     cart.addItem({ itemId: MENU.tea });
-    cart.setFulfillment('room_delivery');
-    cart.setRoomNo('   ');
-    expect(await cart.submit()).toEqual({ ok: false, reason: 'roomRequired' });
+    expect(await cart.submit()).toEqual({ ok: false, reason: 'deliveryRequired' });
+    cart.setBuilding('B1');
+    cart.setRecipientName('   ');
+    expect(await cart.submit()).toEqual({ ok: false, reason: 'deliveryRequired' });
+    cart.setRecipientName('x'.repeat(61));
+    expect(await cart.submit()).toEqual({ ok: false, reason: 'deliveryRequired' });
     expect(create).not.toHaveBeenCalled();
   });
 });
@@ -342,10 +465,38 @@ describe('when the request fails', () => {
     expect(cart.getState()).toMatchObject({ phase: 'editing', clientRequestId: null, lines: [] });
   });
 
+  test('changing the building, name or details gives the next attempt a new request id', async () => {
+    const { cart, create } = setup();
+    create.mockRejectedValueOnce(new ApiClientError('ORDER_INVALID', { status: 422 }));
+    cart.addItem(tomYum);
+    await cart.submit();
+    cart.setBuilding('C1');
+    await cart.submit();
+    expect(create.mock.calls[1]?.[1]?.clientRequestId).not.toBe(
+      create.mock.calls[0]?.[1]?.clientRequestId,
+    );
+  });
+
+  test('after success the recipient is forgotten: the next order is somebody else', async () => {
+    const { cart } = setup({}, false);
+    cart.addItem(tomYum);
+    cart.chooseRecipient(FAH);
+    await cart.submit();
+    expect(cart.getState()).toMatchObject({
+      deliveryBuilding: '',
+      recipientName: '',
+      deliveryNote: '',
+      chosen: null,
+    });
+  });
+
   test('a new order after success gets its own request id', async () => {
     const { cart, create } = setup();
     cart.addItem(tomYum);
     await cart.submit();
+    // The recipient was cleared with the order: the next one is typed again.
+    cart.setBuilding('B1');
+    cart.setRecipientName('Fah ตัวอย่าง');
     cart.addItem(tomYum);
     await cart.submit();
     const ids = create.mock.calls.map((c) => c[1]?.clientRequestId);
@@ -435,6 +586,8 @@ describe('reset (sign-out)', () => {
       cart.addItem(tomYum);
       const stale = cart.submit();
       cart.reset();
+      cart.setBuilding('A1');
+      cart.setRecipientName('Next Person');
       cart.addItem({ itemId: MENU.tea });
       const current = cart.submit();
       first.resolve(created(1));

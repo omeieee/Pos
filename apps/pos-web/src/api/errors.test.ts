@@ -79,6 +79,18 @@ describe('error code -> message', () => {
     for (const code of needed) expect(Object.hasOwn(API_ERROR_KEYS, code), code).toBe(true);
   });
 
+  test('an entrance order refused for its fulfilment or building says so, in both languages', () => {
+    for (const [code, key] of [
+      ['FULFILLMENT_NOT_OFFERED', 'error.fulfillmentNotOffered'],
+      ['UNKNOWN_BUILDING', 'error.unknownBuilding'],
+    ] as const) {
+      const error = new ApiClientError(code, { status: 422 });
+      expect(errorText(th, error)).toBe(t('th', key));
+      expect(errorText(en, error)).toBe(t('en', key));
+      expect(errorText(th, error)).not.toBe(t('th', 'common.error'));
+    }
+  });
+
   test('an order refused for one line says what is wrong with it, not just "invalid"', () => {
     const soldOut = new ApiClientError('ORDER_INVALID', {
       status: 422,

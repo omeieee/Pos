@@ -18,7 +18,13 @@
  * - when the server refused the order (a 4xx), nothing was created: the cart stays editable, and
  *   changing it makes a new request id.
  */
-import type { OrderDto } from '@sds/shared';
+import {
+  buildingNameSchema,
+  type OrderDto,
+  type RecipientDto,
+  recipientKey,
+  recipientNameSchema,
+} from '@sds/shared';
 import type { ApiClient, NewOrderInput } from '../api/client.ts';
 import { ApiClientError, isApiClientError } from '../api/errors.ts';
 import type { Activity } from '../lib/activity.ts';
@@ -26,15 +32,29 @@ import { createStore, type ReadableStore } from '../lib/store.ts';
 import { newUuid } from '../platform/ids.ts';
 import type { EntityStore } from '../realtime/entity-store.ts';
 import { type CartLine, priceCart } from './cart-pricing.ts';
+import { deliveryBuildings } from './delivery-model.ts';
 
-/** What a counter can offer: pickup is for LINE orders. */
-export type CounterFulfillment = 'dine_in' | 'takeaway' | 'room_delivery';
 export type CartPhase = 'editing' | 'sending' | 'unsure';
+
+/**
+ * A remembered recipient the staff tapped. It is only a link: the server finds or creates the
+ * customer by building + name, and given an id it would RENAME that customer to whatever the order
+ * says, so the id is sent only while the building and the name still match what was chosen.
+ */
+interface ChosenRecipient {
+  customerId: string;
+  building: string;
+  nameKey: string;
+}
 
 export interface CartState {
   lines: CartLine[];
-  fulfillment: CounterFulfillment;
-  roomNo: string;
+  /** Every order is an entrance delivery (owner, 2026-10-02): where, to whom, and other details. */
+  deliveryBuilding: string;
+  recipientName: string;
+  deliveryNote: string;
+  chosen: ChosenRecipient | null;
+  /** The kitchen note, apart from the delivery details. */
   note: string;
   phase: CartPhase;
   clientRequestId: string | null;
@@ -44,7 +64,7 @@ export interface CartState {
 
 export type SubmitOutcome =
   | { ok: true; order: OrderDto; replay: boolean }
-  | { ok: false; reason: 'empty' | 'invalid' | 'roomRequired' | 'busy' }
+  | { ok: false; reason: 'empty' | 'invalid' | 'deliveryRequired' | 'busy' }
   /** The person signed out while the request ran: its answer belongs to nobody and was dropped. */
   | { ok: false; reason: 'stale' }
   | { ok: false; reason: 'error'; error: ApiClientError };
@@ -71,8 +91,11 @@ export interface CartStore extends ReadableStore<CartState> {
     change: { optionIds?: readonly string[]; note?: string; qty?: number },
   ): void;
   removeLine(key: string): void;
-  setFulfillment(value: CounterFulfillment): void;
-  setRoomNo(value: string): void;
+  setBuilding(value: string): void;
+  setRecipientName(value: string): void;
+  setDeliveryNote(value: string): void;
+  /** Prefills building, name and details from a remembered recipient (all stay editable). */
+  chooseRecipient(recipient: RecipientDto): void;
   setNote(value: string): void;
   /** Empties the order (also from `unsure`: the person chose to discard it). */
   clear(): void;
@@ -92,6 +115,22 @@ const sameChoices = (a: readonly string[], b: readonly string[]) =>
 const sameLine = (a: CartLine, b: CartLine) =>
   a.itemId === b.itemId && a.note === b.note && sameChoices(a.optionIds, b.optionIds);
 
+const deliveryFilled = (state: Pick<CartState, 'deliveryBuilding' | 'recipientName'>) =>
+  buildingNameSchema.safeParse(state.deliveryBuilding).success &&
+  recipientNameSchema.safeParse(state.recipientName).success;
+
+/** The chosen customer's id, while building and name still match what was chosen. */
+function linkedCustomerId(
+  state: Pick<CartState, 'chosen' | 'deliveryBuilding' | 'recipientName'>,
+): string | undefined {
+  const { chosen } = state;
+  if (!chosen) return undefined;
+  return state.deliveryBuilding.trim() === chosen.building &&
+    recipientKey(state.recipientName) === chosen.nameKey
+    ? chosen.customerId
+    : undefined;
+}
+
 /** The request got no usable answer, so what it asked for (an order, a payment) may exist. */
 export function mayHaveBeenCreated(error: ApiClientError): boolean {
   return (
@@ -106,8 +145,10 @@ export function createCartStore(deps: CartDeps): CartStore {
   const newId = deps.newId ?? newUuid;
   const initial = (): CartState => ({
     lines: [],
-    fulfillment: 'dine_in',
-    roomNo: '',
+    deliveryBuilding: '',
+    recipientName: '',
+    deliveryNote: '',
+    chosen: null,
     note: '',
     phase: 'editing',
     clientRequestId: null,
@@ -204,8 +245,24 @@ export function createCartStore(deps: CartDeps): CartStore {
       edit({ lines: store.getState().lines.filter((l) => l.key !== key) });
     },
 
-    setFulfillment: (fulfillment) => edit({ fulfillment }),
-    setRoomNo: (roomNo) => edit({ roomNo }),
+    setBuilding: (deliveryBuilding) => edit({ deliveryBuilding }),
+    setRecipientName: (recipientName) => edit({ recipientName }),
+    setDeliveryNote: (deliveryNote) => edit({ deliveryNote }),
+    chooseRecipient(recipient) {
+      // A building the shop no longer delivers to is not selected for the staff.
+      const offered = deliveryBuildings(deps.entities.getState().settings);
+      edit({
+        deliveryBuilding:
+          offered === null || offered.includes(recipient.building) ? recipient.building : '',
+        recipientName: recipient.recipientName,
+        deliveryNote: recipient.deliveryNote ?? '',
+        chosen: {
+          customerId: recipient.id,
+          building: recipient.building,
+          nameKey: recipientKey(recipient.recipientName),
+        },
+      });
+    },
     setNote: (note) => edit({ note }),
 
     clear() {
@@ -223,9 +280,8 @@ export function createCartStore(deps: CartDeps): CartStore {
       // (same body, same id) even if the menu has changed since. A refusal then comes from the
       // server, which answers the original order for a known id.
       if (state.phase !== 'unsure') {
-        if (state.fulfillment === 'room_delivery' && state.roomNo.trim() === '') {
-          return { ok: false, reason: 'roomRequired' };
-        }
+        // The server owns the list of buildings; the screen offers only that list.
+        if (!deliveryFilled(state)) return { ok: false, reason: 'deliveryRequired' };
         if (!priceCart(deps.entities.getState(), state.lines).valid) {
           return { ok: false, reason: 'invalid' };
         }
@@ -236,8 +292,11 @@ export function createCartStore(deps: CartDeps): CartStore {
       store.setState({ phase: 'sending', clientRequestId, error: null });
       const input: NewOrderInput = {
         channel: 'storefront',
-        fulfillment: state.fulfillment,
-        ...(state.fulfillment === 'room_delivery' ? { roomNo: state.roomNo.trim() } : {}),
+        fulfillment: 'entrance_delivery',
+        deliveryBuilding: state.deliveryBuilding.trim(),
+        recipientName: state.recipientName.trim(),
+        ...(state.deliveryNote.trim() === '' ? {} : { deliveryNote: state.deliveryNote.trim() }),
+        ...(linkedCustomerId(state) ? { customerId: linkedCustomerId(state) } : {}),
         ...(state.note.trim() === '' ? {} : { note: state.note.trim() }),
         items: state.lines.map((l) => ({
           menuItemId: l.itemId,
@@ -251,11 +310,8 @@ export function createCartStore(deps: CartDeps): CartStore {
         const { order, replay } = await deps.api.orders.create(input, { clientRequestId });
         if (epoch !== startedIn) return { ok: false, reason: 'stale' };
         deps.entities.apply({ type: 'order.upserted', id: order.id, rev: order.rev, data: order });
-        store.setState({
-          ...initial(),
-          // The way of serving is a counter habit: keep it for the next order.
-          fulfillment: state.fulfillment === 'room_delivery' ? 'dine_in' : state.fulfillment,
-        });
+        // The next order is somebody else's: the recipient is not carried over.
+        store.setState(initial());
         return { ok: true, order, replay };
       } catch (caught) {
         if (epoch !== startedIn) return { ok: false, reason: 'stale' };

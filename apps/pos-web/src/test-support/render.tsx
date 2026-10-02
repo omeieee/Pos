@@ -8,7 +8,7 @@
  * step-up dialog next to it, as App does.
  */
 import type { Locale } from '@sds/i18n';
-import { ROLE_PERMISSIONS, type StaffRole } from '@sds/shared';
+import { DEFAULT_DELIVERY_SETTINGS, ROLE_PERMISSIONS, type StaffRole } from '@sds/shared';
 import { render } from '@testing-library/react';
 import type { ReactElement } from 'react';
 import { vi } from 'vitest';
@@ -22,6 +22,7 @@ import { createMemoryTokenStore } from '../platform/tokenStore.ts';
 import { createCartStore } from '../pos/cart-store.ts';
 import { createOrderMovesStore } from '../pos/order-moves-store.ts';
 import { createPaymentStore } from '../pos/payment-store.ts';
+import { createRecipientStore } from '../pos/recipient-store.ts';
 import type { ConnectionState } from '../realtime/connection.ts';
 import { createEntityStore } from '../realtime/entity-store.ts';
 import type { Services } from '../services.ts';
@@ -30,6 +31,7 @@ import { StepUpDialog } from '../ui/StepUpDialog.tsx';
 import { createFakeEngine, createFakePrefs, createFakeWakeLock } from './fake-audio.ts';
 import { createFakeLifecycle } from './fake-realtime.ts';
 import { FAKE_DEVICE_TOKEN, IDS, sessionBody } from './fixtures.ts';
+import { deliveryFrame } from './frames.ts';
 import { seedMenu } from './menu-fixtures.ts';
 
 /** The PIN the fake step-up accepts. */
@@ -78,7 +80,12 @@ const unexpected = (name: string) => async () => {
 
 /** An API whose every call fails the test unless the test gave it an answer. */
 export function createFakeApi(
-  overrides: { orders?: Partial<Orders>; payments?: Partial<Payments> } = {},
+  overrides: {
+    orders?: Partial<Orders>;
+    payments?: Partial<Payments>;
+    recipients?: Partial<ApiClient['recipients']>;
+    settings?: Partial<ApiClient['settings']>;
+  } = {},
 ) {
   const orders = {
     create: vi.fn<Orders['create']>(overrides.orders?.create ?? unexpected('orders.create')),
@@ -109,7 +116,25 @@ export function createFakeApi(
   };
   // The keepalive of a kitchen display calls this; it answers like a live session.
   const auth = { me: vi.fn(async () => ({}) as never) };
-  return { orders, payments, auth };
+  // The order screen reads these when it opens: by default nobody is remembered and the shared
+  // default buildings are on offer.
+  const recipients = {
+    list: vi.fn<ApiClient['recipients']['list']>(
+      overrides.recipients?.list ?? (async () => ({ recipients: [] })),
+    ),
+  };
+  const settings = {
+    delivery: vi.fn<ApiClient['settings']['delivery']>(
+      overrides.settings?.delivery ??
+        (async () => ({
+          value: DEFAULT_DELIVERY_SETTINGS,
+          version: 0,
+          rev: 0,
+          updatedAt: null,
+        })),
+    ),
+  };
+  return { orders, payments, auth, recipients, settings };
 }
 
 export function createTestServices(
@@ -120,14 +145,20 @@ export function createTestServices(
     getOrder?: ApiClient['orders']['get'];
     orders?: Partial<Orders>;
     payments?: Partial<Payments>;
+    /** What the order screen's chips read (default: nobody remembered). */
+    recipients?: Partial<ApiClient['recipients']>;
+    /** Put the delivery buildings in the store as the feed would (default: the shared list). */
+    buildings?: boolean;
     /** Signed-in auth from `createTestAuth`. Without one, screens that need a person cannot render. */
     auth?: AuthStore;
   } = {},
 ) {
   const entities = createEntityStore();
   if (options.menu !== false) seedMenu(entities);
+  if (options.buildings !== false) entities.apply(deliveryFrame(1));
   const activity = createActivity();
   const api = createFakeApi({
+    ...(options.recipients ? { recipients: options.recipients } : {}),
     orders: {
       ...(options.create ? { create: options.create } : {}),
       ...(options.getOrder ? { get: options.getOrder } : {}),
@@ -138,6 +169,7 @@ export function createTestServices(
   const create = api.orders.create;
   const getOrder = api.orders.get;
   const cart = createCartStore({ api: { orders: { create } }, entities, activity });
+  const recipients = createRecipientStore({ api, entities });
   const payments = createPaymentStore({
     api,
     entities,
@@ -167,6 +199,7 @@ export function createTestServices(
     entities,
     activity,
     cart,
+    recipients,
     payments,
     orderMoves,
     sound,
@@ -179,6 +212,7 @@ export function createTestServices(
     services,
     entities,
     cart,
+    recipients,
     payments,
     orderMoves,
     sound,
