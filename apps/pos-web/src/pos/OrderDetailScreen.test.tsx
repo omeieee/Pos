@@ -295,6 +295,73 @@ describe('moving the order along', () => {
   });
 });
 
+describe('a move whose answer was lost', () => {
+  const later = (over: Partial<OrderDto>): OrderDto => ({ ...withItems(over), rev: 41 });
+  const moveButton = (name: string) => screen.getByRole('button', { name });
+
+  test('the first call had worked: the retry shows no INVALID_TRANSITION, the order is read and shown as moved', async () => {
+    const env = await setup({
+      order: withItems({ status: 'preparing' }),
+      services: {
+        orders: {
+          transition: async () => {
+            throw new ApiClientError('INVALID_TRANSITION', { status: 409 });
+          },
+          get: async () => later({ status: 'ready' }),
+        },
+      },
+    });
+    renderScreen(<OrderDetailScreen id={ID} />, env.services);
+    fireEvent.click(moveButton(th['order.move.ready']));
+    await waitFor(() => expect(env.entities.getState().orders.get(ID)?.status).toBe('ready'));
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  test('nothing arrived: the error is shown and the same tap can be repeated', async () => {
+    let calls = 0;
+    const env = await setup({
+      order: withItems({ status: 'preparing' }),
+      services: {
+        orders: {
+          transition: async () => {
+            calls += 1;
+            if (calls === 1) throw new ApiClientError('TIMEOUT');
+            return { ...later({ status: 'ready' }), rev: 42 };
+          },
+          get: async () => later({ status: 'preparing' }),
+        },
+      },
+    });
+    renderScreen(<OrderDetailScreen id={ID} />, env.services);
+    fireEvent.click(moveButton(th['order.move.ready']));
+    await screen.findByRole('alert');
+    fireEvent.click(moveButton(th['order.move.ready']));
+    await waitFor(() => expect(env.entities.getState().orders.get(ID)?.status).toBe('ready'));
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  test('a move that is on its way gives visible feedback: busy, buttons off', async () => {
+    let answer!: () => void;
+    const env = await setup({
+      order: withItems({ status: 'preparing' }),
+      services: {
+        orders: {
+          transition: () =>
+            new Promise((resolve) => {
+              answer = () => resolve(later({ status: 'ready' }));
+            }),
+        },
+      },
+    });
+    renderScreen(<OrderDetailScreen id={ID} />, env.services);
+    fireEvent.click(moveButton(th['order.move.ready']));
+    const button = moveButton(th['order.move.ready']) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    expect(button.getAttribute('aria-busy')).toBe('true');
+    await act(async () => answer());
+  });
+});
+
 describe('cancelling the order', () => {
   async function cancelling(
     cancel: (reason: string) => Promise<OrderDto>,

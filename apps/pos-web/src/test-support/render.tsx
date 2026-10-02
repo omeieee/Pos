@@ -19,6 +19,7 @@ import { createActivity } from '../lib/activity.ts';
 import { createStore } from '../lib/store.ts';
 import { createMemoryTokenStore } from '../platform/tokenStore.ts';
 import { createCartStore } from '../pos/cart-store.ts';
+import { createOrderMovesStore } from '../pos/order-moves-store.ts';
 import { createPaymentStore } from '../pos/payment-store.ts';
 import type { ConnectionState } from '../realtime/connection.ts';
 import { createEntityStore } from '../realtime/entity-store.ts';
@@ -141,6 +142,7 @@ export function createTestServices(
       runSensitive: async (call) => ({ ok: true as const, value: await call() }),
     },
   });
+  const orderMoves = createOrderMovesStore({ api, entities });
   const connection = createStore<ConnectionState>({
     status: 'online',
     synced: true,
@@ -152,11 +154,23 @@ export function createTestServices(
     activity,
     cart,
     payments,
+    orderMoves,
     lifecycle: createFakeLifecycle().lifecycle,
     ...(options.auth ? { auth: options.auth } : {}),
     connection: { ...connection, start: vi.fn(), stop: vi.fn() },
   } as unknown as Services;
-  return { services, entities, cart, payments, activity, api, create, getOrder, connection };
+  return {
+    services,
+    entities,
+    cart,
+    payments,
+    orderMoves,
+    activity,
+    api,
+    create,
+    getOrder,
+    connection,
+  };
 }
 
 export function renderScreen(

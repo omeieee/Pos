@@ -1,48 +1,33 @@
 import type { OrderDto, StaffRole } from '@sds/shared';
-import { useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { errorText } from '../api/errors.ts';
-import { useActivityHold, useServices, useT } from '../ui/hooks.ts';
+import { useActivityHold, useServices, useStoreState, useT } from '../ui/hooks.ts';
 import { Modal } from '../ui/Modal.tsx';
-import { type MoveTarget, type OrderMove, orderMoves } from './order-board.ts';
-
-function frameOf(order: OrderDto) {
-  return { type: 'order.upserted' as const, id: order.id, rev: order.rev, data: order };
-}
+import { type OrderMove, orderMoves } from './order-board.ts';
 
 /**
  * The status moves this role may make on the order (read from the shared order machine). A move
  * is one tap; a cancel asks for a reason first. The order on screen changes only when the server
- * has answered (the order it returns goes into the store), never from the tap.
+ * has answered (the order it returns goes into the store), never from the tap. The calls go
+ * through the order-moves store: one move per order at a time, a lost answer is reconciled by
+ * reading the order again, and an answer that arrives after sign-out is dropped.
  */
 export function OrderMoves({ order, role }: { order: OrderDto; role: StaffRole }) {
-  const { api, entities } = useServices();
+  const { orderMoves: moveStore } = useServices();
+  const flow = useStoreState(moveStore);
   const tr = useT();
   const moves = orderMoves(order.status, role);
-  const inFlight = useRef(false);
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState<unknown>(null);
   const [cancelling, setCancelling] = useState(false);
   if (moves.length === 0) return null;
 
-  async function advance(to: MoveTarget) {
-    // Set in the same tick: two taps before React re-renders send one request.
-    if (inFlight.current) return;
-    inFlight.current = true;
-    setPending(true);
-    setError(null);
-    try {
-      entities.apply(frameOf(await api.orders.transition(order.id, { to })));
-    } catch (caught) {
-      setError(caught);
-    } finally {
-      inFlight.current = false;
-      setPending(false);
-    }
-  }
+  const pending = flow.pending.includes(order.id);
+  // An error belongs to the status it was refused from; once the order has moved on it is stale.
+  const failure = flow.errors[order.id];
+  const shown = failure && failure.from === order.status && !cancelling ? failure.error : null;
 
   function choose(move: OrderMove) {
     if (move.kind === 'cancel') setCancelling(true);
-    else void advance(move.to);
+    else void moveStore.transition(order, move.to);
   }
 
   return (
@@ -57,15 +42,16 @@ export function OrderMoves({ order, role }: { order: OrderDto; role: StaffRole }
               move.kind === 'cancel' ? 'btn btn-soft omoves__cancel' : 'btn btn-primary btn-lg'
             }
             disabled={pending}
+            aria-busy={pending}
             onClick={() => choose(move)}
           >
             {tr(`order.move.${move.to}`)}
           </button>
         ))}
       </fieldset>
-      {error ? (
+      {shown ? (
         <p className="error" role="alert">
-          {errorText(tr, error)}
+          {errorText(tr, shown)}
         </p>
       ) : null}
       {cancelling ? <CancelOrderDialog order={order} onClose={() => setCancelling(false)} /> : null}
@@ -74,37 +60,26 @@ export function OrderMoves({ order, role }: { order: OrderDto; role: StaffRole }
 }
 
 function CancelOrderDialog({ order, onClose }: { order: OrderDto; onClose: () => void }) {
-  const { api, entities } = useServices();
+  const { orderMoves: moveStore } = useServices();
+  const flow = useStoreState(moveStore);
   const tr = useT();
   const [reason, setReason] = useState('');
-  const [error, setError] = useState<unknown>(null);
-  const [pending, setPending] = useState(false);
-  const inFlight = useRef(false);
   // A reason being typed must not be lost to a page reload.
   useActivityHold(true);
+  // An error from an earlier move is not this dialog's.
+  useEffect(() => moveStore.dismiss(order.id), [moveStore, order.id]);
+
+  const pending = flow.pending.includes(order.id);
+  const error = flow.errors[order.id]?.error ?? null;
 
   async function submit() {
     const text = reason.trim();
-    if (text === '' || inFlight.current) return;
-    inFlight.current = true;
-    setPending(true);
-    setError(null);
-    try {
-      entities.apply(frameOf(await api.orders.cancel(order.id, { reason: text })));
-      onClose();
-    } catch (caught) {
-      setError(caught);
-    } finally {
-      inFlight.current = false;
-      setPending(false);
-    }
+    if (text === '' || pending) return;
+    const outcome = await moveStore.cancel(order, text);
+    if (outcome.ok) onClose();
   }
 
-  const blockedByPayment =
-    typeof error === 'object' &&
-    error !== null &&
-    'code' in error &&
-    (error as { code: unknown }).code === 'ORDER_HAS_PAYMENT';
+  const blockedByPayment = error?.code === 'ORDER_HAS_PAYMENT';
 
   return (
     <Modal labelledBy="cancel-order-title" onClose={onClose}>
@@ -136,6 +111,7 @@ function CancelOrderDialog({ order, onClose }: { order: OrderDto; onClose: () =>
         type="button"
         className="btn btn-primary btn-lg btn-block"
         disabled={pending || reason.trim() === ''}
+        aria-busy={pending}
         onClick={() => void submit()}
       >
         {tr('order.cancel.confirm')}

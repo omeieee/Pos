@@ -19,6 +19,7 @@ import { webServiceWorker } from './platform/serviceWorker.ts';
 import { createWebSocket, type SocketFactory, socketUrl } from './platform/socket.ts';
 import { createWebTokenStore, type TokenStore } from './platform/tokenStore.ts';
 import { type CartStore, createCartStore } from './pos/cart-store.ts';
+import { createOrderMovesStore, type OrderMovesStore } from './pos/order-moves-store.ts';
 import { createPaymentStore, type PaymentStore } from './pos/payment-store.ts';
 import { bindRealtime } from './realtime/bind.ts';
 import { type Connection, createConnection } from './realtime/connection.ts';
@@ -35,6 +36,8 @@ export interface Services {
   cart: CartStore;
   /** The payment calls of the order page: guarded, idempotent, kept across pages. */
   payments: PaymentStore;
+  /** The status moves of an order (order page and kitchen view): guarded, reconciled, epoch-safe. */
+  orderMoves: OrderMovesStore;
   /** The service worker's update state. `updates.start()` registers it (production builds only). */
   updates: AppUpdates;
   /** Is the app in front, is the device online; the web one wraps the browser events. */
@@ -88,6 +91,7 @@ export function createServices(
   const activity = createActivity();
   const cart = createCartStore({ api, entities, activity });
   const payments = createPaymentStore({ api, entities, activity, auth });
+  const orderMoves = createOrderMovesStore({ api, entities });
   const updates = createAppUpdates({
     host: options.serviceWorker ?? webServiceWorker,
     lifecycle: options.lifecycle ?? webLifecycle,
@@ -102,6 +106,7 @@ export function createServices(
     activity,
     cart,
     payments,
+    orderMoves,
     lifecycle,
     updates,
     bindRealtime: () =>
@@ -113,6 +118,7 @@ export function createServices(
         onSignedOut: () => {
           cart.reset();
           payments.reset();
+          orderMoves.reset();
         },
       }),
   };
