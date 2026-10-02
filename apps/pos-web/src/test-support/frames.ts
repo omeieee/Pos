@@ -240,6 +240,54 @@ export function settingsFrame(
   });
 }
 
+type SettingsFrame = Extract<SyncChange, { type: 'settings.updated' }>;
+
+/** `payment_methods`: cash, PromptPay and platform on, other off (the shared defaults). */
+export function paymentMethodsFrame(
+  rev: number,
+  over: Partial<Record<'cash' | 'promptpay' | 'platform' | 'other', boolean>> = {},
+): SettingsFrame {
+  return parse<SettingsFrame>({
+    type: 'settings.updated',
+    id: 'payment_methods',
+    rev,
+    version: 1,
+    data: { cash: true, promptpay: true, platform: true, other: false, ...over },
+  });
+}
+
+/** A ไทยช่วยไทย scheme: 60% government, cap ฿200 a day, 1 Oct - 30 Nov 2030, 06:00-23:00. */
+export function govCopayFrame(
+  rev: number,
+  over: Partial<Extract<SettingsFrame, { id: 'gov_copay' }>['data']> = {},
+): SettingsFrame {
+  return parse<SettingsFrame>({
+    type: 'settings.updated',
+    id: 'gov_copay',
+    rev,
+    version: 1,
+    data: {
+      id: uuid(77),
+      code: 'thai_chuay_thai_plus_2',
+      nameTh: 'ไทยช่วยไทย พลัส',
+      nameEn: 'Thai Chuay Thai Plus',
+      settlementNote: null,
+      version: 1,
+      rev,
+      govShareBp: 6000,
+      govDailyCapSatang: satang(20000),
+      govTotalCapSatang: satang(100000),
+      activeFrom: '2030-10-01',
+      activeTo: '2030-11-30',
+      activeFromMinute: 360,
+      activeToMinute: 1380,
+      channels: ['storefront'],
+      enabled: true,
+      ...over,
+    },
+  });
+}
+
 export const alertFrame = (id: string): Extract<RealtimeFrame, { type: 'alert.new_order' }> =>
   parse({
     type: 'alert.new_order',
