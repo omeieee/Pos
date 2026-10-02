@@ -56,6 +56,7 @@ export const th = {
   'pos.orderEntry.fulfilment.label': 'รูปแบบรับอาหาร',
   'pos.orderEntry.fulfilment.pickup': 'รับที่ร้าน',
   'pos.orderEntry.fulfilment.room_delivery': 'ส่งถึงห้อง',
+  'pos.orderEntry.fulfilment.entrance_delivery': 'ส่งที่ทางเข้าตึก',
   'pos.orderEntry.fulfilment.platform_delivery': 'ส่งผ่านแพลตฟอร์ม',
   'pos.orderEntry.roomNo': 'เลขห้อง',
   'pos.orderEntry.roomNoPlaceholder': 'เช่น 1204',

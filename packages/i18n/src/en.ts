@@ -52,6 +52,7 @@ export const en = {
   'pos.orderEntry.fulfilment.label': 'How it is served',
   'pos.orderEntry.fulfilment.pickup': 'Pickup',
   'pos.orderEntry.fulfilment.room_delivery': 'Room delivery',
+  'pos.orderEntry.fulfilment.entrance_delivery': 'Building entrance delivery',
   'pos.orderEntry.fulfilment.platform_delivery': 'Platform delivery',
   'pos.orderEntry.roomNo': 'Room number',
   'pos.orderEntry.roomNoPlaceholder': 'e.g. 1204',
