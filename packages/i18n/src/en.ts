@@ -491,6 +491,10 @@ export const en = {
     'This order is not in the system and the kitchen cannot see it. If you remove it the order is gone, and any cash saved for it is removed too.',
   'outbox.discard.payment':
     'This cash payment is not recorded in the system. If you remove it, record it again on the order page.',
+  'outbox.discard.stuck':
+    'This entry failed many times with no answer. It may already be on the server: check the Orders page before removing it. If you remove it, it will not be sent again.',
+  'outbox.error.tenderBelow':
+    'The real total on the server is higher than the cash received, so sending it again would be refused. Remove this entry, then open the order and take the cash again while online.',
   'outbox.discard.confirm': 'Remove it',
   'outbox.discard.keep': 'Keep it',
   'outbox.error.storage':

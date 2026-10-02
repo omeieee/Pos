@@ -68,6 +68,8 @@ export type PaymentPayload = z.infer<typeof paymentPayloadSchema>;
 export const ERROR_NOT_UNDERSTOOD = 'ENTRY_UNREADABLE';
 export const ERROR_PARENT_MISSING = 'ORDER_ENTRY_MISSING';
 const ERROR_REUSED = 'IDEMPOTENCY_KEY_REUSED';
+/** The server's total is above the tender: sending the same tender again is refused again. */
+export const ERROR_TENDER_BELOW = 'TENDERED_BELOW_TOTAL';
 
 export type QueueState = 'queued' | 'attention' | 'blocked';
 
@@ -224,7 +226,11 @@ export function toQueueItems(
         error,
         kind: 'payment',
         state,
-        canRetry: state === 'attention' && error !== ERROR_PARENT_MISSING && error !== ERROR_REUSED,
+        canRetry:
+          state === 'attention' &&
+          error !== ERROR_PARENT_MISSING &&
+          error !== ERROR_REUSED &&
+          error !== ERROR_TENDER_BELOW,
         orderId,
         dependsOn,
         tenderedSatang,
@@ -357,6 +363,8 @@ export type ReplayVerdict =
   | 'unreachable'
   /** The server answered with a fault of its own (5xx, a garbled body): try again later. */
   | 'transient'
+  /** 429: the whole queue waits for the time the server named. */
+  | 'rateLimited'
   /** The session or the device is gone: the queue pauses until the person signs in again. */
   | 'pause'
   /** The server refused this entry: it needs a person. */
@@ -373,8 +381,9 @@ export function classifyReplayError(error: unknown): ReplayVerdict {
     case 'DEVICE_MISMATCH':
       return 'pause';
     case 'RESPONSE_INVALID':
-    case 'RATE_LIMITED':
       return 'transient';
+    case 'RATE_LIMITED':
+      return 'rateLimited';
     default:
       return error.status !== null && error.status >= 500 ? 'transient' : 'refused';
   }

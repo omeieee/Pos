@@ -48,24 +48,26 @@ export function QueueActions({ item }: { item: QueueItem }) {
   const tr = useT();
   const [confirming, setConfirming] = useState(false);
 
-  if (item.state === 'queued') {
-    return item.stuck ? (
-      <div className="qactions">
-        <button type="button" className="btn" onClick={() => outbox.kick()}>
-          <Icon name="sync" />
-          {tr('outbox.sendNow')}
-        </button>
-      </div>
-    ) : null;
-  }
   if (item.state === 'blocked') return null;
+  // Waiting and not stuck: it sends itself. Stuck: tried many times without an answer, so it can
+  // be tried now or removed.
+  const stuck = item.state === 'queued';
+  if (stuck && !item.stuck) return null;
 
   return (
     <div className="qactions">
-      <p className="error" role="alert">
-        {entryErrorText(tr, item.error)}
-      </p>
+      {stuck ? null : (
+        <p className="error" role="alert">
+          {entryErrorText(tr, item.error)}
+        </p>
+      )}
       <div className="qactions__row">
+        {stuck ? (
+          <button type="button" className="btn btn-primary" onClick={() => outbox.kick()}>
+            <Icon name="sync" />
+            {tr('outbox.sendNow')}
+          </button>
+        ) : null}
         {item.canRetry ? (
           <button
             type="button"
@@ -85,7 +87,15 @@ export function QueueActions({ item }: { item: QueueItem }) {
           <h2 id={`discard-${item.id}`} className="sheet__title">
             {tr('outbox.discard.title')}
           </h2>
-          <p>{tr(item.kind === 'order' ? 'outbox.discard.order' : 'outbox.discard.payment')}</p>
+          <p>
+            {tr(
+              stuck
+                ? 'outbox.discard.stuck'
+                : item.kind === 'order'
+                  ? 'outbox.discard.order'
+                  : 'outbox.discard.payment',
+            )}
+          </p>
           <button
             type="button"
             className="btn btn-primary btn-block"

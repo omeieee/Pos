@@ -291,7 +291,7 @@ describe('replaying an order', () => {
     expect(create).toHaveBeenCalledTimes(1);
   });
 
-  test('coming back to the front replays an entry that is waiting for its backoff', async () => {
+  test('coming back to the front does not skip an entry’s backoff, but `online` does', async () => {
     let fail = true;
     const { outbox, create, life } = setup({
       create: async (input, options) => {
@@ -305,8 +305,46 @@ describe('replaying an order', () => {
     fail = false;
     life.show();
     await settle();
+    expect(create).toHaveBeenCalledTimes(1); // still waiting out its backoff
+    life.goOnline();
+    await settle();
     expect(create).toHaveBeenCalledTimes(2);
     expect(outbox.getState().items).toHaveLength(0);
+  });
+
+  test('saving another order does not make the others skip their backoff', async () => {
+    const fail = true;
+    const { outbox, create } = setup({
+      create: async (input, options) => {
+        if (fail && options?.clientRequestId === uuid(10)) throw network();
+        return okOrder()(input, options);
+      },
+    });
+    await settle();
+    await queueOrder(outbox, uuid(10));
+    await settle();
+    expect(create).toHaveBeenCalledTimes(1);
+    await queueOrder(outbox, uuid(11));
+    await settle();
+    // The new order went; the one in backoff did not.
+    expect(create.mock.calls.map((c) => c[1]?.clientRequestId)).toEqual([uuid(10), uuid(11)]);
+  });
+
+  test('"send now" is a person asking: it tries again at once', async () => {
+    let fail = true;
+    const { outbox, create } = setup({
+      create: async (input, options) => {
+        if (fail) throw network();
+        return okOrder()(input, options);
+      },
+    });
+    await settle();
+    await queueOrder(outbox, uuid(10));
+    await settle();
+    fail = false;
+    outbox.kick();
+    await settle();
+    expect(create).toHaveBeenCalledTimes(2);
   });
 
   test('sends the entries oldest first, one at a time', async () => {
@@ -441,6 +479,77 @@ describe('an entry the server refuses', () => {
   });
 });
 
+describe('a 429 from the server', () => {
+  const limited = (seconds: number | null) =>
+    new ApiClientError('RATE_LIMITED', { status: 429, retryAfterSeconds: seconds });
+
+  test('is waited out for as long as the server says, for the whole queue, even after `online`', async () => {
+    let limit = true;
+    const { outbox, create, life } = setup({
+      create: async (input, options) => {
+        if (limit) throw limited(20);
+        return okOrder()(input, options);
+      },
+      online: false,
+    });
+    await settle();
+    await queueOrder(outbox, uuid(10));
+    await queueOrder(outbox, uuid(11));
+    life.goOnline();
+    await settle();
+    expect(create).toHaveBeenCalledTimes(1); // the pass ended: the second would be limited too
+    limit = false;
+    await vi.advanceTimersByTimeAsync(10_000);
+    life.goOnline();
+    life.show();
+    outbox.kick();
+    await settle();
+    expect(create).toHaveBeenCalledTimes(1); // 10 s of the 20 s have passed
+    await vi.advanceTimersByTimeAsync(11_000);
+    await settle();
+    expect(create.mock.calls.length).toBe(3); // the first again, then the second
+    expect(outbox.getState().items).toHaveLength(0);
+  });
+
+  test('without a wait time the usual backoff applies and the entry is not refused', async () => {
+    const { outbox, create } = setup({
+      create: async () => {
+        throw limited(null);
+      },
+    });
+    await settle();
+    await queueOrder(outbox, uuid(10));
+    await settle();
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(outbox.getState().items[0]).toMatchObject({ state: 'queued', attempts: 1 });
+  });
+});
+
+describe('an entry that is stuck', () => {
+  test('can be removed after many tries, though the server never refused it', async () => {
+    const { outbox, store } = setup({
+      create: async () => {
+        throw new ApiClientError('INTERNAL', { status: 500 });
+      },
+    });
+    await settle();
+    await queueOrder(outbox, uuid(10));
+    await outbox.enqueueCash({
+      target: { entryId: uuid(10) },
+      tenderedSatang: 10000,
+      totalSatang: 2500,
+      label: 'XK-01',
+    });
+    await outbox.discard(uuid(10)); // not stuck yet: refused
+    expect(await store.outbox.count()).toBe(2);
+    for (let i = 0; i < STUCK_AFTER + 1; i += 1) await vi.advanceTimersByTimeAsync(70_000);
+    expect(outbox.getState().items[0]).toMatchObject({ state: 'queued', stuck: true });
+    await outbox.discard(uuid(10));
+    expect(await store.outbox.count()).toBe(0);
+    expect(outbox.getState().items).toHaveLength(0);
+  });
+});
+
 describe('a server fault or a lost session', () => {
   test('a 5xx is retried and shown as stuck after many tries, never refused', async () => {
     const { outbox } = setup({
@@ -532,11 +641,12 @@ describe('cash on a queued order', () => {
       label: 'S-001',
     });
     await settle();
+    // A retry would send the same tender and be refused again: only discard and re-key online.
     expect(outbox.getState().items[0]).toMatchObject({
       kind: 'payment',
       state: 'attention',
       error: 'TENDERED_BELOW_TOTAL',
-      canRetry: true,
+      canRetry: false,
     });
     expect((await store.outbox.list())[0]?.lastError).toBe('TENDERED_BELOW_TOTAL');
   });

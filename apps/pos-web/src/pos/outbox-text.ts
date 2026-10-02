@@ -4,6 +4,7 @@ import type { SaveError } from './cart-store.ts';
 import {
   ERROR_NOT_UNDERSTOOD,
   ERROR_PARENT_MISSING,
+  ERROR_TENDER_BELOW,
   MAX_QUEUE,
   type QueueItem,
 } from './outbox-model.ts';
@@ -27,6 +28,7 @@ export function saveErrorText(tr: Translate, reason: SaveError): string {
 export function entryErrorText(tr: Translate, error: string | null): string {
   if (error === ERROR_NOT_UNDERSTOOD) return tr('outbox.error.unreadable');
   if (error === ERROR_PARENT_MISSING) return tr('outbox.error.orderMissing');
+  if (error === ERROR_TENDER_BELOW) return tr('outbox.error.tenderBelow');
   return tr('outbox.refused', { reason: codeText(tr, error ?? 'UNKNOWN') });
 }
 

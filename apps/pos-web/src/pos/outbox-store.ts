@@ -30,6 +30,7 @@
  */
 import type { OrderDto, RealtimeFrame } from '@sds/shared';
 import type { ApiClient, NewOrderInput } from '../api/client.ts';
+import { isApiClientError } from '../api/errors.ts';
 import type { AuthPhase } from '../auth/auth-store.ts';
 import { createStore, type ReadableStore } from '../lib/store.ts';
 import { newUuid } from '../platform/ids.ts';
@@ -167,6 +168,8 @@ export function createOutboxStore(deps: OutboxDeps): OutboxStore {
   const dueAt = new Map<string, number>();
   /** Entries whose request is on its way right now. */
   const inFlight = new Set<string>();
+  /** After a 429: nothing is sent before this time, whatever else happens (a queue-wide wait). */
+  let notBefore = 0;
   let running = false;
   let again = false;
   let timer: ReturnType<typeof setTimeout> | null = null;
@@ -249,6 +252,7 @@ export function createOutboxStore(deps: OutboxDeps): OutboxStore {
 
   function nextDue(): OutboxEntry | undefined {
     const at = now();
+    if (at < notBefore) return undefined;
     return mine.find((entry) => {
       if (entry.state === 'attention') return false;
       if ((dueAt.get(entry.id) ?? 0) > at) return false;
@@ -265,12 +269,17 @@ export function createOutboxStore(deps: OutboxDeps): OutboxStore {
     if (timer !== null) clearTimeout(timer);
     timer = null;
     if (who === null || lifecycleOffline()) return;
+    const at = now();
     const waiting = mine
       .filter((e) => e.state !== 'attention')
       .map((e) => dueAt.get(e.id))
-      .filter((due): due is number => due !== undefined);
+      .filter((due): due is number => due !== undefined)
+      .map((due) => Math.max(due, notBefore));
+    // A queue-wide wait with entries behind it needs its own wake-up (a "send now" clears the
+    // per-entry times but never the wait).
+    if (notBefore > at && mine.some((e) => e.state !== 'attention')) waiting.push(notBefore);
     if (waiting.length === 0) return;
-    const wait = Math.max(0, Math.min(...waiting) - now());
+    const wait = Math.max(0, Math.min(...waiting) - at);
     timer = setTimeout(() => {
       timer = null;
       void pump();
@@ -421,6 +430,17 @@ export function createOutboxStore(deps: OutboxDeps): OutboxStore {
         await markRefused(entry, errorCodeOf(error), startedIn);
         return true;
       }
+      if (verdict === 'rateLimited') {
+        // The server named a wait: the whole queue honours it (the next entry would be limited too).
+        const tries = (attempts.get(entry.id) ?? entry.attempts) + 1;
+        attempts.set(entry.id, tries);
+        const named = isApiClientError(error) ? (error.retryAfterSeconds ?? 0) * 1000 : 0;
+        const wait = Math.max(named, backoffMs(tries, random));
+        dueAt.set(entry.id, now() + wait);
+        notBefore = Math.max(notBefore, now() + named);
+        publish();
+        return false;
+      }
       if (verdict === 'pause') {
         dueAt.set(entry.id, now() + PAUSED_RETRY_MS);
         publish();
@@ -460,8 +480,14 @@ export function createOutboxStore(deps: OutboxDeps): OutboxStore {
     }
   }
 
-  const kick = () => {
-    for (const id of [...dueAt.keys()]) dueAt.delete(id);
+  /**
+   * Looks at the queue now. `clearBackoffs` is for the moments that say the network is back or that
+   * a person asked ("send now"): then every entry may go at once. A new entry or the app coming to
+   * the front only looks, so entries still waiting out their backoff keep waiting. A 429's wait
+   * (`notBefore`) is never skipped.
+   */
+  const kick = (clearBackoffs = true) => {
+    if (clearBackoffs) for (const id of [...dueAt.keys()]) dueAt.delete(id);
     void pump();
   };
 
@@ -484,7 +510,7 @@ export function createOutboxStore(deps: OutboxDeps): OutboxStore {
     if (epoch === startedIn) {
       mine = [...mine, entry];
       publish();
-      kick();
+      kick(false);
     }
     return null;
   }
@@ -619,12 +645,14 @@ export function createOutboxStore(deps: OutboxDeps): OutboxStore {
     attempts.delete(id);
     dueAt.delete(id);
     publish();
-    kick();
+    kick(false);
   }
 
   async function discard(id: string): Promise<void> {
     const item = toQueueItems(mine, attempts).find((i) => i.id === id);
-    if (item?.state !== 'attention') return;
+    // Refused, or stuck (tried many times with no answer: it may even be on the server already).
+    // Never one whose request is on its way.
+    if (!item || (item.state !== 'attention' && !item.stuck) || inFlight.has(id)) return;
     // The payments that wait for an order go with it.
     const gone = new Set([id]);
     for (const dependent of toQueueItems(mine, attempts)) {
@@ -685,7 +713,7 @@ export function createOutboxStore(deps: OutboxDeps): OutboxStore {
     enqueueCash,
     retry,
     discard,
-    kick,
+    kick: () => kick(true),
     bind() {
       const unsubscribeAuth = deps.auth.subscribe(follow);
       let lastStatus = deps.connection.getState().status;
@@ -701,7 +729,7 @@ export function createOutboxStore(deps: OutboxDeps): OutboxStore {
           kick();
         },
         offline: () => publish(),
-        visible: () => kick(),
+        visible: () => kick(false),
       });
       follow();
       publish();

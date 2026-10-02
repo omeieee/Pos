@@ -308,6 +308,52 @@ describe('the orders list with orders waiting', () => {
   });
 });
 
+describe('entries that need a person', () => {
+  test('a stuck entry offers send now and remove, and the confirmation warns it may be on the server', async () => {
+    const made = await offlineCounter({
+      create: async () => {
+        throw new ApiClientError('INTERNAL', { status: 500 });
+      },
+    });
+    await placeTeaOffline(made);
+    act(() => made.life.goOnline());
+    for (let i = 0; i < 7; i += 1) {
+      act(() => made.outbox.kick());
+      await settle();
+    }
+    expect(made.outbox.getState().items[0]).toMatchObject({ state: 'queued', stuck: true });
+    cleanup();
+    renderScreen(<OrdersScreen />, made.services);
+    expect(screen.getByRole('button', { name: th['outbox.sendNow'] })).toBeTruthy();
+    click(screen.getByRole('button', { name: th['outbox.discard'] }));
+    expect(within(screen.getByRole('dialog')).getByText(th['outbox.discard.stuck'])).toBeTruthy();
+  });
+
+  test('cash refused as below the real total says to remove it and take the cash again online, with no send again', async () => {
+    const made = await offlineCounter({
+      create: okCreate,
+      payments: {
+        create: (async () => {
+          throw new ApiClientError('TENDERED_BELOW_TOTAL', { status: 422 });
+        }) as Pay,
+      },
+    });
+    const item = await placeTeaOffline(made);
+    cleanup();
+    renderScreen(<OrderDetailScreen id={item?.id ?? ''} />, made.services);
+    click(screen.getByRole('button', { name: th['payment.cash.exact'] }));
+    click(screen.getByRole('button', { name: th['outbox.cash.confirm'] }));
+    await waitFor(() => expect(screen.getByText(th['outbox.cash.waiting'])).toBeTruthy());
+    act(() => made.life.goOnline());
+    await waitFor(() => expect(made.outbox.getState().items[0]?.state).toBe('attention'));
+    cleanup();
+    renderScreen(<OrdersScreen />, made.services);
+    expect(screen.getByRole('alert').textContent).toBe(th['outbox.error.tenderBelow']);
+    expect(screen.queryByRole('button', { name: th['outbox.retry'] })).toBeNull();
+    expect(screen.getByRole('button', { name: th['outbox.discard'] })).toBeTruthy();
+  });
+});
+
 describe('entries that wait for days', () => {
   const DAY = 86_400_000;
 

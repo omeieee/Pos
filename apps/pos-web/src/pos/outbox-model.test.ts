@@ -115,7 +115,7 @@ describe('classifying a failed replay', () => {
     expect(classify('INTERNAL', 500)).toBe('transient');
     expect(classify('X', 503)).toBe('transient');
     expect(classify('RESPONSE_INVALID', 200)).toBe('transient');
-    expect(classify('RATE_LIMITED', 429)).toBe('transient');
+    expect(classify('RATE_LIMITED', 429)).toBe('rateLimited');
   });
   test('a lost session pauses the queue', () => {
     for (const code of ['UNAUTHENTICATED', 'DEVICE_UNREGISTERED', 'DEVICE_MISMATCH']) {
