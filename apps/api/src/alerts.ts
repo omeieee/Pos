@@ -13,6 +13,7 @@ export interface AlertReport {
     deviceId: string | null;
     paymentId?: string;
     orderId?: string;
+    openPromptpayPayments?: number;
   };
 }
 
@@ -28,6 +29,7 @@ export function alertReport(event: SecurityAlertEvent): AlertReport {
       ...(event.subject
         ? { paymentId: event.subject.paymentId, orderId: event.subject.orderId }
         : {}),
+      ...(event.detail ? { openPromptpayPayments: event.detail.openPromptpayPayments } : {}),
     },
   };
 }

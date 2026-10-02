@@ -8,11 +8,20 @@
  * see "no open payment". The same order everywhere also rules out a deadlock.
  */
 import type { PaymentMethod, PaymentStatus } from '@sds/shared';
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, count, eq, inArray } from 'drizzle-orm';
 import type { Db } from './client.ts';
 import { payments } from './schema.ts';
 
 export type PaymentRow = typeof payments.$inferSelect;
+
+/** How many payments of `method` are open (pending or claimed) right now. */
+export async function countOpenByMethod(db: Db, method: PaymentMethod): Promise<number> {
+  const [row] = await db
+    .select({ n: count() })
+    .from(payments)
+    .where(and(eq(payments.method, method), inArray(payments.status, ['pending', 'claimed'])));
+  return row?.n ?? 0;
+}
 
 /** The partial unique index that allows one open (pending or claimed) payment per order. */
 export const OPEN_PAYMENT_INDEX = 'payments_one_open_per_order';

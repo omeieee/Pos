@@ -88,6 +88,7 @@ export function securityAlert(
     staffId?: string | null;
     deviceId?: string | null;
     subject?: SecurityAlertEvent['subject'];
+    detail?: SecurityAlertEvent['detail'];
   },
 ): AppEvent {
   return {
@@ -98,6 +99,7 @@ export function securityAlert(
     staffId: who.staffId ?? null,
     deviceId: who.deviceId ?? null,
     ...(who.subject ? { subject: who.subject } : {}),
+    ...(who.detail ? { detail: who.detail } : {}),
   };
 }
 

@@ -6,7 +6,8 @@
  *
  * The PromptPay ID and the co-pay scheme move money, so only the owner may change them, after a
  * step-up (the route guard checks), with an audit row and an alert on every change. The full ID
- * is never written to an audit row, a log or an alert: only its masked form.
+ * is never written to an audit row, a log or an alert: only its masked form (plus a count of the
+ * PromptPay payments still open, which are left as they are).
  */
 import {
   type Db,
@@ -18,6 +19,7 @@ import {
   insertSettingRow,
   lockGovCopayRow,
   lockSettingRow,
+  paymentsRepo,
   type SettingRow,
   type syncRepo,
   updateGovCopayRowIfVersion,
@@ -196,10 +198,18 @@ export async function patchSetting(
       : await insertSettingRow(tx, resource.key, next, actor.staffId);
     if (!saved) throw versionConflict(version + 1); // another request created or changed it first
 
+    // Warn, do not cancel (owner, 2026-10-02): a count of PromptPay payments still open under the
+    // old ID goes to the audit row and the alert, so the owner can check them. Never an ID.
+    const openPromptpay = resource.promptpay
+      ? await paymentsRepo.countOpenByMethod(tx, 'promptpay')
+      : 0;
     const view = resource.promptpay
       ? {
           before: maskedPromptpay(current as PromptpaySettings | null),
-          after: maskedPromptpay(next as PromptpaySettings),
+          after: {
+            ...maskedPromptpay(next as PromptpaySettings),
+            openPromptpayPayments: openPromptpay,
+          },
         }
       : changes(current, next);
     await insertAudit(tx, {
@@ -218,6 +228,7 @@ export async function patchSetting(
         securityAlert(ctx, 'settings.promptpay_changed', 'critical', {
           staffId: actor.staffId,
           deviceId: actor.deviceId,
+          detail: { openPromptpayPayments: openPromptpay },
         }),
       );
     }

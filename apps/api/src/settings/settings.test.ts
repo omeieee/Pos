@@ -1,5 +1,6 @@
 import { govCopaySchemeSchema, isCopayAvailable } from '@sds/shared';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
+import { alertReport } from '../alerts.ts';
 import { currentBusinessDate } from '../orders/business-day.ts';
 import { createHarness, type Harness, type OwnerFixture } from '../test-support/harness.ts';
 import { currentPromptpayId } from './service.ts';
@@ -526,6 +527,144 @@ describe('PromptPay ID', () => {
     expect(res.json()).toMatchObject({ code: 'STEP_UP_REQUIRED' });
     expect(await currentPromptpayId(h.db)).toBeNull();
     expect((await actions('promptpay')).length).toBe(audited);
+  });
+});
+
+// ---------- changing the PromptPay ID while PromptPay payments are open ----------
+
+describe('PromptPay ID change warns about open PromptPay payments (owner decision 2026-10-02)', () => {
+  const OLD_ID = '0987654321';
+  const NEW_ID = '0899991234';
+  let menuId = '';
+  let thinId = '';
+
+  async function cashier() {
+    return staffToken('cashier');
+  }
+
+  async function newOrderWithPromptpay(token: string) {
+    if (!menuId) {
+      const menu = await h.newMenu();
+      menuId = menu.noodles;
+      thinId = menu.thin;
+    }
+    const order = await call('POST', '/v1/orders', token, {
+      clientRequestId: crypto.randomUUID(),
+      channel: 'storefront',
+      fulfillment: 'takeaway',
+      items: [{ menuItemId: menuId, qty: 1, modifierOptionIds: [thinId] }],
+    });
+    expect(order.statusCode, order.body).toBe(201);
+    const payment = await call('POST', `/v1/orders/${order.json().id}/payments`, token, {
+      clientRequestId: crypto.randomUUID(),
+      method: 'promptpay',
+    });
+    expect(payment.statusCode, payment.body).toBe(201);
+    return payment.json().payment.id as string;
+  }
+
+  async function setId(idValue: string, expectedVersion: number) {
+    const token = await ownerStepped();
+    const res = await call('PATCH', '/v1/settings/promptpay', token, {
+      expectedVersion,
+      idType: 'phone',
+      idValue,
+    });
+    expect(res.statusCode, res.body).toBe(200);
+  }
+
+  test('no open PromptPay payment: the alert and the audit row say 0', async () => {
+    await clearSettings();
+    await setId(OLD_ID, 0);
+    const alerts = h.alerts.length;
+    await setId(NEW_ID, 1);
+    expect(h.alerts.slice(alerts)).toEqual([
+      expect.objectContaining({
+        kind: 'settings.promptpay_changed',
+        severity: 'critical',
+        detail: { openPromptpayPayments: 0 },
+      }),
+    ]);
+    const audit = (await h.auditRows('promptpay')).findLast(
+      (a) => a.action === 'settings.promptpay_change',
+    );
+    expect(audit?.after).toEqual({
+      idType: 'phone',
+      idMasked: '******1234',
+      openPromptpayPayments: 0,
+    });
+  });
+
+  test('pending and claimed PromptPay payments are counted, others are not, and none is cancelled', async () => {
+    await clearSettings();
+    await setId(OLD_ID, 0);
+    const token = await cashier();
+    const manager = await staffToken('manager');
+    const pending = await newOrderWithPromptpay(token);
+    const claimed = await newOrderWithPromptpay(token);
+    expect((await call('POST', `/v1/payments/${claimed}/claim`, token, {})).statusCode).toBe(200);
+    const confirmed = await newOrderWithPromptpay(token);
+    expect((await call('POST', `/v1/payments/${confirmed}/confirm`, manager, {})).statusCode).toBe(
+      200,
+    );
+    const cancelled = await newOrderWithPromptpay(token);
+    await h.client.query("update payments set status = 'cancelled' where id = $1", [cancelled]);
+    // Cash is confirmed at once: it never counts.
+    const cashOrder = await call('POST', '/v1/orders', token, {
+      clientRequestId: crypto.randomUUID(),
+      channel: 'storefront',
+      fulfillment: 'takeaway',
+      items: [{ menuItemId: menuId, qty: 1, modifierOptionIds: [thinId] }],
+    });
+    await call('POST', `/v1/orders/${cashOrder.json().id}/payments`, token, {
+      clientRequestId: crypto.randomUUID(),
+      method: 'cash',
+      tendered: 10000,
+    });
+
+    const alerts = h.alerts.length;
+    await setId(NEW_ID, 1);
+
+    expect(h.alerts.slice(alerts)).toEqual([
+      expect.objectContaining({
+        kind: 'settings.promptpay_changed',
+        severity: 'critical',
+        detail: { openPromptpayPayments: 2 },
+      }),
+    ]);
+    const audit = (await h.auditRows('promptpay')).findLast(
+      (a) => a.action === 'settings.promptpay_change',
+    );
+    expect(audit?.before).toEqual({ idType: 'phone', idMasked: '******4321' });
+    expect(audit?.after).toEqual({
+      idType: 'phone',
+      idMasked: '******1234',
+      openPromptpayPayments: 2,
+    });
+
+    // Warn, do not cancel: the payments are exactly as they were.
+    const status = async (id: string) =>
+      (await h.client.query<{ status: string }>('select status from payments where id = $1', [id]))
+        .rows[0]?.status;
+    expect(await status(pending)).toBe('pending');
+    expect(await status(claimed)).toBe('claimed');
+    expect(await status(confirmed)).toBe('confirmed');
+  });
+
+  test('neither the old nor the new full ID is in the alert, its report, the audit row or the logs', async () => {
+    await clearSettings();
+    await setId(OLD_ID, 0);
+    await newOrderWithPromptpay(await cashier());
+    const alerts = h.alerts.length;
+    await setId(NEW_ID, 1);
+    const alert = h.alerts.slice(alerts)[0];
+    if (!alert) throw new Error('no alert was raised');
+    const everywhere = JSON.stringify([alert, alertReport(alert), await h.auditRows('promptpay')]);
+    for (const clear of [OLD_ID, NEW_ID]) {
+      expect(everywhere).not.toContain(clear);
+      expect(h.logs()).not.toContain(clear);
+    }
+    expect(alertReport(alert).extra).toMatchObject({ openPromptpayPayments: expect.any(Number) });
   });
 });
 

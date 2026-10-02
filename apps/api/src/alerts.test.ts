@@ -73,6 +73,21 @@ describe('forwardAlerts (security alerts to Sentry)', () => {
     });
   });
 
+  test('a PromptPay ID change adds the count of open PromptPay payments, and nothing else', () => {
+    const report = alertReport(
+      alert({
+        kind: 'settings.promptpay_changed',
+        detail: { openPromptpayPayments: 3, idValue: '0899994321' } as never,
+      }),
+    );
+    expect(report.extra).toEqual({
+      staffId: '0192f3a0-0000-7000-8000-000000000001',
+      deviceId: '0192f3a0-0000-7000-8000-000000000002',
+      openPromptpayPayments: 3,
+    });
+    expect(JSON.stringify(report)).not.toContain('0899994321');
+  });
+
   test('missing ids stay null', () => {
     expect(alertReport(alert({ staffId: null, deviceId: null })).extra).toEqual({
       staffId: null,
