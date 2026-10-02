@@ -41,6 +41,61 @@ describe('error code -> message', () => {
     for (const code of needed) expect(Object.hasOwn(API_ERROR_KEYS, code), code).toBe(true);
   });
 
+  test('covers every code the API can send for menu, orders and payments', () => {
+    const needed = [
+      // payments
+      'TENDERED_BELOW_TOTAL',
+      'AMOUNT_TOO_LARGE',
+      'PROMPTPAY_NOT_CONFIGURED',
+      'PROMPTPAY_PAYLOAD_INVALID',
+      'GOV_COPAY_UNAVAILABLE',
+      'METHOD_DISABLED',
+      'PAYMENT_ALREADY_OPEN',
+      'ORDER_ALREADY_PAID',
+      'NOTHING_TO_PAY',
+      'PAYMENT_NOT_PENDING',
+      'METHOD_UNCHANGED',
+      'QR_NOT_AVAILABLE',
+      'QR_LINK_INVALID',
+      'QR_LINK_EXPIRED',
+      'ORDER_HAS_PAYMENT',
+      // pricing (they travel inside ORDER_INVALID, and a client may meet them on their own)
+      'UNKNOWN_ITEM',
+      'ITEM_UNAVAILABLE',
+      'ITEM_NOT_ON_CHANNEL',
+      'UNKNOWN_OPTION',
+      'OPTION_UNAVAILABLE',
+      'DUPLICATE_OPTION',
+      'GROUP_TOO_FEW',
+      'GROUP_TOO_MANY',
+      'INVALID_PRICE',
+      // menu, staff and the socket route
+      'UNKNOWN_CATEGORY',
+      'UNKNOWN_GROUP',
+      'OWNER_PROTECTED',
+      'UPGRADE_REQUIRED',
+      'BAD_REQUEST',
+    ];
+    for (const code of needed) expect(Object.hasOwn(API_ERROR_KEYS, code), code).toBe(true);
+  });
+
+  test('an order refused for one line says what is wrong with it, not just "invalid"', () => {
+    const soldOut = new ApiClientError('ORDER_INVALID', {
+      status: 422,
+      lineErrors: [{ code: 'ITEM_UNAVAILABLE', lineIndex: 1 }],
+    });
+    expect(errorText(th, soldOut)).toBe(t('th', 'error.itemUnavailable'));
+    expect(errorText(en, soldOut)).toBe(t('en', 'error.itemUnavailable'));
+    const unknown = new ApiClientError('ORDER_INVALID', {
+      status: 422,
+      lineErrors: [{ code: 'SOMETHING_NEW', lineIndex: 0 }],
+    });
+    expect(errorText(th, unknown)).toBe(t('th', 'error.orderInvalid'));
+    expect(errorText(th, new ApiClientError('ORDER_INVALID', { status: 422 }))).toBe(
+      t('th', 'error.orderInvalid'),
+    );
+  });
+
   test('shows our own text, never the server message', () => {
     const error = new ApiClientError('VERSION_CONFLICT', { status: 409, currentVersion: 4 });
     expect(error.message).toBe('VERSION_CONFLICT');

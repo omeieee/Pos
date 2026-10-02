@@ -18,25 +18,43 @@ import {
   authMeResponseSchema,
   authStaffListResponseSchema,
   cancelOrderInputSchema,
+  categoryDtoSchema,
+  changePaymentMethodInputSchema,
+  changePaymentMethodResultSchema,
+  claimPaymentInputSchema,
+  confirmPaymentInputSchema,
   createOrderInputSchema,
+  createPaymentInputSchema,
+  groupDtoSchema,
+  itemDtoSchema,
   listOrdersQuerySchema,
   listOrdersResponseSchema,
   orderDtoSchema,
   orderIdParamSchema,
+  orderPaymentsResponseSchema,
   ownerLoginInputSchema,
   ownerStepUpInputSchema,
   patchOrderInputSchema,
+  paymentIdParamSchema,
+  paymentQrUrlResponseSchema,
+  paymentReasonInputSchema,
+  paymentResultSchema,
   pinLoginInputSchema,
+  publicMenuQuerySchema,
+  publicMenuResponseSchema,
   registerDeviceInputSchema,
   registerDeviceResponseSchema,
   sessionResponseSchema,
   staffStepUpInputSchema,
   stepUpResponseSchema,
+  syncQuerySchema,
+  syncResponseSchema,
   transitionOrderInputSchema,
 } from '@sds/shared';
-import type { z } from 'zod';
+import { z } from 'zod';
+import { joinUrl } from '../platform/config.ts';
 import { newUuid } from '../platform/ids.ts';
-import { ApiClientError, AUTH_FAILURE_CODES, codeFromStatus } from './errors.ts';
+import { ApiClientError, AUTH_FAILURE_CODES, codeFromStatus, type LineError } from './errors.ts';
 
 /** Structural slice of a Zod schema, so a failed parse can never leak its issues or the input. */
 export interface Schema<T> {
@@ -94,6 +112,20 @@ function parseJson(text: string): unknown {
   }
 }
 
+/** `details.errors` of a refused order: keeps code and line index only, at most 50 of them. */
+function lineErrorsOf(value: unknown): LineError[] {
+  if (!Array.isArray(value)) return [];
+  const found: LineError[] = [];
+  for (const entry of value.slice(0, 50)) {
+    if (!isRecord(entry)) continue;
+    const { code, lineIndex } = entry;
+    if (typeof code === 'string' && code.length <= 64 && Number.isInteger(lineIndex)) {
+      found.push({ code, lineIndex: lineIndex as number });
+    }
+  }
+  return found;
+}
+
 /** Builds the error from a non-2xx answer, keeping only the fields the UI uses. */
 function errorFromResponse(status: number, text: string): ApiClientError {
   const body = parseJson(text);
@@ -112,6 +144,7 @@ function errorFromResponse(status: number, text: string): ApiClientError {
     status,
     retryAfterSeconds: wait === null ? null : Math.min(MAX_WAIT_SECONDS, Math.ceil(wait)),
     currentVersion: version === null ? null : Math.floor(version),
+    lineErrors: lineErrorsOf(details.errors),
   });
 }
 
@@ -127,6 +160,13 @@ export function newClientRequestId(): string {
 }
 
 export type NewOrderInput = Omit<z.input<typeof createOrderInputSchema>, 'clientRequestId'>;
+type WithoutRequestId<T> = T extends unknown ? Omit<T, 'clientRequestId'> : never;
+export type NewPaymentInput = WithoutRequestId<z.input<typeof createPaymentInputSchema>>;
+export type ChangePaymentInput = WithoutRequestId<z.input<typeof changePaymentMethodInputSchema>>;
+
+const categoryListSchema = z.object({ categories: z.array(categoryDtoSchema) });
+const itemListSchema = z.object({ items: z.array(itemDtoSchema) });
+const groupListSchema = z.object({ groups: z.array(groupDtoSchema) });
 export type OwnerLoginRequest = z.input<typeof ownerLoginInputSchema>;
 export type OwnerStepUpRequest = z.input<typeof ownerStepUpInputSchema>;
 
@@ -386,7 +426,163 @@ export function createApiClient(options: ApiClientOptions) {
       ).data,
   };
 
-  return { auth, orders };
+  const menu = {
+    /** What can be ordered on a channel: public, no session. Sold-out items are NOT in it. */
+    publicMenu: async (channel: z.input<typeof publicMenuQuerySchema>['channel'] = 'storefront') =>
+      (
+        await get({
+          path: '/v1/menu',
+          query: checked(publicMenuQuerySchema, { channel }) as Record<string, string>,
+          schema: publicMenuResponseSchema,
+        })
+      ).data,
+
+    /** The staff lists keep sold-out rows (every role may read them). */
+    listCategories: async () =>
+      (
+        await get({
+          path: '/v1/menu/categories',
+          schema: categoryListSchema,
+          session: true,
+          device: 'optional',
+        })
+      ).data,
+
+    listItems: async () =>
+      (
+        await get({
+          path: '/v1/menu/items',
+          schema: itemListSchema,
+          session: true,
+          device: 'optional',
+        })
+      ).data,
+
+    listGroups: async () =>
+      (
+        await get({
+          path: '/v1/menu/modifier-groups',
+          schema: groupListSchema,
+          session: true,
+          device: 'optional',
+        })
+      ).data,
+  };
+
+  const sync = {
+    /** One page of changes newer than `since`, the same frames the socket pushes. */
+    changes: async (query: z.input<typeof syncQuerySchema>) => {
+      const parsed = checked(syncQuerySchema, query);
+      return (
+        await get({
+          path: '/v1/sync',
+          query: { since: String(parsed.since), limit: String(parsed.limit) },
+          schema: syncResponseSchema,
+          session: true,
+          device: 'optional',
+        })
+      ).data;
+    },
+  };
+
+  const paymentPath = (id: string) => `/v1/payments/${checked(paymentIdParamSchema, { id }).id}`;
+
+  /**
+   * Payment calls never carry an amount: the server charges the order total. Cash sends only what
+   * the customer handed over. A caller that may retry creates `clientRequestId` once and passes it
+   * on every attempt (the server then answers the original, `replay: true`).
+   */
+  const payments = {
+    create: async (
+      orderId: string,
+      input: NewPaymentInput,
+      options?: { clientRequestId?: string },
+    ) => {
+      const clientRequestId = options?.clientRequestId ?? newClientRequestId();
+      const { data, status } = await post({
+        path: `${orderPath(orderId)}/payments`,
+        body: checked(createPaymentInputSchema, { ...input, clientRequestId }),
+        schema: paymentResultSchema,
+        session: true,
+        device: 'optional',
+        headers: { 'Idempotency-Key': clientRequestId },
+      });
+      return { result: data, replay: status === 200, clientRequestId };
+    },
+
+    list: async (orderId: string) =>
+      (
+        await get({
+          path: `${orderPath(orderId)}/payments`,
+          schema: orderPaymentsResponseSchema,
+          session: true,
+          device: 'optional',
+        })
+      ).data,
+
+    claim: async (id: string, input: z.input<typeof claimPaymentInputSchema> = {}) =>
+      paymentMove(`${paymentPath(id)}/claim`, checked(claimPaymentInputSchema, input)),
+
+    confirm: async (id: string, input: z.input<typeof confirmPaymentInputSchema> = {}) =>
+      paymentMove(`${paymentPath(id)}/confirm`, checked(confirmPaymentInputSchema, input)),
+
+    cancelClaimed: async (id: string, input: z.input<typeof paymentReasonInputSchema>) =>
+      paymentMove(`${paymentPath(id)}/cancel-claimed`, checked(paymentReasonInputSchema, input)),
+
+    void: async (id: string, input: z.input<typeof paymentReasonInputSchema>) =>
+      paymentMove(`${paymentPath(id)}/void`, checked(paymentReasonInputSchema, input)),
+
+    refund: async (id: string, input: z.input<typeof paymentReasonInputSchema>) =>
+      paymentMove(`${paymentPath(id)}/refund`, checked(paymentReasonInputSchema, input)),
+
+    changeMethod: async (
+      id: string,
+      input: ChangePaymentInput,
+      options?: { clientRequestId?: string },
+    ) => {
+      const clientRequestId = options?.clientRequestId ?? newClientRequestId();
+      const { data, status } = await post({
+        path: `${paymentPath(id)}/change-method`,
+        body: checked(changePaymentMethodInputSchema, { ...input, clientRequestId }),
+        schema: changePaymentMethodResultSchema,
+        session: true,
+        device: 'optional',
+        headers: { 'Idempotency-Key': clientRequestId },
+      });
+      return { result: data, replay: status === 200, clientRequestId };
+    },
+
+    /**
+     * A short-lived signed link for an `<img>` (it cannot send a header). The link is the only
+     * authentication of the picture and is worth a few minutes: never log or store it. Ask again
+     * whenever the QR is shown, and after a PromptPay settings change.
+     */
+    qrUrl: async (id: string) => {
+      const link = (
+        await get({
+          path: `${paymentPath(id)}/qr-url`,
+          schema: paymentQrUrlResponseSchema,
+          session: true,
+          device: 'optional',
+        })
+      ).data;
+      return { ...link, url: joinUrl(options.baseUrl, link.url) };
+    },
+  };
+
+  async function paymentMove(path: string, body: unknown) {
+    return (
+      await post({
+        path,
+        body,
+        schema: paymentResultSchema,
+        session: true,
+        device: 'optional',
+      })
+    ).data;
+  }
+
+  return { auth, orders, menu, sync, payments };
 }
 
 export type ApiClient = ReturnType<typeof createApiClient>;

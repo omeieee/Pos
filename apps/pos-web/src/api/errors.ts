@@ -30,6 +30,38 @@ export const API_ERROR_KEYS = {
   IDEMPOTENCY_KEY_MISMATCH: 'error.idempotencyKeyMismatch',
   IDEMPOTENCY_KEY_REUSED: 'error.idempotencyKeyReused',
   VALIDATION_ERROR: 'error.validation',
+  BAD_REQUEST: 'error.validation',
+  // Payments
+  TENDERED_BELOW_TOTAL: 'error.tenderedBelowTotal',
+  AMOUNT_TOO_LARGE: 'error.amountTooLarge',
+  PROMPTPAY_NOT_CONFIGURED: 'error.promptpayNotConfigured',
+  PROMPTPAY_PAYLOAD_INVALID: 'error.promptpayPayloadInvalid',
+  GOV_COPAY_UNAVAILABLE: 'error.govCopayUnavailable',
+  METHOD_DISABLED: 'error.methodDisabled',
+  PAYMENT_ALREADY_OPEN: 'error.paymentAlreadyOpen',
+  ORDER_ALREADY_PAID: 'error.orderAlreadyPaid',
+  NOTHING_TO_PAY: 'error.nothingToPay',
+  PAYMENT_NOT_PENDING: 'error.paymentNotPending',
+  METHOD_UNCHANGED: 'error.methodUnchanged',
+  QR_NOT_AVAILABLE: 'error.qrNotAvailable',
+  QR_LINK_INVALID: 'error.qrLinkInvalid',
+  QR_LINK_EXPIRED: 'error.qrLinkExpired',
+  ORDER_HAS_PAYMENT: 'error.orderHasPayment',
+  // Pricing: sent inside ORDER_INVALID (`details.errors`), see `lineErrors`
+  UNKNOWN_ITEM: 'error.unknownItem',
+  ITEM_UNAVAILABLE: 'error.itemUnavailable',
+  ITEM_NOT_ON_CHANNEL: 'error.itemNotOnChannel',
+  UNKNOWN_OPTION: 'error.unknownOption',
+  OPTION_UNAVAILABLE: 'error.optionUnavailable',
+  DUPLICATE_OPTION: 'error.orderInvalid',
+  GROUP_TOO_FEW: 'error.groupTooFew',
+  GROUP_TOO_MANY: 'error.groupTooMany',
+  INVALID_PRICE: 'error.orderInvalid',
+  // Menu, staff and the socket route
+  UNKNOWN_CATEGORY: 'error.unknownMenuRow',
+  UNKNOWN_GROUP: 'error.unknownMenuRow',
+  OWNER_PROTECTED: 'error.ownerProtected',
+  UPGRADE_REQUIRED: 'error.upgradeRequired',
   RATE_LIMITED: 'error.rateLimited',
   DB_UNAVAILABLE: 'error.server',
   INTERNAL: 'error.server',
@@ -57,6 +89,12 @@ export function isClientErrorCode(code: string): code is ClientErrorCode {
   return Object.hasOwn(CLIENT_ERROR_KEYS, code);
 }
 
+/** One refused order line, from a 422 ORDER_INVALID: what is wrong and which line (0-based). */
+export interface LineError {
+  code: string;
+  lineIndex: number;
+}
+
 export class ApiClientError extends Error {
   /** The API's `code`, or one of the client codes above, or 'UNKNOWN'. */
   readonly code: string;
@@ -65,6 +103,8 @@ export class ApiClientError extends Error {
   readonly retryAfterSeconds: number | null;
   /** From a 409 VERSION_CONFLICT. */
   readonly currentVersion: number | null;
+  /** From a 422 ORDER_INVALID: code and line index only, so the cart can mark the line. */
+  readonly lineErrors: readonly LineError[];
 
   constructor(
     code: string,
@@ -72,6 +112,7 @@ export class ApiClientError extends Error {
       status?: number | null;
       retryAfterSeconds?: number | null;
       currentVersion?: number | null;
+      lineErrors?: readonly LineError[];
     } = {},
   ) {
     // The message is the code only: nothing from the server or the request ends up in logs.
@@ -81,6 +122,7 @@ export class ApiClientError extends Error {
     this.status = init.status ?? null;
     this.retryAfterSeconds = init.retryAfterSeconds ?? null;
     this.currentVersion = init.currentVersion ?? null;
+    this.lineErrors = init.lineErrors ?? [];
   }
 }
 
@@ -131,6 +173,12 @@ export function errorText(tr: Translate, error: unknown, context?: ErrorContext)
     if (context === 'pin') return tr('auth.pin.lockedFor', { wait });
     if (context === 'stepUp') return tr('auth.stepUp.lockedFor', { wait });
     return tr('error.accountLockedFor', { wait });
+  }
+  if (code === 'ORDER_INVALID') {
+    const cause = error.lineErrors[0]?.code;
+    if (cause !== undefined && cause !== code && isKnownApiCode(cause)) {
+      return tr(API_ERROR_KEYS[cause]);
+    }
   }
   if (isKnownApiCode(code)) return tr(API_ERROR_KEYS[code]);
   if (isClientErrorCode(code)) return tr(CLIENT_ERROR_KEYS[code]);
