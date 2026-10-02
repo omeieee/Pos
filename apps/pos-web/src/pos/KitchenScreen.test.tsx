@@ -445,6 +445,31 @@ describe('keeping the display alive', () => {
   });
 });
 
+describe('the keepalive and the owner password session', () => {
+  test('is not started for an owner password session: its short idle limit stays', async () => {
+    vi.useRealTimers();
+    vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] });
+    vi.setSystemTime(NOW);
+    const { auth } = await createTestAuth('owner');
+    const session = auth.getState().session;
+    if (!session) throw new Error('no session');
+    const ownerState = { ...auth.getState(), session: { ...session, method: 'owner' as const } };
+    const ownerAuth = {
+      ...auth,
+      getState: () => ownerState,
+    };
+    const env = createTestServices({
+      auth: ownerAuth,
+      orders: { list: async () => ({ day: '2030-01-01', orders: [] }) },
+    });
+    renderScreen(<KitchenScreen />, env.services);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30 * 60_000);
+    });
+    expect(env.api.auth.me).not.toHaveBeenCalled();
+  });
+});
+
 describe('the sound control', () => {
   const control = () => screen.getByRole('group', { name: th['kitchen.sound.label'] });
 
