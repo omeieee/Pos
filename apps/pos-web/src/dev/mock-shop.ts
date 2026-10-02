@@ -14,6 +14,7 @@ import {
   createOrderInputSchema,
   type GroupDto,
   type ItemDto,
+  initialOrderStatus,
   type OptionDto,
   type OrderDto,
   orderIdParamSchema,
@@ -26,6 +27,7 @@ import {
   ZERO,
 } from '@sds/shared';
 import type { SocketFactory, SocketHandlers } from '../platform/socket.ts';
+import { createMockPayments, type MockCaller } from './mock-payments.ts';
 
 export interface MockShopOptions {
   now?: () => number;
@@ -262,6 +264,16 @@ export function createMockShop(options: MockShopOptions = {}) {
   }
   seedMenu();
 
+  // Order moves, payments and the payment settings (see mock-payments.ts).
+  const payments = createMockPayments({
+    now,
+    orders,
+    nextRev: () => ++rev,
+    newUuid,
+    publish: (frame) => publish(frame as SyncChange),
+  });
+  for (const frame of payments.settingsFrames()) publish(frame as SyncChange);
+
   /** The catalog the pricing function wants, from the made-up rows (costs are zero). */
   function catalog(): Map<string, CatalogItem> {
     const groups = new Map<string, CatalogGroup>(
@@ -339,7 +351,7 @@ export function createMockShop(options: MockShopOptions = {}) {
       fulfillment: input.data.fulfillment,
       roomNo: input.data.roomNo ?? null,
       customerId: null,
-      status: 'new',
+      status: initialOrderStatus(input.data.channel),
       paymentStatus: 'unpaid',
       subtotalSatang: priced.totals.subtotal,
       discountSatang: priced.totals.discount,
@@ -456,8 +468,11 @@ export function createMockShop(options: MockShopOptions = {}) {
     path: string,
     query: URLSearchParams,
     body: unknown,
+    caller: MockCaller = { role: 'owner', stepUpFresh: true },
   ): MockAnswer | null {
     if (method === 'GET' && path === '/v1/menu') return publicMenu();
+    const paid = payments.handle(method, path, body, caller);
+    if (paid) return paid;
     if (method === 'GET' && path === '/v1/sync') return sync(query);
     if (method === 'POST' && path === '/v1/orders') return createOrder(body);
     const one = /^\/v1\/orders\/([^/]+)$/.exec(path);

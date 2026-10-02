@@ -1,0 +1,474 @@
+/**
+ * The order-status and payment routes of the dev shop (`VITE_MOCK_API=1`) and of tests, in the
+ * shapes apps/api answers, using the SAME shared rules the real server uses: the order and payment
+ * state machines, `calculateCashChange`, `estimateGovCopaySplit`, `isCopayAvailable`,
+ * `derivePaymentStatus`. It is reached through mock-shop.ts and mock-server.ts, which are only
+ * reachable through `src/dev/enable.ts` (guarded by `import.meta.env.DEV`), so production builds
+ * do not contain it. Everything here is made up and nothing is persisted.
+ *
+ * Differences from the real API, on purpose: the PromptPay ID is a made-up masked value, the QR
+ * link is unsigned (the dev server serves a placeholder picture at it), and the dev ไทยช่วยไทย
+ * scheme is open all day so the guided steps can be tried at any hour.
+ */
+import {
+  CashPaymentError,
+  calculateCashChange,
+  cancelOrderInputSchema,
+  changePaymentMethodInputSchema,
+  claimPaymentInputSchema,
+  confirmPaymentInputSchema,
+  createPaymentInputSchema,
+  derivePaymentStatus,
+  estimateGovCopaySplit,
+  type GovCopayDto,
+  isCopayAvailable,
+  type OrderDto,
+  orderMachine,
+  type PaymentDto,
+  type PaymentStatus,
+  paymentMachine,
+  paymentReasonInputSchema,
+  paymentsSettingsSchema,
+  type RealtimeFrame,
+  type StaffRole,
+  satang,
+  transitionOrderInputSchema,
+} from '@sds/shared';
+
+export interface MockCaller {
+  role: StaffRole;
+  /** Has this session passed a step-up in the last five minutes? */
+  stepUpFresh: boolean;
+}
+
+export interface MockAnswer {
+  status: number;
+  body: unknown;
+}
+
+interface Deps {
+  now: () => number;
+  orders: Map<string, OrderDto>;
+  nextRev: () => number;
+  newUuid: () => string;
+  publish: (frame: RealtimeFrame & { rev: number }) => void;
+}
+
+const errorBody = (code: string, details: Record<string, unknown> = {}) => ({
+  code,
+  message: 'mock server error',
+  details,
+});
+const fail = (status: number, code: string, details: Record<string, unknown> = {}): MockAnswer => ({
+  status,
+  body: errorBody(code, details),
+});
+
+/** The made-up PromptPay target the dev shop pays to (last digits only, like the real API). */
+export const MOCK_PROMPTPAY_MASKED = '******1234';
+
+export function createMockPayments(deps: Deps) {
+  const payments = new Map<string, PaymentDto>();
+  const byRequest = new Map<string, { paymentId: string; requestKey: string }>();
+
+  /** Open all day, so the guided steps can be tried at any hour in the dev shop. */
+  const scheme = (): GovCopayDto => {
+    const day = (offset: number) =>
+      new Date(deps.now() + offset * 86_400_000).toISOString().slice(0, 10);
+    return {
+      id: deps.newUuid(),
+      code: 'mock_copay',
+      nameTh: 'ไทยช่วยไทย พลัส (ตัวอย่าง)',
+      nameEn: 'Thai Chuay Thai Plus (sample)',
+      settlementNote: null,
+      version: 1,
+      rev: 0,
+      govShareBp: 6000,
+      govDailyCapSatang: satang(20000),
+      govTotalCapSatang: satang(100000),
+      activeFrom: day(-1),
+      activeTo: day(60),
+      activeFromMinute: 0,
+      activeToMinute: 1440,
+      channels: ['storefront'],
+      enabled: true,
+    };
+  };
+  const copayScheme = scheme();
+  const settingsFrames = (): RealtimeFrame[] => {
+    const frames: RealtimeFrame[] = [];
+    const methods = paymentsSettingsSchema.parse({});
+    for (const [id, data] of [
+      ['payment_methods', methods],
+      ['promptpay', { idType: 'phone', idMasked: MOCK_PROMPTPAY_MASKED }],
+    ] as const) {
+      frames.push({
+        type: 'settings.updated',
+        id,
+        rev: deps.nextRev(),
+        version: 1,
+        data,
+      } as RealtimeFrame);
+    }
+    const rev = deps.nextRev();
+    frames.push({
+      type: 'settings.updated',
+      id: 'gov_copay',
+      rev,
+      version: 1,
+      data: { ...copayScheme, rev },
+    } as RealtimeFrame);
+    return frames;
+  };
+
+  const actorOf = (caller: MockCaller) => ({ kind: 'staff', role: caller.role }) as const;
+  const forOrder = (orderId: string) =>
+    [...payments.values()].filter((p) => p.orderId === orderId).sort((a, b) => a.rev - b.rev);
+
+  function publishPayment(next: PaymentDto): PaymentDto {
+    const stored = { ...next, rev: deps.nextRev() };
+    payments.set(stored.id, stored);
+    deps.publish({ type: 'payment.upserted', id: stored.id, rev: stored.rev, data: stored });
+    return stored;
+  }
+
+  /** Re-derives the order's payment status from its payments and publishes the order. */
+  function settleOrder(order: OrderDto, extra: Partial<OrderDto> = {}): OrderDto {
+    const status = derivePaymentStatus(
+      order.totalSatang,
+      forOrder(order.id).map((p) => ({ status: p.status, amount: p.amountSatang })),
+    );
+    const next: OrderDto = {
+      ...order,
+      ...extra,
+      paymentStatus: status,
+      version: order.version + 1,
+      rev: deps.nextRev(),
+    };
+    deps.orders.set(next.id, next);
+    deps.publish({ type: 'order.upserted', id: next.id, rev: next.rev, data: next });
+    return next;
+  }
+
+  const open = (orderId: string) =>
+    forOrder(orderId).find((p) => p.status === 'pending' || p.status === 'claimed');
+
+  const fromMachineError = (error: string, from: string, to: string): MockAnswer =>
+    error === 'forbidden'
+      ? fail(403, 'FORBIDDEN')
+      : error === 'reason_required'
+        ? fail(422, 'REASON_REQUIRED')
+        : fail(409, 'INVALID_TRANSITION', { from, to });
+
+  // ---------- Orders: list, transition, cancel ----------
+
+  function listOrders(): MockAnswer {
+    const day = new Date(deps.now()).toISOString().slice(0, 10);
+    return { status: 200, body: { day, orders: [...deps.orders.values()] } };
+  }
+
+  function moveOrder(
+    orderId: string,
+    to: OrderDto['status'],
+    reason: string | undefined,
+    caller: MockCaller,
+  ): MockAnswer {
+    const order = deps.orders.get(orderId);
+    if (!order) return fail(404, 'NOT_FOUND');
+    const verdict = orderMachine.transition(order.status, to, { actor: actorOf(caller), reason });
+    if (!verdict.ok) return fromMachineError(verdict.error, order.status, to);
+    const at = new Date(deps.now()).toISOString();
+    const stamps: Partial<OrderDto> =
+      to === 'preparing'
+        ? { acceptedAt: at }
+        : to === 'ready'
+          ? { readyAt: at }
+          : to === 'completed'
+            ? { completedAt: at }
+            : { cancelledAt: at, cancelReason: reason ?? '' };
+    if (to === 'cancelled') {
+      const blocking = forOrder(orderId).find(
+        (p) => p.status === 'claimed' || p.status === 'confirmed',
+      );
+      if (blocking)
+        return fail(409, 'ORDER_HAS_PAYMENT', { paymentId: blocking.id, status: blocking.status });
+      for (const p of forOrder(orderId)) {
+        if (p.status === 'pending')
+          publishPayment({ ...p, status: 'cancelled', version: p.version + 1 });
+      }
+    }
+    return { status: 200, body: settleOrder({ ...order, status: to }, stamps) };
+  }
+
+  // ---------- Payments ----------
+
+  function insertPayment(
+    order: OrderDto,
+    input: ReturnType<typeof createPaymentInputSchema.parse>,
+    caller: MockCaller,
+  ): MockAnswer | PaymentDto {
+    if (order.status === 'cancelled') return fail(409, 'ORDER_CLOSED');
+    if (order.totalSatang <= 0) return fail(422, 'NOTHING_TO_PAY');
+    const methods = paymentsSettingsSchema.parse({});
+    if (input.method !== 'gov_copay' && !methods[input.method]) return fail(422, 'METHOD_DISABLED');
+    const existing = forOrder(order.id);
+    if (existing.some((p) => p.status === 'confirmed')) return fail(409, 'ORDER_ALREADY_PAID');
+    const waiting = open(order.id);
+    if (waiting)
+      return fail(409, 'PAYMENT_ALREADY_OPEN', { paymentId: waiting.id, status: waiting.status });
+
+    const base: Omit<PaymentDto, 'status'> = {
+      id: deps.newUuid(),
+      orderId: order.id,
+      method: input.method,
+      amountSatang: order.totalSatang,
+      tenderedSatang: null,
+      changeSatang: null,
+      promptpayTargetMasked: null,
+      schemeId: null,
+      estGovShareSatang: null,
+      estCustomerShareSatang: null,
+      referenceNote: input.referenceNote ?? null,
+      claimedAt: null,
+      confirmedByStaffId: null,
+      confirmedAt: null,
+      reason: null,
+      version: 1,
+      rev: 0,
+    };
+    const draft: PaymentDto = { ...base, status: 'pending' };
+
+    if (input.method === 'cash') {
+      const move = paymentMachine.transition('pending', 'confirmed', { actor: actorOf(caller) });
+      if (!move.ok) return fromMachineError(move.error, 'pending', 'confirmed');
+      let cash: ReturnType<typeof calculateCashChange>;
+      try {
+        cash = calculateCashChange(order.totalSatang, satang(input.tendered));
+      } catch (error) {
+        if (error instanceof CashPaymentError && error.code === 'tendered_below_total') {
+          return fail(422, 'TENDERED_BELOW_TOTAL');
+        }
+        return fail(422, 'AMOUNT_TOO_LARGE');
+      }
+      return {
+        ...draft,
+        status: 'confirmed',
+        tenderedSatang: cash.tendered,
+        changeSatang: cash.change,
+        confirmedAt: new Date(deps.now()).toISOString(),
+      };
+    }
+    if (input.method === 'promptpay') {
+      return { ...draft, promptpayTargetMasked: MOCK_PROMPTPAY_MASKED };
+    }
+    if (input.method === 'gov_copay') {
+      if (
+        order.channel === 'grab' ||
+        order.channel === 'lineman' ||
+        !isCopayAvailable(copayScheme, new Date(deps.now()), 'storefront', order.fulfillment)
+      ) {
+        return fail(422, 'GOV_COPAY_UNAVAILABLE');
+      }
+      const split = estimateGovCopaySplit(order.totalSatang, copayScheme);
+      return {
+        ...draft,
+        schemeId: copayScheme.id,
+        estGovShareSatang: split.govShare,
+        estCustomerShareSatang: split.customerShare,
+      };
+    }
+    return draft;
+  }
+
+  function create(orderId: string, body: unknown, caller: MockCaller): MockAnswer {
+    const input = createPaymentInputSchema.safeParse(body);
+    if (!input.success) return fail(400, 'VALIDATION_ERROR');
+    const order = deps.orders.get(orderId);
+    if (!order) return fail(404, 'NOT_FOUND');
+    const requestKey = JSON.stringify([orderId, { ...input.data, clientRequestId: undefined }]);
+    const known = byRequest.get(input.data.clientRequestId);
+    if (known) {
+      if (known.requestKey !== requestKey) return fail(409, 'IDEMPOTENCY_KEY_REUSED');
+      const payment = payments.get(known.paymentId);
+      const current = deps.orders.get(orderId);
+      return payment && current
+        ? { status: 200, body: { payment, order: current } }
+        : fail(404, 'NOT_FOUND');
+    }
+    const made = insertPayment(order, input.data, caller);
+    if ('status' in made && 'body' in made) return made as MockAnswer;
+    const payment = publishPayment(made as PaymentDto);
+    byRequest.set(input.data.clientRequestId, { paymentId: payment.id, requestKey });
+    return { status: 201, body: { payment, order: settleOrder(order) } };
+  }
+
+  function move(
+    paymentId: string,
+    action: 'claim' | 'confirm' | 'cancel-claimed' | 'void' | 'refund',
+    body: unknown,
+    caller: MockCaller,
+  ): MockAnswer {
+    const payment = payments.get(paymentId);
+    if (!payment) return fail(404, 'NOT_FOUND');
+    const order = deps.orders.get(payment.orderId);
+    if (!order) return fail(404, 'NOT_FOUND');
+    const to: PaymentStatus = {
+      claim: 'claimed',
+      confirm: 'confirmed',
+      'cancel-claimed': 'cancelled',
+      void: 'voided',
+      refund: 'refunded',
+    }[action] as PaymentStatus;
+    const schema =
+      action === 'claim'
+        ? claimPaymentInputSchema
+        : action === 'confirm'
+          ? confirmPaymentInputSchema
+          : paymentReasonInputSchema;
+    const input = schema.safeParse(body ?? {});
+    if (!input.success)
+      return action === 'cancel-claimed' || action === 'void' || action === 'refund'
+        ? fail(422, 'REASON_REQUIRED')
+        : fail(400, 'VALIDATION_ERROR');
+    if (payment.status === to) return { status: 200, body: { payment, order } };
+    if (action === 'cancel-claimed' && payment.status !== 'claimed') {
+      return fail(409, 'INVALID_TRANSITION', { from: payment.status, to });
+    }
+    const data: Record<string, unknown> = { ...input.data };
+    const reason = typeof data.reason === 'string' ? data.reason : undefined;
+    const referenceNote = typeof data.referenceNote === 'string' ? data.referenceNote : undefined;
+    const verdict = paymentMachine.transition(payment.status, to, {
+      actor: actorOf(caller),
+      reason,
+    });
+    if (!verdict.ok) return fromMachineError(verdict.error, payment.status, to);
+    if (verdict.stepUp && !caller.stepUpFresh) return fail(403, 'STEP_UP_REQUIRED');
+    const at = new Date(deps.now()).toISOString();
+    const patch: Partial<PaymentDto> =
+      to === 'claimed'
+        ? { claimedAt: at }
+        : to === 'confirmed'
+          ? {
+              confirmedAt: at,
+              ...(referenceNote ? { referenceNote } : {}),
+            }
+          : { reason: reason ?? '' };
+    const updated = publishPayment({
+      ...payment,
+      ...patch,
+      status: to,
+      version: payment.version + 1,
+    });
+    return { status: 200, body: { payment: updated, order: settleOrder(order) } };
+  }
+
+  function changeMethod(paymentId: string, body: unknown, caller: MockCaller): MockAnswer {
+    const input = changePaymentMethodInputSchema.safeParse(body);
+    if (!input.success) return fail(400, 'VALIDATION_ERROR');
+    const source = payments.get(paymentId);
+    if (!source) return fail(404, 'NOT_FOUND');
+    const order = deps.orders.get(source.orderId);
+    if (!order) return fail(404, 'NOT_FOUND');
+    const requestKey = JSON.stringify([paymentId, { ...input.data, clientRequestId: undefined }]);
+    const known = byRequest.get(input.data.clientRequestId);
+    if (known) {
+      const payment = payments.get(known.paymentId);
+      const cancelledPayment = payments.get(paymentId);
+      const current = deps.orders.get(order.id);
+      return payment && cancelledPayment && current
+        ? { status: 200, body: { payment, cancelledPayment, order: current } }
+        : fail(404, 'NOT_FOUND');
+    }
+    if (source.status !== 'pending')
+      return fail(409, 'PAYMENT_NOT_PENDING', { status: source.status });
+    if (source.method === input.data.method) return fail(422, 'METHOD_UNCHANGED');
+    // The old payment is cancelled first so the "one open payment" rule lets the new one in; if the
+    // new one cannot be made, the old one is put back.
+    const cancelled = { ...source, status: 'cancelled' as PaymentStatus };
+    payments.set(source.id, cancelled);
+    const { clientRequestId: _ignored, expectedVersion: _version, ...choice } = input.data;
+    const made = insertPayment(
+      order,
+      { ...choice, clientRequestId: input.data.clientRequestId } as never,
+      caller,
+    );
+    if ('status' in made && 'body' in made) {
+      payments.set(source.id, source);
+      return made as MockAnswer;
+    }
+    const cancelledPayment = publishPayment({ ...cancelled, version: source.version + 1 });
+    const payment = publishPayment(made as PaymentDto);
+    byRequest.set(input.data.clientRequestId, { paymentId: payment.id, requestKey });
+    return { status: 201, body: { payment, cancelledPayment, order: settleOrder(order) } };
+  }
+
+  function qrUrl(paymentId: string): MockAnswer {
+    const payment = payments.get(paymentId);
+    if (!payment) return fail(404, 'NOT_FOUND');
+    if (
+      payment.method !== 'promptpay' ||
+      (payment.status !== 'pending' && payment.status !== 'claimed')
+    ) {
+      return fail(409, 'QR_NOT_AVAILABLE');
+    }
+    const exp = Math.floor(deps.now() / 1000) + 300;
+    return {
+      status: 200,
+      body: {
+        url: `/v1/payments/${paymentId}/qr.png?exp=${exp}&sig=MOCKSIGNATUREMOCKSIGNATUREMOCKSIGNATUREMOCK`,
+        expiresAt: new Date(exp * 1000).toISOString(),
+        promptpayTargetMasked: MOCK_PROMPTPAY_MASKED,
+      },
+    };
+  }
+
+  /** Answers the order-status and payment routes (null: not one of them). */
+  function handle(
+    method: string,
+    path: string,
+    body: unknown,
+    caller: MockCaller,
+  ): MockAnswer | null {
+    if (method === 'GET' && path === '/v1/orders') return listOrders();
+    const orderRoute = /^\/v1\/orders\/([^/]+)\/(transition|cancel|payments)$/.exec(path);
+    if (orderRoute) {
+      const [, id = '', what] = orderRoute;
+      if (what === 'payments') {
+        if (method === 'GET') return { status: 200, body: { payments: forOrder(id) } };
+        if (method === 'POST') return create(id, body, caller);
+      }
+      if (method === 'POST' && what === 'transition') {
+        const input = transitionOrderInputSchema.safeParse(body);
+        return input.success
+          ? moveOrder(id, input.data.to, input.data.reason, caller)
+          : fail(400, 'VALIDATION_ERROR');
+      }
+      if (method === 'POST' && what === 'cancel') {
+        const input = cancelOrderInputSchema.safeParse(body);
+        return input.success
+          ? moveOrder(id, 'cancelled', input.data.reason, caller)
+          : fail(422, 'REASON_REQUIRED');
+      }
+    }
+    const paymentRoute = /^\/v1\/payments\/([^/]+)\/([a-z-]+)$/.exec(path);
+    if (paymentRoute) {
+      const [, id = '', what] = paymentRoute;
+      if (method === 'GET' && what === 'qr-url') return qrUrl(id);
+      if (method === 'POST') {
+        if (what === 'change-method') return changeMethod(id, body, caller);
+        if (
+          what === 'claim' ||
+          what === 'confirm' ||
+          what === 'cancel-claimed' ||
+          what === 'void' ||
+          what === 'refund'
+        ) {
+          return move(id, what, body, caller);
+        }
+      }
+    }
+    return null;
+  }
+
+  return { handle, settingsFrames };
+}

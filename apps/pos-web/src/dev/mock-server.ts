@@ -20,7 +20,9 @@ import {
   authMeResponseSchema,
   ownerLoginInputSchema,
   ownerStepUpInputSchema,
+  type Permission,
   pinLoginInputSchema,
+  ROLE_PERMISSIONS,
   registerDeviceInputSchema,
   staffStepUpInputSchema,
 } from '@sds/shared';
@@ -69,54 +71,12 @@ export const MOCK_OWNER = {
   totpCodes: ['111111', '222222', '333333', '444444', '555555'],
 } as const;
 
-const PERMISSIONS: Record<Role, readonly string[]> = {
-  owner: [
-    'order.create',
-    'order.accept',
-    'order.advance',
-    'order.cancel_new',
-    'order.cancel_in_progress',
-    'payment.record',
-    'payment.confirm',
-    'payment.cancel_claimed',
-    'payment.void_refund',
-    'menu.edit',
-    'customer.view',
-    'report.view',
-    'expense.edit',
-    'settings.edit',
-    'settings.promptpay',
-    'staff.manage',
-    'device.manage',
-    'data.export',
-  ],
-  manager: [
-    'order.create',
-    'order.accept',
-    'order.advance',
-    'order.cancel_new',
-    'order.cancel_in_progress',
-    'payment.record',
-    'payment.confirm',
-    'payment.cancel_claimed',
-    'payment.void_refund',
-    'menu.edit',
-    'customer.view',
-    'report.view',
-    'expense.edit',
-    'settings.edit',
-  ],
-  cashier: [
-    'order.create',
-    'order.accept',
-    'order.advance',
-    'order.cancel_new',
-    'payment.record',
-    'payment.confirm',
-    'payment.cancel_claimed',
-    'customer.view',
-  ],
-  kitchen: ['order.accept', 'order.advance'],
+/** The same table the real API uses, so the dev app shows exactly what each role may do. */
+const PERMISSIONS: Record<Role, readonly Permission[]> = {
+  owner: [...ROLE_PERMISSIONS.owner],
+  manager: [...ROLE_PERMISSIONS.manager],
+  cashier: [...ROLE_PERMISSIONS.cashier],
+  kitchen: [...ROLE_PERMISSIONS.kitchen],
 };
 
 export interface MockServerOptions {
@@ -372,7 +332,10 @@ export function createMockServer(options: MockServerOptions = {}) {
     ) {
       return fail(403, 'FORBIDDEN');
     }
-    const answer = shop.handle(method, path, query, body);
+    const answer = shop.handle(method, path, query, body, {
+      role: session.staff.role,
+      stepUpFresh: (stepUps.get(session.token) ?? 0) > now(),
+    });
     if (answer) return reply(answer.status, answer.body);
 
     return fail(404, 'NOT_FOUND');
