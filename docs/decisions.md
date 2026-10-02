@@ -29,6 +29,8 @@ This is the **single source of truth for technology and design choices**. Other 
 | D-17 | Staff auth: registered devices + personal PINs; owner password + TOTP | Proposed | 2026-09-29 |
 | D-18 | Backups & monitoring: hourly encrypted dumps off-site, uptime + error tracking | Proposed | 2026-09-29 |
 | D-19 | Clients: web first (Safari on iPad/iPhone, desktop browsers); native apps later (Capacitor for iOS, Electron for desktop) | Proposed — deferred (future) | 2026-09-29 |
+| D-20 | Offline PromptPay: staff devices cache the real PromptPay ID and render the QR locally (owner accepted the risk) | **Accepted** | 2026-10-02 |
+| D-21 | Menu photos are stored in Postgres and served by the API (no object storage, no new secret) | **Accepted** | 2026-10-02 |
 
 ---
 
@@ -173,3 +175,15 @@ This is the **single source of truth for technology and design choices**. Other 
 - **Alternatives:** Tauri 2 for desktop and/or mobile (much smaller installers, but printing needs Rust or a sidecar, and iOS push relies on community plugins); React Native or Flutter (UI rewrite); staying PWA-only (free, but no LAN printing or reliable alarms on iOS).
 - **Status note (2026-09-29):** deferred. Native apps are a future project. The owner plans to buy a MacBook for Xcode/iOS work, and nothing native is built until then. The P1/P3 seams listed above are still built, because they cost almost nothing.
 - **Revisit if:** at P10 the desktop app will *not* print directly (printing stays with the print agent) and installer size or RAM matters on the target PCs. Then choose **Tauri 2** for desktop instead of Electron.
+
+## D-20 · Offline PromptPay — Accepted (owner decision 2026-10-02)
+- **Decision:** a staff device keeps the **real PromptPay ID** in the local store (IndexedDB, never the token store, never the outbox) so a PromptPay QR can be drawn offline with `packages/promptpay`. The ID is read from `GET /v1/settings/promptpay` (roles with `settings.view`) after every sign-in, on reconnect and on every `settings.updated` for `promptpay`, and is cleared when a different staff member signs in on the device or the device is revoked. An offline PromptPay payment is queued like cash (create pending, then the staff member's confirm after checking the bank app), so **staff still confirm every payment by hand** (rule 2).
+- **Why:** the exit criterion says "cash and PromptPay still work with the internet unplugged", and the shop's internet is the weakest link.
+- **Risks the owner accepted, and the mitigations:** (1) a device that is offline when the owner changes the ID keeps showing the OLD account's QR: the QR screen shows when the ID was saved and tells staff to compare the masked account with the bank app, the owner's change alert is the signal to refresh every device, and a QR is refused once the saved ID is older than a limit (default 24 h) until the device reconnects; (2) a stolen unlocked device exposes the ID (it is on every printed or shown QR anyway; revoke the device); (3) the offline amount is an ESTIMATE from the cached menu, so the QR amount can differ from the server total if prices changed: the screen says so and a mismatch at replay ends as 'needs attention'. Not allowed offline: co-pay (staff create the ถุงเงิน QR in their own app and the system cannot check the scheme window against the server), changing the PromptPay ID, and order moves.
+- **Revisit if:** the owner prefers 'cash only offline', or a bank offers a merchant QR that does not need the ID on the device.
+
+## D-21 · Menu photos in Postgres — Accepted (2026-10-02)
+- **Decision:** a menu item's photo is stored as a small image row in Postgres (client-side resized to at most 800 px, WebP or JPEG, capped at about 150 KB), uploaded with `PUT /v1/menu/items/{id}/photo` (`menu.edit`) and served by `GET /v1/menu/items/{id}/photo?v=<version>` with `ETag`, `Cache-Control: public, max-age=31536000, immutable` (the version is part of the URL) and `nosniff`. The API checks the image's magic bytes and size and never trusts the client's content type.
+- **Why:** free, nothing new to sign up for, **no new secret on the VM**, included in the hourly encrypted backups, and 30 to 60 photos are a few megabytes. It replaces the Supabase Storage proposal (that needed a service key on the VM and a new moving part). Slips (P9) can use the same pattern or R2/OCI later.
+- **Alternatives:** Supabase Storage (service key), OCI Object Storage (already holds backups; separate request quota on a Pay-As-You-Go account), committing images to `apps/pos-web/public` (every photo change is a deploy; the owner cannot edit in the app).
+- **Revisit if:** photos exceed about 50 MB in total or traffic makes the API VM the bottleneck (then put Cloudflare in front or move to object storage).
