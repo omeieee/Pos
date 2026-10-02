@@ -45,6 +45,8 @@
 			fields {
 				request>uri query {
 					replace sig REDACTED
+					# GET /v1/recipients?q= carries a customer's name (PDPA)
+					replace q REDACTED
 				}
 			}
 		}
