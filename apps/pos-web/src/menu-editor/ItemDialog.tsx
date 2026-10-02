@@ -129,6 +129,11 @@ export function ItemDialog({
             </option>
           ))}
         </select>
+        {problems.includes('categoryId') ? (
+          <p className="error" role="alert">
+            {tr('menuEditor.error.categoryId')}
+          </p>
+        ) : null}
       </div>
 
       <div className="mdialog__pair">

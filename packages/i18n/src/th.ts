@@ -648,7 +648,6 @@ export const th = {
   'menuEditor.error.priceDelta': 'ใส่ส่วนต่างราคาเป็นบาท เช่น 10 หรือ -5',
   'menuEditor.error.costDelta': 'ใส่ส่วนต่างต้นทุนเป็นบาท เช่น 3 หรือ -2',
   'menuEditor.saving': 'กำลังบันทึก…',
-  'menuEditor.noChange': 'ยังไม่ได้แก้อะไร',
   'menuEditor.photo.title': 'รูปภาพ',
   'menuEditor.photo.choose': 'เลือกรูป',
   'menuEditor.photo.change': 'เปลี่ยนรูป',
@@ -661,22 +660,13 @@ export const th = {
   'menuEditor.photo.error.unsupported': 'เครื่องนี้แปลงรูปเป็นแบบที่ระบบรับไม่ได้ ลองเครื่องอื่นหรือรูปอื่น',
   'menuEditor.photo.error.too_big': 'ย่อรูปแล้วก็ยังใหญ่เกินไป ลองรูปอื่น',
   'menuEditor.photo.error.metadata': 'ลบข้อมูลที่ติดมากับรูปไม่สำเร็จ จึงไม่ได้อัปโหลดรูปนี้ ลองรูปอื่น',
-  'menuEditor.costLabel':
-    'ต้นทุน {amount}',
-  'menuEditor.archived':
-    'เก็บแล้ว',
-  'menuEditor.group.range':
-    'เลือก {min} ถึง {max}',
-  'menuEditor.group.required':
-    'ต้องเลือก',
-  'menuEditor.option.priceDelta':
-    'ราคา {amount}',
-  'menuEditor.option.noPriceChange':
-    'ไม่เปลี่ยนราคา',
-  'menuEditor.option.costDelta':
-    'ต้นทุน {amount}',
-  'menuEditor.option.group':
-    'กลุ่ม {name}',
+  'menuEditor.costLabel': 'ต้นทุน {amount}',
+  'menuEditor.archived': 'เก็บแล้ว',
+  'menuEditor.group.range': 'เลือก {min} ถึง {max}',
+  'menuEditor.group.required': 'ต้องเลือก',
+  'menuEditor.option.priceDelta': 'ราคา {amount}',
+  'menuEditor.option.noPriceChange': 'ไม่เปลี่ยนราคา',
+  'menuEditor.option.costDelta': 'ต้นทุน {amount}',
 } as const;
 
 export type MessageKey = keyof typeof th;

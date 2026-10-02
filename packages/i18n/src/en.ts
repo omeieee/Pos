@@ -686,7 +686,6 @@ export const en = {
   'menuEditor.error.priceDelta': 'Enter the price change in baht, for example 10 or -5.',
   'menuEditor.error.costDelta': 'Enter the cost change in baht, for example 3 or -2.',
   'menuEditor.saving': 'Saving…',
-  'menuEditor.noChange': 'Nothing was changed',
   'menuEditor.photo.title': 'Photo',
   'menuEditor.photo.choose': 'Choose a photo',
   'menuEditor.photo.change': 'Change the photo',
@@ -704,20 +703,11 @@ export const en = {
     'The photo is still too large after shrinking. Try another one.',
   'menuEditor.photo.error.metadata':
     'The data inside the photo could not be removed, so it was not uploaded. Try another one.',
-  'menuEditor.costLabel':
-    'Cost {amount}',
-  'menuEditor.archived':
-    'Archived',
-  'menuEditor.group.range':
-    'Pick {min} to {max}',
-  'menuEditor.group.required':
-    'Required',
-  'menuEditor.option.priceDelta':
-    'Price {amount}',
-  'menuEditor.option.noPriceChange':
-    'No price change',
-  'menuEditor.option.costDelta':
-    'Cost {amount}',
-  'menuEditor.option.group':
-    'Group {name}',
+  'menuEditor.costLabel': 'Cost {amount}',
+  'menuEditor.archived': 'Archived',
+  'menuEditor.group.range': 'Pick {min} to {max}',
+  'menuEditor.group.required': 'Required',
+  'menuEditor.option.priceDelta': 'Price {amount}',
+  'menuEditor.option.noPriceChange': 'No price change',
+  'menuEditor.option.costDelta': 'Cost {amount}',
 } as const satisfies Record<MessageKey, string>;

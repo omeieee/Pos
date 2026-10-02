@@ -1,7 +1,6 @@
 import { formatDate } from '@sds/i18n';
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { allowedRoutes, pathFromHash, resolveRoute } from '../app/routes.ts';
-import { MenuEditorScreen } from '../menu-editor/MenuEditorScreen.tsx';
 import { KitchenScreen } from '../pos/KitchenScreen.tsx';
 import { OrderDetailScreen } from '../pos/OrderDetailScreen.tsx';
 import { OrderEntryScreen } from '../pos/OrderEntryScreen.tsx';
@@ -22,6 +21,11 @@ import {
 } from './hooks.ts';
 import { Icon } from './Icon.tsx';
 import { UpdateBanner } from './UpdateBanner.tsx';
+
+// Only managers and the owner open it, so its screens load on first use, not with the till.
+const MenuEditorScreen = lazy(async () => ({
+  default: (await import('../menu-editor/MenuEditorScreen.tsx')).MenuEditorScreen,
+}));
 
 /**
  * The signed-in frame: top bar (shop, device, person, role, sign out), navigation limited to
@@ -120,7 +124,17 @@ export function Shell() {
         {resolved?.page === 'platform' ? <OrderEntryScreen mode="platform" /> : null}
         {resolved?.page === 'orders' ? <OrdersScreen /> : null}
         {resolved?.page === 'kitchen' ? <KitchenScreen /> : null}
-        {resolved?.page === 'menu' ? <MenuEditorScreen /> : null}
+        {resolved?.page === 'menu' ? (
+          <Suspense
+            fallback={
+              <p className="muted" role="status">
+                {tr('menuEditor.loading')}
+              </p>
+            }
+          >
+            <MenuEditorScreen />
+          </Suspense>
+        ) : null}
         {resolved?.page === 'order' ? <OrderDetailScreen id={resolved.params.id ?? ''} /> : null}
         {route && resolved && !full ? (
           <section className="coming-soon">
