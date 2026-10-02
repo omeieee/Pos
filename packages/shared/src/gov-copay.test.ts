@@ -474,10 +474,20 @@ describe('isCopayAvailable: enabled flag, channel and fulfilment', () => {
     );
   });
 
-  test('true at the storefront for counter fulfilments', () => {
-    for (const f of ['dine_in', 'takeaway', 'pickup'] as const) {
+  test('true face to face: the entrance hand-over and the legacy counter fulfilments', () => {
+    for (const f of ['entrance_delivery', 'dine_in', 'takeaway', 'pickup'] as const) {
       expect(isCopayAvailable(ROUND_2, open, 'storefront', f)).toBe(true);
     }
+  });
+
+  test('false for an entrance delivery outside the dates and hours, or when disabled', () => {
+    const late = new Date('2026-10-01T16:30:00Z'); // 23:30 Bangkok
+    const after = new Date('2026-12-01T04:00:00Z');
+    expect(isCopayAvailable(ROUND_2, late, 'storefront', 'entrance_delivery')).toBe(false);
+    expect(isCopayAvailable(ROUND_2, after, 'storefront', 'entrance_delivery')).toBe(false);
+    expect(
+      isCopayAvailable({ ...ROUND_2, enabled: false }, open, 'storefront', 'entrance_delivery'),
+    ).toBe(false);
   });
 
   test.each(['line', 'grab', 'lineman', 'phone'] as const)(
@@ -491,9 +501,15 @@ describe('isCopayAvailable: enabled flag, channel and fulfilment', () => {
     expect(isCopayAvailable(ROUND_2, open, 'storefront', fulfillment)).toBe(false);
   });
 
-  test('only dine_in, takeaway and pickup can ever be true (allow-list)', () => {
+  test('only the face-to-face fulfilments can ever be true (allow-list)', () => {
     const allowed = FULFILLMENTS.filter((f) => isCopayAvailable(ROUND_2, open, 'storefront', f));
-    expect(allowed).toEqual(['dine_in', 'takeaway', 'pickup']);
+    expect(allowed).toEqual(['dine_in', 'takeaway', 'pickup', 'entrance_delivery']);
+  });
+
+  test('a platform channel is refused even for an entrance delivery', () => {
+    for (const channel of ['grab', 'lineman'] as const) {
+      expect(isCopayAvailable(ROUND_2, open, channel, 'entrance_delivery')).toBe(false);
+    }
   });
 
   test('only the storefront channel can ever be true, whatever the scheme lists', () => {

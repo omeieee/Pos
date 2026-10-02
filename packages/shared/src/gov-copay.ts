@@ -168,11 +168,18 @@ export function estimateGovCopaySplit(
 }
 
 /**
- * Fulfilments where the customer and cashier meet at the counter. Room delivery is not allowed
- * until the ถุงเงิน terms confirm it (D-08, Q2), and platform delivery is paid through the
- * platform. An allow-list, so any future fulfilment defaults to "not available".
+ * Fulfilments where staff and the customer meet face to face (owner, 2026-10-02, replacing "only
+ * at the storefront"): at the counter, or at the building entrance when staff hand the order over
+ * (`entrance_delivery`; the customer scans the ถุงเงิน QR that staff create on the spot). The old
+ * counter values stay for history. The legacy room delivery is not allowed, and platform delivery
+ * is paid through the platform. An allow-list, so any future fulfilment defaults to "not available".
  */
-const FACE_TO_FACE_FULFILLMENTS: readonly Fulfillment[] = ['dine_in', 'takeaway', 'pickup'];
+const FACE_TO_FACE_FULFILLMENTS: readonly Fulfillment[] = [
+  'dine_in',
+  'takeaway',
+  'pickup',
+  'entrance_delivery',
+];
 
 const clockFormatters = new Map<string, Intl.DateTimeFormat>();
 
@@ -209,7 +216,9 @@ function secondOfDayIn(timeZone: string, instant: Date): number {
  * ALL of these hold; otherwise false:
  * - the scheme is `enabled`;
  * - `channel` is `'storefront'` (a hard rule, CLAUDE.md rule 4) and the scheme lists it;
- * - `fulfillment` is `dine_in`, `takeaway` or `pickup` (never `room_delivery`);
+ * - `fulfillment` is face to face: `entrance_delivery` (staff hand it over at the building
+ *   entrance) or the legacy `dine_in`, `takeaway`, `pickup` (never `room_delivery` or
+ *   `platform_delivery`);
  * - the local calendar date is within `activeFrom`..`activeTo`, both included;
  * - the local time of day is within `[activeFromMinute, activeToMinute)`: opening included,
  *   closing excluded, so 23:00:00 is already closed when the hours end at 23:00.
@@ -218,9 +227,10 @@ function secondOfDayIn(timeZone: string, instant: Date): number {
  * date: the 04:00 business-day cutoff does not apply. `now` is the server's clock. An invalid
  * `now` throws `RangeError`.
  *
- * `channel` is the order's sales channel. A LINE order that the customer collects at the
- * counter has channel `'line'`, so it is refused here; whoever wires LINE pick-up payments
- * (P4) must decide how to treat it. Counter payments pass `'storefront'`.
+ * `channel` is the channel of the payment, not of the order. A LINE or phone order that staff
+ * hand over (and take the payment for) face to face is paid like a storefront one, so the payment
+ * service passes `'storefront'` for it; a `'line'` here is refused. Grab and LINE MAN orders are
+ * never eligible. The ถุงเงิน QR is never sent through LINE.
  */
 export function isCopayAvailable(
   scheme: Pick<

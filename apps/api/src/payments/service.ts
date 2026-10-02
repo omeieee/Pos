@@ -322,9 +322,11 @@ async function insertPaymentFor(
     case 'gov_copay': {
       const schemeRow = await getGovCopayRow(tx);
       const scheme = schemeRow ? govCopaySchemeSchema.parse(schemeRow) : null;
-      // Counter payments are face to face at the storefront whatever channel the order came by
-      // (a LINE pickup order paid at the counter qualifies), but Grab and LINE MAN orders are paid
-      // on the platform, never at the counter, so co-pay does not apply to them (D-08).
+      // Staff take the payment face to face (at the counter or at the entrance hand-over, owner
+      // 2026-10-02) whatever channel the order came by: a LINE or phone entrance delivery paid at
+      // hand-over qualifies, and the real fulfilment is checked (platform and legacy room
+      // delivery are refused). Grab and LINE MAN orders are paid on the platform, so co-pay never
+      // applies to them (D-08). The ถุงเงิน QR is made by staff and never sent through LINE.
       if (
         !schemeRow ||
         !scheme ||
