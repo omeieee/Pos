@@ -136,7 +136,7 @@ type SentryEventLike = {
 };
 
 /** A URL without its query string and fragment: the signed QR link keeps its credential there. */
-function withoutQuery(url: string): string {
+export function withoutQuery(url: string): string {
   return url.replace(/[?#].*$/s, '');
 }
 

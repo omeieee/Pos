@@ -38,6 +38,32 @@ export function recipientKey(name: string): string {
 }
 
 /**
+ * GET /v1/recipients: remembered recipients for the order screen's chips and prefill. `q` is
+ * matched as "contains" on the name, ignoring case and spacing; `limit` defaults to 8, at most 20.
+ */
+export const RECIPIENTS_DEFAULT_LIMIT = 8;
+export const RECIPIENTS_MAX_LIMIT = 20;
+export const recipientsQuerySchema = z.object({
+  q: z.string().trim().max(60).optional(),
+  building: buildingNameSchema.optional(),
+  limit: z.coerce.number().int().min(1).max(RECIPIENTS_MAX_LIMIT).default(RECIPIENTS_DEFAULT_LIMIT),
+});
+export type RecipientsQuery = z.infer<typeof recipientsQuerySchema>;
+
+/** All a staff screen learns about a remembered recipient: no phone, LINE id, picture or history. */
+export const recipientDtoSchema = z.object({
+  id: z.uuid(),
+  building: z.string(),
+  recipientName: z.string(),
+  deliveryNote: z.string().nullable(),
+  lastOrderAt: z.iso.datetime().nullable(),
+});
+export type RecipientDto = z.infer<typeof recipientDtoSchema>;
+
+export const recipientsResponseSchema = z.object({ recipients: z.array(recipientDtoSchema) });
+export type RecipientsResponse = z.infer<typeof recipientsResponseSchema>;
+
+/**
  * The fulfilments a new order on this channel may use. Storefront, LINE and phone orders are
  * delivered to the building entrance; Grab and LINE MAN orders go by the platform. The legacy
  * values (`dine_in`, `takeaway`, `pickup`, `room_delivery`) are never offered.

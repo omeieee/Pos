@@ -357,7 +357,12 @@ describe('what each role is sent', () => {
 
   test('customers are cut down: no LINE id, phone, picture or note, and the id is the row id', async () => {
     const { changes } = await everything('cashier');
-    const c = changes.find((x) => x.type === 'customer.upserted');
+    // (The orders in this fixture also remembered their recipients as nameless counter customers.)
+    const c = changes.find(
+      (x) =>
+        x.type === 'customer.upserted' &&
+        (x.data as { displayName: string | null }).displayName === 'คุณสมชาย',
+    );
     expect(c?.data).toMatchObject({
       displayName: 'คุณสมชาย',
       nickname: 'ชาย',

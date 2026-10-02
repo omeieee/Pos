@@ -3,8 +3,10 @@ import {
   allowedFulfillments,
   buildingNameSchema,
   deliveryNoteSchema,
+  recipientDtoSchema,
   recipientKey,
   recipientNameSchema,
+  recipientsQuerySchema,
 } from './delivery.ts';
 import { FULFILLMENTS, ORDER_CHANNELS } from './enums.ts';
 import { createOrderInputSchema } from './schemas.ts';
@@ -49,6 +51,41 @@ describe('recipient fields', () => {
 
   test('different names have different keys', () => {
     expect(recipientKey('Test A')).not.toBe(recipientKey('Test B'));
+  });
+});
+
+describe('recipientsQuerySchema', () => {
+  test('defaults the limit to 8, allows up to 20, and coerces the query string', () => {
+    expect(recipientsQuerySchema.parse({}).limit).toBe(8);
+    expect(recipientsQuerySchema.parse({ limit: '20' }).limit).toBe(20);
+    expect(recipientsQuerySchema.safeParse({ limit: '21' }).success).toBe(false);
+    expect(recipientsQuerySchema.safeParse({ limit: '0' }).success).toBe(false);
+    expect(recipientsQuerySchema.safeParse({ limit: 'abc' }).success).toBe(false);
+  });
+
+  test('trims the search text and the building; refuses an overlong search', () => {
+    expect(recipientsQuerySchema.parse({ q: '  Fa ', building: ' B1 ' })).toMatchObject({
+      q: 'Fa',
+      building: 'B1',
+    });
+    expect(recipientsQuerySchema.safeParse({ q: 'x'.repeat(61) }).success).toBe(false);
+  });
+});
+
+describe('recipientDtoSchema', () => {
+  test('carries exactly five fields and drops anything else', () => {
+    const parsed = recipientDtoSchema.parse({
+      id: '0192f3a0-0000-7000-8000-000000000001',
+      building: 'B1',
+      recipientName: NAME,
+      deliveryNote: null,
+      lastOrderAt: '2026-10-02T03:00:00.000Z',
+      phone: '0800000000',
+      lineUserId: 'U-test',
+    });
+    expect(Object.keys(parsed).sort()).toEqual(
+      ['building', 'deliveryNote', 'id', 'lastOrderAt', 'recipientName'].sort(),
+    );
   });
 });
 

@@ -3,7 +3,7 @@
  * trigger does it) and publishes its events only after the commit. Status changes go through the
  * state machine in `@sds/shared`; the server prices every order from the menu.
  */
-import { type Db, ordersRepo } from '@sds/db';
+import { customersRepo, type Db, ordersRepo } from '@sds/db';
 import {
   allowedFulfillments,
   businessDate,
@@ -18,6 +18,7 @@ import {
   type PatchOrderInput,
   type PricingError,
   priceOrder,
+  recipientKey,
   type TransitionError,
   type TransitionOrderInput,
 } from '@sds/shared';
@@ -130,6 +131,26 @@ export async function createOrder(
 
       // Only after the order has been accepted does it take a number, in the same transaction.
       const seq = await ordersRepo.nextDailySeq(tx, date);
+
+      // An entrance delivery remembers its recipient (automatic customer memory, owner
+      // 2026-10-02) in this same transaction: find or create the customer by building and name
+      // (or use the given customer id), record the order on them, and link the order. A replayed
+      // request returned above and never gets here, so nothing counts twice; if this transaction
+      // fails or loses a duplicate-request race, the customer and the count roll back with it.
+      const customerId =
+        input.deliveryBuilding !== undefined && input.recipientName !== undefined
+          ? await customersRepo.recordRecipientOrder(
+              tx,
+              {
+                building: input.deliveryBuilding,
+                recipientName: input.recipientName,
+                recipientKey: recipientKey(input.recipientName),
+                deliveryNote: input.deliveryNote || null,
+              },
+              now,
+              input.customerId,
+            )
+          : (input.customerId ?? null);
       const status = initialOrderStatus(input.channel);
       const row = await ordersRepo.insertOrder(tx, {
         orderNo: `${ORDER_NO_PREFIX[input.channel]}-${String(seq).padStart(3, '0')}`,
@@ -140,7 +161,7 @@ export async function createOrder(
         deliveryBuilding: input.deliveryBuilding ?? null,
         recipientName: input.recipientName ?? null,
         deliveryNote: input.deliveryNote || null,
-        customerId: input.customerId ?? null,
+        customerId,
         status,
         subtotalSatang: priced.totals.subtotal,
         discountSatang: priced.totals.discount,

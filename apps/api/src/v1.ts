@@ -8,6 +8,7 @@ import { registerAuthRoutes } from './auth/routes.ts';
 import type { AuthContext } from './auth/service.ts';
 import type { EventBus } from './events.ts';
 import { registerMenuRoutes } from './menu/routes.ts';
+import { registerRecipientRoutes } from './orders/recipients.ts';
 import { registerOrderRoutes } from './orders/routes.ts';
 import { registerPaymentRoutes } from './payments/routes.ts';
 import { type RealtimeOptions, registerRealtimeRoutes, setupRealtime } from './realtime/routes.ts';
@@ -80,6 +81,9 @@ export async function registerV1(app: FastifyInstance, deps: V1Deps): Promise<vo
       });
       await v1.register((scope) => registerOrderRoutes(scope, context.auth, context.guard), {
         prefix: '/orders',
+      });
+      await v1.register((scope) => registerRecipientRoutes(scope, context.auth, context.guard), {
+        prefix: '/recipients',
       });
       await v1.register((scope) => registerMenuRoutes(scope, context.auth, context.guard), {
         prefix: '/menu',

@@ -1,9 +1,13 @@
 import cors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
-import Fastify, { type FastifyInstance, type FastifyServerOptions } from 'fastify';
+import Fastify, {
+  type FastifyInstance,
+  type FastifyRequest,
+  type FastifyServerOptions,
+} from 'fastify';
 import type { Config } from './config.ts';
 import { ApiError } from './errors.ts';
-import { LOG_REDACT_PATHS, scrubLogArgs, serializeErr } from './redact.ts';
+import { LOG_REDACT_PATHS, scrubLogArgs, serializeErr, withoutQuery } from './redact.ts';
 
 export type AppOptions = {
   config: Pick<Config, 'corsOrigins' | 'version'>;
@@ -44,7 +48,21 @@ function withErrRedaction(logger: AppOptions['logger'] = true): NonNullable<AppO
   return {
     ...base,
     redact: { paths: LOG_REDACT_PATHS, censor: '[redacted]' },
-    serializers: { ...base.serializers, err: serializeErr },
+    serializers: {
+      ...base.serializers,
+      err: serializeErr,
+      // Fastify's default request log line carries the whole URL. A query string can hold a
+      // customer's name (GET /v1/recipients?q=) or a signed-link credential, so it is dropped.
+      req: (request: FastifyRequest) => ({
+        method: request.method,
+        ...(typeof request.url === 'string' ? { url: withoutQuery(request.url) } : {}),
+        host: request.host,
+        remoteAddress: request.ip,
+        ...(request.socket?.remotePort === undefined
+          ? {}
+          : { remotePort: request.socket.remotePort }),
+      }),
+    },
     hooks: {
       ...base.hooks,
       logMethod(args, method) {
