@@ -117,6 +117,7 @@ fieldset.ksound {
   font-size: var(--sds-font-size-lg);
 }
 .kcard__no {
+  margin: 0;
   flex: 1;
   min-width: 0;
   font-family: var(--sds-font-display);
