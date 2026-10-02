@@ -106,7 +106,7 @@ export function OrderDetailScreen({ id }: { id: string }) {
       <ul className="odetail__lines">
         {order.items.map((item) => (
           <li key={item.id} className="oline">
-            <span className="oline__qty">{item.qty}×</span>
+            <span className="oline__qty">{tr('order.detail.qty', { count: item.qty })}</span>
             <span className="oline__what">
               <span>{localName(locale, item.nameTh, item.nameEn)}</span>
               {item.modifiers.length > 0 ? (

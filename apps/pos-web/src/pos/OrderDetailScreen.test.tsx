@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { catalogs } from '@sds/i18n';
+import { catalogs, translator } from '@sds/i18n';
 import { satang } from '@sds/shared';
 import { act, cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, test } from 'vitest';
@@ -9,6 +9,7 @@ import { createTestServices, renderScreen } from '../test-support/render.tsx';
 import { OrderDetailScreen } from './OrderDetailScreen.tsx';
 
 const th = catalogs.th;
+const tr = translator('th');
 const ID = uuid(900);
 
 afterEach(cleanup);
@@ -66,6 +67,8 @@ describe('the order page (a placeholder until the payment screens)', () => {
     expect(screen.getByText(th['status.order.new'])).toBeTruthy();
     expect(screen.getByText(th['status.payment.unpaid'])).toBeTruthy();
     expect(screen.getByText(/ก๋วยเตี๋ยวต้มยำ/)).toBeTruthy();
+    // The quantity sign comes from the catalog, not from the component.
+    expect(screen.getAllByText(tr('order.detail.qty', { count: 1 })).length).toBe(2);
     expect(screen.getByText(/ไข่ต้ม/)).toBeTruthy();
     expect(screen.getByText(/แยกน้ำ/)).toBeTruthy();
     expect(screen.getByText(/ห้อง 1204/)).toBeTruthy();

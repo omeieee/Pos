@@ -92,6 +92,44 @@ describe('app updates (service worker)', () => {
     expect(env.updates.getState().needRefresh).toBe(false);
   });
 
+  describe('stop()', () => {
+    test('clears the hourly check and the lifecycle subscription', async () => {
+      const env = setup();
+      env.updates.start();
+      env.registrationReady();
+      expect(env.life.listenerCount()).toBe(1);
+      env.updates.stop();
+      expect(env.life.listenerCount()).toBe(0);
+      await vi.advanceTimersByTimeAsync(3 * 60 * 60 * 1000);
+      expect(env.registration.update).not.toHaveBeenCalled();
+      // Nothing is applied after teardown either.
+      env.newVersionFound();
+      env.life.hide();
+      expect(env.applyUpdate).not.toHaveBeenCalled();
+    });
+
+    test('is harmless before start() and when called twice', () => {
+      const env = setup();
+      env.updates.stop();
+      env.updates.start();
+      env.updates.stop();
+      env.updates.stop();
+      expect(env.life.listenerCount()).toBe(0);
+    });
+
+    test('start() works again after a stop() and checks again', async () => {
+      const env = setup();
+      env.updates.start();
+      env.registrationReady();
+      env.updates.stop();
+      env.updates.start();
+      env.registrationReady();
+      await vi.advanceTimersByTimeAsync(60 * 60 * 1000);
+      expect(env.registration.update).toHaveBeenCalledTimes(1);
+      expect(env.life.listenerCount()).toBe(1);
+    });
+  });
+
   describe('applying on its own', () => {
     test('when the app goes to the background and nothing is in progress', () => {
       const env = setup();

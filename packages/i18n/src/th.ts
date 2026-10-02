@@ -104,6 +104,7 @@ export const th = {
   'order.detail.status': 'สถานะออเดอร์',
   'order.detail.paymentStatus': 'การชำระเงิน',
   'order.detail.items': 'รายการ',
+  'order.detail.qty': '{count}×',
   'order.detail.room': 'ห้อง {room}',
   'order.detail.paymentSoon': 'หน้าชำระเงินจะเปิดให้ใช้ในขั้นถัดไป',
   'order.detail.takeAnother': 'รับออเดอร์ต่อ',

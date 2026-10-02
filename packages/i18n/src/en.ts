@@ -100,6 +100,7 @@ export const en = {
   'order.detail.status': 'Order status',
   'order.detail.paymentStatus': 'Payment',
   'order.detail.items': 'Items',
+  'order.detail.qty': '{count}×',
   'order.detail.room': 'Room {room}',
   'order.detail.paymentSoon': 'The payment screens come in the next step',
   'order.detail.takeAnother': 'Take another order',

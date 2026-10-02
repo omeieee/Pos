@@ -42,6 +42,8 @@ export interface UpdateState {
 
 export interface AppUpdates extends ReadableStore<UpdateState> {
   start(): void;
+  /** Clears the hourly check and the lifecycle subscription (teardown, tests, a native shell). */
+  stop(): void;
   apply(): Promise<void>;
 }
 
@@ -55,7 +57,10 @@ export function createAppUpdates(deps: {
   checkEveryMs?: number;
 }): AppUpdates {
   const state = createStore<UpdateState>({ needRefresh: false });
-  let started = false;
+  let registered = false;
+  let running = false;
+  let timer: ReturnType<typeof setInterval> | undefined;
+  let unsubscribe: (() => void) | undefined;
   let activate: ((reload: boolean) => Promise<void>) | null = null;
   let registration: RegistrationLike | undefined;
   let applying: Promise<void> | null = null;
@@ -78,21 +83,32 @@ export function createAppUpdates(deps: {
     subscribe: state.subscribe,
     apply,
     start() {
-      if (started) return;
-      started = true;
-      activate = deps.host.register({
-        onNeedRefresh: () => state.setState({ needRefresh: true }),
-        onRegistered(found) {
-          registration = found;
-        },
-      });
-      setInterval(check, deps.checkEveryMs ?? HOUR_MS);
-      deps.lifecycle.subscribe({
+      if (running) return;
+      running = true;
+      // The worker is registered once; a later start() after stop() only resumes the checks.
+      if (!registered) {
+        registered = true;
+        activate = deps.host.register({
+          onNeedRefresh: () => state.setState({ needRefresh: true }),
+          onRegistered(found) {
+            registration = found;
+          },
+        });
+      }
+      timer = setInterval(check, deps.checkEveryMs ?? HOUR_MS);
+      unsubscribe = deps.lifecycle.subscribe({
         visible: check,
         hidden() {
           if (state.getState().needRefresh && !deps.isBusy()) void apply();
         },
       });
+    },
+    stop() {
+      running = false;
+      if (timer !== undefined) clearInterval(timer);
+      timer = undefined;
+      unsubscribe?.();
+      unsubscribe = undefined;
     },
   };
 }
