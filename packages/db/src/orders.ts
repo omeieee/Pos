@@ -16,7 +16,7 @@ import {
   type PricedModifier,
   satang,
 } from '@sds/shared';
-import { and, asc, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type { Db } from './client.ts';
 import {
   customers,
@@ -200,11 +200,12 @@ export async function updateOrderIfVersion(
   return row;
 }
 
+/** True for a live customer. An anonymised one (PDPA erasure) no longer exists for new orders. */
 export async function customerExists(db: Db, id: string): Promise<boolean> {
   const rows = await db
     .select({ id: customers.id })
     .from(customers)
-    .where(eq(customers.id, id))
+    .where(and(eq(customers.id, id), isNull(customers.anonymizedAt)))
     .limit(1);
   return rows.length > 0;
 }

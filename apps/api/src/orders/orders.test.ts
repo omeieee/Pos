@@ -454,6 +454,64 @@ describe('POST /v1/orders', () => {
     expect(res.statusCode).toBe(422);
     expect(res.json()).toMatchObject({ code: 'UNKNOWN_CUSTOMER' });
   });
+
+  test('refuses an anonymised customer, and writes nothing', async () => {
+    newDay();
+    const gone = (
+      await h.client.query<{ id: string }>(
+        'insert into customers (anonymized_at) values (now()) returning id',
+      )
+    ).rows[0]?.id;
+    const body = orderBody({ customerId: gone });
+    const res = await post(await sign('cashier'), body);
+    expect(res.statusCode).toBe(422);
+    expect(res.json()).toMatchObject({ code: 'UNKNOWN_CUSTOMER' });
+    expect(await orderCount(body.clientRequestId)).toBe(0);
+  });
+});
+
+describe('POST /v1/orders with a customerId (the id is a hint, not a licence)', () => {
+  const customerRow = async (id: string) =>
+    (await h.client.query<Record<string, unknown>>('select * from customers where id = $1', [id]))
+      .rows[0];
+  const newCustomer = async (sql: string) =>
+    String((await h.client.query<{ id: string }>(sql)).rows[0]?.id);
+
+  test('a LINE customer is linked to the order but never gets recipient details written onto it', async () => {
+    newDay();
+    const lineId = await newCustomer(
+      "insert into customers (line_user_id, display_name) values ('U-test-api-1', 'Test Line') returning id",
+    );
+    const order = await place(await sign('cashier'), {
+      customerId: lineId,
+      deliveryNote: 'ชั้น 9',
+    });
+    expect(order.customerId).toBe(lineId);
+    expect(await customerRow(lineId)).toMatchObject({
+      building: null,
+      recipient_name: null,
+      recipient_key: null,
+      delivery_note: null,
+      order_count: 1,
+    });
+  });
+
+  test('a saved counter recipient is not renamed by an order that names another recipient', async () => {
+    newDay();
+    const cashier = await sign('cashier');
+    const first = await place(cashier, { recipientName: 'Test Saved Name' });
+    const saved = String(first.customerId);
+    const second = await place(cashier, { customerId: saved, recipientName: 'Test Other Name' });
+    expect(second.customerId).not.toBe(saved);
+    expect(await customerRow(saved)).toMatchObject({
+      recipient_name: 'Test Saved Name',
+      order_count: 1,
+    });
+    // The same recipient through its id is the same customer, counted.
+    const third = await place(cashier, { customerId: saved, recipientName: 'Test Saved Name' });
+    expect(third.customerId).toBe(saved);
+    expect(await customerRow(saved)).toMatchObject({ order_count: 2 });
+  });
 });
 
 describe('POST /v1/orders is idempotent', () => {

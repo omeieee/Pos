@@ -281,7 +281,7 @@ describe('automatic customer memory on POST /v1/orders', () => {
     expect(res.json()).toMatchObject({ code: 'UNKNOWN_CUSTOMER' });
   });
 
-  test('a LINE customer given by id is updated and keeps its LINE id; it is never matched by name', async () => {
+  test('a LINE customer given by id is linked and counted, never given recipient details, and never matched by name', async () => {
     newDay();
     const line = await h.client.query<{ id: string }>(
       "insert into customers (line_user_id, display_name) values ('U-test-line-order', 'Test Line') returning id",
@@ -296,8 +296,9 @@ describe('automatic customer memory on POST /v1/orders', () => {
     expect(viaLine.customerId).toBe(lineId);
     expect(await customerRow(lineId)).toMatchObject({
       line_user_id: 'U-test-line-order',
-      building: 'A2',
-      recipient_name: 'Memory Five',
+      building: null,
+      recipient_name: null,
+      recipient_key: null,
       order_count: 1,
     });
     const byName = await place({ deliveryBuilding: 'A2', recipientName: 'Memory Five' });

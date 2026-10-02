@@ -6,7 +6,7 @@
  * computed by the caller. This is personal data (PDPA): rows are cleared on anonymisation, and
  * `listRecipients` returns nothing but the five fields staff need.
  */
-import { and, desc, eq, isNotNull, isNull, ne, sql } from 'drizzle-orm';
+import { and, desc, eq, isNotNull, isNull, sql } from 'drizzle-orm';
 import type { Db } from './client.ts';
 import { customers } from './schema.ts';
 
@@ -20,16 +20,25 @@ export interface RecipientDetails {
 
 /**
  * Finds or creates the customer for an entrance-delivery order and records the order on them, in
- * the caller's transaction: last-used building, name and note, `last_order_at`, and `order_count`
- * + 1 (`total_spent_satang` is left for the reports). Returns the customer id for the order.
- * A replayed request never gets here, so nothing counts twice; a rolled-back order takes its
+ * the caller's transaction: last-used note, `last_order_at`, and `order_count` + 1
+ * (`total_spent_satang` is left for the reports). Returns the customer id for the order. A
+ * replayed request never gets here, so nothing counts twice; a rolled-back order takes its
  * customer and count with it.
  *
- * - `customerId` (when it names a live customer) is used: a LINE customer is only updated; a
- *   counter customer is updated too, unless the new building and name already belong to ANOTHER
- *   counter customer, in which case the order goes to that one (the unique index would refuse two).
- * - otherwise one statement does find-or-create on the unique (building, key) index of counter
- *   customers (`INSERT ... ON CONFLICT DO UPDATE`), so two orders at once cannot make two rows.
+ * `customerId` comes from the client, so it is a hint and never a licence to write recipient
+ * details onto someone (reviewer M1, 2026-10-02):
+ * - a LINE customer is only LINKED to the order (`last_order_at`, `order_count`); building, name,
+ *   note and key are never written onto it;
+ * - a counter customer is used only when the order is for the same recipient it already holds
+ *   (same building and key), and then only the last-used spelling and note are refreshed;
+ * - in every other case (unknown or anonymised id, a different recipient, a customer with no
+ *   recipient yet) the id is ignored and the order goes to the customer for (building, key). A
+ *   saved recipient is never renamed implicitly.
+ *
+ * The (building, key) of an existing row therefore never changes here, so no update can hit the
+ * unique index; the only statement that can race is the upsert, which is one atomic
+ * `INSERT ... ON CONFLICT DO UPDATE` on the unique (building, key) index of counter customers, so
+ * two orders at once cannot make two rows and neither fails.
  */
 export async function recordRecipientOrder(
   db: Db,
@@ -37,49 +46,47 @@ export async function recordRecipientOrder(
   orderedAt: Date,
   customerId?: string,
 ): Promise<string> {
+  const counted = { lastOrderAt: orderedAt, orderCount: sql`${customers.orderCount} + 1` };
   const used = {
-    building: recipient.building,
+    ...counted,
     recipientName: recipient.recipientName,
-    recipientKey: recipient.recipientKey,
     deliveryNote: recipient.deliveryNote,
-    lastOrderAt: orderedAt,
-    orderCount: sql`${customers.orderCount} + 1`,
   };
 
   if (customerId) {
     const [existing] = await db
-      .select({ id: customers.id, lineUserId: customers.lineUserId })
+      .select({
+        id: customers.id,
+        lineUserId: customers.lineUserId,
+        building: customers.building,
+        recipientKey: customers.recipientKey,
+      })
       .from(customers)
       .where(and(eq(customers.id, customerId), isNull(customers.anonymizedAt)))
       .for('update')
       .limit(1);
-    if (existing) {
-      const taken =
-        existing.lineUserId === null &&
-        (
-          await db
-            .select({ id: customers.id })
-            .from(customers)
-            .where(
-              and(
-                eq(customers.building, recipient.building),
-                eq(customers.recipientKey, recipient.recipientKey),
-                isNull(customers.lineUserId),
-                ne(customers.id, existing.id),
-              ),
-            )
-            .limit(1)
-        ).length > 0;
-      if (!taken) {
-        await db.update(customers).set(used).where(eq(customers.id, existing.id));
-        return existing.id;
-      }
+    if (existing?.lineUserId != null) {
+      await db.update(customers).set(counted).where(eq(customers.id, existing.id));
+      return existing.id;
+    }
+    if (
+      existing &&
+      existing.building === recipient.building &&
+      existing.recipientKey === recipient.recipientKey
+    ) {
+      await db.update(customers).set(used).where(eq(customers.id, existing.id));
+      return existing.id;
     }
   }
 
   const [row] = await db
     .insert(customers)
-    .values({ ...used, orderCount: 1 })
+    .values({
+      building: recipient.building,
+      recipientKey: recipient.recipientKey,
+      ...used,
+      orderCount: 1,
+    })
     .onConflictDoUpdate({
       target: [customers.building, customers.recipientKey],
       targetWhere: sql`line_user_id is null`,

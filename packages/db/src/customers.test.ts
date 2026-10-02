@@ -100,48 +100,84 @@ describe('recordRecipientOrder: find or create by building and name', () => {
   });
 });
 
-describe('recordRecipientOrder: a customer id from the client', () => {
-  test('a customer without recipient details gets them, and the count', async () => {
-    const [row] = (
-      await client.query<{ id: string }>(
-        "insert into customers (display_name, phone) values ('Test Person', '0800000000') returning id",
-      )
-    ).rows;
-    const id = await repo.recordRecipientOrder(db, details('B1', 'Test Theta'), at(1), row?.id);
-    expect(id).toBe(row?.id);
-    expect(await one(id)).toMatchObject({
-      building: 'B1',
-      recipient_name: 'Test Theta',
-      order_count: 1,
-      phone: '0800000000', // other fields untouched
+describe('recordRecipientOrder: a customer id from the client is only a hint', () => {
+  const insertId = async (sql: string) =>
+    String((await client.query<{ id: string }>(sql)).rows[0]?.id);
+
+  test('the same recipient: the saved customer is used, spelling and note refreshed, counted', async () => {
+    const a = await repo.recordRecipientOrder(db, details('A1', 'Test Mu', 'old'), at(1));
+    const used = await repo.recordRecipientOrder(db, details('A1', 'test MU', 'new'), at(2), a);
+    expect(used).toBe(a);
+    expect(await one(a)).toMatchObject({
+      building: 'A1',
+      recipient_name: 'test MU',
+      recipient_key: 'test mu',
+      delivery_note: 'new',
+      order_count: 2,
     });
   });
 
-  test('a LINE customer is only updated, never matched by name', async () => {
-    const [line] = (
-      await client.query<{ id: string }>(
-        "insert into customers (line_user_id, display_name) values ('U-test-line-1', 'Test Line') returning id",
-      )
-    ).rows;
-    const lineId = line?.id;
-    // Same building and name as an existing counter customer: still its own row.
+  test('a LINE customer is only linked: counted, and no recipient field is written onto it', async () => {
+    const lineId = await insertId(
+      "insert into customers (line_user_id, display_name) values ('U-test-line-1', 'Test Line') returning id",
+    );
     const counter = await repo.recordRecipientOrder(db, details('C2', 'Test Iota'), at(1));
-    const used = await repo.recordRecipientOrder(db, details('C2', 'Test Iota'), at(2), lineId);
+    const used = await repo.recordRecipientOrder(
+      db,
+      details('C2', 'Test Iota', 'x'),
+      at(2),
+      lineId,
+    );
     expect(used).toBe(lineId);
     expect(used).not.toBe(counter);
     expect(await one(counter)).toMatchObject({ order_count: 1 });
-    expect(await one(lineId ?? '')).toMatchObject({
-      building: 'C2',
-      recipient_name: 'Test Iota',
-      order_count: 1,
+    expect(await one(lineId)).toMatchObject({
+      building: null,
+      recipient_name: null,
+      recipient_key: null,
+      delivery_note: null,
       line_user_id: 'U-test-line-1',
+      display_name: 'Test Line',
+      order_count: 1,
     });
+    expect(new Date(String((await one(lineId))?.last_order_at)).toISOString()).toBe(
+      at(2).toISOString(),
+    );
     // Without its id, a new order for that name goes to the counter customer, not the LINE one.
-    const next = await repo.recordRecipientOrder(db, details('C2', 'Test Iota'), at(3));
-    expect(next).toBe(counter);
+    expect(await repo.recordRecipientOrder(db, details('C2', 'Test Iota'), at(3))).toBe(counter);
   });
 
-  test('a counter customer renamed to a name another customer already has: the order goes to that customer', async () => {
+  test('a LINE customer that already holds recipient details (written before the fix) keeps them untouched', async () => {
+    const lineId = await insertId(
+      "insert into customers (line_user_id, building, recipient_name, recipient_key) values ('U-test-line-3', 'B9', 'Test Old', 'test old') returning id",
+    );
+    await repo.recordRecipientOrder(db, details('B9', 'Someone Else'), at(1), lineId);
+    expect(await one(lineId)).toMatchObject({
+      recipient_name: 'Test Old',
+      recipient_key: 'test old',
+    });
+  });
+
+  test('a saved recipient is never renamed: another name means the customer for that name', async () => {
+    const a = await repo.recordRecipientOrder(db, details('A3', 'Test Mu'), at(1));
+    const used = await repo.recordRecipientOrder(db, details('A3', 'Test Mu Two'), at(2), a);
+    expect(used).not.toBe(a);
+    expect(await one(a)).toMatchObject({
+      recipient_name: 'Test Mu',
+      recipient_key: 'test mu',
+      order_count: 1,
+    });
+    expect(await one(used)).toMatchObject({ recipient_name: 'Test Mu Two', order_count: 1 });
+  });
+
+  test("another building is another customer too, and the id's owner is unchanged", async () => {
+    const a = await repo.recordRecipientOrder(db, details('A4', 'Test Rho', 'ชั้น 1'), at(1));
+    const used = await repo.recordRecipientOrder(db, details('B4', 'Test Rho'), at(2), a);
+    expect(used).not.toBe(a);
+    expect(await one(a)).toMatchObject({ building: 'A4', delivery_note: 'ชั้น 1', order_count: 1 });
+  });
+
+  test("a name another customer already has: the order goes to that customer, the id's owner is unchanged (the old 'taken' race)", async () => {
     const a = await repo.recordRecipientOrder(db, details('D2', 'Test Kappa'), at(1));
     const b = await repo.recordRecipientOrder(db, details('D2', 'Test Lambda'), at(1));
     const used = await repo.recordRecipientOrder(db, details('D2', 'Test Kappa'), at(2), b);
@@ -150,26 +186,37 @@ describe('recordRecipientOrder: a customer id from the client', () => {
     expect(await one(b)).toMatchObject({ recipient_name: 'Test Lambda', order_count: 1 });
   });
 
-  test('a counter customer renamed to a free name is renamed (last used)', async () => {
-    const a = await repo.recordRecipientOrder(db, details('A1', 'Test Mu'), at(1));
-    const used = await repo.recordRecipientOrder(db, details('A1', 'Test Mu Two'), at(2), a);
-    expect(used).toBe(a);
-    expect(await one(a)).toMatchObject({
-      recipient_name: 'Test Mu Two',
-      recipient_key: 'test mu two',
-      order_count: 2,
-    });
+  test('simultaneous orders that name the same customer id and a new recipient make one row and fail none', async () => {
+    const a = await repo.recordRecipientOrder(db, details('E1', 'Test Sigma'), at(1));
+    const before = await count();
+    const ids = await Promise.all(
+      Array.from({ length: 3 }, (_, i) =>
+        db.transaction((tx) => repo.recordRecipientOrder(tx, details('E2', 'Test Tau'), at(i), a)),
+      ),
+    );
+    expect(new Set(ids).size).toBe(1);
+    expect(ids[0]).not.toBe(a);
+    expect(await count()).toBe(before + 1);
+    expect(await one(a)).toMatchObject({ order_count: 1 });
+    expect(await one(ids[0] ?? '')).toMatchObject({ order_count: 3 });
+  });
+
+  test('a customer with no recipient yet is not given one by id; the order goes to the recipient customer', async () => {
+    const id = await insertId(
+      "insert into customers (display_name, phone) values ('Test Person', '0800000000') returning id",
+    );
+    const used = await repo.recordRecipientOrder(db, details('B1', 'Test Theta'), at(1), id);
+    expect(used).not.toBe(id);
+    expect(await one(id)).toMatchObject({ building: null, order_count: 0, phone: '0800000000' });
   });
 
   test('an anonymised customer is never reused', async () => {
-    const [gone] = (
-      await client.query<{ id: string }>(
-        'insert into customers (anonymized_at) values (now()) returning id',
-      )
-    ).rows;
-    const used = await repo.recordRecipientOrder(db, details('B2', 'Test Nu'), at(1), gone?.id);
-    expect(used).not.toBe(gone?.id);
-    expect(await one(gone?.id ?? '')).toMatchObject({ building: null, order_count: 0 });
+    const gone = await insertId(
+      'insert into customers (anonymized_at) values (now()) returning id',
+    );
+    const used = await repo.recordRecipientOrder(db, details('B2', 'Test Nu'), at(1), gone);
+    expect(used).not.toBe(gone);
+    expect(await one(gone)).toMatchObject({ building: null, order_count: 0 });
   });
 });
 
