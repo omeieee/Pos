@@ -648,6 +648,41 @@ describe('sessions that end on purpose close their sockets at once', () => {
     expect(other.client.isClosed()).toBe(false);
   });
 
+  test('a logout that lands while the socket is still authenticating: it never becomes ready', async () => {
+    // The session check reads the session (valid), then takes 300 ms to answer: the logout commits
+    // and is announced in that gap, when the socket has no principal for the event to match.
+    const slow = await createHarness({
+      realtime: {
+        hub: {
+          checkSession: async (ctx, token, deviceToken) => {
+            const principal = await peekSession(ctx, token, deviceToken);
+            await pause(300);
+            return principal;
+          },
+        },
+      },
+    });
+    try {
+      const person = await slow.newStaff('cashier', '4821');
+      const dev = await slow.newDevice();
+      const token = await slow.pinSession(dev.token, person.id, person.pin);
+      const c = await connect(slow.app);
+      c.send({ type: 'auth', sessionToken: token, deviceToken: dev.token });
+      await pause(100);
+      const res = await slow.app.inject({
+        method: 'POST',
+        url: '/v1/auth/logout',
+        headers: { authorization: `Bearer ${token}` },
+        remoteAddress: slow.nextIp(),
+      });
+      expect(res.statusCode).toBe(204);
+      expect(await expectClosed(c, 3000)).toMatchObject({ code: 4401 });
+      expect(c.frames.filter(ofType('ready'))).toEqual([]);
+    } finally {
+      await slow.close();
+    }
+  });
+
   test('revoking a device closes the sockets of sessions opened on it', async () => {
     const spare = await h.newDevice();
     const token = await h.pinSession(spare.token, staff.cashier.id, staff.cashier.pin);

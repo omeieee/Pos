@@ -13,7 +13,8 @@
  * - re-checks every session on the same beat, WITHOUT touching it (an open socket never keeps a
  *   session alive), and closes sockets whose session expired, went idle, was revoked, belongs to a
  *   deactivated person or lost its device; a logout, a device revoke, a deactivation and a PIN
- *   change close theirs at once (`session.ended` events);
+ *   change close theirs at once (`session.ended` events; a socket still authenticating checks its
+ *   session again if one arrived meanwhile, so it never becomes ready on a stale answer);
  * - caps connections (per IP, per session, overall), message size (the ws layer), message rate and
  *   the bytes queued for a slow client (a client that falls behind is dropped and catches up);
  * - closes every socket with 1001 on shutdown.
@@ -125,6 +126,8 @@ export function createHub(
   const conns = new Set<Conn>();
   const perIp = new Map<string, number>();
   let nextId = 0;
+  /** Counts `session.ended` events: a socket still authenticating has no principal to match one. */
+  let sessionEnds = 0;
   let closing = false;
   let drained: (() => void) | undefined;
 
@@ -179,6 +182,7 @@ export function createHub(
     );
     let principal: Principal | null;
     let serverRev: number;
+    let endsSeen = sessionEnds;
     try {
       principal = await options.checkSession(ctx, message.sessionToken, message.deviceToken);
       if (stateOf(conn) === 'closed') return;
@@ -196,6 +200,18 @@ export function createHub(
         return;
       }
       serverRev = await sync.currentRev(ctx.db);
+      // A logout or a revoke may have landed while we waited. Its event matched no socket (this one
+      // has no principal yet) and the answer above may predate it, so ask again, until no event
+      // arrives during a check. Events are published after commit, so the database then agrees.
+      while (sessionEnds !== endsSeen) {
+        endsSeen = sessionEnds;
+        principal = await options.checkSession(ctx, message.sessionToken, message.deviceToken);
+        if (stateOf(conn) === 'closed') return;
+        if (!principal) {
+          shut(conn, WS_CLOSE.UNAUTHENTICATED, 'unauthenticated');
+          return;
+        }
+      }
     } catch (error) {
       if (error instanceof ApiError && error.code === 'DEVICE_MISMATCH') {
         shut(conn, WS_CLOSE.FORBIDDEN, 'device_mismatch');
@@ -309,6 +325,7 @@ export function createHub(
 
   function onEvent(event: AppEvent): void {
     if (event.type === 'session.ended') {
+      sessionEnds += 1;
       for (const conn of conns) {
         const p = conn.principal;
         if (!p || conn.state !== 'ready') continue;
