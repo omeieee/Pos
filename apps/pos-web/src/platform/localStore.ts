@@ -6,9 +6,8 @@
  * Two areas:
  * - `kv`: small JSON values by key (a remembered choice, a cached setting).
  * - `outbox`: actions that still have to reach the server, each keyed by its idempotency key
- *   (`id`), oldest first. THIS SLICE ONLY HOLDS THE SEAM AND THE SCHEMA: nothing writes to the
- *   outbox yet, and nothing replays it. The replay worker, the order screens' use of it and the
- *   "waiting to sync" markers are the offline slice (R3).
+ *   (`id`), oldest first. The offline outbox (`pos/outbox-store.ts`) writes and replays it; this
+ *   seam only stores rows and never looks inside `payload`.
  *
  * `openLocalStore` loads Dexie only when it is called, so the first screen does not pay for it,
  * and falls back to a memory store when IndexedDB is unavailable (Safari private mode, blocked
@@ -26,7 +25,16 @@ export interface OutboxEntry {
   /** Epoch milliseconds; the replay order. */
   createdAt: number;
   attempts: number;
+  /** An error CODE only (never a message, a body or a name). */
   lastError?: string;
+  /**
+   * Whose entry it is. It is replayed, and its contents shown, only to this person on this
+   * device. Not indexed: the queue is capped and small, so it is filtered in memory.
+   */
+  staffId?: string;
+  deviceId?: string;
+  /** `queued` waits to be sent; `attention` was refused and waits for a person. */
+  state?: 'queued' | 'attention';
 }
 
 export interface LocalStore {

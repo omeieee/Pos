@@ -168,7 +168,7 @@ const orderFrame = (o: OrderDto): RealtimeFrame => ({
   rev: o.rev,
   data: o,
 });
-const framesOf = (result: PaymentResult | ChangePaymentMethodResult): RealtimeFrame[] => [
+export const framesOf = (result: PaymentResult | ChangePaymentMethodResult): RealtimeFrame[] => [
   ...('cancelledPayment' in result ? [paymentFrame(result.cancelledPayment)] : []),
   paymentFrame(result.payment),
   orderFrame(result.order),
