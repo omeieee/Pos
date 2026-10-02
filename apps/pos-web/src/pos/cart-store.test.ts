@@ -383,4 +383,68 @@ describe('reset (sign-out)', () => {
     expect(cart.lastChoice(MENU.tomYum)).toBeUndefined();
     expect(activity.isBusy()).toBe(false);
   });
+
+  describe('a request that was sent before the person left', () => {
+    function deferred<T>() {
+      let resolve!: (value: T) => void;
+      let reject!: (error: unknown) => void;
+      const promise = new Promise<T>((res, rej) => {
+        resolve = res;
+        reject = rej;
+      });
+      return { promise, resolve, reject };
+    }
+    type Created = Awaited<ReturnType<CartDeps['api']['orders']['create']>>;
+    const created = (n: number): Created => ({
+      order: orderDto(uuid(900 + n), 500 + n, { orderNo: `S-00${n}` }),
+      replay: false,
+      clientRequestId: '',
+    });
+
+    test('its late success is dropped: the next person gets no order in the store', async () => {
+      const first = deferred<Created>();
+      const { cart, entities, create } = setup();
+      create.mockReturnValueOnce(first.promise);
+      cart.addItem(tomYum);
+      const pending = cart.submit();
+      cart.reset();
+      first.resolve(created(1));
+      expect(await pending).toEqual({ ok: false, reason: 'stale' });
+      expect(entities.getState().orders.size).toBe(0);
+      expect(cart.getState().phase).toBe('editing');
+    });
+
+    test("its late failure does not lock the next person's cart as unsure", async () => {
+      const first = deferred<Created>();
+      const { cart, create } = setup();
+      create.mockReturnValueOnce(first.promise);
+      cart.addItem(tomYum);
+      const pending = cart.submit();
+      cart.reset();
+      cart.addItem({ itemId: MENU.tea });
+      first.reject(new ApiClientError('NETWORK'));
+      expect(await pending).toEqual({ ok: false, reason: 'stale' });
+      expect(cart.getState()).toMatchObject({ phase: 'editing', error: null });
+    });
+
+    test("its late answer cannot clear the guard of the next person's own request", async () => {
+      const first = deferred<Created>();
+      const second = deferred<Created>();
+      const { cart, entities, create } = setup();
+      create.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+      cart.addItem(tomYum);
+      const stale = cart.submit();
+      cart.reset();
+      cart.addItem({ itemId: MENU.tea });
+      const current = cart.submit();
+      first.resolve(created(1));
+      await stale;
+      // The second request is still in flight: a double tap must still be refused.
+      expect(await cart.submit()).toEqual({ ok: false, reason: 'busy' });
+      expect(cart.getState().phase).toBe('sending');
+      second.resolve(created(2));
+      expect((await current).ok).toBe(true);
+      expect([...entities.getState().orders.keys()]).toEqual([uuid(902)]);
+    });
+  });
 });

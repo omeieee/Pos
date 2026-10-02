@@ -45,6 +45,8 @@ export interface CartState {
 export type SubmitOutcome =
   | { ok: true; order: OrderDto; replay: boolean }
   | { ok: false; reason: 'empty' | 'invalid' | 'roomRequired' | 'busy' }
+  /** The person signed out while the request ran: its answer belongs to nobody and was dropped. */
+  | { ok: false; reason: 'stale' }
   | { ok: false; reason: 'error'; error: ApiClientError };
 
 export interface CartDeps {
@@ -115,6 +117,12 @@ export function createCartStore(deps: CartDeps): CartStore {
   const lastChoices = new Map<string, readonly string[]>();
   let lineCounter = 0;
   let inFlight = false;
+  /**
+   * Bumped by `reset()` (sign-out). A request remembers the epoch it started in and, if it has
+   * changed when the answer arrives, touches nothing: no order into the store, no `unsure` on the
+   * next person's cart, and no clearing of the next request's `inFlight` guard.
+   */
+  let epoch = 0;
   let endBusy: (() => void) | null = null;
 
   // The app is busy (no update may reload the page) while an order is being built or sent.
@@ -238,8 +246,10 @@ export function createCartStore(deps: CartDeps): CartStore {
           ...(l.note.trim() === '' ? {} : { note: l.note.trim() }),
         })),
       };
+      const startedIn = epoch;
       try {
         const { order, replay } = await deps.api.orders.create(input, { clientRequestId });
+        if (epoch !== startedIn) return { ok: false, reason: 'stale' };
         deps.entities.apply({ type: 'order.upserted', id: order.id, rev: order.rev, data: order });
         store.setState({
           ...initial(),
@@ -248,15 +258,18 @@ export function createCartStore(deps: CartDeps): CartStore {
         });
         return { ok: true, order, replay };
       } catch (caught) {
+        if (epoch !== startedIn) return { ok: false, reason: 'stale' };
         const error = isApiClientError(caught) ? caught : new ApiClientError('UNKNOWN');
         store.setState({ phase: mayHaveBeenCreated(error) ? 'unsure' : 'editing', error });
         return { ok: false, reason: 'error', error };
       } finally {
-        inFlight = false;
+        // After a sign-out the guard belongs to whoever has sent a request since.
+        if (epoch === startedIn) inFlight = false;
       }
     },
 
     reset() {
+      epoch += 1;
       inFlight = false;
       lastChoices.clear();
       store.setState(initial());
