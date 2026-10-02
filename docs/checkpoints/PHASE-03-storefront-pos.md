@@ -69,3 +69,4 @@ Tasks 1 (except the TOTP app choice) and 4 need no owner answers. Tasks 1–6 ar
 - 2026-10-02 · Realtime sync and hardening QA-reviewed, pushed and deployed as cddb6af ([PROGRESS](../PROGRESS.md))
 - 2026-10-02 · Staff app foundation and order entry (F1) QA-reviewed, pushed and deployed as e672a7d ([PROGRESS](../PROGRESS.md))
 - 2026-10-02 · Orders board and payment screens (F2a) QA-reviewed, pushed and deployed as 297e69c ([PROGRESS](../PROGRESS.md))
+- 2026-10-02 · Sync window and kitchen view (F2b) QA-reviewed, pushed and deployed as d60a7d1 ([PROGRESS](../PROGRESS.md))
