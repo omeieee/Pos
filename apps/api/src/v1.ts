@@ -54,6 +54,13 @@ export const SIGNED_URL_ROUTES: ReadonlySet<string> = new Set(['GET /v1/payments
  */
 export const FIRST_MESSAGE_AUTH_ROUTES: ReadonlySet<string> = new Set(['GET /v1/ws']);
 
+/**
+ * The fourth exception: the photo of a menu item, shown in an `<img>` on the staff till and the
+ * public LINE menu (no Authorization header, no signature). It must run a `markPublicMediaCheck`
+ * hook, which serves only a photo of an item that is on the menu at the version in the URL.
+ */
+export const PUBLIC_MEDIA_ROUTES: ReadonlySet<string> = new Set(['GET /v1/menu/items/:id/photo']);
+
 /** What every /v1 module receives: the database, the clock, the event bus and the guard. */
 export interface ModuleContext {
   auth: AuthContext;
@@ -75,7 +82,13 @@ export async function registerV1(app: FastifyInstance, deps: V1Deps): Promise<vo
 
   await app.register(
     async (v1) => {
-      enforceGuardedRoutes(v1, OPEN_ROUTES, SIGNED_URL_ROUTES, FIRST_MESSAGE_AUTH_ROUTES);
+      enforceGuardedRoutes(
+        v1,
+        OPEN_ROUTES,
+        SIGNED_URL_ROUTES,
+        FIRST_MESSAGE_AUTH_ROUTES,
+        PUBLIC_MEDIA_ROUTES,
+      );
       v1.decorateRequest('auth', null);
       await v1.register((scope) => registerAuthRoutes(scope, context.auth, context.guard), {
         prefix: '/auth',

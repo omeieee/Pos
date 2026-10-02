@@ -7,13 +7,21 @@ import Fastify from 'fastify';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 import { createEventBus } from '../events.ts';
 import { createHarness, type Harness } from '../test-support/harness.ts';
-import { FIRST_MESSAGE_AUTH_ROUTES, OPEN_ROUTES, registerV1, SIGNED_URL_ROUTES } from '../v1.ts';
+import {
+  FIRST_MESSAGE_AUTH_ROUTES,
+  OPEN_ROUTES,
+  PUBLIC_MEDIA_ROUTES,
+  registerV1,
+  SIGNED_URL_ROUTES,
+} from '../v1.ts';
 import {
   enforceGuardedRoutes,
   hasFirstMessageAuth,
+  hasPublicMediaCheck,
   hasSignedUrlCheck,
   isGuarded,
   markFirstMessageAuth,
+  markPublicMediaCheck,
   markSignedUrlCheck,
 } from './guards.ts';
 
@@ -29,6 +37,7 @@ afterAll(async () => {
 const OPEN = [...OPEN_ROUTES];
 const SIGNED = [...SIGNED_URL_ROUTES];
 const WS = [...FIRST_MESSAGE_AUTH_ROUTES];
+const MEDIA = [...PUBLIC_MEDIA_ROUTES];
 
 describe('the real /v1 routes', () => {
   test('every one has the guard, except the sign-in routes, the public menu, the signed-URL routes and the socket', () => {
@@ -38,7 +47,7 @@ describe('the real /v1 routes', () => {
     const key = (r: { method: string; url: string }) =>
       `${r.method === 'HEAD' ? 'GET' : r.method} ${r.url}`;
     const open = [...new Set(v1.filter((r) => !r.guarded).map(key))];
-    expect(open.sort()).toEqual([...OPEN, ...SIGNED, ...WS].sort());
+    expect(open.sort()).toEqual([...OPEN, ...SIGNED, ...WS, ...MEDIA].sort());
     // ...and the list itself is exactly the sign-in routes and the public menu, so it cannot grow unnoticed.
     expect(OPEN.sort()).toEqual([
       'GET /v1/auth/staff',
@@ -52,6 +61,9 @@ describe('the real /v1 routes', () => {
     // The third exception: a browser WebSocket cannot send headers, so the socket authenticates
     // its first message (hub.ts). Only that one route, and only as a marked WebSocket handler.
     expect(WS.sort()).toEqual(['GET /v1/ws']);
+    // The fourth: a menu item's photo, read by an <img> with no header and no signature (D-21).
+    // Its hook serves only the photo of an item that is on the menu, at the version in the URL.
+    expect(MEDIA.sort()).toEqual(['GET /v1/menu/items/:id/photo']);
   });
 
   test('the inventory includes the routes we know about', () => {
@@ -187,6 +199,53 @@ describe('enforceGuardedRoutes', () => {
     expect(isGuarded({ onRequest: guarded })).toBe(true);
     expect(isGuarded({ onRequest: [async () => {}, guarded] })).toBe(true);
     expect(isGuarded({ preHandler: guarded })).toBe(false);
+  });
+});
+
+describe('the public-media exception', () => {
+  const mediaAllow = new Set(['GET /v1/media/:id']);
+  const check = markPublicMediaCheck(async () => {});
+  const guarded = Object.assign(async () => {}, { [Symbol.for('sds.guarded')]: true });
+
+  async function appWith(register: (app: ReturnType<typeof Fastify>) => void): Promise<void> {
+    const app = Fastify();
+    enforceGuardedRoutes(app, new Set(), new Set(), new Set(), mediaAllow);
+    register(app);
+    try {
+      await app.ready();
+    } finally {
+      await app.close();
+    }
+  }
+
+  test('lets the listed route through only when it runs the marked check in onRequest', async () => {
+    await expect(
+      appWith((app) => app.get('/v1/media/:id', { onRequest: check }, async () => ({}))),
+    ).resolves.toBeUndefined();
+    await expect(
+      appWith((app) =>
+        app.get('/v1/media/:id', { onRequest: [async () => {}, check] }, async () => ({})),
+      ),
+    ).resolves.toBeUndefined();
+    // Listed, but nothing limits it: it would be a public route by accident.
+    await expect(appWith((app) => app.get('/v1/media/:id', async () => ({})))).rejects.toThrow(
+      /GET \/v1\/media\/:id.*does not limit what it serves/,
+    );
+    await expect(
+      appWith((app) => app.get('/v1/media/:id', { preHandler: check }, async () => ({}))),
+    ).rejects.toThrow(/does not limit what it serves/);
+  });
+
+  test('a check alone does not open a route that is not on the list, or another method', async () => {
+    await expect(
+      appWith((app) => app.get('/v1/elsewhere/:id', { onRequest: check }, async () => ({}))),
+    ).rejects.toThrow(/GET \/v1\/elsewhere\/:id has no auth guard/);
+    await expect(
+      appWith((app) => app.delete('/v1/media/:id', { onRequest: check }, async () => ({}))),
+    ).rejects.toThrow(/DELETE \/v1\/media\/:id has no auth guard/);
+    expect(hasPublicMediaCheck({ onRequest: check })).toBe(true);
+    expect(hasPublicMediaCheck({ onRequest: guarded })).toBe(false);
+    expect(isGuarded({ onRequest: check })).toBe(false);
   });
 });
 

@@ -7,7 +7,7 @@
  * is not signed in costs no JSON parsing and cannot tell a bad body from a missing session.
  */
 import { hasPermission, type Permission, requiresStepUp } from '@sds/shared';
-import type { FastifyInstance, FastifyRequest } from 'fastify';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { forbidden, stepUpRequired, unauthenticated } from '../errors.ts';
 import {
   type AuthContext,
@@ -78,6 +78,32 @@ export function hasSignedUrlCheck(route: RouteHooks): boolean {
 }
 
 /**
+ * Marks a hook that decides, from what the URL names, whether a public media route may answer at
+ * all (`GET /v1/menu/items/:id/photo`). It is the fourth exception: the picture of a menu item is
+ * shown in an `<img>` (no Authorization header) on the public LINE menu, and it is not signed, so
+ * the check has to be strict about WHAT it serves: nothing but the photo of an item that is on the
+ * menu. A request it cannot match must get the same answer as any other, so it reveals nothing.
+ */
+const PUBLIC_MEDIA = Symbol.for('sds.public-media');
+
+export type PublicMediaCheck = (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
+
+export function markPublicMediaCheck(fn: PublicMediaCheck): PublicMediaCheck {
+  return Object.assign(fn, { [PUBLIC_MEDIA]: true });
+}
+
+/** True when the route runs a public-media check in its own `onRequest` hooks. */
+export function hasPublicMediaCheck(route: RouteHooks): boolean {
+  return [route.onRequest]
+    .flat(2)
+    .some(
+      (hook) =>
+        typeof hook === 'function' &&
+        (hook as unknown as Record<symbol, unknown>)[PUBLIC_MEDIA] === true,
+    );
+}
+
+/**
  * Marks the handler of a WebSocket route that authenticates its sockets itself: a browser
  * WebSocket cannot send an Authorization header, so the socket proves who it is with its first
  * message. The marked handler is what enforces that (`realtime/hub.ts`).
@@ -106,13 +132,16 @@ export function hasFirstMessageAuth(route: RouteHooks): boolean {
  * signed-URL verifier (`markSignedUrlCheck`) in `onRequest`; listing it without the verifier
  * fails the start too, so an exception cannot be public by accident. The third exception is a
  * WebSocket route in `firstMessageAuth`: it must be a `websocket` route with a handler marked
- * `markFirstMessageAuth`. Add the hook before declaring any route.
+ * `markFirstMessageAuth`. The fourth is a route in `publicMedia`: it needs no session but must run
+ * a check marked `markPublicMediaCheck` that limits what it serves. Add the hook before declaring
+ * any route.
  */
 export function enforceGuardedRoutes(
   scope: FastifyInstance,
   open: ReadonlySet<string>,
   signedUrl: ReadonlySet<string> = new Set(),
   firstMessageAuth: ReadonlySet<string> = new Set(),
+  publicMedia: ReadonlySet<string> = new Set(),
 ): void {
   scope.addHook('onRoute', (route) => {
     if (!route.url.startsWith('/v1')) return;
@@ -124,6 +153,12 @@ export function enforceGuardedRoutes(
         if (hasFirstMessageAuth(route)) continue;
         throw new Error(
           `${key} is listed as a first-message-auth route but is not a WebSocket route with a handler that authenticates: use markFirstMessageAuth()`,
+        );
+      }
+      if (publicMedia.has(key)) {
+        if (hasPublicMediaCheck(route)) continue;
+        throw new Error(
+          `${key} is listed as a public media route but does not limit what it serves: add markPublicMediaCheck() to its onRequest hooks`,
         );
       }
       if (signedUrl.has(key)) {

@@ -1,3 +1,4 @@
+import type { menuRepo } from '@sds/db';
 import {
   availabilityInputSchema,
   createCategoryInputSchema,
@@ -7,21 +8,25 @@ import {
   groupIdParamSchema,
   idParamSchema,
   listItemsQuerySchema,
+  PHOTO_CONTENT_TYPES,
+  PHOTO_MAX_BYTES,
   patchCategoryInputSchema,
   patchGroupInputSchema,
   patchItemInputSchema,
   patchOptionInputSchema,
+  photoQuerySchema,
   publicMenuQuerySchema,
 } from '@sds/shared';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
-import { type GuardFactory, principalOf } from '../auth/guards.ts';
+import { type GuardFactory, markPublicMediaCheck, principalOf } from '../auth/guards.ts';
 import type { AuthContext } from '../auth/service.ts';
-import { ApiError } from '../errors.ts';
+import { ApiError, notFound } from '../errors.ts';
 import { parse } from '../validate.ts';
 import {
   archiveGroup,
   archiveItem,
   archiveOption,
+  clearItemPhoto,
   createCategory,
   createGroup,
   createItem,
@@ -36,7 +41,9 @@ import {
   patchItem,
   patchOption,
   publicMenu,
+  publicPhoto,
   setItemAvailability,
+  setItemPhoto,
   setOptionAvailability,
 } from './service.ts';
 
@@ -134,6 +141,75 @@ export async function registerMenuRoutes(
   app.delete('/items/:id', edit, async (request) =>
     archiveItem(ctx, principalOf(request), idOf(request), meta(request)),
   );
+  // Photos (D-21). The body is the raw image: only these three types are parsed (as a Buffer), so
+  // anything else, including text/html and image/svg+xml, is a 415 before the handler runs.
+  app.addContentTypeParser(
+    [...PHOTO_CONTENT_TYPES],
+    { parseAs: 'buffer' },
+    (_request, body, done) => done(null, body),
+  );
+  app.put(
+    '/items/:id/photo',
+    { onRequest: guard('menu.edit'), bodyLimit: PHOTO_MAX_BYTES },
+    async (request) =>
+      setItemPhoto(
+        ctx,
+        principalOf(request),
+        idOf(request),
+        Buffer.isBuffer(request.body) ? request.body : Buffer.alloc(0),
+        request.headers['content-type'],
+        meta(request),
+      ),
+  );
+  app.delete('/items/:id/photo', edit, async (request) =>
+    clearItemPhoto(ctx, principalOf(request), idOf(request), meta(request)),
+  );
+
+  // The one public read besides the menu itself (an <img> cannot send a header). Listed in v1.ts as
+  // a public media route: the hook below answers only for a photo of an item that is on the menu, at
+  // the version in the URL, and every other request gets the same 404.
+  if (typeof app.rateLimit !== 'function') {
+    throw new Error('the menu routes need @fastify/rate-limit to be registered first');
+  }
+  // A menu page loads dozens of photos and the whole condominium may share one public IP.
+  const photoLimit = app.rateLimit({ max: 600, timeWindow: '1 minute' });
+  const servable = new WeakMap<FastifyRequest, { itemId: string; photo: menuRepo.ServablePhoto }>();
+  app.get(
+    '/items/:id/photo',
+    {
+      onRequest: [
+        photoLimit,
+        markPublicMediaCheck(async (request, reply) => {
+          const params = idParamSchema.safeParse(request.params);
+          const query = photoQuerySchema.safeParse(request.query);
+          const photo =
+            params.success && query.success
+              ? await publicPhoto(ctx, params.data.id, query.data.v)
+              : undefined;
+          if (!params.success || !photo) {
+            reply.header('cache-control', 'no-store');
+            throw notFound('Photo');
+          }
+          servable.set(request, { itemId: params.data.id, photo });
+        }),
+      ],
+    },
+    async (request, reply) => {
+      const found = servable.get(request);
+      if (!found) throw notFound('Photo'); // unreachable: the hook above sets it or throws
+      const { itemId, photo } = found;
+      const etag = `"${itemId}.${photo.version}"`;
+      reply
+        .header('x-content-type-options', 'nosniff')
+        .header('content-security-policy', "default-src 'none'")
+        .header('cross-origin-resource-policy', 'cross-origin')
+        .header('cache-control', 'public, max-age=31536000, immutable')
+        .header('etag', etag);
+      if (request.headers['if-none-match'] === etag) return reply.status(304).send();
+      return reply.header('content-type', photo.contentType).send(photo.bytes);
+    },
+  );
+
   app.patch('/items/:id/availability', view, async (request) =>
     setItemAvailability(
       ctx,
