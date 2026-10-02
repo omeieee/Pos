@@ -13,13 +13,7 @@ import type { ApiClient } from '../api/client.ts';
 type Settings = ApiClient['settings'];
 export type FakeResource = { read: (...a: never[]) => unknown; save: (...a: never[]) => unknown };
 export type SettingsOverrides = {
-  [K in
-    | 'shop'
-    | 'openingHours'
-    | 'numbering'
-    | 'payments'
-    | 'deliveryList'
-    | 'promptpayMasked']?: Partial<Settings[K]>;
+  [K in keyof typeof DEFAULT_READS]?: Partial<Settings[K]>;
 };
 
 const NOW = '2026-10-03T03:00:00.000Z';
@@ -40,6 +34,7 @@ const DEFAULT_READS = {
   payments: { cash: true, promptpay: true, platform: true, other: false },
   deliveryList: DEFAULT_DELIVERY_SETTINGS,
   promptpayMasked: { idType: 'phone', idMasked: '******1234' },
+  govCopay: { scheme: null },
 } as const;
 
 export function createFakeSettingsApi(overrides: SettingsOverrides = {}) {
@@ -50,7 +45,9 @@ export function createFakeSettingsApi(overrides: SettingsOverrides = {}) {
     out[name] = {
       read: vi.fn(
         (given?.read as (() => unknown) | undefined) ??
-          (async () => settingAnswer(DEFAULT_READS[name], 0)),
+          // The scheme answers `{ scheme }` on its own; every other setting a versioned value.
+          (async () =>
+            name === 'govCopay' ? { scheme: null } : settingAnswer(DEFAULT_READS[name], 0)),
       ),
       save: vi.fn(
         (given?.save as (() => unknown) | undefined) ??

@@ -12,6 +12,7 @@ const FEED_KEY: Record<ResourceName, string> = {
   payments: 'payment_methods',
   delivery: 'delivery',
   promptpay: 'promptpay',
+  copay: 'gov_copay',
 };
 
 export interface SectionBodyProps<K extends ResourceName> {

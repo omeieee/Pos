@@ -17,6 +17,8 @@ import type {
   BusinessDaySettings,
   DeliveryPatchInput,
   DeliverySettings,
+  GovCopayDto,
+  GovCopayPatchInput,
   NumberingPatchInput,
   OpeningHours,
   OpeningHoursPatchInput,
@@ -42,6 +44,8 @@ export interface SettingsResources {
   delivery: { value: DeliverySettings; input: DeliveryPatchInput };
   /** Masked, always: the ID in clear never reaches the store (the client reduces it). */
   promptpay: { value: PromptpayMasked | null; input: PromptpayPatchInput };
+  /** The saved scheme, or null when none was ever saved. Owner only. */
+  copay: { value: GovCopayDto | null; input: GovCopayPatchInput };
 }
 export type ResourceName = keyof SettingsResources;
 export type ValueOf<K extends ResourceName> = SettingsResources[K]['value'];
@@ -111,6 +115,7 @@ const initial = (): SettingsState => ({
     payments: emptySlot(),
     delivery: emptySlot(),
     promptpay: emptySlot(),
+    copay: emptySlot(),
   },
   pending: [],
 });
@@ -151,6 +156,20 @@ export function createSettingsStore(deps: SettingsDeps): SettingsStore {
     delivery: resource(s.deliveryList),
     // Owner only, and the step-up comes first.
     promptpay: resource(s.promptpayMasked, true),
+    // The scheme answers `{ scheme }`; its version is the row's (0: none saved yet).
+    copay: resource(
+      {
+        read: async () => {
+          const { scheme } = await s.govCopay.read();
+          return { value: scheme, version: scheme?.version ?? 0 };
+        },
+        save: async (input: GovCopayPatchInput) => {
+          const { scheme } = await s.govCopay.save(input);
+          return { value: scheme, version: scheme?.version ?? 0 };
+        },
+      },
+      true,
+    ),
   };
 
   const putSlot = <K extends ResourceName>(name: K, slot: Slot<ValueOf<K>>) =>

@@ -170,3 +170,65 @@ describe('the PromptPay ID is only ever shown masked', () => {
     expect(JSON.stringify(error) + String((error as Error).message)).not.toContain(MADE_UP_ID);
   });
 });
+
+describe('the co-pay scheme', () => {
+  const scheme = {
+    id: '0192f3a0-0000-7000-8000-000000000077',
+    code: 'thai_chuay_thai_plus_2',
+    nameTh: 'ไทยช่วยไทย พลัส',
+    nameEn: null,
+    settlementNote: null,
+    version: 3,
+    rev: 30,
+    govShareBp: 6000,
+    govDailyCapSatang: 20000,
+    govTotalCapSatang: null,
+    activeFrom: '2030-10-01',
+    activeTo: '2030-11-30',
+    activeFromMinute: 360,
+    activeToMinute: 1380,
+    channels: ['storefront'],
+    enabled: false,
+  };
+
+  test('reads the scheme, or null when there is none', async () => {
+    const some = clientWith(() => ({ status: 200, json: { scheme } }));
+    expect((await some.api.settings.govCopay.read()).scheme?.govShareBp).toBe(6000);
+    expect(some.calls[0]).toMatchObject({ method: 'GET', url: `${BASE}/v1/settings/gov-copay` });
+    const none = clientWith(() => ({ status: 200, json: { scheme: null } }));
+    expect((await none.api.settings.govCopay.read()).scheme).toBeNull();
+  });
+
+  test('a change is a PATCH with the version, parsed with the shared schema', async () => {
+    const { api, calls } = clientWith(() => ({
+      status: 200,
+      json: { scheme: { ...scheme, enabled: true, version: 4 } },
+    }));
+    const saved = await api.settings.govCopay.save({ expectedVersion: 3, enabled: true });
+    expect(saved.scheme?.version).toBe(4);
+    expect(calls[0]).toMatchObject({ method: 'PATCH', url: `${BASE}/v1/settings/gov-copay` });
+    expect(bodyOf(calls[0])).toEqual({ expectedVersion: 3, enabled: true });
+  });
+
+  test('a change with nothing in it, or a share over 100 percent, never reaches the network', async () => {
+    const { api, calls } = clientWith(() => ({ status: 200, json: { scheme } }));
+    await expect(api.settings.govCopay.save({ expectedVersion: 3 })).rejects.toMatchObject({
+      code: 'REQUEST_INVALID',
+    });
+    await expect(
+      api.settings.govCopay.save({ expectedVersion: 3, govShareBp: 10001 }),
+    ).rejects.toMatchObject({ code: 'REQUEST_INVALID' });
+    expect(calls).toHaveLength(0);
+  });
+
+  test('FORBIDDEN (not the owner) and STEP_UP_REQUIRED keep their codes', async () => {
+    const forbidden = clientWith(() => apiError(403, 'FORBIDDEN'));
+    await expect(
+      forbidden.api.settings.govCopay.save({ expectedVersion: 3, enabled: true }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    const stepUp = clientWith(() => apiError(403, 'STEP_UP_REQUIRED'));
+    await expect(
+      stepUp.api.settings.govCopay.save({ expectedVersion: 3, enabled: true }),
+    ).rejects.toMatchObject({ code: 'STEP_UP_REQUIRED' });
+  });
+});

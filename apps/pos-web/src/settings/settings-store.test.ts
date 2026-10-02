@@ -225,3 +225,63 @@ describe('the PromptPay ID (sensitive: a step-up comes first)', () => {
     });
   });
 });
+
+describe('the co-pay scheme (sensitive; its version is that of the saved row)', () => {
+  const row = { id: 's', version: 3, enabled: false } as never;
+
+  function copayEnv(runSensitive: SettingsDeps['auth']['runSensitive']) {
+    const govCopay = {
+      read: vi.fn(async () => ({ scheme: row })),
+      save: vi.fn(async () => ({ scheme: { id: 's', version: 4, enabled: true } as never })),
+    };
+    const unused = { read: vi.fn(), save: vi.fn() };
+    const store = createSettingsStore({
+      api: {
+        settings: {
+          shop: unused,
+          openingHours: unused,
+          numbering: unused,
+          payments: unused,
+          deliveryList: unused,
+          promptpayMasked: unused,
+          govCopay,
+        } as unknown as ApiClient['settings'],
+      },
+      lifecycle: { isOnline: () => true },
+      auth: { runSensitive },
+    });
+    return { store, govCopay };
+  }
+
+  test('reads the scheme with the row version, and 0 when none is saved', async () => {
+    const { store } = copayEnv(async (call) => ({ ok: true as const, value: await call() }));
+    await store.load('copay');
+    expect(store.getState().slots.copay.loaded).toMatchObject({ version: 3 });
+
+    const none = copayEnv(async (call) => ({ ok: true as const, value: await call() }));
+    none.govCopay.read.mockResolvedValueOnce({ scheme: null as never });
+    await none.store.load('copay');
+    expect(none.store.getState().slots.copay.loaded).toEqual({ value: null, version: 0 });
+  });
+
+  test('a change is made inside the step-up, and a closed step-up sends nothing', async () => {
+    const asked: string[] = [];
+    const { store, govCopay } = copayEnv(async (call) => {
+      asked.push('step-up');
+      return { ok: true as const, value: await call() };
+    });
+    expect(await store.save('copay', { expectedVersion: 3, enabled: true })).toMatchObject({
+      ok: true,
+    });
+    expect(asked).toEqual(['step-up']);
+    expect(govCopay.save).toHaveBeenCalledWith({ expectedVersion: 3, enabled: true });
+    expect(store.getState().slots.copay.loaded?.version).toBe(4);
+
+    const closed = copayEnv(async () => ({ ok: false as const, error: null }));
+    expect(await closed.store.save('copay', { expectedVersion: 3, enabled: true })).toEqual({
+      ok: false,
+      reason: 'cancelled',
+    });
+    expect(closed.govCopay.save).not.toHaveBeenCalled();
+  });
+});

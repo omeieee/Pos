@@ -780,12 +780,44 @@ export const th = {
   'settings.promptpay.dialog.newAccount': 'บัญชีใหม่: {masked}',
   'settings.promptpay.dialog.oldAccount': 'บัญชีเดิม: {masked}',
   'settings.promptpay.dialog.noOld': 'ยังไม่เคยตั้งบัญชี',
-  'settings.promptpay.dialog.warnOpen': 'ตอนนี้มีรายการพร้อมเพย์ที่ยังรอยืนยัน {count} รายการ (เท่าที่เครื่องนี้เห็น) ลูกค้าอาจโอนเข้าบัญชีเดิมไปแล้ว ระบบไม่ยกเลิกให้ ตรวจยอดทั้งบัญชีเดิมและบัญชีใหม่ก่อนกดยืนยันรับเงิน',
-  'settings.promptpay.dialog.warnNone': 'เครื่องนี้ไม่เห็นรายการพร้อมเพย์ที่รอยืนยัน แต่ลูกค้าที่สแกน QR เดิมไปแล้วจะโอนเข้าบัญชีเดิม',
+  'settings.promptpay.dialog.warnOpen':
+    'ตอนนี้มีรายการพร้อมเพย์ที่ยังรอยืนยัน {count} รายการ (เท่าที่เครื่องนี้เห็น) ลูกค้าอาจโอนเข้าบัญชีเดิมไปแล้ว ระบบไม่ยกเลิกให้ ตรวจยอดทั้งบัญชีเดิมและบัญชีใหม่ก่อนกดยืนยันรับเงิน',
+  'settings.promptpay.dialog.warnNone':
+    'เครื่องนี้ไม่เห็นรายการพร้อมเพย์ที่รอยืนยัน แต่ลูกค้าที่สแกน QR เดิมไปแล้วจะโอนเข้าบัญชีเดิม',
   'settings.promptpay.dialog.alert': 'การเปลี่ยนนี้จะถูกบันทึกในประวัติและแจ้งเตือนเจ้าของ',
   'settings.promptpay.dialog.confirm': 'เปลี่ยนบัญชี',
   'settings.promptpay.dialog.changing': 'กำลังเปลี่ยน…',
   'settings.promptpay.done': 'เปลี่ยนบัญชีพร้อมเพย์แล้ว',
+  'settings.copay.rules':
+    'ใช้ได้เฉพาะในช่วงวันและเวลาที่ตั้งไว้ และเฉพาะการชำระต่อหน้า (ที่หน้าร้านหรือตอนส่งมอบที่ทางเข้าอาคาร) พนักงานสร้าง QR ใน ถุงเงิน ทุกรายการ ไม่ส่ง QR ทาง LINE และพนักงานยืนยันรับเงินเองทุกครั้ง',
+  'settings.copay.risk':
+    'ยังไม่ได้ยืนยันกับ ถุงเงิน ว่าการส่งมอบที่ทางเข้าอาคารอยู่ในเงื่อนไขของโครงการ ถ้าโครงการแจ้งว่าไม่ได้ ให้ปิดสวิตช์เปิดใช้ด้านล่าง',
+  'settings.copay.channels': 'ช่องทางที่ตั้งไว้: {channels}',
+  'settings.copay.channelsNote': 'หน้านี้ไม่เปลี่ยนช่องทาง โครงการใหม่ตั้งเป็นหน้าร้านเท่านั้น',
+  'settings.copay.new': 'ยังไม่มีโครงการที่ตั้งไว้ กรอกข้อมูลแล้วบันทึก โครงการใหม่จะปิดอยู่จนกว่าจะเปิดใช้เอง',
+  'settings.copay.nameTh': 'ชื่อโครงการ (ไทย)',
+  'settings.copay.nameEn': 'ชื่อโครงการ (อังกฤษ)',
+  'settings.copay.share': 'ส่วนที่รัฐช่วยจ่าย (%)',
+  'settings.copay.shareHint': 'เช่น 60 หมายถึงรัฐจ่าย 60% ลูกค้าจ่ายที่เหลือ',
+  'settings.copay.dailyCap': 'เพดานที่รัฐช่วยต่อคนต่อวัน (บาท)',
+  'settings.copay.totalCap': 'เพดานที่รัฐช่วยต่อคนตลอดโครงการ (บาท)',
+  'settings.copay.capHint': 'เว้นว่าง = ไม่มีเพดาน',
+  'settings.copay.from': 'วันแรกของโครงการ',
+  'settings.copay.to': 'วันสุดท้ายของโครงการ',
+  'settings.copay.fromTime': 'เริ่มรับทุกวัน (เช่น 06:00)',
+  'settings.copay.toTime': 'หยุดรับทุกวัน (เช่น 23:00 หรือ 24:00)',
+  'settings.copay.enabled': 'เปิดใช้โครงการนี้',
+  'settings.copay.enabledHint': 'เมื่อเปิด พนักงานเลือกวิธีนี้ได้เฉพาะในช่วงวันและเวลาที่ตั้งไว้',
+  'settings.copay.error.nameTh': 'กรอกชื่อโครงการ (ไม่เกิน 80 ตัวอักษร)',
+  'settings.copay.error.share':
+    'ใส่เป็นเปอร์เซ็นต์ 0 ถึง 100 (ทศนิยมไม่เกิน 2 ตำแหน่ง) และต้องมากกว่า 0 ถ้าเปิดใช้',
+  'settings.copay.error.dailyCap': 'ใส่จำนวนเงินเป็นบาท เช่น 200 หรือเว้นว่าง',
+  'settings.copay.error.totalCap': 'ใส่จำนวนเงินเป็นบาท เช่น 1000 หรือเว้นว่าง',
+  'settings.copay.error.activeFrom': 'เลือกวันที่ให้ถูกต้อง',
+  'settings.copay.error.activeTo': 'วันสุดท้ายต้องเป็นวันที่จริงและไม่ก่อนวันแรก',
+  'settings.copay.error.fromTime': 'ใส่เวลาเป็น ชั่วโมง:นาที เช่น 06:00',
+  'settings.copay.error.toTime': 'เวลาหยุดต้องหลังเวลาเริ่ม เช่น 23:00 หรือ 24:00',
+  'settings.copay.error.enabled': 'โครงการนี้ไม่มีช่องทางที่ใช้ได้ จึงเปิดใช้ไม่ได้',
 } as const;
 
 export type MessageKey = keyof typeof th;

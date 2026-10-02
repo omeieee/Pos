@@ -33,6 +33,8 @@ import {
   createPaymentInputSchema,
   deliveryPatchInputSchema,
   deliverySettingsSchema,
+  govCopayPatchInputSchema,
+  govCopayResponseSchema,
   groupDtoSchema,
   idParamSchema,
   itemDtoSchema,
@@ -794,6 +796,28 @@ export function createApiClient(options: ApiClientOptions) {
     numbering: settingsResource('numbering', businessDaySettingsSchema, numberingPatchInputSchema),
     payments: settingsResource('payments', paymentsSettingsSchema, paymentsPatchInputSchema),
     promptpayMasked,
+    /** The ไทยช่วยไทย scheme (`scheme` null: none saved yet). Owner only, with a step-up. */
+    govCopay: {
+      read: async () =>
+        (
+          await get({
+            path: '/v1/settings/gov-copay',
+            schema: govCopayResponseSchema,
+            session: true,
+            device: 'optional',
+          })
+        ).data,
+      save: async (body: z.input<typeof govCopayPatchInputSchema>) =>
+        (
+          await patch({
+            path: '/v1/settings/gov-copay',
+            body: checked(govCopayPatchInputSchema, body),
+            schema: govCopayResponseSchema,
+            session: true,
+            device: 'optional',
+          })
+        ).data,
+    },
     /** The buildings list as an editor reads and replaces it (PUT). */
     deliveryList: settingsResource(
       'delivery',

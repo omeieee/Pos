@@ -1,5 +1,6 @@
 import { useAuthState, useT } from '../ui/hooks.ts';
 import { Icon } from '../ui/Icon.tsx';
+import { CopayForm } from './CopayForm.tsx';
 import { DeliveryForm } from './DeliveryForm.tsx';
 import { HoursForm } from './HoursForm.tsx';
 import { NumberingForm } from './NumberingForm.tsx';
@@ -57,6 +58,12 @@ function SectionBody({ def, editable }: { def: SectionDef; editable: boolean }) 
       return (
         <SettingSection name="promptpay" editable={editable}>
           {(p) => <PromptpayForm {...p} />}
+        </SettingSection>
+      );
+    case 'gov-copay':
+      return (
+        <SettingSection name="copay" editable={editable}>
+          {(p) => <CopayForm {...p} />}
         </SettingSection>
       );
     default:

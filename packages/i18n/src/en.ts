@@ -811,7 +811,8 @@ export const en = {
     'A building with this name is already in the list (case is ignored).',
   'settings.delivery.error.full': 'The list holds 30 buildings at most.',
   'settings.delivery.error.last': 'At least one building must stay.',
-  'settings.changedElsewhere': 'This setting was changed on another device. What you see may be out of date.',
+  'settings.changedElsewhere':
+    'This setting was changed on another device. What you see may be out of date.',
   'settings.reload': 'Load the latest',
   'settings.promptpay.shown': '{type}: {masked}',
   'settings.promptpay.type.phone': 'Mobile number',
@@ -819,24 +820,63 @@ export const en = {
   'settings.promptpay.type.ewallet': 'e-Wallet (15 digits)',
   'settings.promptpay.none': 'No PromptPay account is set, so PromptPay cannot be used yet.',
   'settings.promptpay.privacy': 'Only part of the account number is ever shown.',
-  'settings.promptpay.ownerOnly': 'Only the owner can change it, and must confirm who they are again before it is saved.',
+  'settings.promptpay.ownerOnly':
+    'Only the owner can change it, and must confirm who they are again before it is saved.',
   'settings.promptpay.set': 'Set the PromptPay account',
   'settings.promptpay.change': 'Change the PromptPay account',
   'settings.promptpay.dialog.title': 'Change the PromptPay account',
   'settings.promptpay.dialog.kind': 'Account type',
   'settings.promptpay.dialog.value': 'New account number',
   'settings.promptpay.dialog.valueHint': 'Digits only (hyphens and spaces are fine).',
-  'settings.promptpay.dialog.error': 'The number does not fit the chosen type. Check how many digits it has.',
+  'settings.promptpay.dialog.error':
+    'The number does not fit the chosen type. Check how many digits it has.',
   'settings.promptpay.dialog.review': 'Review',
   'settings.promptpay.dialog.edit': 'Edit the number',
   'settings.promptpay.dialog.confirmTitle': 'Confirm the change',
   'settings.promptpay.dialog.newAccount': 'New account: {masked}',
   'settings.promptpay.dialog.oldAccount': 'Current account: {masked}',
   'settings.promptpay.dialog.noOld': 'No account was set before.',
-  'settings.promptpay.dialog.warnOpen': '{count} PromptPay payments are still waiting to be confirmed (as far as this device can see). The customer may already have paid the old account. They are not cancelled for you: check both the old and the new account before confirming them.',
-  'settings.promptpay.dialog.warnNone': 'This device sees no PromptPay payment waiting, but a customer who already scanned the old QR will pay the old account.',
+  'settings.promptpay.dialog.warnOpen':
+    '{count} PromptPay payments are still waiting to be confirmed (as far as this device can see). The customer may already have paid the old account. They are not cancelled for you: check both the old and the new account before confirming them.',
+  'settings.promptpay.dialog.warnNone':
+    'This device sees no PromptPay payment waiting, but a customer who already scanned the old QR will pay the old account.',
   'settings.promptpay.dialog.alert': 'The change is written to the audit log and alerts the owner.',
   'settings.promptpay.dialog.confirm': 'Change account',
   'settings.promptpay.dialog.changing': 'Changing…',
   'settings.promptpay.done': 'The PromptPay account was changed.',
+  'settings.copay.rules':
+    'It can be used only inside the dates and hours set here, and only face to face (at the counter or at the hand-over at the building entrance). Staff create the ถุงเงิน QR for every transaction, it is never sent through LINE, and staff confirm every payment by hand.',
+  'settings.copay.risk':
+    'It is not confirmed with ถุงเงิน that a hand-over at the building entrance is within the scheme terms. If the scheme says it is not, switch it off below.',
+  'settings.copay.channels': 'Channels it is set for: {channels}',
+  'settings.copay.channelsNote':
+    'This page does not change the channels. A new scheme is set for the storefront only.',
+  'settings.copay.new':
+    'No scheme is set yet. Fill it in and save. A new scheme stays off until you switch it on.',
+  'settings.copay.nameTh': 'Scheme name (Thai)',
+  'settings.copay.nameEn': 'Scheme name (English)',
+  'settings.copay.share': 'Government share (%)',
+  'settings.copay.shareHint':
+    'For example 60 means the government pays 60% and the customer the rest.',
+  'settings.copay.dailyCap': 'Daily cap per person (baht)',
+  'settings.copay.totalCap': 'Total cap per person for the scheme (baht)',
+  'settings.copay.capHint': 'Leave empty for no cap.',
+  'settings.copay.from': 'First day',
+  'settings.copay.to': 'Last day',
+  'settings.copay.fromTime': 'Daily start (for example 06:00)',
+  'settings.copay.toTime': 'Daily end (for example 23:00 or 24:00)',
+  'settings.copay.enabled': 'Scheme switched on',
+  'settings.copay.enabledHint':
+    'When on, staff can pick this method only inside the dates and hours above.',
+  'settings.copay.error.nameTh': 'Enter the scheme name (80 characters at most).',
+  'settings.copay.error.share':
+    'Enter a percent from 0 to 100 (up to 2 decimals), above 0 if the scheme is on.',
+  'settings.copay.error.dailyCap': 'Enter an amount in baht, like 200, or leave it empty.',
+  'settings.copay.error.totalCap': 'Enter an amount in baht, like 1000, or leave it empty.',
+  'settings.copay.error.activeFrom': 'Pick a real date.',
+  'settings.copay.error.activeTo': 'The last day must be a real date, not before the first day.',
+  'settings.copay.error.fromTime': 'Enter a time as hours:minutes, like 06:00.',
+  'settings.copay.error.toTime': 'The end must be after the start, like 23:00 or 24:00.',
+  'settings.copay.error.enabled':
+    'This scheme has no channel to be used in, so it cannot be switched on.',
 } as const satisfies Record<MessageKey, string>;
