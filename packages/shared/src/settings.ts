@@ -6,6 +6,7 @@
  * Pure: no I/O. Nothing here holds a PromptPay ID or a scheme figure; the owner enters them.
  */
 import { z } from 'zod';
+import { buildingNameSchema } from './delivery.ts';
 import {
   businessDaySettingsSchema,
   isoDateSchema,
@@ -188,6 +189,39 @@ export const numberingPatchInputSchema = z
   })
   .refine(needsAField, needsAFieldMessage);
 export type NumberingPatchInput = z.infer<typeof numberingPatchInputSchema>;
+
+// ---------- Delivery buildings ----------
+
+/** Most buildings the list may hold. */
+export const MAX_DELIVERY_BUILDINGS = 30;
+
+/**
+ * Where the shop delivers (owner, 2026-10-02): the condominium bans outside visitors, so every
+ * order is delivered to the entrance of one of these buildings, where a guard is stationed and the
+ * customer comes down to receive it. 1 to 30 unique names (ignoring case), each 1 to 10 characters.
+ * A new order must name one of them. The owner edits the list.
+ */
+export const deliverySettingsSchema = z.object({
+  buildings: z
+    .array(buildingNameSchema)
+    .min(1)
+    .max(MAX_DELIVERY_BUILDINGS)
+    .refine((names) => new Set(names.map((n) => n.toLowerCase())).size === names.length, {
+      message: 'two buildings with the same name',
+    }),
+});
+export type DeliverySettings = z.infer<typeof deliverySettingsSchema>;
+
+export const DEFAULT_DELIVERY_SETTINGS: DeliverySettings = {
+  buildings: ['A1', 'A2', 'B1', 'B2', 'C1', 'C2', 'D1', 'D2'],
+};
+
+/** PUT (or PATCH) replaces the whole list. */
+export const deliveryPatchInputSchema = z.strictObject({
+  expectedVersion,
+  buildings: deliverySettingsSchema.shape.buildings,
+});
+export type DeliveryPatchInput = z.infer<typeof deliveryPatchInputSchema>;
 
 // ---------- Payment methods ----------
 

@@ -26,6 +26,7 @@ import {
   orderChannelSchema,
 } from './schemas.ts';
 import {
+  deliverySettingsSchema,
   govCopayDtoSchema,
   openingHoursSchema,
   paymentsSettingsSchema,
@@ -154,6 +155,7 @@ export const settingsUpdatedFrameSchema = z.union([
   settingsFrame('opening_hours', openingHoursSchema),
   settingsFrame('business_day', businessDaySettingsSchema),
   settingsFrame('payment_methods', paymentsSettingsSchema),
+  settingsFrame('delivery', deliverySettingsSchema),
   settingsFrame('promptpay', promptpayMaskedSchema),
   settingsFrame('gov_copay', govCopayDtoSchema),
 ]);
@@ -163,6 +165,7 @@ export const SYNCED_SETTING_KEYS = [
   'opening_hours',
   'business_day',
   'payment_methods',
+  'delivery',
   'promptpay',
 ] as const;
 

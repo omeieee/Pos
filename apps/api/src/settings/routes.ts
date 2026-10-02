@@ -6,7 +6,7 @@ import { patchGovCopay, patchSetting, RESOURCES, readGovCopay, readSetting } fro
 const meta = (request: FastifyRequest) => ({ ip: request.ip ?? null });
 
 /**
- * Mounted at /v1/settings: shop, opening-hours, numbering, payments, promptpay, gov-copay.
+ * Mounted at /v1/settings: shop, opening-hours, numbering, payments, delivery, promptpay, gov-copay.
  * Reading needs `settings.view` (cashiers need the PromptPay ID for the QR, and the scheme for
  * the method list). Changing needs `settings.edit` (managers and the owner), except the PromptPay
  * ID (`settings.promptpay`) and the co-pay scheme (`settings.gov_copay`): owner only, with a
@@ -25,12 +25,13 @@ export async function registerSettingsRoutes(
     app.get(`/${resource.route}`, { onRequest: guard('settings.view') }, async () =>
       readSetting(ctx, resource),
     );
-    app.patch(
-      `/${resource.route}`,
-      { onRequest: guard(resource.editPermission) },
-      async (request) =>
-        patchSetting(ctx, principalOf(request), resource, request.body, meta(request)),
-    );
+    const change = async (request: FastifyRequest) =>
+      patchSetting(ctx, principalOf(request), resource, request.body, meta(request));
+    app.patch(`/${resource.route}`, { onRequest: guard(resource.editPermission) }, change);
+    // The building list is replaced as a whole, so it also answers PUT.
+    if (resource.put) {
+      app.put(`/${resource.route}`, { onRequest: guard(resource.editPermission) }, change);
+    }
   }
 
   app.get('/gov-copay', { onRequest: guard('settings.view') }, async () => readGovCopay(ctx));

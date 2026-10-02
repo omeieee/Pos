@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 import { alertReport } from '../alerts.ts';
 import { currentBusinessDate } from '../orders/business-day.ts';
 import { createHarness, type Harness, type OwnerFixture } from '../test-support/harness.ts';
-import { currentPromptpayId } from './service.ts';
+import { currentDeliverySettings, currentPromptpayId } from './service.ts';
 
 let h: Harness;
 let owner: OwnerFixture;
@@ -28,7 +28,7 @@ async function staffToken(role: 'manager' | 'cashier' | 'kitchen') {
 }
 
 function call(
-  method: 'GET' | 'POST' | 'PATCH',
+  method: 'GET' | 'POST' | 'PATCH' | 'PUT',
   url: string,
   token: string | undefined,
   body?: unknown,
@@ -50,7 +50,15 @@ const actions = async (entityId: string) => (await h.auditRows(entityId)).map((a
 // ---------- who may do what ----------
 
 describe('access', () => {
-  const READABLE = ['shop', 'opening-hours', 'numbering', 'payments', 'promptpay', 'gov-copay'];
+  const READABLE = [
+    'shop',
+    'opening-hours',
+    'numbering',
+    'payments',
+    'delivery',
+    'promptpay',
+    'gov-copay',
+  ];
 
   test('nobody without a session', async () => {
     for (const name of READABLE) {
@@ -343,6 +351,133 @@ describe('shop profile, opening hours, numbering and payment methods', () => {
       cash: false,
     });
     expect(res.json().value).toEqual({ cash: false, promptpay: true, platform: true, other: true });
+  });
+});
+
+// ---------- delivery buildings ----------
+
+describe('delivery buildings', () => {
+  const DEFAULT_BUILDINGS = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2', 'D1', 'D2'];
+
+  test('never saved: GET and the order-side reader both give the eight default buildings at version 0', async () => {
+    await clearSettings();
+    const token = await staffToken('cashier');
+    const res = await call('GET', '/v1/settings/delivery', token);
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({
+      value: { buildings: DEFAULT_BUILDINGS },
+      version: 0,
+      rev: 0,
+      updatedAt: null,
+    });
+    expect(await currentDeliverySettings(h.db)).toEqual({ buildings: DEFAULT_BUILDINGS });
+  });
+
+  test('a manager replaces the list with PUT (PATCH says the same); a cashier may not', async () => {
+    await clearSettings();
+    const cashier = await staffToken('cashier');
+    const manager = await staffToken('manager');
+    const body = { expectedVersion: 0, buildings: ['A1', ' B1 ', 'Tower'] };
+    const denied = await call('PUT', '/v1/settings/delivery', cashier, body);
+    expect(denied.statusCode).toBe(403);
+    expect(denied.json()).toMatchObject({ code: 'FORBIDDEN' });
+
+    const saved = await call('PUT', '/v1/settings/delivery', manager, body);
+    expect(saved.statusCode).toBe(200);
+    expect(saved.json()).toMatchObject({ version: 1, value: { buildings: ['A1', 'B1', 'Tower'] } });
+    expect((await call('GET', '/v1/settings/delivery', cashier)).json().value.buildings).toEqual([
+      'A1',
+      'B1',
+      'Tower',
+    ]);
+    expect(await currentDeliverySettings(h.db)).toEqual({ buildings: ['A1', 'B1', 'Tower'] });
+
+    const again = await call('PATCH', '/v1/settings/delivery', manager, {
+      expectedVersion: 1,
+      buildings: ['E1'],
+    });
+    expect(again.json()).toMatchObject({ version: 2, value: { buildings: ['E1'] } });
+  });
+
+  test('needs no step-up: a signed-in manager is enough', async () => {
+    await clearSettings();
+    const manager = await staffToken('manager'); // never stepped up
+    expect(
+      (
+        await call('PUT', '/v1/settings/delivery', manager, {
+          expectedVersion: 0,
+          buildings: ['A1'],
+        })
+      ).statusCode,
+    ).toBe(200);
+  });
+
+  test('a change is audited with before and after, and published once after commit', async () => {
+    await clearSettings();
+    const manager = await staffToken('manager');
+    await call('PUT', '/v1/settings/delivery', manager, { expectedVersion: 0, buildings: ['A1'] });
+    const eventsBefore = h.events.length;
+    const res = await call('PUT', '/v1/settings/delivery', manager, {
+      expectedVersion: 1,
+      buildings: ['A1', 'A2'],
+    });
+    const audit = (await h.auditRows('delivery')).filter((a) => a.action === 'settings.update');
+    expect(audit.at(-1)).toMatchObject({
+      entity: 'settings',
+      entityId: 'delivery',
+      before: { buildings: ['A1'] },
+      after: { buildings: ['A1', 'A2'] },
+    });
+    expect(h.events.slice(eventsBefore)).toEqual([
+      expect.objectContaining({
+        type: 'settings.updated',
+        key: 'delivery',
+        rev: res.json().rev,
+        version: 2,
+        data: { buildings: ['A1', 'A2'] },
+      }),
+    ]);
+  });
+
+  test('sending the list it already has changes nothing', async () => {
+    await clearSettings();
+    const manager = await staffToken('manager');
+    await call('PUT', '/v1/settings/delivery', manager, { expectedVersion: 0, buildings: ['A1'] });
+    const auditBefore = (await actions('delivery')).length;
+    const res = await call('PUT', '/v1/settings/delivery', manager, {
+      expectedVersion: 1,
+      buildings: ['A1'],
+    });
+    expect(res.json()).toMatchObject({ version: 1 });
+    expect((await actions('delivery')).length).toBe(auditBefore);
+  });
+
+  test('refuses a stale version, a missing version, an empty or duplicated list and extra fields', async () => {
+    await clearSettings();
+    const manager = await staffToken('manager');
+    await call('PUT', '/v1/settings/delivery', manager, { expectedVersion: 0, buildings: ['A1'] });
+    const stale = await call('PUT', '/v1/settings/delivery', manager, {
+      expectedVersion: 0,
+      buildings: ['B1'],
+    });
+    expect(stale.statusCode).toBe(409);
+    expect(stale.json()).toMatchObject({
+      code: 'VERSION_CONFLICT',
+      details: { currentVersion: 1 },
+    });
+    for (const body of [
+      { buildings: ['B1'] },
+      { expectedVersion: 1 },
+      { expectedVersion: 1, buildings: [] },
+      { expectedVersion: 1, buildings: ['B1', 'b1'] },
+      { expectedVersion: 1, buildings: ['A234567890X'] },
+      { expectedVersion: 1, buildings: ['B1'], deliveryFee: 0 },
+    ]) {
+      const res = await call('PUT', '/v1/settings/delivery', manager, body);
+      expect(res.statusCode, JSON.stringify(body)).toBe(400);
+      expect(res.json()).toMatchObject({ code: 'VALIDATION_ERROR' });
+    }
+    expect(await currentDeliverySettings(h.db)).toEqual({ buildings: ['A1'] });
   });
 });
 
@@ -852,6 +987,7 @@ describe('what the settings routes leave out', () => {
       'opening-hours',
       'numbering',
       'payments',
+      'delivery',
       'promptpay',
       'gov-copay',
     ]) {

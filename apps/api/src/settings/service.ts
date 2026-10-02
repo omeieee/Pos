@@ -29,8 +29,12 @@ import type { Permission } from '@sds/shared';
 import {
   businessDaySettingsSchema,
   DEFAULT_CUTOFF_MINUTES,
+  DEFAULT_DELIVERY_SETTINGS,
   DEFAULT_OPENING_HOURS,
   DEFAULT_SHOP_SETTINGS,
+  type DeliverySettings,
+  deliveryPatchInputSchema,
+  deliverySettingsSchema,
   type GovCopayDto,
   type GovCopayResponse,
   govCopayDtoSchema,
@@ -74,6 +78,8 @@ interface Resource {
   editPermission: Permission;
   /** Special handling for the PromptPay ID. */
   promptpay?: true;
+  /** The change also answers PUT (a whole-value replacement) besides PATCH. Same handler. */
+  put?: true;
 }
 
 const businessDayDefaults = { cutoffMinutes: DEFAULT_CUTOFF_MINUTES, timeZone: SHOP_TIME_ZONE };
@@ -113,6 +119,17 @@ export const RESOURCES: readonly Resource[] = [
     editPermission: 'settings.edit',
   },
   {
+    // The buildings the shop delivers to (owner, 2026-10-02): every order is delivered to the
+    // entrance of one of them. Not a money setting: settings.edit, no step-up, an audit row.
+    route: 'delivery',
+    key: 'delivery',
+    schema: deliverySettingsSchema,
+    defaults: DEFAULT_DELIVERY_SETTINGS,
+    patch: deliveryPatchInputSchema,
+    editPermission: 'settings.edit',
+    put: true,
+  },
+  {
     route: 'promptpay',
     key: 'promptpay',
     schema: promptpaySettingsSchema,
@@ -148,6 +165,15 @@ export async function readSetting(ctx: AuthContext, resource: Resource): Promise
 export async function currentPromptpayId(db: Db): Promise<PromptpaySettings | null> {
   const row = await getSettingRow(db, 'promptpay');
   return row ? promptpaySettingsSchema.parse(row.value) : null;
+}
+
+/**
+ * The buildings an order may be delivered to: the saved list, or the default when it was never
+ * saved (production has no settings rows until the owner saves one). A damaged row fails loudly.
+ */
+export async function currentDeliverySettings(db: Db): Promise<DeliverySettings> {
+  const row = await getSettingRow(db, 'delivery');
+  return row ? deliverySettingsSchema.parse(row.value) : DEFAULT_DELIVERY_SETTINGS;
 }
 
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);

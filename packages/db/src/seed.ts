@@ -5,6 +5,7 @@
 import {
   businessDaySettingsSchema,
   DEFAULT_CUTOFF_MINUTES,
+  DEFAULT_DELIVERY_SETTINGS,
   promptpaySettingsSchema,
   SHOP_TIME_ZONE,
   satang,
@@ -159,6 +160,8 @@ export async function seed(db: Db): Promise<{ seeded: boolean }> {
             overrides: [],
           },
         },
+        // Every order is delivered to the entrance of one of these buildings (owner, 2026-10-02).
+        { key: 'delivery', value: DEFAULT_DELIVERY_SETTINGS },
         { key: 'line_policy', value: { push: 'ready-only', warnAtPercent: 80 } },
       ])
       .onConflictDoNothing();

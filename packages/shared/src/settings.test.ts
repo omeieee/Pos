@@ -1,6 +1,9 @@
 import { describe, expect, test } from 'vitest';
 import { govCopaySchemeSchema } from './gov-copay.ts';
 import {
+  DEFAULT_DELIVERY_SETTINGS,
+  deliveryPatchInputSchema,
+  deliverySettingsSchema,
   govCopayPatchInputSchema,
   maskPromptpayId,
   numberingPatchInputSchema,
@@ -245,5 +248,48 @@ describe('gov co-pay patch', () => {
       govCopaySchemeSchema.safeParse({ ...scheme, activeFromMinute: 1380, activeToMinute: 360 })
         .success,
     ).toBe(false);
+  });
+});
+
+describe('delivery buildings (settings.delivery)', () => {
+  test('the default is the eight buildings the owner named', () => {
+    expect(DEFAULT_DELIVERY_SETTINGS).toEqual({
+      buildings: ['A1', 'A2', 'B1', 'B2', 'C1', 'C2', 'D1', 'D2'],
+    });
+    expect(deliverySettingsSchema.safeParse(DEFAULT_DELIVERY_SETTINGS).success).toBe(true);
+  });
+
+  test('names are trimmed; 1 to 30 items; each 1 to 10 characters', () => {
+    expect(deliverySettingsSchema.parse({ buildings: ['  A1 ', 'B1'] }).buildings).toEqual([
+      'A1',
+      'B1',
+    ]);
+    const names = (n: number) => Array.from({ length: n }, (_, i) => `T${i + 1}`);
+    expect(deliverySettingsSchema.safeParse({ buildings: names(30) }).success).toBe(true);
+    expect(deliverySettingsSchema.safeParse({ buildings: names(31) }).success).toBe(false);
+    expect(deliverySettingsSchema.safeParse({ buildings: [] }).success).toBe(false);
+    expect(deliverySettingsSchema.safeParse({ buildings: ['   '] }).success).toBe(false);
+    expect(deliverySettingsSchema.safeParse({ buildings: ['A234567890'] }).success).toBe(true);
+    expect(deliverySettingsSchema.safeParse({ buildings: ['A2345678901'] }).success).toBe(false);
+  });
+
+  test('names are unique, ignoring case and surrounding spaces', () => {
+    expect(deliverySettingsSchema.safeParse({ buildings: ['A1', 'A1'] }).success).toBe(false);
+    expect(deliverySettingsSchema.safeParse({ buildings: ['A1', ' a1 '] }).success).toBe(false);
+    expect(deliverySettingsSchema.safeParse({ buildings: ['A1', 'A2'] }).success).toBe(true);
+  });
+
+  test('a change carries the version and the whole list, and nothing else', () => {
+    expect(
+      deliveryPatchInputSchema.safeParse({ expectedVersion: 0, buildings: ['A1'] }).success,
+    ).toBe(true);
+    expect(deliveryPatchInputSchema.safeParse({ buildings: ['A1'] }).success).toBe(false);
+    expect(deliveryPatchInputSchema.safeParse({ expectedVersion: 1 }).success).toBe(false);
+    expect(
+      deliveryPatchInputSchema.safeParse({ expectedVersion: 1, buildings: ['A1'], fee: 0 }).success,
+    ).toBe(false);
+    expect(deliveryPatchInputSchema.safeParse({ expectedVersion: 1, buildings: [] }).success).toBe(
+      false,
+    );
   });
 });

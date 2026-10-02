@@ -235,6 +235,15 @@ describe('settings frames', () => {
     ).toBe(true);
     expect(settingsUpdatedFrameSchema.safeParse(frame('shop', { nameTh: 5 })).success).toBe(false);
   });
+
+  test('the delivery buildings travel, so every device learns a change of the list', () => {
+    expect(
+      settingsUpdatedFrameSchema.safeParse(frame('delivery', { buildings: ['A1', 'B2'] })).success,
+    ).toBe(true);
+    expect(settingsUpdatedFrameSchema.safeParse(frame('delivery', { buildings: [] })).success).toBe(
+      false,
+    );
+  });
 });
 
 describe('the frame list', () => {

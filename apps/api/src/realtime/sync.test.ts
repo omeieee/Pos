@@ -26,7 +26,7 @@ const roles = ['kitchen', 'cashier', 'manager', 'owner'] as const;
 type Role = (typeof roles)[number];
 
 function call(
-  method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
+  method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE',
   url: string,
   token: string | undefined,
   body?: unknown,
@@ -104,6 +104,12 @@ beforeAll(async () => {
   );
   await ok(
     call('PATCH', '/v1/settings/payments', tokens.manager, { expectedVersion: 0, other: true }),
+  );
+  await ok(
+    call('PUT', '/v1/settings/delivery', tokens.manager, {
+      expectedVersion: 0,
+      buildings: ['A1', 'B1'],
+    }),
   );
   await h.client.query(
     `insert into gov_copay_schemes (code, name_th, gov_share_bp, gov_daily_cap_satang, active_from,
@@ -323,11 +329,15 @@ describe('what each role is sent', () => {
       );
       const settings = changes.filter((c) => c.type === 'settings.updated');
       expect(settings.map((c) => c.id).sort()).toEqual([
+        'delivery',
         'gov_copay',
         'payment_methods',
         'promptpay',
         'shop',
       ]);
+      expect(settings.find((c) => c.id === 'delivery')?.data).toEqual({
+        buildings: ['A1', 'B1'],
+      });
       const promptpay = settings.find((c) => c.id === 'promptpay');
       expect(promptpay?.data).toEqual({ idType: 'phone', idMasked: '******4321' });
     },

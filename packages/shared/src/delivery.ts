@@ -6,7 +6,15 @@
  *
  * Pure: no I/O.
  */
+import { z } from 'zod';
 import type { Fulfillment, OrderChannel } from './enums.ts';
+
+/**
+ * A building name as the owner enters it and as an order carries it (A1, B2 ...): trimmed, 1 to 10
+ * characters. Whether a building is one the shop delivers to is decided against the saved list
+ * (`settings.delivery`), which only the server can read.
+ */
+export const buildingNameSchema = z.string().trim().min(1).max(10);
 
 const ENTRANCE_ONLY: readonly Fulfillment[] = ['entrance_delivery'];
 const PLATFORM_ONLY: readonly Fulfillment[] = ['platform_delivery'];

@@ -130,8 +130,15 @@ describe('seed', () => {
       groups: 3,
       options: 12,
       links: 12,
-      settings: 5,
+      settings: 6,
       disabled_schemes: 1,
+    });
+
+    const [delivery] = await rows<{ value: unknown }>(
+      sql`select value from settings where key = 'delivery'`,
+    );
+    expect(delivery?.value).toEqual({
+      buildings: ['A1', 'A2', 'B1', 'B2', 'C1', 'C2', 'D1', 'D2'],
     });
 
     const [pp] = await rows<{ value: unknown }>(
