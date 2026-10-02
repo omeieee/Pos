@@ -103,7 +103,15 @@ function setup(
   const create = vi.fn<CreateOrder>(options.create ?? okOrder());
   const pay = vi.fn<CreatePayment>(options.pay ?? okPayment);
   const outbox = createOutboxStore({
-    api: { orders: { create }, payments: { create: pay } },
+    api: {
+      orders: { create },
+      payments: {
+        create: pay,
+        confirm: async () => {
+          throw new Error('confirm was not expected');
+        },
+      },
+    },
     entities,
     auth,
     lifecycle: life.lifecycle,

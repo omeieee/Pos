@@ -47,8 +47,8 @@ function OrderEntryCard({
           <QueueStateBadge item={item} />
           {payment ? (
             <span className="status status--info">
-              <Icon name="cash" />
-              {tr('payment.method.cash')}
+              <Icon name={payment.method === 'cash' ? 'cash' : 'qr'} />
+              {tr(`payment.method.${payment.method}`)}
             </span>
           ) : null}
         </span>
@@ -59,7 +59,7 @@ function OrderEntryCard({
   );
 }
 
-/** A cash payment waiting for an order the server already has. */
+/** A cash or PromptPay payment waiting for an order the server already has. */
 function PaymentCard({ item }: { item: QueuedPayment }) {
   const tr = useT();
   const locale = useLocale();
@@ -68,12 +68,14 @@ function PaymentCard({ item }: { item: QueuedPayment }) {
       <a className="qcard__link" href={item.orderId ? `#/orders/${item.orderId}` : '#/orders'}>
         <span className="ocard__top">
           <span className="ochannel" aria-hidden="true">
-            <Icon name="cash" />
+            <Icon name={item.method === 'cash' ? 'cash' : 'qr'} />
           </span>
           <span className="ocard__no">{item.label}</span>
-          <span className="ocard__total money">{formatBaht(item.tenderedSatang, locale)}</span>
+          <span className="ocard__total money">
+            {formatBaht(item.method === 'cash' ? item.tenderedSatang : item.qrAmountSatang, locale)}
+          </span>
         </span>
-        <span className="ocard__meta muted small">{tr('payment.method.cash')}</span>
+        <span className="ocard__meta muted small">{tr(`payment.method.${item.method}`)}</span>
         <span className="ocard__badges">
           <QueueStateBadge item={item} />
         </span>

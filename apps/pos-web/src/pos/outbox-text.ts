@@ -4,6 +4,8 @@ import type { SaveError } from './cart-store.ts';
 import {
   ERROR_NOT_UNDERSTOOD,
   ERROR_PARENT_MISSING,
+  ERROR_QR_AMOUNT,
+  ERROR_QR_TARGET,
   ERROR_TENDER_BELOW,
   MAX_QUEUE,
   type QueueItem,
@@ -29,6 +31,10 @@ export function entryErrorText(tr: Translate, error: string | null): string {
   if (error === ERROR_NOT_UNDERSTOOD) return tr('outbox.error.unreadable');
   if (error === ERROR_PARENT_MISSING) return tr('outbox.error.orderMissing');
   if (error === ERROR_TENDER_BELOW) return tr('outbox.error.tenderBelow');
+  if (error === ERROR_QR_AMOUNT) return tr('outbox.error.qrAmount');
+  if (error === ERROR_QR_TARGET) return tr('outbox.error.qrId');
+  if (error === 'ORDER_ALREADY_PAID') return tr('outbox.error.alreadyPaid');
+  if (error === 'PAYMENT_ALREADY_OPEN') return tr('outbox.error.alreadyOpen');
   return tr('outbox.refused', { reason: codeText(tr, error ?? 'UNKNOWN') });
 }
 

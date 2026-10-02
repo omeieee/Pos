@@ -5,8 +5,9 @@
  * What an entry holds is only what the order needs: item ids, quantities, chosen options, notes
  * and (for a delivery) the building and the recipient name as the order carries them. The recipient
  * name is personal data (PDPA): it lives only inside the entry, is never logged and never put in a
- * URL, and the entry is removed once the server has the order. No token, no QR link and no
- * PromptPay ID is ever stored here.
+ * URL, and the entry is removed once the server has the order. No token, no QR link, no QR payload
+ * and no PromptPay ID is ever stored here (a PromptPay entry keeps the amount the QR showed and the
+ * MASKED account, to notice a changed account or amount at replay).
  *
  * Money: nothing here adds prices. The estimate shown for a queued order is the shared pricing
  * (`priceCart`); the real total is the server's, after the replay.
@@ -26,6 +27,13 @@ export const STUCK_AFTER = 5;
 
 export const KIND_ORDER = 'order.create';
 export const KIND_CASH = 'payment.cash';
+/**
+ * An offline PromptPay payment is two entries (D-20): `create` makes the pending payment once the
+ * order is on the server, `confirm` is the staff member's "I checked the bank app" (rule 2) and
+ * goes only after the create has answered.
+ */
+export const KIND_PROMPTPAY = 'payment.promptpay.create';
+export const KIND_PROMPTPAY_CONFIRM = 'payment.promptpay.confirm';
 
 // ---------- What is stored ----------
 
@@ -64,10 +72,53 @@ const paymentPayloadSchema = z.object({
 });
 export type PaymentPayload = z.infer<typeof paymentPayloadSchema>;
 
+const orderTargetSchema = z.union([
+  z.object({ entryId: z.string() }),
+  z.object({ orderId: z.uuid() }),
+]);
+const amountKindSchema = z.enum(['estimate', 'server']);
+
+const promptpayCreatePayloadSchema = z.object({
+  /** The order entry this payment waits for, or the server order once it is known. */
+  target: orderTargetSchema,
+  /** The amount the QR showed (satang): an estimate for an order not synced yet, else the server's total. */
+  qrAmountSatang: z.number().int().positive(),
+  amountKind: amountKindSchema,
+  /** The account the QR paid, MASKED (the last characters only), to notice a changed account at replay. */
+  qrTargetMasked: z.string().min(1),
+  label: z.string().min(1),
+});
+export type PromptpayCreatePayload = z.infer<typeof promptpayCreatePayloadSchema>;
+
+const promptpayConfirmPayloadSchema = z.object({
+  /** The create entry it waits for, or the payment the server made once that has answered. */
+  target: z.union([
+    z.object({ createEntryId: z.string() }),
+    z.object({ paymentId: z.uuid(), orderId: z.uuid() }),
+  ]),
+  qrAmountSatang: z.number().int().positive(),
+  amountKind: amountKindSchema,
+  label: z.string().min(1),
+  /** Set when the server's amount was not the one on the QR: the confirm then waits for a person. */
+  serverAmountSatang: z.number().int().nonnegative().optional(),
+});
+export type PromptpayConfirmPayload = z.infer<typeof promptpayConfirmPayloadSchema>;
+
 /** The error codes kept on an entry: only a code, never a message. */
 export const ERROR_NOT_UNDERSTOOD = 'ENTRY_UNREADABLE';
 export const ERROR_PARENT_MISSING = 'ORDER_ENTRY_MISSING';
 const ERROR_REUSED = 'IDEMPOTENCY_KEY_REUSED';
+/** The payment the server made is for another amount than the QR showed: money was taken, reconcile. */
+export const ERROR_QR_AMOUNT = 'QR_AMOUNT_DIFFERS';
+/** The server's PromptPay account is not the one the QR paid: money may have gone to the old account. */
+export const ERROR_QR_TARGET = 'QR_ID_CHANGED';
+/** Answers that mean money may have been taken twice: a person decides, never a retry. */
+const NO_RETRY_CODES: readonly string[] = [
+  ERROR_QR_AMOUNT,
+  ERROR_QR_TARGET,
+  'ORDER_ALREADY_PAID',
+  'PAYMENT_ALREADY_OPEN',
+];
 /** The server's total is above the tender: sending the same tender again is refused again. */
 export const ERROR_TENDER_BELOW = 'TENDERED_BELOW_TOTAL';
 
@@ -102,19 +153,38 @@ export interface QueuedOrder extends QueueBase {
   note: string | null;
 }
 
-export interface QueuedPayment extends QueueBase {
+interface QueuedPaymentBase extends QueueBase {
   kind: 'payment';
   /** The server order, once known. */
   orderId: string | null;
   /** The order entry it waits for, until that one has synced. */
   dependsOn: string | null;
-  tenderedSatang: number;
+  /** What the screen was showing as the total: an estimate for an order not synced yet. */
   totalSatang: number | null;
+}
+
+export interface QueuedCashPayment extends QueuedPaymentBase {
+  method: 'cash';
+  tenderedSatang: number;
   /** The tender was changed after it was first saved. */
   tenderChanged: boolean;
   /** Not sent yet and not refused: the amount can still be corrected. */
   canChangeTender: boolean;
 }
+
+/** An offline PromptPay payment: the create and the staff's confirm, shown as one. */
+export interface QueuedPromptpayPayment extends QueuedPaymentBase {
+  method: 'promptpay';
+  /** The amount the QR showed. */
+  qrAmountSatang: number;
+  amountKind: 'estimate' | 'server';
+  /** What the server charged, when it was not the amount on the QR. */
+  serverAmountSatang: number | null;
+  /** The payment exists on the server already; only the confirm is left. */
+  confirmOnly: boolean;
+}
+
+export type QueuedPayment = QueuedCashPayment | QueuedPromptpayPayment;
 
 export type QueueItem = QueuedOrder | QueuedPayment;
 
@@ -225,6 +295,7 @@ export function toQueueItems(
         ...base,
         error,
         kind: 'payment',
+        method: 'cash',
         state,
         canRetry:
           state === 'attention' &&
@@ -238,12 +309,111 @@ export function toQueueItems(
         tenderChanged: changed === true,
         canChangeTender: state === 'queued' && entry.sentAt === undefined && totalSatang !== null,
       });
+    } else if (entry.kind === KIND_PROMPTPAY) {
+      const parsed = promptpayCreatePayloadSchema.safeParse(entry.payload);
+      if (!parsed.success) {
+        items.push(unreadable(entry));
+        continue;
+      }
+      const { target, qrAmountSatang, amountKind, label } = parsed.data;
+      const base = toBase(entry, tries, label);
+      const gate = gateOf(entry, base.error, target, parsedOrders);
+      items.push({
+        ...base,
+        error: gate.error,
+        kind: 'payment',
+        method: 'promptpay',
+        state: gate.state,
+        canRetry: canRetryEntry(gate.state, gate.error),
+        orderId: 'orderId' in target ? target.orderId : null,
+        dependsOn: 'entryId' in target ? target.entryId : null,
+        totalSatang: qrAmountSatang,
+        qrAmountSatang,
+        amountKind,
+        serverAmountSatang: null,
+        confirmOnly: false,
+      });
+    } else if (entry.kind === KIND_PROMPTPAY_CONFIRM) {
+      const parsed = promptpayConfirmPayloadSchema.safeParse(entry.payload);
+      if (!parsed.success) {
+        items.push(unreadable(entry));
+        continue;
+      }
+      const { target, label, qrAmountSatang, amountKind } = parsed.data;
+      const base = toBase(entry, tries, label);
+      if ('createEntryId' in target) {
+        // Waiting behind its create entry: that one is the item, this one is part of it.
+        if (entries.some((e) => e.id === target.createEntryId)) continue;
+        // The create entry is gone without having answered: there is nothing to confirm.
+        items.push({
+          ...base,
+          kind: 'payment',
+          method: 'promptpay',
+          state: 'attention',
+          error: ERROR_PARENT_MISSING,
+          canRetry: false,
+          orderId: null,
+          dependsOn: null,
+          totalSatang: qrAmountSatang,
+          qrAmountSatang,
+          amountKind,
+          serverAmountSatang: null,
+          confirmOnly: false,
+        });
+        continue;
+      }
+      const state: QueueState = entry.state === 'attention' ? 'attention' : 'queued';
+      items.push({
+        ...base,
+        kind: 'payment',
+        method: 'promptpay',
+        state,
+        canRetry: canRetryEntry(state, base.error),
+        orderId: target.orderId,
+        dependsOn: null,
+        totalSatang: qrAmountSatang,
+        qrAmountSatang,
+        amountKind,
+        serverAmountSatang: parsed.data.serverAmountSatang ?? null,
+        confirmOnly: true,
+      });
     } else {
       items.push(unreadable(entry));
     }
   }
   return items;
 }
+
+type ParsedOrders = Map<string, { entry: OutboxEntry; payload: OrderPayload }>;
+
+/** The state of a payment entry that waits for an order: blocked while its order needs attention. */
+function gateOf(
+  entry: OutboxEntry,
+  error: string | null,
+  target: { entryId: string } | { orderId: string },
+  orders: ParsedOrders,
+): { state: QueueState; error: string | null } {
+  let state: QueueState = entry.state === 'attention' ? 'attention' : 'queued';
+  let out = error;
+  if ('entryId' in target) {
+    const parent = orders.get(target.entryId);
+    if (!parent) {
+      state = 'attention';
+      out = ERROR_PARENT_MISSING;
+    } else if (parent.entry.state === 'attention' && state === 'queued') {
+      state = 'blocked';
+    }
+  }
+  return { state, error: out };
+}
+
+/** A retry is allowed unless the refusal is about money that may have been taken twice or a reused id. */
+const canRetryEntry = (state: QueueState, error: string | null): boolean =>
+  state === 'attention' &&
+  error !== ERROR_PARENT_MISSING &&
+  error !== ERROR_REUSED &&
+  error !== ERROR_TENDER_BELOW &&
+  !(error !== null && NO_RETRY_CODES.includes(error));
 
 export const orderPayloadOf = (entry: OutboxEntry): OrderPayload | null => {
   const parsed = orderPayloadSchema.safeParse(entry.payload);
@@ -252,6 +422,16 @@ export const orderPayloadOf = (entry: OutboxEntry): OrderPayload | null => {
 
 export const paymentPayloadOf = (entry: OutboxEntry): PaymentPayload | null => {
   const parsed = paymentPayloadSchema.safeParse(entry.payload);
+  return parsed.success ? parsed.data : null;
+};
+
+export const promptpayCreatePayloadOf = (entry: OutboxEntry): PromptpayCreatePayload | null => {
+  const parsed = promptpayCreatePayloadSchema.safeParse(entry.payload);
+  return parsed.success ? parsed.data : null;
+};
+
+export const promptpayConfirmPayloadOf = (entry: OutboxEntry): PromptpayConfirmPayload | null => {
+  const parsed = promptpayConfirmPayloadSchema.safeParse(entry.payload);
   return parsed.success ? parsed.data : null;
 };
 
@@ -287,6 +467,77 @@ export function cashEntry(
     state: 'queued',
     ...owner,
   };
+}
+
+export function promptpayCreateEntry(
+  clientRequestId: string,
+  payload: PromptpayCreatePayload,
+  owner: { staffId: string; deviceId: string },
+  now: number,
+): OutboxEntry {
+  return {
+    id: clientRequestId,
+    kind: KIND_PROMPTPAY,
+    payload,
+    createdAt: now,
+    attempts: 0,
+    state: 'queued',
+    ...owner,
+  };
+}
+
+export function promptpayConfirmEntry(
+  id: string,
+  payload: PromptpayConfirmPayload,
+  owner: { staffId: string; deviceId: string },
+  now: number,
+): OutboxEntry {
+  return {
+    id,
+    kind: KIND_PROMPTPAY_CONFIRM,
+    payload,
+    createdAt: now,
+    attempts: 0,
+    state: 'queued',
+    ...owner,
+  };
+}
+
+/** The entry this one waits for, if it waits for an entry at all. */
+function parentIdOf(row: OutboxEntry): string | null {
+  if (row.kind === KIND_CASH) {
+    const payload = paymentPayloadOf(row);
+    return payload && 'entryId' in payload.target ? payload.target.entryId : null;
+  }
+  if (row.kind === KIND_PROMPTPAY) {
+    const payload = promptpayCreatePayloadOf(row);
+    return payload && 'entryId' in payload.target ? payload.target.entryId : null;
+  }
+  if (row.kind === KIND_PROMPTPAY_CONFIRM) {
+    const payload = promptpayConfirmPayloadOf(row);
+    return payload && 'createEntryId' in payload.target ? payload.target.createEntryId : null;
+  }
+  return null;
+}
+
+/**
+ * The ids of the entries that cannot be sent without `id`, and the ones behind those: the payments
+ * of an order entry, and the confirm behind a PromptPay create. `id` itself is not in the list.
+ */
+export function dependentIds(rows: readonly OutboxEntry[], id: string): string[] {
+  const found = new Set<string>();
+  const queue = [id];
+  while (queue.length > 0) {
+    const current = queue.pop();
+    for (const row of rows) {
+      if (row.id === id || found.has(row.id)) continue;
+      if (parentIdOf(row) === current) {
+        found.add(row.id);
+        queue.push(row.id);
+      }
+    }
+  }
+  return [...found];
 }
 
 // ---------- Who may see and replay an entry ----------
@@ -331,11 +582,11 @@ export function purgeableIds(
   const doomed = new Set(
     rows.filter((r) => !ownsEntry(r, who) && now - r.createdAt > PURGE_AFTER_MS).map((r) => r.id),
   );
-  for (const row of rows) {
-    if (row.kind !== KIND_CASH || ownsEntry(row, who)) continue;
-    const payload = paymentPayloadOf(row);
-    if (payload && 'entryId' in payload.target && doomed.has(payload.target.entryId)) {
-      doomed.add(row.id);
+  // What waits for a purged entry (cash, a PromptPay create and its confirm) could never be sent.
+  for (const id of [...doomed]) {
+    for (const dependent of dependentIds(rows, id)) {
+      const row = rows.find((r) => r.id === dependent);
+      if (row && !ownsEntry(row, who)) doomed.add(dependent);
     }
   }
   return [...doomed];

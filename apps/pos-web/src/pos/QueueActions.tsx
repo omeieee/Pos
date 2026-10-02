@@ -93,7 +93,9 @@ export function QueueActions({ item }: { item: QueueItem }) {
                 ? 'outbox.discard.stuck'
                 : item.kind === 'order'
                   ? 'outbox.discard.order'
-                  : 'outbox.discard.payment',
+                  : item.method === 'promptpay'
+                    ? 'outbox.discard.promptpay'
+                    : 'outbox.discard.payment',
             )}
           </p>
           <button

@@ -34,6 +34,9 @@ function boot(name: string, create: OutboxDeps['api']['orders']['create'], onlin
         create: async () => {
           throw new Error('not expected');
         },
+        confirm: async () => {
+          throw new Error('not expected');
+        },
       },
     },
     entities: createEntityStore(),

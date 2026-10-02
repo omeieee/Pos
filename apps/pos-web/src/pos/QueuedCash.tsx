@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useLocale, useServices, useT } from '../ui/hooks.ts';
 import { Modal } from '../ui/Modal.tsx';
 import { CashPanel } from './CashPanel.tsx';
-import type { QueuedPayment } from './outbox-model.ts';
+import type { QueuedCashPayment } from './outbox-model.ts';
 import { cashView } from './payment-model.ts';
 import { QueueActions, QueueStateBadge } from './QueueActions.tsx';
 
@@ -17,7 +17,7 @@ import { QueueActions, QueueStateBadge } from './QueueActions.tsx';
  * While the entry has not been sent the amount can be corrected (the same keypad); the entry is
  * replaced, never doubled. After a send was tried it is frozen: the first request may have landed.
  */
-export function QueuedCash({ item }: { item: QueuedPayment }) {
+export function QueuedCash({ item }: { item: QueuedCashPayment }) {
   const tr = useT();
   const locale = useLocale();
   const { outbox } = useServices();

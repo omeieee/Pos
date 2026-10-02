@@ -25,10 +25,16 @@
  * flight when that happens still finishes its bookkeeping on the device but touches neither the
  * view nor the entity store of whoever signs in next.
  *
+ * Offline PromptPay (D-20) is two dependent entries on the same chain: `create` (the pending
+ * payment, sent once its order is on the server) and `confirm` (the staff member's "I checked the
+ * bank app", sent once the create has answered). The create is checked against what the QR showed:
+ * if the server charged another amount, or pays another (masked) account, the confirm is NOT sent
+ * and the entry waits for a person: money was taken, and the server never auto-confirms (rule 2).
+ *
  * The provisional label ("XK-07") is only a name for the waiting order. The server numbers the
  * order when it arrives; the label is not kept after the sync.
  */
-import type { OrderDto, RealtimeFrame } from '@sds/shared';
+import type { OrderDto, PaymentResult, RealtimeFrame } from '@sds/shared';
 import type { ApiClient, NewOrderInput } from '../api/client.ts';
 import { isApiClientError } from '../api/errors.ts';
 import type { AuthPhase } from '../auth/auth-store.ts';
@@ -42,17 +48,27 @@ import {
   backoffMs,
   cashEntry,
   classifyReplayError,
+  dependentIds,
   ERROR_NOT_UNDERSTOOD,
+  ERROR_QR_AMOUNT,
+  ERROR_QR_TARGET,
   errorCodeOf,
   KIND_CASH,
   KIND_ORDER,
+  KIND_PROMPTPAY,
+  KIND_PROMPTPAY_CONFIRM,
   MAX_QUEUE,
   type OrderPayload,
   orderEntry,
   orderPayloadOf,
   ownsEntry,
   type PaymentPayload,
+  type PromptpayCreatePayload,
   paymentPayloadOf,
+  promptpayConfirmEntry,
+  promptpayConfirmPayloadOf,
+  promptpayCreateEntry,
+  promptpayCreatePayloadOf,
   provisionalLabel,
   purgeableIds,
   type QueueItem,
@@ -96,7 +112,7 @@ export type RecoverResult =
 export interface OutboxDeps {
   api: {
     orders: { create: ApiClient['orders']['create'] };
-    payments: { create: ApiClient['payments']['create'] };
+    payments: Pick<ApiClient['payments'], 'create' | 'confirm'>;
   };
   entities: Pick<EntityStore, 'apply' | 'applyMany'>;
   auth: ReadableStore<{
@@ -130,6 +146,17 @@ export interface NewQueuedCash {
   label: string;
 }
 
+export interface NewQueuedPromptpay {
+  /** An order entry that has not synced, or an order the server has. */
+  target: PromptpayCreatePayload['target'];
+  /** The amount the QR showed: an estimate for an order not synced yet, else the server's total. */
+  qrAmountSatang: number;
+  amountKind: PromptpayCreatePayload['amountKind'];
+  /** The account the QR paid, masked (`******5678`): the only trace of the ID that is kept. */
+  qrTargetMasked: string;
+  label: string;
+}
+
 export interface OutboxStore extends ReadableStore<OutboxState> {
   /** Follows sign-in: opens and replays while a person is signed in, stops on sign-out. */
   bind(): () => void;
@@ -137,6 +164,12 @@ export interface OutboxStore extends ReadableStore<OutboxState> {
   isOffline(): boolean;
   enqueueOrder(input: NewQueuedOrder): Promise<EnqueueResult>;
   enqueueCash(input: NewQueuedCash): Promise<EnqueueResult>;
+  /**
+   * The customer paid by an offline QR and the staff member checked the bank app: saves the create
+   * and the confirm of the PromptPay payment behind its order. Nothing is sent from here and nothing
+   * counts as paid until the server confirms.
+   */
+  enqueuePromptpay(input: NewQueuedPromptpay): Promise<EnqueueResult>;
   /** A refused entry is sent again under the same id (not for a reused request id). */
   retry(id: string): Promise<void>;
   /** Removes a refused entry, and the payment entries that wait for it. */
@@ -277,6 +310,15 @@ export function createOutboxStore(deps: OutboxDeps): OutboxStore {
         const payload = paymentPayloadOf(entry);
         return payload !== null && 'orderId' in payload.target;
       }
+      if (entry.kind === KIND_PROMPTPAY) {
+        const payload = promptpayCreatePayloadOf(entry);
+        return payload !== null && 'orderId' in payload.target;
+      }
+      if (entry.kind === KIND_PROMPTPAY_CONFIRM) {
+        // The confirm goes only after the create has answered and named the payment.
+        const payload = promptpayConfirmPayloadOf(entry);
+        return payload !== null && 'paymentId' in payload.target;
+      }
       return entry.kind === KIND_ORDER;
     });
   }
@@ -331,11 +373,48 @@ export function createOutboxStore(deps: OutboxDeps): OutboxStore {
 
   /** The same payment, pointed at the server order instead of the order entry. */
   const relinked = (row: OutboxEntry, entryId: string, orderId: string): OutboxEntry => {
-    if (row.kind !== KIND_CASH) return row;
-    const payload = paymentPayloadOf(row);
-    if (!payload || !('entryId' in payload.target) || payload.target.entryId !== entryId)
+    if (row.kind === KIND_CASH) {
+      const payload = paymentPayloadOf(row);
+      if (!payload || !('entryId' in payload.target) || payload.target.entryId !== entryId)
+        return row;
+      return { ...row, payload: { ...payload, target: { orderId } } };
+    }
+    if (row.kind === KIND_PROMPTPAY) {
+      const payload = promptpayCreatePayloadOf(row);
+      if (!payload || !('entryId' in payload.target) || payload.target.entryId !== entryId)
+        return row;
+      return { ...row, payload: { ...payload, target: { orderId } } };
+    }
+    return row;
+  };
+
+  /**
+   * The confirm behind a create that has answered: pointed at the payment the server made. When the
+   * server's amount or account is not what the QR showed, the confirm is set to `attention` with
+   * the reason and the server's amount, so it is never sent without a person.
+   */
+  const confirmLinked = (
+    row: OutboxEntry,
+    createId: string,
+    result: PaymentResult,
+    mismatch: string | null,
+  ): OutboxEntry => {
+    if (row.kind !== KIND_PROMPTPAY_CONFIRM) return row;
+    const payload = promptpayConfirmPayloadOf(row);
+    if (
+      !payload ||
+      !('createEntryId' in payload.target) ||
+      payload.target.createEntryId !== createId
+    )
       return row;
-    return { ...row, payload: { ...payload, target: { orderId } } };
+    const linked = {
+      ...payload,
+      target: { paymentId: result.payment.id, orderId: result.order.id },
+      ...(mismatch === null ? {} : { serverAmountSatang: result.payment.amountSatang }),
+    };
+    return mismatch === null
+      ? { ...row, payload: linked }
+      : { ...row, payload: linked, state: 'attention', lastError: mismatch };
   };
 
   /**
@@ -378,6 +457,54 @@ export function createOutboxStore(deps: OutboxDeps): OutboxStore {
       attempts.delete(entry.id);
       dueAt.delete(entry.id);
       publish({ synced: { ...store.getState().synced, [entry.id]: order.id } });
+    });
+  }
+
+  /**
+   * The create answered. Its confirm is pointed at the payment BEFORE the create entry is removed
+   * (a crash in between replays the create, which the server answers as the same payment), and is
+   * held for a person when the amount or the account is not what the QR showed.
+   */
+  function promptpayCreated(
+    entry: OutboxEntry,
+    payload: PromptpayCreatePayload,
+    result: PaymentResult,
+    startedIn: number,
+  ): Promise<void> {
+    return serial(async () => {
+      const mismatch =
+        result.payment.amountSatang !== payload.qrAmountSatang
+          ? ERROR_QR_AMOUNT
+          : result.payment.promptpayTargetMasked !== payload.qrTargetMasked
+            ? ERROR_QR_TARGET
+            : null;
+      try {
+        const opened = local ?? (await ensureStore());
+        for (const row of await opened.outbox.list()) {
+          const linked = confirmLinked(row, entry.id, result, mismatch);
+          if (linked !== row) await opened.outbox.put(linked);
+        }
+      } catch {
+        if (epoch !== startedIn) return;
+        const tries = (attempts.get(entry.id) ?? entry.attempts) + 1;
+        attempts.set(entry.id, tries);
+        dueAt.set(entry.id, now() + backoffMs(tries, random));
+        publish();
+        return;
+      }
+      try {
+        await local?.outbox.remove(entry.id);
+      } catch {
+        // It stays on the device and is answered as a replay next time.
+      }
+      if (epoch !== startedIn) return;
+      deps.entities.applyMany(framesOf(result));
+      mine = mine
+        .filter((e) => e.id !== entry.id)
+        .map((e) => confirmLinked(e, entry.id, result, mismatch));
+      attempts.delete(entry.id);
+      dueAt.delete(entry.id);
+      publish();
     });
   }
 
@@ -425,6 +552,32 @@ export function createOutboxStore(deps: OutboxDeps): OutboxStore {
           clientRequestId: entry.id,
         });
         await orderSynced(entry, order, startedIn);
+        return true;
+      }
+      if (entry.kind === KIND_PROMPTPAY) {
+        const payload = promptpayCreatePayloadOf(entry);
+        if (!payload || !('orderId' in payload.target)) {
+          await markRefused(entry, ERROR_NOT_UNDERSTOOD, startedIn);
+          return true;
+        }
+        const { result } = await deps.api.payments.create(
+          payload.target.orderId,
+          { method: 'promptpay' },
+          { clientRequestId: entry.id },
+        );
+        await promptpayCreated(entry, payload, result, startedIn);
+        return true;
+      }
+      if (entry.kind === KIND_PROMPTPAY_CONFIRM) {
+        const payload = promptpayConfirmPayloadOf(entry);
+        if (!payload || !('paymentId' in payload.target)) {
+          await markRefused(entry, ERROR_NOT_UNDERSTOOD, startedIn);
+          return true;
+        }
+        // The server answers 200 without a write when the payment is already confirmed, so a
+        // confirm whose answer was lost is safe to send again. It takes no request id.
+        const result = await deps.api.payments.confirm(payload.target.paymentId, {});
+        await paymentSynced(entry, framesOf(result), startedIn);
         return true;
       }
       const payload = paymentPayloadOf(entry);
@@ -624,6 +777,8 @@ export function createOutboxStore(deps: OutboxDeps): OutboxStore {
           target = { orderId };
         }
       }
+      // One payment per order: a PromptPay waiting for it means cash would collide with it.
+      if (promptpayWaitingFor(target)) return { ok: false, reason: 'busy' };
       // One cash payment per order: asking again answers the one that is waiting.
       const wanted = JSON.stringify(target);
       const waiting = mine.find((e) => {
@@ -645,6 +800,99 @@ export function createOutboxStore(deps: OutboxDeps): OutboxStore {
       );
       const saved = await save(entry, startedIn);
       return saved ?? { ok: true, id: entry.id, label: input.label };
+    });
+
+  /** The PromptPay create (or, once that has answered, confirm) already saved for this target. */
+  function promptpayWaitingFor(target: PromptpayCreatePayload['target']): OutboxEntry | undefined {
+    const wanted = JSON.stringify(target);
+    return mine.find((e) => {
+      if (e.kind === KIND_PROMPTPAY) {
+        const payload = promptpayCreatePayloadOf(e);
+        return payload !== null && JSON.stringify(payload.target) === wanted;
+      }
+      if (e.kind === KIND_PROMPTPAY_CONFIRM) {
+        const payload = promptpayConfirmPayloadOf(e);
+        return (
+          payload !== null &&
+          'orderId' in target &&
+          'orderId' in payload.target &&
+          payload.target.orderId === target.orderId
+        );
+      }
+      return false;
+    });
+  }
+
+  const enqueuePromptpay: OutboxStore['enqueuePromptpay'] = (input) =>
+    serial(async () => {
+      const person = who;
+      if (person === null) return { ok: false, reason: 'noSession' };
+      const startedIn = epoch;
+      let target = input.target;
+      if ('entryId' in target) {
+        const { entryId } = target;
+        if (!mine.some((e) => e.id === entryId)) {
+          const orderId = store.getState().synced[entryId];
+          if (orderId === undefined) return { ok: false, reason: 'orderGone' };
+          target = { orderId };
+        }
+      }
+      // One payment per order: the same method answers the one that is waiting, cash is refused.
+      const waiting = promptpayWaitingFor(target);
+      if (waiting) return { ok: true, id: waiting.id, label: input.label };
+      const cashWaiting = mine.some((e) => {
+        if (e.kind !== KIND_CASH) return false;
+        const payload = paymentPayloadOf(e);
+        return payload !== null && JSON.stringify(payload.target) === JSON.stringify(target);
+      });
+      if (cashWaiting) return { ok: false, reason: 'busy' };
+
+      const opened = await ensureStore().catch(() => null);
+      if (!opened?.persistent) return { ok: false, reason: 'storage' };
+      const at = now();
+      const create = promptpayCreateEntry(
+        newId(),
+        {
+          target,
+          qrAmountSatang: input.qrAmountSatang,
+          amountKind: input.amountKind,
+          qrTargetMasked: input.qrTargetMasked,
+          label: input.label,
+        },
+        person,
+        at,
+      );
+      const confirm = promptpayConfirmEntry(
+        newId(),
+        {
+          target: { createEntryId: create.id },
+          qrAmountSatang: input.qrAmountSatang,
+          amountKind: input.amountKind,
+          label: input.label,
+        },
+        person,
+        at,
+      );
+      try {
+        // Both need a place: a create without its confirm must never be left behind.
+        if ((await opened.outbox.count()) + 2 > MAX_QUEUE) return { ok: false, reason: 'full' };
+        await opened.outbox.put(create);
+        try {
+          await opened.outbox.put(confirm);
+        } catch {
+          await opened.outbox.remove(create.id).catch(() => undefined);
+          return { ok: false, reason: 'storage' };
+        }
+      } catch {
+        return { ok: false, reason: 'storage' };
+      }
+      local = opened;
+      if (epoch === startedIn) {
+        mine = [...mine, create, confirm];
+        publish();
+        kick(false);
+      }
+      return { ok: true, id: create.id, label: input.label };
     });
 
   // ---------- A person's choices ----------
@@ -669,11 +917,8 @@ export function createOutboxStore(deps: OutboxDeps): OutboxStore {
     // Refused, or stuck (tried many times with no answer: it may even be on the server already).
     // Never one whose request is on its way.
     if (!item || (item.state !== 'attention' && !item.stuck) || inFlight.has(id)) return;
-    // The payments that wait for an order go with it.
-    const gone = new Set([id]);
-    for (const dependent of toQueueItems(mine, attempts)) {
-      if (dependent.kind === 'payment' && dependent.dependsOn === id) gone.add(dependent.id);
-    }
+    // What waits for an entry goes with it: the payments of an order, and the confirm behind a create.
+    const gone = new Set([id, ...dependentIds(mine, id)]);
     for (const goneId of gone) {
       try {
         await local?.outbox.remove(goneId);
@@ -803,6 +1048,7 @@ export function createOutboxStore(deps: OutboxDeps): OutboxStore {
     isOffline,
     enqueueOrder,
     enqueueCash,
+    enqueuePromptpay,
     retry,
     discard,
     kick: () => kick(true),
