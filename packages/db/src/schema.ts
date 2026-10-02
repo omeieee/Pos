@@ -188,10 +188,12 @@ export const customers = pgTable(
     note: text('note'),
     /**
      * The recipient the shop last delivered to for this customer (owner, 2026-10-02), remembered
-     * automatically from orders so the next order can show it. Personal data (PDPA): cleared when
-     * the customer is anonymised. `recipientKey` is the name normalised by `recipientKey()` in
-     * `@sds/shared` (case, spacing, Unicode form); counter and phone recipients are matched by
-     * (building, recipientKey), a LINE customer by `lineUserId` only.
+     * automatically from orders so the next order can show it. Personal data (PDPA): cleared by
+     * `anonymizeCustomer` (owner-only `POST /v1/customers/{id}/anonymize`); nothing clears it
+     * automatically, because a retention period has not been decided. `recipientKey` is the name
+     * normalised by `recipientKey()` in `@sds/shared` (case, spacing, Unicode form). Only counter
+     * and phone customers hold it: they are matched by (building, recipientKey). A LINE customer
+     * is matched by `lineUserId` only and an order never writes these fields onto it.
      */
     building: text('building'),
     recipientName: text('recipient_name'),
@@ -319,8 +321,11 @@ export const orders = pgTable(
     roomNo: text('room_no'),
     /**
      * Entrance delivery (owner, 2026-10-02): the building whose entrance the order goes to, who
-     * receives it, and optional free-text details. Personal data (PDPA). The order's `note` stays
-     * the kitchen note. Null on platform and legacy orders.
+     * receives it, and optional free-text details. Personal data (PDPA): when the order's customer
+     * is anonymised the details are cleared and `recipientName` becomes the text
+     * `ANONYMIZED_RECIPIENT_NAME` (the check below needs a name), while the building stays because
+     * orders are tax records. The order's `note` stays the kitchen note. Null on platform and
+     * legacy orders.
      */
     deliveryBuilding: text('delivery_building'),
     recipientName: text('recipient_name'),

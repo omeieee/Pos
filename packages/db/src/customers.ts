@@ -2,13 +2,18 @@
  * Recipient memory (owner, 2026-10-02): every entrance-delivery order remembers who it was for, so
  * the next order can show "Building B1, Fah" and let staff add details. Counter and phone
  * recipients are matched by (building, name key); a LINE customer is keyed by `line_user_id` and
- * is only ever updated, never matched by name. The name key is `recipientKey()` from `@sds/shared`,
- * computed by the caller. This is personal data (PDPA): rows are cleared on anonymisation, and
- * `listRecipients` returns nothing but the five fields staff need.
+ * is only ever linked to an order, never matched by name and never given recipient details. The
+ * name key is `recipientKey()` from `@sds/shared`, computed by the caller.
+ *
+ * This is personal data (PDPA). `anonymizeCustomer` below erases it on request (owner-only route
+ * `POST /v1/customers/{id}/anonymize`). Nothing erases it by itself: there is NO retention job yet
+ * because the retention period needs an owner decision, so until then a recipient is kept until
+ * someone anonymises it. `listRecipients` returns nothing but the five fields staff need.
  */
-import { and, desc, eq, isNotNull, isNull, sql } from 'drizzle-orm';
+import { ANONYMIZED_RECIPIENT_NAME } from '@sds/shared';
+import { and, desc, eq, isNotNull, isNull, or, sql } from 'drizzle-orm';
 import type { Db } from './client.ts';
-import { customers } from './schema.ts';
+import { customers, orders } from './schema.ts';
 
 export interface RecipientDetails {
   building: string;
@@ -95,6 +100,89 @@ export async function recordRecipientOrder(
     .returning({ id: customers.id });
   if (!row) throw new Error('recipient upsert returned no row');
   return row.id;
+}
+
+export type AnonymizeResult =
+  | { found: false }
+  | {
+      found: true;
+      /** False when the customer was already anonymised: nothing was written. */
+      changed: boolean;
+      anonymizedAt: Date;
+      version: number;
+      /** The orders that were rewritten (and so have a new rev), for the live feed. */
+      orderIds: string[];
+    };
+
+/**
+ * PDPA erasure of one customer, in the caller's transaction. The customer row stays, with its
+ * counters (`order_count`, `total_spent_satang`, dates) so the reports still add up, but every field
+ * that identifies a person is cleared: LINE id, names, picture, phone, room, note and the saved
+ * recipient (building, name, note, key). `anonymized_at` marks it, so it is never matched, listed
+ * or used by a new order again.
+ *
+ * The customer's ORDERS are tax records and stay (rows, totals, items, `delivery_building`). Only
+ * the person on them is erased: `delivery_note` becomes null and `recipient_name` becomes
+ * `ANONYMIZED_RECIPIENT_NAME` on entrance deliveries (the check `orders_entrance_delivery_recipient`
+ * needs a non-empty name there, so the check stays as it is) and null elsewhere. The order's own
+ * `note` (kitchen note) and `room_no` are not touched. The sync trigger gives each changed row a
+ * new rev and version, so the change reaches the feed. Already anonymised: nothing is written.
+ */
+export async function anonymizeCustomer(db: Db, id: string, at: Date): Promise<AnonymizeResult> {
+  const [row] = await db
+    .select({ anonymizedAt: customers.anonymizedAt, version: customers.version })
+    .from(customers)
+    .where(eq(customers.id, id))
+    .for('update')
+    .limit(1);
+  if (!row) return { found: false };
+  if (row.anonymizedAt) {
+    return {
+      found: true,
+      changed: false,
+      anonymizedAt: row.anonymizedAt,
+      version: row.version,
+      orderIds: [],
+    };
+  }
+  const [updated] = await db
+    .update(customers)
+    .set({
+      anonymizedAt: at,
+      lineUserId: null,
+      displayName: null,
+      pictureUrl: null,
+      nickname: null,
+      phone: null,
+      roomNo: null,
+      note: null,
+      building: null,
+      recipientName: null,
+      deliveryNote: null,
+      recipientKey: null,
+    })
+    .where(eq(customers.id, id))
+    .returning({ version: customers.version });
+  const rewritten = await db
+    .update(orders)
+    .set({
+      recipientName: sql`case when ${orders.fulfillment} = 'entrance_delivery' then ${ANONYMIZED_RECIPIENT_NAME} else null end`,
+      deliveryNote: null,
+    })
+    .where(
+      and(
+        eq(orders.customerId, id),
+        or(isNotNull(orders.recipientName), isNotNull(orders.deliveryNote)),
+      ),
+    )
+    .returning({ id: orders.id });
+  return {
+    found: true,
+    changed: true,
+    anonymizedAt: at,
+    version: updated?.version ?? row.version + 1,
+    orderIds: rewritten.map((r) => r.id),
+  };
 }
 
 /** What a staff screen may know about a remembered recipient. Never a phone, LINE id or history. */

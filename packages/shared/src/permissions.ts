@@ -23,6 +23,8 @@ export const PERMISSIONS = [
   'staff.manage',
   'device.manage',
   'data.export',
+  /** Erase a customer's personal data (PDPA). Irreversible, so owner only, with step-up. */
+  'customer.anonymize',
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 
@@ -64,6 +66,7 @@ export const STEP_UP_PERMISSIONS: ReadonlySet<Permission> = new Set<Permission>(
   'staff.manage',
   'device.manage',
   'data.export',
+  'customer.anonymize',
 ]);
 
 export function hasPermission(role: StaffRole, permission: Permission): boolean {

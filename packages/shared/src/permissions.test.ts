@@ -14,6 +14,7 @@ test('only the owner can change the PromptPay ID, the co-pay scheme, staff or de
       'staff.manage',
       'device.manage',
       'data.export',
+      'customer.anonymize',
     ] as const) {
       expect(hasPermission(role, p)).toBe(role === 'owner');
     }
@@ -57,6 +58,7 @@ test('changing ordinary settings stays with managers and the owner', () => {
 test('sensitive actions need step-up', () => {
   expect(PERMISSIONS.filter(requiresStepUp).sort()).toEqual(
     [
+      'customer.anonymize',
       'data.export',
       'device.manage',
       'payment.void_refund',

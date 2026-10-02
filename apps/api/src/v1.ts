@@ -6,6 +6,7 @@ import { createGuard, enforceGuardedRoutes, type GuardFactory } from './auth/gua
 import { type AuthPolicy, DEFAULT_AUTH_POLICY } from './auth/policy.ts';
 import { registerAuthRoutes } from './auth/routes.ts';
 import type { AuthContext } from './auth/service.ts';
+import { registerCustomerRoutes } from './customers/routes.ts';
 import type { EventBus } from './events.ts';
 import { registerMenuRoutes } from './menu/routes.ts';
 import { registerRecipientRoutes } from './orders/recipients.ts';
@@ -84,6 +85,9 @@ export async function registerV1(app: FastifyInstance, deps: V1Deps): Promise<vo
       });
       await v1.register((scope) => registerRecipientRoutes(scope, context.auth, context.guard), {
         prefix: '/recipients',
+      });
+      await v1.register((scope) => registerCustomerRoutes(scope, context.auth, context.guard), {
+        prefix: '/customers',
       });
       await v1.register((scope) => registerMenuRoutes(scope, context.auth, context.guard), {
         prefix: '/menu',

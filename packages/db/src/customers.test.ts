@@ -1,5 +1,5 @@
 import type { PGlite } from '@electric-sql/pglite';
-import { recipientKey } from '@sds/shared';
+import { ANONYMIZED_RECIPIENT_NAME, recipientKey } from '@sds/shared';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 import * as repo from './customers.ts';
 import { createPgliteDb, type PgliteDb } from './pglite.ts';
@@ -27,6 +27,9 @@ const details = (
 });
 const one = async (id: string) =>
   (await client.query<Record<string, unknown>>('select * from customers where id = $1', [id]))
+    .rows[0];
+const one2 = async (table: string, id: string) =>
+  (await client.query<Record<string, unknown>>(`select * from ${table} where id = $1`, [id]))
     .rows[0];
 const count = async () =>
   Number(
@@ -289,5 +292,136 @@ describe('listRecipients', () => {
   test('honours the limit', async () => {
     await seedRecipients();
     expect(await repo.listRecipients(db, { limit: 2 })).toHaveLength(2);
+  });
+});
+describe('anonymizeCustomer (PDPA erasure)', () => {
+  const at2 = new Date(Date.UTC(2026, 9, 2, 6, 0, 0));
+  const seedCustomer = async (lineUserId: string | null) =>
+    String(
+      (
+        await client.query<{ id: string }>(
+          `insert into customers (line_user_id, display_name, picture_url, nickname, phone, room_no, note,
+             building, recipient_name, delivery_note, recipient_key, order_count, total_spent_satang, last_order_at)
+           values ($1, 'Test Name', 'https://img.example.test/p.jpg', 'Nick', '0800000000', '101', 'allergy',
+             'B1', 'Test Erase', 'ชั้น 2', $2, 4, 12000, now()) returning id`,
+          [lineUserId, `test erase ${Math.random()}`],
+        )
+      ).rows[0]?.id,
+    );
+  const seedOrder = async (
+    customerId: string,
+    fulfillment: string,
+    over: { recipient?: string | null; note?: string | null } = {},
+  ) => {
+    const suffix = Math.floor(Math.random() * 1e9);
+    return String(
+      (
+        await client.query<{ id: string }>(
+          `insert into orders (order_no, business_date, channel, fulfillment, delivery_building, recipient_name,
+             delivery_note, customer_id, status, subtotal_satang, total_satang, client_request_id, note)
+           values ($1, '2026-10-02', 'storefront', $2, $3, $4, $5, $6, 'completed', 5000, 5000, gen_random_uuid(), 'kitchen note')
+           returning id`,
+          [
+            `T-${suffix}`,
+            fulfillment,
+            fulfillment === 'entrance_delivery' ? 'B1' : null,
+            over.recipient === undefined ? 'Test Erase' : over.recipient,
+            over.note === undefined ? 'ชั้น 2' : over.note,
+            customerId,
+          ],
+        )
+      ).rows[0]?.id,
+    );
+  };
+
+  test('clears every personal field, keeps the row and the counters, and bumps rev and version', async () => {
+    const id = await seedCustomer('U-test-erase-1');
+    const before = await one(id);
+    const result = await repo.anonymizeCustomer(db, id, at2);
+    expect(result).toMatchObject({ found: true, changed: true });
+    const row = await one(id);
+    expect(row).toMatchObject({
+      line_user_id: null,
+      display_name: null,
+      picture_url: null,
+      nickname: null,
+      phone: null,
+      room_no: null,
+      note: null,
+      building: null,
+      recipient_name: null,
+      delivery_note: null,
+      recipient_key: null,
+      order_count: 4,
+      total_spent_satang: 12000,
+    });
+    expect(new Date(String(row?.anonymized_at)).toISOString()).toBe(at2.toISOString());
+    expect(Number(row?.version)).toBe(Number(before?.version) + 1);
+    expect(Number(row?.rev)).toBeGreaterThan(Number(before?.rev));
+  });
+
+  test("the customer's orders keep their building, totals and kitchen note; the name becomes the erased text and the note is cleared", async () => {
+    const id = await seedCustomer(null);
+    const entrance = await seedOrder(id, 'entrance_delivery');
+    const platform = await seedOrder(id, 'platform_delivery', { recipient: null, note: 'x' });
+    const other = await seedOrder(await seedCustomer(null), 'entrance_delivery');
+    const orderBefore = await one2('orders', entrance);
+    const result = await repo.anonymizeCustomer(db, id, at2);
+    expect([...(result.found ? result.orderIds : [])].sort()).toEqual([entrance, platform].sort());
+    const e = await one2('orders', entrance);
+    expect(e).toMatchObject({
+      recipient_name: ANONYMIZED_RECIPIENT_NAME,
+      delivery_note: null,
+      delivery_building: 'B1',
+      total_satang: 5000,
+      note: 'kitchen note',
+      customer_id: id,
+    });
+    expect(Number(e?.version)).toBe(Number(orderBefore?.version) + 1);
+    expect(Number(e?.rev)).toBeGreaterThan(Number(orderBefore?.rev));
+    expect(await one2('orders', platform)).toMatchObject({
+      recipient_name: null,
+      delivery_note: null,
+    });
+    expect(await one2('orders', other)).toMatchObject({
+      recipient_name: 'Test Erase',
+      delivery_note: 'ชั้น 2',
+    });
+  });
+
+  test('an order with nothing personal on it is left alone (no needless rev)', async () => {
+    const id = await seedCustomer(null);
+    const plain = await seedOrder(id, 'platform_delivery', { recipient: null, note: null });
+    const before = await one2('orders', plain);
+    const result = await repo.anonymizeCustomer(db, id, at2);
+    expect(result).toMatchObject({ found: true, orderIds: [] });
+    expect(await one2('orders', plain)).toMatchObject({
+      rev: before?.rev,
+      version: before?.version,
+    });
+  });
+
+  test('already anonymised: nothing changes and nothing is bumped', async () => {
+    const id = await seedCustomer(null);
+    await repo.anonymizeCustomer(db, id, at2);
+    const before = await one(id);
+    const again = await repo.anonymizeCustomer(db, id, new Date(at2.getTime() + 60_000));
+    expect(again).toMatchObject({ found: true, changed: false });
+    expect(await one(id)).toEqual(before);
+  });
+
+  test('an unknown id is not found', async () => {
+    expect(await repo.anonymizeCustomer(db, '0192f3a0-0000-7000-8000-00000000dead', at2)).toEqual({
+      found: false,
+    });
+  });
+
+  test('it frees the recipient name: a new order for that building and name makes a fresh customer', async () => {
+    const id = await repo.recordRecipientOrder(db, details('A2', 'Test Free'), at(1));
+    await repo.anonymizeCustomer(db, id, at2);
+    const next = await repo.recordRecipientOrder(db, details('A2', 'Test Free'), at(2));
+    expect(next).not.toBe(id);
+    expect(await one(next)).toMatchObject({ order_count: 1 });
+    expect(await repo.listRecipients(db, { nameKey: 'test free', limit: 8 })).toHaveLength(1);
   });
 });
