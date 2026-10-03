@@ -134,6 +134,7 @@ Repo → **Settings → Secrets and variables → Actions**.
 | Secret | `CLOUDFLARE_API_TOKEN` | from 1.8 |
 | Secret | `CLOUDFLARE_ACCOUNT_ID` | from 1.8 |
 | Variable | `API_HOST` | `161-118-211-42.sslip.io` |
+| Variable | `LIFF_ID` | the LIFF app id of the customer app, `<digits>-<letters>` (LINE Developers, LINE Login channel, LIFF tab); the web deploy builds it into `apps/liff-web` as `VITE_LIFF_ID` and fails while it is unset |
 | Variable | `DEPLOY_HOST` | `sds-pos` (the VM's Tailscale machine name, step 2.2) |
 | Variable | `DEPLOY_ENABLED` | leave **unset** until step 3.1 |
 | Variable | `WEB_DEPLOY_ENABLED` | leave **unset** until step 3.4 |

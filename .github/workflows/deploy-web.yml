@@ -3,7 +3,9 @@ name: Deploy web apps
 # Builds apps/pos-web and apps/liff-web and uploads them to Cloudflare Pages
 # (Direct Upload): sds-pos (staff) and sds-order (LINE customer app).
 # Skipped (not failed) until the owner sets the repo variable WEB_DEPLOY_ENABLED=true.
-# The API URL is derived from the single repo variable API_HOST.
+# The API URL is derived from the single repo variable API_HOST. The customer app also
+# needs the repo variable LIFF_ID (the LIFF app id, digits-letters): it is built into
+# apps/liff-web as VITE_LIFF_ID, and the deploy fails when it is unset.
 #
 # Automatic deploys run only AFTER the CI workflow finished green for a push to
 # main of this repo (workflow_run), and deploy exactly the commit CI verified
@@ -86,10 +88,15 @@ jobs:
     env:
       VITE_API_BASE_URL: https://${{ vars.API_HOST }}
       API_HOST: ${{ vars.API_HOST }}
+      LIFF_ID: ${{ vars.LIFF_ID }}
+      VITE_LIFF_ID: ${{ vars.LIFF_ID }}
     steps:
       - name: Check repo variables
         run: |
           [ -n "${API_HOST}" ] || { echo "::error::repo variable API_HOST is empty"; exit 1; }
+          [ -n "${LIFF_ID}" ] || { echo "::error::repo variable LIFF_ID is empty (the LIFF app id of the customer app)"; exit 1; }
+          printf '%s' "${LIFF_ID}" | grep -Eq '^[0-9]+-[A-Za-z0-9]+$' \
+            || { echo "::error::LIFF_ID is not a LIFF id (digits-letters)"; exit 1; }
 
       # workflow_run's github.sha is the tip of main, NOT the commit CI tested.
       - uses: actions/checkout@v4
@@ -115,6 +122,9 @@ jobs:
             grep -rqF "${VITE_API_BASE_URL}" "apps/${app}/dist" \
               || echo "::warning::${app}: VITE_API_BASE_URL not found in the bundle (check turbo.json env)"
           done
+          # Without the LIFF id nobody can sign in to the customer app: fail, do not warn.
+          grep -rqF "${LIFF_ID}" apps/liff-web/dist \
+            || { echo "::error::liff-web: LIFF_ID not found in the bundle (check turbo.json env)"; exit 1; }
 
       # public/_headers (CSP etc.) names the API host as __API_HOST__; fill it in
       # from the one repo variable, and refuse to deploy a placeholder.

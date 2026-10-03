@@ -24,7 +24,7 @@ The app is `apps/liff-web` on Cloudflare Pages (`sds-order.pages.dev`). It lives
 1. LIFF app **Endpoint URL**: `https://sds-order.pages.dev` (no path; the app reads `/menu`, `/orders`, `/orders/<id>` from the address, so `https://liff.line.me/<LIFF ID>/orders/<id>` opens that order).
 2. **Scopes**: `openid`, `profile`, `chat_message.write` (the last one lets the app say "ยืนยันออเดอร์ #L-012" in the chat so the shop's confirmation is a free reply). Size: Full or Tall. Turn on the **add-friend option** (Normal or Aggressive) on the LINE Login channel and link it to the OA, so people who order also follow.
 3. `LINE_LIFF_ID` (`<digits>-<letters>`) goes in the API's `.env`. The API uses its numeric prefix as the channel id to check tokens; `LINE_CHANNEL_ID` (the Messaging channel) is not used for that.
-4. Build variable `VITE_LIFF_ID` (same value) and `VITE_API_BASE_URL` for `apps/liff-web`. `CORS_ORIGINS` already lists `https://sds-order.pages.dev`.
+4. GitHub repo variable **`LIFF_ID`** (same value as `LINE_LIFF_ID`; Settings, Secrets and variables, Actions, Variables). `deploy-web.yml` builds it into `apps/liff-web` as `VITE_LIFF_ID` and fails the deploy while it is unset or malformed. `VITE_API_BASE_URL` comes from `API_HOST` as before. `CORS_ORIGINS` already lists `https://sds-order.pages.dev`.
 5. Customer API: `POST /v1/app/session` (LIFF ID or access token in, short-lived session out), then `/v1/app/checkout`, `/orders`, `/orders/:id`, `/orders/:id/payment|claim|qr`, `/privacy-ack`. The menu is the public `GET /v1/menu?channel=line`.
 
 ## Rich menu (run once; the token never leaves the environment)
