@@ -82,3 +82,4 @@ Tasks 1 (except the TOTP app choice) and 4 need no owner answers. Tasks 1–6 ar
 - 2026-10-03 · Settings screens (hub, shop, hours, PromptPay ID, co-pay scheme, devices, staff) QA-reviewed and pushed as cb9e6ad ([PROGRESS](../PROGRESS.md))
 - 2026-10-03 · Settings review fixes (staff create, co-pay channels, devices) QA-reviewed and pushed as 8244323 ([PROGRESS](../PROGRESS.md))
 - 2026-10-03 · Playwright E2E (36 tests, five browser/viewport projects against the dev mock) QA-reviewed and pushed ([PROGRESS](../PROGRESS.md))
+- 2026-10-03 · P3 phase-end review (no Blocker/High); co-pay enable rule, owner outbox-recovery audit with `originalStaffId` (migration 0017) and real-PostgreSQL payment concurrency check done; pushed as a5b687b and 8184597. P3 waits only on the owner's real-device checks ([PROGRESS](../PROGRESS.md))
