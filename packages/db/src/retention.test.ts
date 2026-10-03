@@ -1,5 +1,10 @@
 import type { PGlite } from '@electric-sql/pglite';
-import { ANONYMIZED_BUILDING, ANONYMIZED_RECIPIENT_NAME, RETENTION_DAYS } from '@sds/shared';
+import {
+  ANONYMIZED_BUILDING,
+  ANONYMIZED_RECIPIENT_NAME,
+  ANONYMIZED_ROOM_NO,
+  RETENTION_DAYS,
+} from '@sds/shared';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 import { createPgliteDb, type PgliteDb } from './pglite.ts';
 import * as retention from './retention.ts';
@@ -170,7 +175,7 @@ describe('anonymizeOrderSnapshotsBatch', () => {
     expect((await orderRow(open))?.recipient_name).toBe('Test Person');
   });
 
-  test('a legacy room delivery loses the name and keeps its room', async () => {
+  test('a legacy room delivery loses the name, the building and the room number', async () => {
     const id = await order({
       completedDaysAgo: 40,
       fulfillment: 'room_delivery',
@@ -182,7 +187,7 @@ describe('anonymizeOrderSnapshotsBatch', () => {
     expect(await orderRow(id)).toMatchObject({
       recipient_name: null,
       delivery_building: null,
-      room_no: '1203',
+      room_no: ANONYMIZED_ROOM_NO,
     });
   });
 

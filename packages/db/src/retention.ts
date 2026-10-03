@@ -5,8 +5,8 @@
  * counts and the retention period only: never a name, a building, a LINE id or a row id.
  *
  * - `purgeLineEventsBatch`: deletes `line_events` older than the cutoff.
- * - `anonymizeOrderSnapshotsBatch`: replaces recipient name and building on finished orders
- *   (completed, or cancelled) and clears the delivery note. Amounts and items stay (tax records).
+ * - `anonymizeOrderSnapshotsBatch`: replaces recipient name, building and room number on
+ *   finished orders (completed, or cancelled) and clears the delivery note. Amounts and items stay (tax records).
  *   The updates go through the sync trigger, so devices catch the change up by rev.
  * - `expireRecipientsBatch`: erases the remembered recipients (counter customers with a recipient)
  *   whose last order is older than the cutoff, the way the owner's erasure request does.
@@ -14,8 +14,13 @@
  * Not here: slip images (90 days). Nothing stores a slip image yet (`payments.slip_image_key` is
  * never written), so there is nothing to delete; add the job with the upload.
  */
-import { ANONYMIZED_BUILDING, ANONYMIZED_RECIPIENT_NAME, RETENTION_DAYS } from '@sds/shared';
-import { and, asc, inArray, isNotNull, isNull, lt, ne, or, sql } from 'drizzle-orm';
+import {
+  ANONYMIZED_BUILDING,
+  ANONYMIZED_RECIPIENT_NAME,
+  ANONYMIZED_ROOM_NO,
+  RETENTION_DAYS,
+} from '@sds/shared';
+import { and, asc, inArray, isNotNull, isNull, lt, or, sql } from 'drizzle-orm';
 import { insertAudit } from './audit.ts';
 import type { Db } from './client.ts';
 import { anonymizeCustomer } from './customers.ts';
@@ -50,8 +55,18 @@ export async function purgeLineEventsBatch(
 }
 
 const isEntrance = sql`${orders.fulfillment} = 'entrance_delivery'`;
+// What each personal column should hold once erased. The checks `orders_entrance_delivery_recipient`
+// and `orders_room_delivery_room` need a value on those two kinds of order, so a stand-in text is
+// written there; every other kind gets null.
+const nameAfter = sql`case when ${isEntrance} then ${ANONYMIZED_RECIPIENT_NAME} else null end`;
+const buildingAfter = sql`case when ${isEntrance} then ${ANONYMIZED_BUILDING} else null end`;
+const roomAfter = sql`case when ${orders.fulfillment} = 'room_delivery' then ${ANONYMIZED_ROOM_NO} else null end`;
 
-/** Anonymises up to `limit` finished orders (completed or cancelled before `before`). */
+/**
+ * Anonymises up to `limit` finished orders (completed or cancelled before `before`): recipient
+ * name, building, room number and delivery note. An order whose columns already hold the erased
+ * values is not selected, so a second run changes nothing and bumps no version.
+ */
 export async function anonymizeOrderSnapshotsBatch(
   db: Db,
   args: { before: Date; limit: number; now: Date },
@@ -65,23 +80,10 @@ export async function anonymizeOrderSnapshotsBatch(
           inArray(orders.status, ['completed', 'cancelled']),
           lt(sql`coalesce(${orders.completedAt}, ${orders.cancelledAt})`, args.before),
           or(
-            // The check `orders_entrance_delivery_recipient` needs a name and a building here.
-            and(
-              isEntrance,
-              or(
-                sql`${orders.recipientName} is distinct from ${ANONYMIZED_RECIPIENT_NAME}`,
-                sql`${orders.deliveryBuilding} is distinct from ${ANONYMIZED_BUILDING}`,
-                isNotNull(orders.deliveryNote),
-              ),
-            ),
-            and(
-              ne(orders.fulfillment, 'entrance_delivery'),
-              or(
-                isNotNull(orders.recipientName),
-                isNotNull(orders.deliveryBuilding),
-                isNotNull(orders.deliveryNote),
-              ),
-            ),
+            sql`${orders.recipientName} is distinct from ${nameAfter}`,
+            sql`${orders.deliveryBuilding} is distinct from ${buildingAfter}`,
+            sql`${orders.roomNo} is distinct from ${roomAfter}`,
+            isNotNull(orders.deliveryNote),
           ),
         ),
       )
@@ -90,8 +92,9 @@ export async function anonymizeOrderSnapshotsBatch(
     const changed = await tx
       .update(orders)
       .set({
-        recipientName: sql`case when ${isEntrance} then ${ANONYMIZED_RECIPIENT_NAME} else null end`,
-        deliveryBuilding: sql`case when ${isEntrance} then ${ANONYMIZED_BUILDING} else null end`,
+        recipientName: nameAfter,
+        deliveryBuilding: buildingAfter,
+        roomNo: roomAfter,
         deliveryNote: null,
       })
       .where(inArray(orders.id, due))

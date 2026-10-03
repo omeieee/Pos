@@ -19,6 +19,9 @@ export const ANONYMIZED_RECIPIENT_NAME = 'ลบข้อมูลแล้ว';
  */
 export const ANONYMIZED_BUILDING = 'ลบข้อมูลแล้ว';
 
+/** The same for the room number of a legacy room-delivery order (`orders_room_delivery_room`). */
+export const ANONYMIZED_ROOM_NO = 'ลบข้อมูลแล้ว';
+
 /**
  * How long personal data is kept (owner decisions, 2026-10-03; design/privacy-notice-th.md §3).
  * Days after: a LINE webhook event arrived; an order was completed (or cancelled); a remembered
