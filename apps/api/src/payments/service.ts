@@ -21,6 +21,7 @@
  */
 import {
   type Db,
+  type GovCopayRow,
   getGovCopayRow,
   getSettingRow,
   insertAudit,
@@ -37,6 +38,7 @@ import {
   derivePaymentStatus,
   estimateGovCopaySplit,
   type Fulfillment,
+  type GovCopayScheme,
   govCopaySchemeSchema,
   isCopayAvailable,
   maskPromptpayId,
@@ -82,7 +84,35 @@ import { paymentRequestHash } from './request-hash.ts';
 /** Another request with the same client request id committed first. Thrown to undo our work. */
 class DuplicateRequest extends Error {}
 
-const actorOf = (principal: Principal) => ({ kind: 'staff' as const, role: principal.role });
+/**
+ * A customer using the customer app, scoped to their own orders. Rule 2: the only thing a
+ * customer's tap can do to a payment is make it `claimed` (the machine allows nothing else), and
+ * the only payments they can start are PromptPay and ไทยช่วยไทย (cash is a choice with no record:
+ * staff take it at the hand-over).
+ */
+export interface CustomerActor {
+  kind: 'customer';
+  customerId: string;
+}
+export type PaymentActor = Principal | CustomerActor;
+
+const isCustomer = (actor: PaymentActor): actor is CustomerActor => actor.kind === 'customer';
+
+/** A staff-only step: a customer never gets this far, and TypeScript knows it from here on. */
+function staffOf(actor: PaymentActor): Principal {
+  if (isCustomer(actor)) throw forbidden();
+  return actor;
+}
+
+/** A customer sees and changes their own orders only; anyone else's looks like it does not exist. */
+function assertOwns(actor: PaymentActor, order: ordersRepo.OrderRow): void {
+  if (isCustomer(actor) && order.customerId !== actor.customerId) throw notFound('Order');
+}
+
+const CUSTOMER_METHODS: readonly PaymentMethod[] = ['promptpay', 'gov_copay'];
+
+const actorOf = (actor: PaymentActor) =>
+  isCustomer(actor) ? { kind: 'customer' as const } : { kind: 'staff' as const, role: actor.role };
 const unprocessable = (code: string, message: string, details: Record<string, unknown> = {}) =>
   new ApiError(422, code, message, details);
 
@@ -123,6 +153,28 @@ async function openPaymentRace(
   );
 }
 
+/**
+ * The co-pay scheme row when the method may be offered for an order of this channel and
+ * fulfilment right now, else null. Staff take the payment face to face (at the counter or at the
+ * entrance hand-over, owner 2026-10-02) whatever channel the order came by: a LINE or phone
+ * entrance delivery paid at hand-over qualifies, and the real fulfilment is checked (platform and
+ * legacy room delivery are refused). Grab and LINE MAN orders are paid on the platform, so co-pay
+ * never applies to them (D-08). The ถุงเงิน QR is made by staff and never sent through LINE.
+ * One definition, used both to create the payment and to decide whether the customer app shows
+ * the option.
+ */
+export async function offeredCopay(
+  db: Db,
+  channel: string,
+  fulfillment: Fulfillment,
+  now: Date,
+): Promise<{ row: GovCopayRow; scheme: GovCopayScheme } | null> {
+  const row = await getGovCopayRow(db);
+  if (!row || channel === 'grab' || channel === 'lineman') return null;
+  const scheme = govCopaySchemeSchema.parse(row);
+  return isCopayAvailable(scheme, now, 'storefront', fulfillment) ? { row, scheme } : null;
+}
+
 const promptpayNotConfigured = () =>
   conflict('PROMPTPAY_NOT_CONFIGURED', 'No PromptPay ID is set. The owner sets it in settings');
 
@@ -161,7 +213,7 @@ async function settleOrder(tx: Db, order: ordersRepo.OrderRow, emit: Emit): Prom
 
 async function auditPayment(
   tx: Db,
-  actor: Principal,
+  actor: PaymentActor,
   meta: RequestMeta,
   action: string,
   paymentId: string,
@@ -169,9 +221,9 @@ async function auditPayment(
   after: unknown,
 ) {
   await insertAudit(tx, {
-    actorType: 'staff',
-    actorId: actor.staffId,
-    deviceId: actor.deviceId,
+    actorType: isCustomer(actor) ? 'customer' : 'staff',
+    actorId: isCustomer(actor) ? actor.customerId : actor.staffId,
+    deviceId: isCustomer(actor) ? null : actor.deviceId,
     action,
     entity: 'payments',
     entityId: paymentId,
@@ -226,13 +278,15 @@ async function replayOf(
 async function insertPaymentFor(
   tx: Db,
   ctx: AuthContext,
-  actor: Principal,
+  actor: PaymentActor,
   meta: RequestMeta,
   order: ordersRepo.OrderRow,
   input: CreatePaymentInput | ChangePaymentMethodInput,
   requestHash: string,
   originalStaffId?: string,
 ): Promise<paymentsRepo.PaymentRow> {
+  assertOwns(actor, order);
+  if (isCustomer(actor) && !CUSTOMER_METHODS.includes(input.method)) throw forbidden();
   if (order.status === 'cancelled') {
     throw conflict('ORDER_CLOSED', 'A cancelled order cannot be paid', { status: order.status });
   }
@@ -280,7 +334,8 @@ async function insertPaymentFor(
   switch (input.method) {
     case 'cash': {
       // Recorded as already confirmed (02 §4.2): the machine decides whether this role may confirm.
-      const move = paymentMachine.transition('pending', 'confirmed', { actor: actorOf(actor) });
+      const cashier = staffOf(actor);
+      const move = paymentMachine.transition('pending', 'confirmed', { actor: actorOf(cashier) });
       if (!move.ok) throw transitionFailure(move.error, 'pending', 'confirmed');
       let cash: ReturnType<typeof calculateCashChange>;
       try {
@@ -301,7 +356,7 @@ async function insertPaymentFor(
         status: 'confirmed',
         tenderedSatang: cash.tendered,
         changeSatang: cash.change,
-        confirmedByStaffId: actor.staffId,
+        confirmedByStaffId: cashier.staffId,
         confirmedAt: now,
         originalStaffId: originalStaffId ?? null,
       });
@@ -334,25 +389,14 @@ async function insertPaymentFor(
       break;
     }
     case 'gov_copay': {
-      const schemeRow = await getGovCopayRow(tx);
-      const scheme = schemeRow ? govCopaySchemeSchema.parse(schemeRow) : null;
-      // Staff take the payment face to face (at the counter or at the entrance hand-over, owner
-      // 2026-10-02) whatever channel the order came by: a LINE or phone entrance delivery paid at
-      // hand-over qualifies, and the real fulfilment is checked (platform and legacy room
-      // delivery are refused). Grab and LINE MAN orders are paid on the platform, so co-pay never
-      // applies to them (D-08). The ถุงเงิน QR is made by staff and never sent through LINE.
-      if (
-        !schemeRow ||
-        !scheme ||
-        order.channel === 'grab' ||
-        order.channel === 'lineman' ||
-        !isCopayAvailable(scheme, now, 'storefront', order.fulfillment as Fulfillment)
-      ) {
+      const offered = await offeredCopay(tx, order.channel, order.fulfillment as Fulfillment, now);
+      if (!offered) {
         throw unprocessable(
           'GOV_COPAY_UNAVAILABLE',
           'The government co-pay scheme is not available for this order right now',
         );
       }
+      const { row: schemeRow, scheme } = offered;
       let split: ReturnType<typeof estimateGovCopaySplit>;
       try {
         split = estimateGovCopaySplit(total, scheme);
@@ -391,13 +435,13 @@ async function insertPaymentFor(
  */
 export async function createPayment(
   ctx: AuthContext,
-  actor: Principal,
+  actor: PaymentActor,
   orderId: string,
   input: CreatePaymentInput,
   meta: RequestMeta,
 ): Promise<{ result: PaymentResult; replay: boolean }> {
   const originalStaffId = input.method === 'cash' ? input.originalStaffId : undefined;
-  requireOwnerForOriginalStaff(actor, originalStaffId, ctx.now());
+  if (!isCustomer(actor)) requireOwnerForOriginalStaff(actor, originalStaffId, ctx.now());
   const requestHash = paymentRequestHash(orderId, input);
   const replayResult = async (db: Db, existing: paymentsRepo.PaymentRow) => {
     const { payment, order } = await replayOf(db, existing, orderId, requestHash, originalStaffId);
@@ -411,6 +455,7 @@ export async function createPayment(
     return await withTransaction(ctx, async (tx, emit) => {
       const order = await ordersRepo.lockOrderById(tx, orderId);
       if (!order) throw notFound('Order');
+      assertOwns(actor, order);
       // A request that waited for the lock may find its twin committed meanwhile.
       const twin = await paymentsRepo.findPaymentByClientRequestId(tx, input.clientRequestId);
       if (twin) return replayResult(tx, twin);
@@ -449,7 +494,7 @@ export async function createPayment(
  */
 export async function changePaymentMethod(
   ctx: AuthContext,
-  actor: Principal,
+  actor: PaymentActor,
   paymentId: string,
   input: ChangePaymentMethodInput,
   meta: RequestMeta,
@@ -483,6 +528,7 @@ export async function changePaymentMethod(
       if (!probe) throw notFound('Payment');
       const order = await ordersRepo.lockOrderById(tx, probe.orderId);
       if (!order) throw notFound('Order');
+      assertOwns(actor, order);
       const source = await paymentsRepo.lockPaymentById(tx, paymentId);
       if (!source) throw notFound('Payment');
       const requestHash = paymentRequestHash(order.id, input, source.id);
@@ -543,6 +589,56 @@ export async function changePaymentMethod(
   }
 }
 
+// ---------- A customer withdraws a waiting payment ----------
+
+/**
+ * A customer who picks cash (nothing is recorded for cash: staff take it at the hand-over) drops
+ * the PromptPay or co-pay payment that was waiting. Only a payment that is still `pending` goes
+ * (the machine lets a customer make that one move); a `claimed` one was already reported to staff
+ * and only staff can cancel it. Nothing waiting: nothing changes, so a retry is harmless.
+ */
+export async function withdrawPendingPayment(
+  ctx: AuthContext,
+  actor: CustomerActor,
+  orderId: string,
+  meta: RequestMeta,
+): Promise<OrderDto> {
+  return withTransaction(ctx, async (tx, emit) => {
+    const order = await ordersRepo.lockOrderById(tx, orderId);
+    if (!order) throw notFound('Order');
+    assertOwns(actor, order);
+    if (order.status === 'cancelled' || order.status === 'completed') {
+      throw conflict('ORDER_CLOSED', 'This order is closed', { status: order.status });
+    }
+    const all = await paymentsRepo.listPaymentsForOrder(tx, order.id);
+    if (all.some((p) => p.status === 'claimed' || p.status === 'confirmed')) {
+      throw conflict(
+        'PAYMENT_NOT_PENDING',
+        'Only a payment that is still pending can change method',
+      );
+    }
+    const pending = all.find((p) => p.status === 'pending');
+    if (!pending) return orderDto(tx, order);
+    const move = paymentMachine.transition('pending', 'cancelled', { actor: actorOf(actor) });
+    if (!move.ok) throw transitionFailure(move.error, 'pending', 'cancelled');
+    const cancelled = await paymentsRepo.updatePaymentIfVersion(tx, pending.id, pending.version, {
+      status: 'cancelled',
+    });
+    if (!cancelled) throw versionConflict(pending.version); // cannot happen under the order lock
+    emitPayment(emit, cancelled);
+    await auditPayment(
+      tx,
+      actor,
+      meta,
+      'payment.withdraw',
+      pending.id,
+      { method: pending.method, status: 'pending' },
+      { status: 'cancelled' },
+    );
+    return settleOrder(tx, order, emit);
+  });
+}
+
 // ---------- Moves: claim, confirm, cancel-claimed, void, refund ----------
 
 export type PaymentMove = 'claim' | 'confirm' | 'cancel-claimed' | 'void' | 'refund';
@@ -570,7 +666,7 @@ export interface MoveInput {
  */
 export async function movePayment(
   ctx: AuthContext,
-  actor: Principal,
+  actor: PaymentActor,
   paymentId: string,
   moveName: PaymentMove,
   input: MoveInput,
@@ -582,6 +678,8 @@ export async function movePayment(
     if (!probe) throw notFound('Payment');
     const order = await ordersRepo.lockOrderById(tx, probe.orderId);
     if (!order) throw notFound('Order');
+    assertOwns(actor, order);
+    if (isCustomer(actor) && moveName !== 'claim') throw forbidden();
     const row = await paymentsRepo.lockPaymentById(tx, paymentId);
     if (!row) throw notFound('Payment');
 
@@ -601,7 +699,7 @@ export async function movePayment(
       reason,
     });
     if (!result.ok) throw transitionFailure(result.error, row.status, spec.to);
-    if (result.stepUp && !hasFreshStepUp(actor, ctx.now())) throw stepUpRequired();
+    if (result.stepUp && !hasFreshStepUp(staffOf(actor), ctx.now())) throw stepUpRequired();
 
     const now = ctx.now();
     const patch: paymentsRepo.PaymentPatch =
@@ -610,7 +708,7 @@ export async function movePayment(
         : spec.to === 'confirmed'
           ? {
               status: 'confirmed',
-              confirmedByStaffId: actor.staffId,
+              confirmedByStaffId: staffOf(actor).staffId,
               confirmedAt: now,
               ...(input.referenceNote ? { referenceNote: input.referenceNote } : {}),
             }
@@ -637,8 +735,8 @@ export async function movePayment(
     if (spec.to === 'voided' || spec.to === 'refunded') {
       emit(
         securityAlert(ctx, `payment.${spec.to}`, 'critical', {
-          staffId: actor.staffId,
-          deviceId: actor.deviceId,
+          staffId: staffOf(actor).staffId,
+          deviceId: staffOf(actor).deviceId,
           subject: { paymentId: row.id, orderId: order.id },
         }),
       );

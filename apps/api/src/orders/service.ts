@@ -98,7 +98,8 @@ const orderInvalid = (errors: readonly PricingError[]) =>
  */
 export async function createOrder(
   ctx: CoreContext,
-  actor: Principal,
+  /** The staff member, or null for a customer's own order (the customer app). */
+  actor: Principal | null,
   input: CreateOrderInput,
 ): Promise<{ order: OrderDto; replay: boolean }> {
   // Owner decision 2026-10-02: each channel offers one way to be served (entrance delivery for
@@ -114,7 +115,11 @@ export async function createOrder(
     );
   }
 
-  requireOwnerForOriginalStaff(actor, input.originalStaffId, ctx.now());
+  if (input.originalStaffId !== undefined) {
+    // Only an owner session may name someone else; a customer never can.
+    if (!actor) throw forbidden();
+    requireOwnerForOriginalStaff(actor, input.originalStaffId, ctx.now());
+  }
   const requestHash = orderRequestHash(input);
   const existing = await ordersRepo.findOrderByClientRequestId(ctx.db, input.clientRequestId);
   if (existing) return replayOf(ctx.db, existing, requestHash, input.originalStaffId);
@@ -181,8 +186,8 @@ export async function createOrder(
         discountSatang: priced.totals.discount,
         totalSatang: priced.totals.total,
         note: input.note ?? null,
-        createdByStaffId: actor.staffId,
-        createdOnDeviceId: actor.deviceId,
+        createdByStaffId: actor?.staffId ?? null,
+        createdOnDeviceId: actor?.deviceId ?? null,
         originalStaffId: input.originalStaffId ?? null,
         clientRequestId: input.clientRequestId,
         requestHash,
@@ -190,7 +195,7 @@ export async function createOrder(
         acceptedAt: status === 'preparing' ? now : null,
       });
       if (!row) throw new DuplicateRequest();
-      if (input.originalStaffId !== undefined) {
+      if (input.originalStaffId !== undefined && actor) {
         await insertAudit(tx, {
           actorType: 'staff',
           actorId: actor.staffId,
@@ -225,7 +230,7 @@ export async function createOrder(
         orderNo: row.orderNo,
         channel: input.channel,
         status,
-        createdOnDeviceId: actor.deviceId,
+        createdOnDeviceId: actor?.deviceId ?? null,
       });
       return dto;
     });

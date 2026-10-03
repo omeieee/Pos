@@ -1,4 +1,4 @@
-import { KEYWORDS, type Keyword, type RoutedEvent } from '@sds/line';
+import { CHAT_PAY_METHODS, KEYWORDS, type Keyword, type RoutedEvent } from '@sds/line';
 import { z } from 'zod';
 
 /**
@@ -16,6 +16,19 @@ export const storedRouteSchema = z.discriminatedUnion('kind', [
     orderId: z.uuid(),
   }),
   z.object({ kind: z.literal('change_method'), userId: z.string().min(1), orderId: z.uuid() }),
+  z.object({
+    kind: z.literal('set_method'),
+    userId: z.string().min(1),
+    orderId: z.uuid(),
+    method: z.enum(CHAT_PAY_METHODS),
+  }),
+  // The order number the app's own confirmation text named. Not a secret, and the handler
+  // matches it to the sender's own orders, so a made-up one finds nothing.
+  z.object({
+    kind: z.literal('order_placed'),
+    userId: z.string().min(1),
+    orderNo: z.string().regex(/^[A-Z]-\d{3,6}$/),
+  }),
   z.object({
     kind: z.literal('keyword'),
     keyword: z.enum(Object.keys(KEYWORDS) as [Keyword, ...Keyword[]]),
@@ -35,6 +48,15 @@ export function toStoredRoute(event: RoutedEvent): StoredRoute {
     case 'payment_claimed':
     case 'change_method':
       return { kind: event.kind, userId: event.userId, orderId: event.orderId };
+    case 'set_method':
+      return {
+        kind: 'set_method',
+        userId: event.userId,
+        orderId: event.orderId,
+        method: event.method,
+      };
+    case 'order_placed':
+      return { kind: 'order_placed', userId: event.userId, orderNo: event.orderNo };
     case 'keyword':
       return { kind: 'keyword', keyword: event.keyword, userId: event.userId };
     case 'slip_image':
@@ -55,7 +77,10 @@ export function fromStoredRoute(route: StoredRoute): RoutedEvent {
       return { kind: 'ack_privacy', userId: route.userId, replyToken: undefined };
     case 'payment_claimed':
     case 'change_method':
+    case 'set_method':
       return { ...route, replyToken: undefined };
+    case 'order_placed':
+      return { ...route, replyToken: '' };
     case 'keyword':
       return { ...route, replyToken: '' };
     case 'slip_image':
