@@ -16,7 +16,11 @@ export interface TextMessage {
 export type LineMessage = FlexMessage | TextMessage;
 
 /** A plain text reply from the message catalog (Thai by default). */
-export function botText(key: MessageKey, params?: MessageParams, locale: Locale = 'th'): TextMessage {
+export function botText(
+  key: MessageKey,
+  params?: MessageParams,
+  locale: Locale = 'th',
+): TextMessage {
   return { type: 'text', text: t(locale, key, params) };
 }
 

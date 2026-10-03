@@ -21,6 +21,7 @@ const options: BuildOptions = {
     'owner-create': 'src/cli/owner-create.ts',
     'owner-reset': 'src/cli/owner-reset.ts',
     'owner-unlock': 'src/cli/owner-unlock.ts',
+    'richmenu-upload': 'src/cli/richmenu-upload.ts',
   },
   outdir,
   bundle: true,

@@ -5,6 +5,7 @@ export * from './order-text.ts';
 export * from './policy.ts';
 export * from './postback.ts';
 export * from './richmenu.ts';
+export * from './richmenu-upload.ts';
 export * from './router.ts';
 export * from './sender.ts';
 export * from './signature.ts';
