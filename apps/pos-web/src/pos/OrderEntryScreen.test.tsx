@@ -4,7 +4,7 @@ import { satang } from '@sds/shared';
 import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { ApiClientError } from '../api/errors.ts';
-import { itemFrame, orderDto, uuid } from '../test-support/frames.ts';
+import { groupFrame, itemFrame, optionFrame, orderDto, uuid } from '../test-support/frames.ts';
 import { MENU } from '../test-support/menu-fixtures.ts';
 import { createTestServices, renderScreen } from '../test-support/render.tsx';
 import { OrderEntryScreen } from './OrderEntryScreen.tsx';
@@ -225,6 +225,103 @@ describe('adding a dish', () => {
     click(tile('ก๋วยเตี๋ยวต้มยำ'));
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(cart.getState().lines[0]?.qty).toBe(2);
+  });
+
+  describe('a dish whose groups are all optional', () => {
+    const KAPROW = uuid(990);
+    const EGG_GROUP = uuid(991);
+    const MEAT_GROUP = uuid(992);
+    const FRIED_EGG = uuid(993);
+    const PORK = uuid(994);
+
+    /** The live menu's กะเพรา: optional egg (0 to 2) and optional meat (0 or 1). */
+    function seedKaprow(entities: ReturnType<typeof createTestServices>['entities']) {
+      entities.applyMany([
+        groupFrame(EGG_GROUP, 900, { nameTh: 'ไข่', nameEn: 'egg', minSelect: 0, maxSelect: 2 }),
+        optionFrame(FRIED_EGG, EGG_GROUP, 901, {
+          nameTh: 'ไข่ดาว',
+          nameEn: 'fried egg',
+          priceDeltaSatang: satang(1000),
+        }),
+        groupFrame(MEAT_GROUP, 902, {
+          nameTh: 'เนื้อสัตว์',
+          nameEn: 'meat',
+          minSelect: 0,
+          maxSelect: 1,
+        }),
+        optionFrame(PORK, MEAT_GROUP, 903, {
+          nameTh: 'หมู',
+          nameEn: 'pork',
+          priceDeltaSatang: satang(1000),
+        }),
+        itemFrame(KAPROW, 904, {
+          categoryId: MENU.catNoodle,
+          nameTh: 'กะเพรา',
+          nameEn: 'kaprow',
+          priceSatang: satang(6500),
+          modifierGroupIds: [EGG_GROUP, MEAT_GROUP],
+          sort: 9,
+        }),
+      ]);
+    }
+
+    test('opens the sheet on a tap, and "add" works with nothing chosen', () => {
+      const { services, cart, entities } = createTestServices();
+      seedKaprow(entities);
+      renderScreen(<OrderEntryScreen />, services);
+      click(tile('กะเพรา'));
+      expect(cart.getState().lines).toHaveLength(0);
+      const dialog = screen.getByRole('dialog');
+      expect(within(dialog).getByRole('checkbox', { name: /ไข่ดาว/ })).toBeTruthy();
+      expect(within(dialog).getByRole('radio', { name: /หมู/ })).toBeTruthy();
+      const add = within(dialog).getByRole('button', { name: /^เพิ่ม ·/ }) as HTMLButtonElement;
+      expect(add.disabled).toBe(false);
+      click(add);
+      expect(screen.queryByRole('dialog')).toBeNull();
+      expect(cart.getState().lines).toMatchObject([{ itemId: KAPROW, optionIds: [], qty: 1 }]);
+    });
+
+    test('adds the optional choices that were made', () => {
+      const { services, cart, entities } = createTestServices();
+      seedKaprow(entities);
+      renderScreen(<OrderEntryScreen />, services);
+      click(tile('กะเพรา'));
+      const dialog = screen.getByRole('dialog');
+      click(within(dialog).getByRole('checkbox', { name: /ไข่ดาว/ }));
+      click(within(dialog).getByRole('radio', { name: /หมู/ }));
+      const add = within(dialog).getByRole('button', { name: /^เพิ่ม ·/ });
+      expect(add.textContent).toContain('฿85.00');
+      click(add);
+      expect(cart.getState().lines[0]).toMatchObject({
+        itemId: KAPROW,
+        optionIds: [FRIED_EGG, PORK],
+      });
+    });
+
+    test('asks again on the next tap instead of repeating the last choices', () => {
+      const { services, cart, entities } = createTestServices();
+      seedKaprow(entities);
+      renderScreen(<OrderEntryScreen />, services);
+      click(tile('กะเพรา'));
+      click(within(screen.getByRole('dialog')).getByRole('radio', { name: /หมู/ }));
+      click(within(screen.getByRole('dialog')).getByRole('button', { name: /^เพิ่ม ·/ }));
+      click(tile('กะเพรา'));
+      expect(screen.getByRole('dialog')).toBeTruthy();
+      expect(cart.getState().lines).toMatchObject([{ qty: 1 }]);
+    });
+
+    test('goes straight in when every optional choice is sold out', () => {
+      const { services, cart, entities } = createTestServices();
+      seedKaprow(entities);
+      entities.applyMany([
+        optionFrame(FRIED_EGG, EGG_GROUP, 910, { nameTh: 'ไข่ดาว', isAvailable: false }),
+        optionFrame(PORK, MEAT_GROUP, 911, { nameTh: 'หมู', isAvailable: false }),
+      ]);
+      renderScreen(<OrderEntryScreen />, services);
+      click(tile('กะเพรา'));
+      expect(screen.queryByRole('dialog')).toBeNull();
+      expect(cart.getState().lines).toMatchObject([{ itemId: KAPROW, optionIds: [], qty: 1 }]);
+    });
   });
 
   test('Escape closes the sheet and adds nothing', () => {

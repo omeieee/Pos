@@ -27,8 +27,9 @@ const PHONE_MAX_WIDTH = 719;
 
 /**
  * Order entry (S1): the menu by category, tap a dish to add it, the order beside it (iPad,
- * laptop) or behind a bar at the bottom (iPhone). Tap a dish: one without required choices is
- * added at once; one with them repeats the last choices made for it, or opens the options sheet.
+ * laptop) or behind a bar at the bottom (iPhone). Tap a dish: one with no choices to offer is
+ * added at once; one with required choices repeats the last choices made for it, or opens the
+ * options sheet; one with only optional choices always opens the sheet.
  */
 export function OrderEntryScreen({ mode = 'storefront' }: { mode?: CartMode }) {
   const { recipients } = useServices();
@@ -78,14 +79,18 @@ export function OrderEntryScreen({ mode = 'storefront' }: { mode?: CartMode }) {
 
   function pick(item: MenuItemView) {
     if (!item.orderable || locked) return;
-    if (!item.groups.some((g) => g.required)) {
+    if (!item.groups.some((g) => g.options.some((o) => o.available))) {
       cart.addItem({ itemId: item.id });
       return;
     }
-    const last = pruneSelection(item.groups, cart.lastChoice(item.id) ?? []);
-    if (last.length > 0 && checkSelection(entities, item.id, last, cartState.channel).ok) {
-      cart.addItem({ itemId: item.id, optionIds: last });
-      return;
+    // Repeating the last choices is only for dishes that must have choices; a dish with optional
+    // choices only asks every time, so an extra egg is never added by habit.
+    if (item.groups.some((g) => g.required)) {
+      const last = pruneSelection(item.groups, cart.lastChoice(item.id) ?? []);
+      if (last.length > 0 && checkSelection(entities, item.id, last, cartState.channel).ok) {
+        cart.addItem({ itemId: item.id, optionIds: last });
+        return;
+      }
     }
     setSheet({ mode: 'add', itemId: item.id });
   }
