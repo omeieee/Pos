@@ -77,6 +77,10 @@ beforeEach(async () => {
   sent.length = 0;
   pushFails = false;
   staffToken = undefined;
+  // Earlier tests' orders must not fill the per-customer limit of open orders.
+  await h.client.query(
+    "update orders set status = 'completed' where channel = 'line' and status not in ('completed', 'cancelled')",
+  );
   await h.client.query(
     "delete from settings where key in ('promptpay', 'line_policy', 'payment_methods')",
   );
@@ -406,6 +410,33 @@ describe('keywords and the rich menu', () => {
     expect(words).toContain(order.orderNo);
     expect(words).toContain('รอร้านรับออเดอร์');
     expect(words).toContain('ยังไม่ชำระ');
+  });
+});
+
+describe('the contact alert', () => {
+  test('the customer is answered every time, but staff are alerted once per customer per 10 minutes', async () => {
+    await signIn('id-token-a-0000000000000000000000');
+    await signIn('id-token-b-0000000000000000000000');
+    const contactAlerts = () => h.alerts.filter((a) => a.kind === 'line.contact_request').length;
+    const before = contactAlerts();
+    await deliver(postback(U_A, 'rm=contact'));
+    await deliver(postback(U_A, 'rm=contact'));
+    await deliver(text(U_A, 'ติดต่อ'));
+    expect(replies()).toHaveLength(3); // each tap is answered, for free
+    expect(contactAlerts() - before).toBe(1);
+    // Another customer is a separate budget.
+    await deliver(postback(U_B, 'rm=contact'));
+    expect(contactAlerts() - before).toBe(2);
+    // After ten minutes the same customer can alert again, and not a moment sooner.
+    h.clock.advanceSeconds(9 * 60);
+    await deliver(postback(U_A, 'rm=contact'));
+    expect(contactAlerts() - before).toBe(2);
+    h.clock.advanceSeconds(61);
+    await deliver(postback(U_A, 'rm=contact'));
+    expect(contactAlerts() - before).toBe(3);
+    // The alert holds no customer data.
+    const alert = h.alerts.find((a) => a.kind === 'line.contact_request');
+    expect(JSON.stringify(alert)).not.toContain(U_A);
   });
 });
 

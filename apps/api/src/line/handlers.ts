@@ -32,6 +32,21 @@ export interface HandlerContext {
   /** `https://liff.line.me/<id>`: the base of every link a card carries. Undefined: no links. */
   liffUrl: string | undefined;
   privacy: LineRuntime['privacy'];
+  contactAlertedAt: LineRuntime['contactAlertedAt'];
+}
+
+const CONTACT_ALERT_WINDOW_MS = 10 * 60_000;
+
+/** True (and remembers it) when this customer has not raised a contact alert in the last 10 minutes. */
+function contactAlertAllowed(ctx: HandlerContext, userId: string): boolean {
+  const now = ctx.now().getTime();
+  const last = ctx.contactAlertedAt.get(userId);
+  if (last !== undefined && now - last < CONTACT_ALERT_WINDOW_MS) return false;
+  for (const [key, at] of ctx.contactAlertedAt) {
+    if (now - at >= CONTACT_ALERT_WINDOW_MS) ctx.contactAlertedAt.delete(key);
+  }
+  ctx.contactAlertedAt.set(userId, now);
+  return true;
 }
 
 /** A status shown to the customer is about the latest order of the last day, no older. */
@@ -323,15 +338,18 @@ async function handleKeyword(
       await say(ctx, event.replyToken, [payInfoCard()], { template: 'pay_info', ...who });
       return;
     case 'contact':
-      // Staff answer in OA Manager (the rich-menu tap shows in the chat as "ติดต่อร้าน").
-      ctx.events.publish({
-        type: 'alert.security',
-        kind: 'line.contact_request',
-        severity: 'info',
-        at: ctx.now().toISOString(),
-        staffId: null,
-        deviceId: null,
-      });
+      // Staff answer in OA Manager (the rich-menu tap shows in the chat as "ติดต่อร้าน"). One
+      // alert per customer per 10 minutes; every tap is still answered.
+      if (contactAlertAllowed(ctx, event.userId)) {
+        ctx.events.publish({
+          type: 'alert.security',
+          kind: 'line.contact_request',
+          severity: 'info',
+          at: ctx.now().toISOString(),
+          staffId: null,
+          deviceId: null,
+        });
+      }
       await say(ctx, event.replyToken, [botText('lineBot.contact.reply')], {
         template: 'contact',
         ...who,

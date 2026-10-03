@@ -176,6 +176,26 @@ async function order(token: string, over: Record<string, unknown> = {}) {
 
 const eventsOf = (type: AppEvent['type']) => h.events.filter((e) => e.type === type);
 
+describe('a LIFF id that LINE keeps refusing', () => {
+  test('repeated refusals log a counter and raise one alert an hour, with no token or id anywhere', async () => {
+    const before = h.alerts.filter((a) => a.kind === 'liff.verify_failing').length;
+    for (let i = 0; i < 8; i++) {
+      const res = await call('POST', '/v1/app/session', undefined, {
+        idToken: `refused-token-${i}-00000000000000000000`,
+      });
+      expect(res.statusCode).toBe(401);
+    }
+    expect(h.alerts.filter((a) => a.kind === 'liff.verify_failing').length - before).toBe(1);
+    const logs = h.logs();
+    expect(logs).toContain('LIFF verification refused repeatedly');
+    expect(logs).not.toContain('refused-token');
+    // A genuine sign-in clears the streak.
+    expect(
+      (await call('POST', '/v1/app/session', undefined, { idToken: TOKEN_A })).statusCode,
+    ).toBe(200);
+  });
+});
+
 describe('the LIFF login', () => {
   test('a genuine token gives a session for that LINE user and nothing about staff', async () => {
     const res = await call('POST', '/v1/app/session', undefined, { idToken: TOKEN_A });

@@ -77,6 +77,7 @@ export async function retryLineEvents(
             now: () => event.receivedAt,
             events: deps.events,
             liffUrl: deps.line.liffUrl,
+            contactAlertedAt: deps.line.contactAlertedAt,
             noticeUrl: deps.line.noticeUrl,
             privacy: deps.line.privacy,
           },

@@ -9,6 +9,7 @@ import {
 } from '@sds/line';
 import { type Config, DEFAULT_PRIVACY } from '../config.ts';
 import type { EventBus } from '../events.ts';
+import { createLiffHealth, type LiffHealth } from './liff-health.ts';
 import { createLiffVerifier, type LiffVerifier, liffChannelId } from './liff-verify.ts';
 
 export interface LineRuntime {
@@ -28,6 +29,13 @@ export interface LineRuntime {
   liffVerifier: LiffVerifier | null;
   /** The controller and contact the privacy notice names (`PRIVACY_*` environment variables). */
   privacy: { controller: string; contactEmail: string };
+  /**
+   * When each customer last raised a staff alert from the chat (key: LINE user id, never leaves
+   * memory). It keeps the contact button from becoming a way to flood the owner with alerts.
+   */
+  contactAlertedAt: Map<string, number>;
+  /** Counts refused customer-app tokens: many in a row usually means a wrong LINE_LIFF_ID. */
+  liffHealth: LiffHealth;
   /** Tests wait on this: resolves when every event accepted so far has been processed. */
   idle(): Promise<void>;
   /** Used by the webhook route to register work that continues after the 200 reply. */
@@ -62,6 +70,8 @@ export function createLineRuntime(
   return {
     channelSecret: line.channelSecret,
     client,
+    contactAlertedAt: new Map(),
+    liffHealth: createLiffHealth(),
     liffUrl: channelId && line.liffId ? `https://liff.line.me/${line.liffId}` : undefined,
     liffVerifier,
     noticeUrl: overrides.noticeUrl,

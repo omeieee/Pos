@@ -160,6 +160,7 @@ async function processEvents(
           now: ctx.now,
           events: ctx.events,
           liffUrl: runtime.liffUrl,
+          contactAlertedAt: runtime.contactAlertedAt,
           noticeUrl: runtime.noticeUrl,
           privacy: runtime.privacy,
         },

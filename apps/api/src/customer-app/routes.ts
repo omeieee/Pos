@@ -85,7 +85,25 @@ export async function registerCustomerAppRoutes(
         }
         throw error;
       }
-      if (!who) throw new ApiError(401, 'LIFF_TOKEN_INVALID', 'Sign in with LINE again');
+      if (!who) {
+        const refused = runtime.liffHealth.rejected(ctx.now());
+        if (refused.overThreshold) {
+          // A count only: never the token, a user id or an address.
+          request.log.warn({ refusals: refused.count }, 'LIFF verification refused repeatedly');
+        }
+        if (refused.alert) {
+          ctx.events.publish({
+            type: 'alert.security',
+            kind: 'liff.verify_failing',
+            severity: 'warn',
+            at: ctx.now().toISOString(),
+            staffId: null,
+            deviceId: null,
+          });
+        }
+        throw new ApiError(401, 'LIFF_TOKEN_INVALID', 'Sign in with LINE again');
+      }
+      runtime.liffHealth.accepted();
       return openSession(ctx, who.userId);
     },
   );
