@@ -108,10 +108,17 @@ export const DEFAULT_RICH_MENU = {
   ],
 } as const;
 
-/** Substitutes `{{liffUrl}}` (an https URL from config) and validates. Throws a ZodError if invalid. */
+/**
+ * Substitutes the app URL (an https URL from config) for `{{liffUrl}}` and for `{{LIFF_BASE_URL}}`
+ * (the placeholder in `design/rich-menu/*.json`, with no trailing slash) and validates. Throws a
+ * ZodError if invalid.
+ */
 export function loadRichMenu(definition: unknown, vars: { liffUrl: string }): RichMenu {
+  const base = vars.liffUrl.replace(/\/+$/, '');
   const filled = JSON.parse(
-    JSON.stringify(definition).replaceAll('{{liffUrl}}', vars.liffUrl),
+    JSON.stringify(definition)
+      .replaceAll('{{liffUrl}}', vars.liffUrl)
+      .replaceAll('{{LIFF_BASE_URL}}', base),
   ) as unknown;
   return richMenuSchema.parse(filled);
 }

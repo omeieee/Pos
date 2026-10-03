@@ -1,6 +1,7 @@
 export * from './client.ts';
 export * from './events.ts';
 export * from './flex.ts';
+export * from './order-text.ts';
 export * from './policy.ts';
 export * from './postback.ts';
 export * from './richmenu.ts';

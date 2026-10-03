@@ -2,9 +2,14 @@ import { describe, expect, test } from 'vitest';
 import {
   type FlexNode,
   followGreeting,
+  menuLink,
+  methodPicker,
   orderConfirmation,
+  orderStatusCard,
+  payInfoCard,
   paymentInstructions,
   readyWithReceipt,
+  receiptCard,
 } from './flex.ts';
 import { parsePostback } from './postback.ts';
 
@@ -48,33 +53,37 @@ describe('orderConfirmation', () => {
 describe('paymentInstructions', () => {
   const common = { orderNo: 'L-012', orderId: ORDER_ID, totalSatang: 12050 };
 
-  test('promptpay: QR image, ID and exact amount in the text, paid and change buttons', () => {
+  const ORDER_URL = 'https://liff.line.me/1234567890-abcdefgh/orders/' + ORDER_ID;
+
+  test('promptpay: ID and exact amount in the text, a button to the order page, and NO image', () => {
     const msg = paymentInstructions({
       ...common,
       method: 'promptpay',
       promptpayId: '0812345678',
-      qrImageUrl: 'https://api.example.test/v1/payments/x/qr.png?exp=1&sig=abc',
+      orderUrl: ORDER_URL,
     });
     expect(msg).toMatchSnapshot();
     expect(allText(msg)).toContain('0812345678');
     expect(allText(msg)).toContain('฿120.50');
-    const images = walk(msg).filter((n) => n.type === 'image');
-    expect(images).toHaveLength(1);
+    // A QR picture in a chat card would outlive its five-minute signed link: never embedded.
+    expect(walk(msg).filter((n) => n.type === 'image')).toHaveLength(0);
+    expect(JSON.stringify(msg)).not.toMatch(/qr\.png|sig=/i);
     const buttons = walk(msg).filter((n) => n.type === 'button');
-    const actions = buttons.map((b) => parsePostback((b.action as { data: string }).data));
-    expect(actions).toEqual([
+    const actions = buttons.map((b) => b.action as { type: string; uri?: string; data?: string });
+    expect(actions[0]).toMatchObject({ type: 'uri', uri: ORDER_URL });
+    expect(actions.slice(1).map((a) => parsePostback(a.data ?? ''))).toEqual([
       { action: 'paid', orderId: ORDER_ID },
       { action: 'change_method', orderId: ORDER_ID },
     ]);
   });
 
-  test('promptpay refuses a non-https image URL', () => {
+  test('promptpay refuses a non-https order link', () => {
     expect(() =>
       paymentInstructions({
         ...common,
         method: 'promptpay',
         promptpayId: '0812345678',
-        qrImageUrl: 'http://x/qr.png',
+        orderUrl: 'http://x/orders/1',
       }),
     ).toThrow(RangeError);
   });
@@ -140,5 +149,69 @@ describe('followGreeting', () => {
       '"uri":"https://x.test/p"',
     );
     expect(() => followGreeting({ ...base, noticeUrl: 'http://x.test/p' })).toThrow(RangeError);
+  });
+});
+
+describe('methodPicker', () => {
+  test('one set_method button per method on offer, nothing else', () => {
+    const msg = methodPicker({
+      orderNo: 'L-012',
+      orderId: ORDER_ID,
+      totalSatang: 12000,
+      methods: ['cash', 'promptpay', 'gov_copay'],
+    });
+    expect(msg).toMatchSnapshot();
+    const buttons = walk(msg).filter((n) => n.type === 'button');
+    expect(buttons.map((b) => parsePostback((b.action as { data: string }).data))).toEqual([
+      { action: 'set_method', orderId: ORDER_ID, method: 'cash' },
+      { action: 'set_method', orderId: ORDER_ID, method: 'promptpay' },
+      { action: 'set_method', orderId: ORDER_ID, method: 'gov_copay' },
+    ]);
+    expect(JSON.stringify(msg)).not.toMatch(/https?:|image/i);
+  });
+  test('without gov_copay it is not offered', () => {
+    const msg = methodPicker({
+      orderNo: 'L-012',
+      orderId: ORDER_ID,
+      totalSatang: 12000,
+      methods: ['cash', 'promptpay'],
+    });
+    expect(JSON.stringify(msg)).not.toContain('gov_copay');
+  });
+});
+
+describe('orderStatusCard, menuLink, payInfoCard, receiptCard', () => {
+  test('status card snapshot, with the order link', () => {
+    const msg = orderStatusCard({
+      orderNo: 'L-012',
+      orderStatus: 'preparing',
+      paymentStatus: 'awaiting_confirmation',
+      orderUrl: 'https://liff.line.me/1-a/orders/x',
+    });
+    expect(msg).toMatchSnapshot();
+    expect(allText(msg)).toContain('กำลังทำอาหาร');
+    expect(allText(msg)).toContain('รอตรวจสอบ');
+  });
+  test('menu link snapshot', () => {
+    expect(menuLink({ menuUrl: 'https://liff.line.me/1-a/menu' })).toMatchSnapshot();
+    expect(() => menuLink({ menuUrl: 'http://x/menu' })).toThrow(RangeError);
+  });
+  test('the generic pay-info card names co-pay as an option and has no link, image or QR', () => {
+    const msg = payInfoCard();
+    expect(msg).toMatchSnapshot();
+    expect(allText(msg)).toContain('ไทยช่วยไทย');
+    expect(JSON.stringify(msg)).not.toMatch(/https?:|image|qr/i);
+  });
+  test('the receipt card carries items, total and method', () => {
+    const msg = receiptCard({
+      orderNo: 'L-012',
+      building: 'B1',
+      items,
+      totalSatang: 12000,
+      methodLabel: 'เงินสด',
+    });
+    expect(msg).toMatchSnapshot();
+    expect(allText(msg)).toContain('฿120.00');
+    expect(allText(msg)).toContain('เงินสด');
   });
 });

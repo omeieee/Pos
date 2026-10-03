@@ -52,6 +52,71 @@ exports[`followGreeting > greeting text, then the privacy card with the controll
 ]
 `;
 
+exports[`methodPicker > one set_method button per method on offer, nothing else 1`] = `
+{
+  "altText": "เลือกวิธีชำระเงินออเดอร์ L-012",
+  "contents": {
+    "body": {
+      "contents": [
+        {
+          "size": "lg",
+          "text": "เลือกวิธีชำระเงิน · L-012",
+          "type": "text",
+          "weight": "bold",
+          "wrap": true,
+        },
+        {
+          "color": "#666666",
+          "size": "sm",
+          "text": "ยอด ฿120.00 · แตะเพื่อเปลี่ยนวิธีชำระเงิน",
+          "type": "text",
+          "wrap": true,
+        },
+      ],
+      "layout": "vertical",
+      "spacing": "md",
+      "type": "box",
+    },
+    "footer": {
+      "contents": [
+        {
+          "action": {
+            "data": "action=set_method&order=0191a8f0-0000-7000-8000-000000000001&method=cash",
+            "label": "เงินสด",
+            "type": "postback",
+          },
+          "style": "secondary",
+          "type": "button",
+        },
+        {
+          "action": {
+            "data": "action=set_method&order=0191a8f0-0000-7000-8000-000000000001&method=promptpay",
+            "label": "พร้อมเพย์",
+            "type": "postback",
+          },
+          "style": "secondary",
+          "type": "button",
+        },
+        {
+          "action": {
+            "data": "action=set_method&order=0191a8f0-0000-7000-8000-000000000001&method=gov_copay",
+            "label": "ไทยช่วยไทย",
+            "type": "postback",
+          },
+          "style": "secondary",
+          "type": "button",
+        },
+      ],
+      "layout": "vertical",
+      "spacing": "sm",
+      "type": "box",
+    },
+    "type": "bubble",
+  },
+  "type": "flex",
+}
+`;
+
 exports[`orderConfirmation > snapshot 1`] = `
 {
   "altText": "ยืนยันออเดอร์ L-012 ยอด ฿120.00",
@@ -154,6 +219,249 @@ exports[`orderConfirmation > snapshot 1`] = `
 }
 `;
 
+exports[`orderStatusCard, menuLink, payInfoCard, receiptCard > menu link snapshot 1`] = `
+{
+  "altText": "เปิดเมนูสั่งอาหาร",
+  "contents": {
+    "body": {
+      "contents": [
+        {
+          "text": "ดูเมนูและสั่งอาหารได้ที่ปุ่มด้านล่างค่ะ ร้านส่งถึงทางเข้าอาคารเท่านั้น",
+          "type": "text",
+          "wrap": true,
+        },
+      ],
+      "layout": "vertical",
+      "spacing": "md",
+      "type": "box",
+    },
+    "footer": {
+      "contents": [
+        {
+          "action": {
+            "label": "เปิดเมนูสั่งอาหาร",
+            "type": "uri",
+            "uri": "https://liff.line.me/1-a/menu",
+          },
+          "style": "primary",
+          "type": "button",
+        },
+      ],
+      "layout": "vertical",
+      "spacing": "sm",
+      "type": "box",
+    },
+    "type": "bubble",
+  },
+  "type": "flex",
+}
+`;
+
+exports[`orderStatusCard, menuLink, payInfoCard, receiptCard > status card snapshot, with the order link 1`] = `
+{
+  "altText": "สถานะออเดอร์ L-012: กำลังทำอาหาร",
+  "contents": {
+    "body": {
+      "contents": [
+        {
+          "size": "lg",
+          "text": "สถานะออเดอร์ L-012",
+          "type": "text",
+          "weight": "bold",
+          "wrap": true,
+        },
+        {
+          "text": "ออเดอร์: กำลังทำอาหาร",
+          "type": "text",
+          "wrap": true,
+        },
+        {
+          "text": "การชำระเงิน: รอตรวจสอบ",
+          "type": "text",
+          "wrap": true,
+        },
+      ],
+      "layout": "vertical",
+      "spacing": "md",
+      "type": "box",
+    },
+    "footer": {
+      "contents": [
+        {
+          "action": {
+            "label": "ดูรายละเอียด",
+            "type": "uri",
+            "uri": "https://liff.line.me/1-a/orders/x",
+          },
+          "style": "primary",
+          "type": "button",
+        },
+      ],
+      "layout": "vertical",
+      "spacing": "sm",
+      "type": "box",
+    },
+    "type": "bubble",
+  },
+  "type": "flex",
+}
+`;
+
+exports[`orderStatusCard, menuLink, payInfoCard, receiptCard > the generic pay-info card names co-pay as an option and has no link, image or QR 1`] = `
+{
+  "altText": "วิธีชำระเงิน: พร้อมเพย์ เงินสด ไทยช่วยไทย",
+  "contents": {
+    "body": {
+      "contents": [
+        {
+          "size": "lg",
+          "text": "วิธีชำระเงิน",
+          "type": "text",
+          "weight": "bold",
+          "wrap": true,
+        },
+        {
+          "size": "sm",
+          "text": "พร้อมเพย์: โอนตามยอดในออเดอร์ แล้วกด "โอนแล้ว" พนักงานจะตรวจสอบยอดเงินเข้า",
+          "type": "text",
+          "wrap": true,
+        },
+        {
+          "size": "sm",
+          "text": "เงินสด: จ่ายตอนรับอาหารที่ทางเข้าตึก",
+          "type": "text",
+          "wrap": true,
+        },
+        {
+          "size": "sm",
+          "text": "ไทยช่วยไทย: จ่ายตอนรับอาหารที่ทางเข้าตึก พนักงานดำเนินการร่วมกับคุณ (เฉพาะช่วงที่ร่วมโครงการ)",
+          "type": "text",
+          "wrap": true,
+        },
+      ],
+      "layout": "vertical",
+      "spacing": "md",
+      "type": "box",
+    },
+    "type": "bubble",
+  },
+  "type": "flex",
+}
+`;
+
+exports[`orderStatusCard, menuLink, payInfoCard, receiptCard > the receipt card carries items, total and method 1`] = `
+{
+  "altText": "ใบเสร็จออเดอร์ L-012",
+  "contents": {
+    "body": {
+      "contents": [
+        {
+          "size": "sm",
+          "text": "ใบเสร็จรับเงินอิเล็กทรอนิกส์ · L-012",
+          "type": "text",
+          "weight": "bold",
+          "wrap": true,
+        },
+        {
+          "color": "#666666",
+          "size": "xs",
+          "text": "ส่งที่ทางเข้าตึก B1",
+          "type": "text",
+          "wrap": true,
+        },
+        {
+          "contents": [
+            {
+              "flex": 4,
+              "size": "sm",
+              "text": "2 × ก๋วยเตี๋ยวต้มยำ",
+              "type": "text",
+              "wrap": true,
+            },
+            {
+              "align": "end",
+              "flex": 2,
+              "size": "sm",
+              "text": "฿110.00",
+              "type": "text",
+              "wrap": true,
+            },
+          ],
+          "layout": "horizontal",
+          "type": "box",
+        },
+        {
+          "contents": [
+            {
+              "flex": 4,
+              "size": "sm",
+              "text": "1 × น้ำเปล่า",
+              "type": "text",
+              "wrap": true,
+            },
+            {
+              "align": "end",
+              "flex": 2,
+              "size": "sm",
+              "text": "฿10.00",
+              "type": "text",
+              "wrap": true,
+            },
+          ],
+          "layout": "horizontal",
+          "type": "box",
+        },
+        {
+          "type": "separator",
+        },
+        {
+          "contents": [
+            {
+              "flex": 4,
+              "size": "sm",
+              "text": "ยอดชำระ",
+              "type": "text",
+              "weight": "bold",
+              "wrap": true,
+            },
+            {
+              "align": "end",
+              "flex": 2,
+              "size": "sm",
+              "text": "฿120.00",
+              "type": "text",
+              "weight": "bold",
+              "wrap": true,
+            },
+          ],
+          "layout": "horizontal",
+          "type": "box",
+        },
+        {
+          "color": "#666666",
+          "size": "xs",
+          "text": "ชำระด้วย เงินสด",
+          "type": "text",
+          "wrap": true,
+        },
+        {
+          "color": "#666666",
+          "size": "xs",
+          "text": "ขอบคุณที่อุดหนุนแซ่บโดนเส้นค่ะ",
+          "type": "text",
+          "wrap": true,
+        },
+      ],
+      "layout": "vertical",
+      "spacing": "md",
+      "type": "box",
+    },
+    "type": "bubble",
+  },
+  "type": "flex",
+}
+`;
+
 exports[`paymentInstructions > cash: pay at hand-over, no image 1`] = `
 {
   "altText": "วิธีชำระเงินออเดอร์ L-012 ยอด ฿120.50",
@@ -213,7 +521,7 @@ exports[`paymentInstructions > gov_copay: pay at the hand-over, and the message 
           "wrap": true,
         },
         {
-          "text": "ชำระด้วยไทยช่วยไทย ที่ทางเข้าตึกตอนรับอาหารเท่านั้น พนักงานจะสร้าง QR ให้ต่อหน้า แล้วสแกนด้วยเป๋าตัง ยอดเต็ม ฿120.50",
+          "text": "ชำระด้วยไทยช่วยไทย ตอนรับอาหารที่ทางเข้าตึก พนักงานจะดำเนินการร่วมกับคุณต่อหน้า ยอดเต็ม ฿120.50",
           "type": "text",
           "wrap": true,
         },
@@ -251,7 +559,7 @@ exports[`paymentInstructions > gov_copay: pay at the hand-over, and the message 
 }
 `;
 
-exports[`paymentInstructions > promptpay: QR image, ID and exact amount in the text, paid and change buttons 1`] = `
+exports[`paymentInstructions > promptpay: ID and exact amount in the text, a button to the order page, and NO image 1`] = `
 {
   "altText": "วิธีชำระเงินออเดอร์ L-012 ยอด ฿120.50",
   "contents": {
@@ -272,6 +580,13 @@ exports[`paymentInstructions > promptpay: QR image, ID and exact amount in the t
         {
           "color": "#666666",
           "size": "sm",
+          "text": "กดปุ่มด้านล่างเพื่อเปิด QR ยอดตรงตามออเดอร์ (ได้ QR ใหม่ทุกครั้งที่เปิด)",
+          "type": "text",
+          "wrap": true,
+        },
+        {
+          "color": "#666666",
+          "size": "sm",
           "text": "โอนเสร็จแล้วกด "โอนแล้ว" หรือส่งสลิปในแชทนี้ พนักงานจะตรวจสอบยอดเงินเข้าอีกครั้ง",
           "type": "text",
           "wrap": true,
@@ -285,11 +600,20 @@ exports[`paymentInstructions > promptpay: QR image, ID and exact amount in the t
       "contents": [
         {
           "action": {
+            "label": "เปิดดู QR พร้อมเพย์",
+            "type": "uri",
+            "uri": "https://liff.line.me/1234567890-abcdefgh/orders/0191a8f0-0000-7000-8000-000000000001",
+          },
+          "style": "primary",
+          "type": "button",
+        },
+        {
+          "action": {
             "data": "action=paid&order=0191a8f0-0000-7000-8000-000000000001",
             "label": "โอนแล้ว",
             "type": "postback",
           },
-          "style": "primary",
+          "style": "secondary",
           "type": "button",
         },
         {
@@ -305,13 +629,6 @@ exports[`paymentInstructions > promptpay: QR image, ID and exact amount in the t
       "layout": "vertical",
       "spacing": "sm",
       "type": "box",
-    },
-    "hero": {
-      "aspectMode": "fit",
-      "aspectRatio": "1:1",
-      "size": "full",
-      "type": "image",
-      "url": "https://api.example.test/v1/payments/x/qr.png?exp=1&sig=abc",
     },
     "type": "bubble",
   },

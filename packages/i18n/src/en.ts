@@ -976,7 +976,7 @@ export const en = {
   'lineBot.pay.promptpayAfter':
     'After you transfer, tap "I have paid" or send the slip in this chat. Staff will check that the money arrived.',
   'lineBot.pay.govCopay':
-    'Pay with Thai Chuay Thai at the building entrance when you collect the food only. Staff create the QR in front of you and you scan it with Paotang. Full price {amount}.',
+    'Pay with Thai Chuay Thai when you collect the food at the building entrance. Staff handle it with you in person. Full price {amount}.',
   'lineBot.pay.govCopayNote': 'The shop never sends this QR through LINE.',
   'lineBot.pay.paidButton': 'I have paid',
   'lineBot.pay.changeButton': 'Change payment method',
@@ -987,4 +987,47 @@ export const en = {
   'lineBot.receipt.total': 'Amount paid',
   'lineBot.receipt.method': 'Paid by {method}',
   'lineBot.receipt.thanks': 'Thank you for ordering from Saap Don Sen.',
+  'lineBot.pay.openQr': 'Open PromptPay QR',
+  'lineBot.pay.qrNote':
+    'Tap the button below to open the QR for the exact order total (a fresh QR every time).',
+  'lineBot.pick.title': 'Choose how to pay · {orderNo}',
+  'lineBot.pick.altText': 'Choose how to pay order {orderNo}',
+  'lineBot.pick.hint': 'Total {amount} · tap to change the payment method',
+  'lineBot.claim.done':
+    'We got your transfer notice for order {orderNo}. Staff will check the money arrived and confirm.',
+  'lineBot.err.generic': 'That did not work. Please try again, or type your question here.',
+  'lineBot.err.noOrder': 'We cannot find that order on your account.',
+  'lineBot.err.claimed':
+    'This order is already marked as paid by you, so the method cannot change. Please tell staff in this chat.',
+  'lineBot.err.closed': 'This order is closed or already paid, so it cannot change.',
+  'lineBot.err.methodUnavailable':
+    'That payment method is not available right now. Please pick another.',
+  'lineBot.status.title': 'Order {orderNo} status',
+  'lineBot.status.altText': 'Order {orderNo}: {status}',
+  'lineBot.status.order': 'Order: {status}',
+  'lineBot.status.payment': 'Payment: {payment}',
+  'lineBot.status.open': 'See details',
+  'lineBot.status.none': 'You have no order in progress. Tap "Order" in the menu below to order.',
+  'lineBot.status.new': 'Waiting for the shop to accept',
+  'lineBot.status.preparing': 'Being prepared',
+  'lineBot.status.ready': 'Ready at the building entrance',
+  'lineBot.status.completed': 'Handed over',
+  'lineBot.status.cancelled': 'Cancelled',
+  'lineBot.menu.text':
+    'See the menu and order with the button below. We deliver to the building entrance only.',
+  'lineBot.menu.open': 'Open the menu',
+  'lineBot.payInfo.title': 'How to pay',
+  'lineBot.payInfo.promptpay':
+    'PromptPay: transfer the order total, then tap "I have paid". Staff check the money arrived.',
+  'lineBot.payInfo.cash': 'Cash: pay when you collect at the building entrance.',
+  'lineBot.payInfo.govCopay':
+    'Thai Chuay Thai: pay when you collect at the building entrance; staff handle it with you (only while the scheme runs).',
+  'lineBot.payInfo.altText': 'How to pay: PromptPay, cash, Thai Chuay Thai',
+  'lineBot.contact.reply': 'Got it. Staff will reply in this chat.',
+  'lineBot.hours.today': 'Today we deliver {from}–{to} (to the building entrance only).',
+  'lineBot.hours.closed': 'The shop is closed today.',
+  'lineBot.slip.reply':
+    'We got your picture. Please tap "I have paid" on the payment card; staff will then check the money arrived.',
+  'lineBot.receipt.altText': 'Receipt for order {orderNo}',
+  'lineBot.receipt.deliveredTo': 'Delivered to the entrance of building {building}',
 } as const satisfies Record<MessageKey, string>;

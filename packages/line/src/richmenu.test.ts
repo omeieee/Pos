@@ -1,4 +1,6 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, test } from 'vitest';
+import { parsePostback } from './postback.ts';
 import { DEFAULT_RICH_MENU, loadRichMenu } from './richmenu.ts';
 import { KEYWORDS } from './router.ts';
 
@@ -34,6 +36,26 @@ describe('rich menu', () => {
     };
     expect(() => loadRichMenu(outside, { liffUrl: LIFF })).toThrow();
     expect(() => loadRichMenu(DEFAULT_RICH_MENU, { liffUrl: 'http://x.test' })).toThrow();
+  });
+
+  test('the real design files load, fill {{LIFF_BASE_URL}}, and every postback is one the router answers', () => {
+    for (const file of ['rich-menu-full.json', 'rich-menu-compact.json']) {
+      const raw = JSON.parse(
+        readFileSync(new URL(`../../../design/rich-menu/${file}`, import.meta.url), 'utf8'),
+      ) as unknown;
+      const menu = loadRichMenu(raw, { liffUrl: 'https://liff.line.me/1234567890-abcdefgh' });
+      expect(JSON.stringify(menu)).not.toContain('{{');
+      for (const area of menu.areas) {
+        if (area.action.type === 'uri') {
+          expect(area.action.uri).toMatch(
+            /^https:\/\/liff\.line\.me\/1234567890-abcdefgh\/(menu|orders)$/,
+          );
+        }
+        if (area.action.type === 'postback') {
+          expect(parsePostback(area.action.data), area.action.data).not.toBeNull();
+        }
+      }
+    }
   });
 
   test('chat bar text is at most 14 characters', () => {

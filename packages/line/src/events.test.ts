@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { eventUserId, webhookBodySchema, webhookEventSchema } from './events.ts';
+import { orderPlacedText, parseOrderPlacedText } from './order-text.ts';
 import { encodePostback, parsePostback } from './postback.ts';
 import { routeEvent } from './router.ts';
 
@@ -48,6 +49,9 @@ describe('postback data', () => {
       { action: 'ack_privacy' },
       { action: 'paid', orderId: ORDER },
       { action: 'change_method', orderId: ORDER },
+      { action: 'set_method', orderId: ORDER, method: 'promptpay' },
+      { action: 'pay_info' },
+      { action: 'contact' },
     ] as const) {
       expect(parsePostback(encodePostback(a))).toEqual(a);
     }
@@ -92,7 +96,46 @@ describe('routeEvent', () => {
       replyToken: 'rt',
     });
     expect(routeEvent(pb(`action=change_method&order=${ORDER}`)).kind).toBe('change_method');
+    expect(routeEvent(pb(`action=set_method&order=${ORDER}&method=gov_copay`))).toEqual({
+      kind: 'set_method',
+      userId: U,
+      orderId: ORDER,
+      method: 'gov_copay',
+      replyToken: 'rt',
+    });
+    // a method the chat does not offer, or a bad order id, is never trusted
+    expect(routeEvent(pb(`action=set_method&order=${ORDER}&method=platform`)).kind).toBe('ignore');
+    expect(routeEvent(pb('action=set_method&order=x&method=cash')).kind).toBe('ignore');
     expect(routeEvent(pb('action=nope')).kind).toBe('ignore');
+  });
+
+  test('the rich menu postbacks act as the payment and contact keywords', () => {
+    const pb = (data: string, replyToken = 'rt') =>
+      parse({ type: 'postback', webhookEventId: '1', replyToken, source, postback: { data } });
+    expect(routeEvent(pb('rm=pay-info'))).toMatchObject({ kind: 'keyword', keyword: 'payment' });
+    expect(routeEvent(pb('rm=contact'))).toMatchObject({ kind: 'keyword', keyword: 'contact' });
+    expect(routeEvent(pb('rm=other')).kind).toBe('ignore');
+    const noToken = parse({
+      type: 'postback',
+      webhookEventId: '1',
+      source,
+      postback: { data: 'rm=pay-info' },
+    });
+    expect(routeEvent(noToken).kind).toBe('ignore');
+  });
+
+  test('the order-placed text sent by the app is routed with its order number', () => {
+    expect(routeEvent(msg({ type: 'text', id: '1', text: 'ยืนยันออเดอร์ #L-012' }))).toEqual({
+      kind: 'order_placed',
+      userId: U,
+      orderNo: 'L-012',
+      replyToken: 'rt',
+    });
+    expect(routeEvent(msg({ type: 'text', id: '1', text: 'ยืนยันออเดอร์ #l-12' })).kind).toBe(
+      'ignore',
+    );
+    expect(parseOrderPlacedText(orderPlacedText('L-1234'))).toBe('L-1234');
+    expect(() => orderPlacedText('hello')).toThrow(RangeError);
   });
 
   test('keywords match the whole trimmed text only', () => {
