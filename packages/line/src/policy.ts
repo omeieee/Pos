@@ -52,3 +52,18 @@ export function thresholdCrossed(
   if (used === Math.ceil((policy.monthlyLimit * policy.warnAtPercent) / 100)) return 'warn';
   return null;
 }
+
+/**
+ * Every level the month's usage has reached, lowest first. Unlike `thresholdCrossed` it does not
+ * need `used` to hit the level exactly, so a lowered limit or a release followed by a resend
+ * cannot make an alert double or vanish; the caller de-duplicates per month and level.
+ */
+export function thresholdsReached(
+  used: number,
+  policy: Pick<LinePolicy, 'warnAtPercent' | 'monthlyLimit'>,
+): ('warn' | 'cap')[] {
+  const levels: ('warn' | 'cap')[] = [];
+  if (used >= Math.ceil((policy.monthlyLimit * policy.warnAtPercent) / 100)) levels.push('warn');
+  if (used >= policy.monthlyLimit) levels.push('cap');
+  return levels;
+}

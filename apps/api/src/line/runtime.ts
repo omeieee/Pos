@@ -57,11 +57,12 @@ export function createLineRuntime(
 }
 
 /** The quota books on the real tables (`line_message_log`, `line_quota_months`). */
-export function dbQuotaStore(db: Db): QuotaStore {
+export function dbQuotaStore(db: Db, now: () => Date = () => new Date()): QuotaStore {
   return {
     reservePush: (args) => lineRepo.reservePush(db, args),
     releasePush: (args) => lineRepo.releasePush(db, args),
     logReply: (args) => lineRepo.logReply(db, args),
+    claimAlert: (args) => lineRepo.claimQuotaAlert(db, { ...args, at: now() }),
   };
 }
 
@@ -78,7 +79,7 @@ export function buildSender(args: {
 }): LineSender {
   return createLineSender({
     client: args.runtime.client,
-    store: dbQuotaStore(args.db),
+    store: dbQuotaStore(args.db, args.now),
     getPolicy: () => readPolicy(args.db),
     now: args.now,
     onThreshold: (level) => {

@@ -14,10 +14,17 @@ const TEXT = [{ type: 'text' as const, text: 'x' }];
 function fakeStore(limitUsed = 0) {
   let used = limitUsed;
   const orders = new Set<string>();
+  const alerted = new Set<string>();
   const store: QuotaStore & { replies: number; released: number; used(): number } = {
     replies: 0,
     released: 0,
     used: () => used,
+    async claimAlert(a) {
+      const key = `${a.month}|${a.level}`;
+      if (alerted.has(key)) return false;
+      alerted.add(key);
+      return true;
+    },
     async reservePush(a) {
       if (a.orderId) {
         const key = `${a.orderId}|${a.template}`;
@@ -161,6 +168,85 @@ describe('push', () => {
       ['warn', 8],
       ['cap', 10],
     ]);
+  });
+
+  test('the alert comes after the push went out, never for a push LINE refused', async () => {
+    const order: string[] = [];
+    const client = fakeClient();
+    client.push.mockImplementation(async () => {
+      order.push('push');
+      return { ok: true } as LineSendResult;
+    });
+    const s = sender({
+      client,
+      policy: policy({ monthlyLimit: 10, warnAtPercent: 80 }),
+      store: fakeStore(7),
+      onThreshold: (level) => order.push(`alert:${level}`),
+    });
+    await s.push('U1', TEXT, { template: 'a', essential: true });
+    expect(order).toEqual(['push', 'alert:warn']);
+
+    // LINE definitely refuses a push that would reach the cap: the unit goes back, no alert.
+    const calls: string[] = [];
+    const refused = sender({
+      client: fakeClient({ ok: false, definite: true, status: 400 }),
+      policy: policy({ monthlyLimit: 10, warnAtPercent: 80 }),
+      store: fakeStore(9),
+      onThreshold: (level) => calls.push(level),
+    });
+    await refused.push('U1', TEXT, { template: 'a', essential: true });
+    expect(calls).toEqual([]);
+  });
+
+  test('a refused push does not use up the alert: the next one that reaches the level raises it once', async () => {
+    const store = fakeStore(7);
+    const calls: string[] = [];
+    const p = policy({ monthlyLimit: 10, warnAtPercent: 80 });
+    const onThreshold = (level: string) => calls.push(level);
+    await sender({
+      client: fakeClient({ ok: false, definite: true, status: 500 }),
+      policy: p,
+      store,
+      onThreshold,
+    }).push('U1', TEXT, { template: 'a', essential: true });
+    expect(calls).toEqual([]);
+    // Two senders over the same books, as two webhook batches: still one alert.
+    await sender({ policy: p, store, onThreshold }).push('U1', TEXT, {
+      template: 'a',
+      essential: true,
+    });
+    await sender({ policy: p, store, onThreshold }).push('U1', TEXT, {
+      template: 'a',
+      essential: true,
+    });
+    expect(calls).toEqual(['warn']);
+  });
+
+  test('an unknown failure may have been delivered, so the unit stays spent and the alert still comes', async () => {
+    const calls: string[] = [];
+    await sender({
+      client: fakeClient({ ok: false, definite: false }),
+      policy: policy({ monthlyLimit: 10, warnAtPercent: 80 }),
+      store: fakeStore(7),
+      onThreshold: (level) => calls.push(level),
+    }).push('U1', TEXT, { template: 'a', essential: true });
+    expect(calls).toEqual(['warn']);
+  });
+
+  test('a level that was passed without being hit exactly still alerts once (limit lowered mid-month)', async () => {
+    const calls: [string, number][] = [];
+    const store = fakeStore(12); // already above the new limit of 10
+    const s = sender({
+      policy: policy({ monthlyLimit: 10, warnAtPercent: 80 }),
+      store,
+      onThreshold: (level, used) => calls.push([level, used]),
+    });
+    expect(await s.push('U1', TEXT, { template: 'a', essential: true })).toEqual({
+      sent: false,
+      reason: 'quota_exhausted',
+    });
+    await s.push('U1', TEXT, { template: 'a', essential: true });
+    expect(calls).toEqual([['cap', 10]]);
   });
 
   test('without LINE_* settings nothing is sent and nothing is spent', async () => {

@@ -221,6 +221,32 @@ export async function releasePush(db: Db, args: { month: string; logId: string }
   });
 }
 
+/**
+ * Claims the owner alert for a month and level (`warn` or `cap`). True for the first caller only;
+ * one atomic upsert, so concurrent senders and restarts cannot raise it twice.
+ */
+export async function claimQuotaAlert(
+  db: Db,
+  args: { month: string; level: 'warn' | 'cap'; at: Date },
+): Promise<boolean> {
+  const column =
+    args.level === 'warn' ? lineQuotaMonths.warnAlertedAt : lineQuotaMonths.capAlertedAt;
+  const rows = await db
+    .insert(lineQuotaMonths)
+    .values({
+      month: args.month,
+      used: 0,
+      ...(args.level === 'warn' ? { warnAlertedAt: args.at } : { capAlertedAt: args.at }),
+    })
+    .onConflictDoUpdate({
+      target: lineQuotaMonths.month,
+      set: args.level === 'warn' ? { warnAlertedAt: args.at } : { capAlertedAt: args.at },
+      setWhere: sql`${column} is null`,
+    })
+    .returning({ month: lineQuotaMonths.month });
+  return rows.length > 0;
+}
+
 /** A free reply, logged as uncounted. */
 export async function logReply(
   db: Db,

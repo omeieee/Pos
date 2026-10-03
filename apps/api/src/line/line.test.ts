@@ -595,6 +595,14 @@ describe('quota-aware push through the real books', () => {
     expect((await refuse.push('U', msg, { template: 'f', essential: true })).sent).toBe(false);
     expect(await lineRepo.getMonthUsage(h.db, month)).toBe(1);
 
+    // A later webhook batch builds a new sender over the same books. The count reaches the
+    // warning level again (after the release above); the owner was told for this month already.
+    const alertsSoFar = h.alerts.length;
+    const later = buildSender({ db: h.db, runtime: rt, events: h.bus, now: h.clock.now });
+    expect((await later.push('U', msg, { template: 'g', essential: true })).sent).toBe(true);
+    expect(await lineRepo.getMonthUsage(h.db, month)).toBe(2);
+    expect(h.alerts).toHaveLength(alertsSoFar);
+
     await h.client.query(`delete from settings where key = 'line_policy'`);
   });
 

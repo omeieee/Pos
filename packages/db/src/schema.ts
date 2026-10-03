@@ -693,6 +693,9 @@ export const lineMessageLog = pgTable(
 export const lineQuotaMonths = pgTable('line_quota_months', {
   month: text('month').primaryKey(),
   used: integer('used').notNull().default(0),
+  /** When the owner was told the month reached the warning level / the limit (once each). */
+  warnAlertedAt: ts('warn_alerted_at'),
+  capAlertedAt: ts('cap_alerted_at'),
   updatedAt: ts('updated_at').notNull().defaultNow(),
 });
 

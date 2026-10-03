@@ -112,3 +112,23 @@ describe('acknowledgePrivacy records the notice version', () => {
     });
   });
 });
+
+describe('claimQuotaAlert', () => {
+  const at = new Date(Date.UTC(2026, 9, 3, 5, 0, 0));
+  test('is true once per month and level, even before the month has a counter row', async () => {
+    expect(await lineRepo.claimQuotaAlert(db, { month: '2026-11', level: 'warn', at })).toBe(true);
+    expect(await lineRepo.claimQuotaAlert(db, { month: '2026-11', level: 'warn', at })).toBe(false);
+    expect(await lineRepo.claimQuotaAlert(db, { month: '2026-11', level: 'cap', at })).toBe(true);
+    expect(await lineRepo.claimQuotaAlert(db, { month: '2026-11', level: 'cap', at })).toBe(false);
+    expect(await lineRepo.claimQuotaAlert(db, { month: '2026-12', level: 'warn', at })).toBe(true);
+  });
+
+  test('does not disturb the push counter, and concurrent claims have one winner', async () => {
+    await lineRepo.reservePush(db, { month: '2027-01', limit: 300, template: 't' });
+    const results = await Promise.all(
+      [1, 2, 3, 4].map(() => lineRepo.claimQuotaAlert(db, { month: '2027-01', level: 'warn', at })),
+    );
+    expect(results.filter(Boolean)).toHaveLength(1);
+    expect(await lineRepo.getMonthUsage(db, '2027-01')).toBe(1);
+  });
+});
