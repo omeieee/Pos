@@ -72,6 +72,8 @@ export interface NewPayment {
   referenceNote?: string | null;
   confirmedByStaffId?: string | null;
   confirmedAt?: Date | null;
+  /** Owner outbox take-over only: the cashier who really took this cash. */
+  originalStaffId?: string | null;
   clientRequestId: string;
   requestHash: string;
 }

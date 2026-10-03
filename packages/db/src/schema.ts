@@ -429,6 +429,11 @@ export const orders = pgTable(
     note: text('note'),
     createdByStaffId: uuid('created_by_staff_id').references(() => staff.id),
     createdOnDeviceId: uuid('created_on_device_id').references(() => devices.id),
+    /**
+     * Set only when the owner took over a device's offline outbox: the staff member who took the
+     * order, while `createdByStaffId` is the owner who sent it. Null otherwise.
+     */
+    originalStaffId: uuid('original_staff_id').references(() => staff.id),
     clientRequestId: uuid('client_request_id').notNull(),
     /**
      * Fingerprint of the request that created the order. A second POST with the same client request
@@ -454,6 +459,7 @@ export const orders = pgTable(
     index('orders_customer_id_idx').on(t.customerId),
     index('orders_created_by_staff_id_idx').on(t.createdByStaffId),
     index('orders_created_on_device_id_idx').on(t.createdOnDeviceId),
+    index('orders_original_staff_id_idx').on(t.originalStaffId),
     index('orders_rev_idx').on(t.rev),
     check('orders_channel', oneOf('channel', ORDER_CHANNELS)),
     check('orders_fulfillment', oneOf('fulfillment', FULFILLMENTS)),
@@ -555,6 +561,8 @@ export const payments = pgTable(
     claimedAt: ts('claimed_at'),
     confirmedByStaffId: uuid('confirmed_by_staff_id').references(() => staff.id),
     confirmedAt: ts('confirmed_at'),
+    /** Set only when the owner took over a device's outbox: the cashier who took this cash. */
+    originalStaffId: uuid('original_staff_id').references(() => staff.id),
     voidReason: text('void_reason'),
     clientRequestId: uuid('client_request_id').notNull(),
     /** Fingerprint of the request that made this payment; null on rows saved before it existed. */
@@ -565,6 +573,7 @@ export const payments = pgTable(
     uniqueIndex('payments_client_request_id_key').on(t.clientRequestId),
     index('payments_order_id_idx').on(t.orderId),
     index('payments_confirmed_by_staff_id_idx').on(t.confirmedByStaffId),
+    index('payments_original_staff_id_idx').on(t.originalStaffId),
     index('payments_scheme_id_idx').on(t.schemeId),
     index('payments_open_status_idx').on(t.status).where(sql`status in ('pending', 'claimed')`),
     // DB backstop for "one open payment per order" (the order row lock is the first line).

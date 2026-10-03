@@ -1,4 +1,5 @@
 import type { AuditActorType } from '@sds/shared';
+import { and, eq, sql } from 'drizzle-orm';
 import type { Db } from './client.ts';
 import { auditLog } from './schema.ts';
 
@@ -29,4 +30,28 @@ export async function insertAudit(db: Db, entry: AuditEntry): Promise<void> {
     after: entry.after ?? null,
     ip: entry.ip ?? null,
   });
+}
+
+/**
+ * The audit row of an entity whose `after` carries this `clientRequestId`: how a route that
+ * records only in the audit log recognises a retry. Call it under the lock of the entity.
+ */
+export async function findAuditByRequestId(
+  db: Db,
+  entity: string,
+  entityId: string,
+  clientRequestId: string,
+): Promise<{ action: string; after: unknown } | undefined> {
+  const [row] = await db
+    .select({ action: auditLog.action, after: auditLog.after })
+    .from(auditLog)
+    .where(
+      and(
+        eq(auditLog.entity, entity),
+        eq(auditLog.entityId, entityId),
+        sql`${auditLog.after}->>'clientRequestId' = ${clientRequestId}`,
+      ),
+    )
+    .limit(1);
+  return row;
 }

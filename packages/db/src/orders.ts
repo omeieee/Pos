@@ -66,6 +66,8 @@ export interface NewOrder {
   note: string | null;
   createdByStaffId: string | null;
   createdOnDeviceId: string | null;
+  /** Owner outbox take-over only: who really took the order. */
+  originalStaffId?: string | null;
   clientRequestId: string;
   requestHash: string;
   placedAt: Date;

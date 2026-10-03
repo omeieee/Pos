@@ -53,6 +53,10 @@ import {
   type TransitionError,
 } from '@sds/shared';
 import {
+  assertOriginalStaffExists,
+  requireOwnerForOriginalStaff,
+} from '../admin/original-staff.ts';
+import {
   type AuthContext,
   hasFreshStepUp,
   type Principal,
@@ -221,6 +225,7 @@ async function insertPaymentFor(
   order: ordersRepo.OrderRow,
   input: CreatePaymentInput | ChangePaymentMethodInput,
   requestHash: string,
+  originalStaffId?: string,
 ): Promise<paymentsRepo.PaymentRow> {
   if (order.status === 'cancelled') {
     throw conflict('ORDER_CLOSED', 'A cancelled order cannot be paid', { status: order.status });
@@ -284,6 +289,7 @@ async function insertPaymentFor(
         }
         throw unprocessable('AMOUNT_TOO_LARGE', 'This amount is too large for a cash payment');
       }
+      if (originalStaffId !== undefined) await assertOriginalStaffExists(tx, originalStaffId);
       row = await paymentsRepo.insertPayment(tx, {
         ...base,
         status: 'confirmed',
@@ -291,11 +297,13 @@ async function insertPaymentFor(
         changeSatang: cash.change,
         confirmedByStaffId: actor.staffId,
         confirmedAt: now,
+        originalStaffId: originalStaffId ?? null,
       });
       if (row) {
         await auditPayment(tx, actor, meta, 'payment.confirm', row.id, null, {
           ...snapshot(row),
           created: true,
+          ...(originalStaffId !== undefined ? { originalStaffId } : {}),
         });
       }
       break;
@@ -382,6 +390,8 @@ export async function createPayment(
   input: CreatePaymentInput,
   meta: RequestMeta,
 ): Promise<{ result: PaymentResult; replay: boolean }> {
+  const originalStaffId = input.method === 'cash' ? input.originalStaffId : undefined;
+  requireOwnerForOriginalStaff(actor, originalStaffId);
   const requestHash = paymentRequestHash(orderId, input);
   const replayResult = async (db: Db, existing: paymentsRepo.PaymentRow) => {
     const { payment, order } = await replayOf(db, existing, orderId, requestHash);
@@ -399,7 +409,16 @@ export async function createPayment(
       const twin = await paymentsRepo.findPaymentByClientRequestId(tx, input.clientRequestId);
       if (twin) return replayResult(tx, twin);
 
-      const row = await insertPaymentFor(tx, ctx, actor, meta, order, input, requestHash);
+      const row = await insertPaymentFor(
+        tx,
+        ctx,
+        actor,
+        meta,
+        order,
+        input,
+        requestHash,
+        originalStaffId,
+      );
       const payment = emitPayment(emit, row);
       return { result: { payment, order: await settleOrder(tx, order, emit) }, replay: false };
     });

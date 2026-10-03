@@ -27,6 +27,32 @@ export type DeviceDto = z.infer<typeof deviceDtoSchema>;
 export const listDevicesResponseSchema = z.object({ devices: z.array(deviceDtoSchema) });
 export type ListDevicesResponse = z.infer<typeof listDevicesResponseSchema>;
 
+/**
+ * The owner took over or cleared another person's offline outbox entries on a device. Counts only:
+ * no names, no order contents, no free text. `clientRequestId` makes a retry write nothing more.
+ */
+export const OUTBOX_RECOVERY_ACTIONS = ['take_over', 'clear'] as const;
+export const outboxRecoveryInputSchema = z
+  .strictObject({
+    clientRequestId: z.uuid(),
+    action: z.enum(OUTBOX_RECOVERY_ACTIONS),
+    orders: z.number().int().min(0).max(1000),
+    payments: z.number().int().min(0).max(1000),
+  })
+  .refine((v) => v.orders + v.payments > 0, {
+    message: 'there is nothing to recover',
+    path: ['orders'],
+  });
+export type OutboxRecoveryInput = z.infer<typeof outboxRecoveryInputSchema>;
+
+export const outboxRecoveryResponseSchema = z.object({
+  deviceId: z.uuid(),
+  action: z.enum(OUTBOX_RECOVERY_ACTIONS),
+  orders: z.number().int(),
+  payments: z.number().int(),
+});
+export type OutboxRecoveryResponse = z.infer<typeof outboxRecoveryResponseSchema>;
+
 // ---------- Staff ----------
 
 export const staffDtoSchema = z.object({

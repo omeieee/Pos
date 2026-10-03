@@ -54,6 +54,11 @@ export const createOrderInputSchema = z
     recipientName: recipientNameSchema.optional(),
     deliveryNote: deliveryNoteSchema.optional(),
     customerId: z.uuid().optional(),
+    /**
+     * Owner only: the staff member who took this order on a device before the owner took over that
+     * device's offline outbox. Stored and audited; never changes who the order is for.
+     */
+    originalStaffId: z.uuid().optional(),
     note: z.string().max(500).optional(),
     items: z
       .array(

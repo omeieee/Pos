@@ -34,7 +34,13 @@ const choice = {
  * recorded as already confirmed; every other method must not send it.
  */
 export const createPaymentInputSchema = z.discriminatedUnion('method', [
-  z.strictObject({ ...choice, method: z.literal('cash'), tendered: cashAmountSchema }),
+  z.strictObject({
+    ...choice,
+    method: z.literal('cash'),
+    tendered: cashAmountSchema,
+    /** Owner only: the cashier who took this cash before the owner took over the outbox. */
+    originalStaffId: z.uuid().optional(),
+  }),
   z.strictObject({ ...choice, method: z.literal('promptpay') }),
   z.strictObject({ ...choice, method: z.literal('gov_copay') }),
   z.strictObject({ ...choice, method: z.literal('platform') }),

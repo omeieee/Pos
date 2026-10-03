@@ -3,7 +3,7 @@
  * trigger does it) and publishes its events only after the commit. Status changes go through the
  * state machine in `@sds/shared`; the server prices every order from the menu.
  */
-import { customersRepo, type Db, ordersRepo } from '@sds/db';
+import { customersRepo, type Db, insertAudit, ordersRepo } from '@sds/db';
 import {
   allowedFulfillments,
   businessDate,
@@ -22,6 +22,10 @@ import {
   type TransitionError,
   type TransitionOrderInput,
 } from '@sds/shared';
+import {
+  assertOriginalStaffExists,
+  requireOwnerForOriginalStaff,
+} from '../admin/original-staff.ts';
 import { hasFreshStepUp, type Principal } from '../auth/service.ts';
 import {
   ApiError,
@@ -104,6 +108,7 @@ export async function createOrder(
     );
   }
 
+  requireOwnerForOriginalStaff(actor, input.originalStaffId);
   const requestHash = orderRequestHash(input);
   const existing = await ordersRepo.findOrderByClientRequestId(ctx.db, input.clientRequestId);
   if (existing) return replayOf(ctx.db, existing, requestHash);
@@ -116,6 +121,9 @@ export async function createOrder(
     const order = await withTransaction(ctx, async (tx, emit) => {
       if (input.customerId && !(await ordersRepo.customerExists(tx, input.customerId))) {
         throw new ApiError(422, 'UNKNOWN_CUSTOMER', 'That customer does not exist');
+      }
+      if (input.originalStaffId !== undefined) {
+        await assertOriginalStaffExists(tx, input.originalStaffId);
       }
       // The building must be one the shop delivers to, from the saved list (or the default).
       if (
@@ -169,12 +177,24 @@ export async function createOrder(
         note: input.note ?? null,
         createdByStaffId: actor.staffId,
         createdOnDeviceId: actor.deviceId,
+        originalStaffId: input.originalStaffId ?? null,
         clientRequestId: input.clientRequestId,
         requestHash,
         placedAt: now,
         acceptedAt: status === 'preparing' ? now : null,
       });
       if (!row) throw new DuplicateRequest();
+      if (input.originalStaffId !== undefined) {
+        await insertAudit(tx, {
+          actorType: 'staff',
+          actorId: actor.staffId,
+          deviceId: actor.deviceId,
+          action: 'order.create_on_behalf',
+          entity: 'orders',
+          entityId: row.id,
+          after: { originalStaffId: input.originalStaffId },
+        });
+      }
 
       const items = await ordersRepo.insertOrderItems(
         tx,

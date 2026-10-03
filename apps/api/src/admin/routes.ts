@@ -1,6 +1,7 @@
 import {
   createStaffInputSchema,
   idParamSchema,
+  outboxRecoveryInputSchema,
   patchStaffInputSchema,
   setStaffPinInputSchema,
 } from '@sds/shared';
@@ -13,6 +14,7 @@ import {
   listDevices,
   listStaffMembers,
   patchStaffMember,
+  recordOutboxRecovery,
   revokeDevice,
   setStaffPin,
 } from './service.ts';
@@ -39,6 +41,23 @@ export async function registerAdminRoutes(
 
   app.post('/devices/:id/revoke', { onRequest: guard('device.manage') }, async (request) =>
     revokeDevice(ctx, principalOf(request), idOf(request), meta(request)),
+  );
+
+  // The device's offline outbox lives in the browser; the owner reports a take-over or clear here
+  // so it is audited and alerted. A retry with the same clientRequestId answers 200, writes nothing.
+  app.post(
+    '/devices/:id/outbox-recovery',
+    { onRequest: guard('device.manage') },
+    async (request, reply) => {
+      const { result, replay } = await recordOutboxRecovery(
+        ctx,
+        principalOf(request),
+        idOf(request),
+        parse(outboxRecoveryInputSchema, request.body),
+        meta(request),
+      );
+      return reply.status(replay ? 200 : 201).send(result);
+    },
   );
 
   app.get('/staff', { onRequest: guard('staff.manage') }, async () => listStaffMembers(ctx));

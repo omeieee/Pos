@@ -3,12 +3,14 @@
  * staff, rename or deactivate them, set a PIN. Owner only with step-up (the route guard checks);
  * every change is audited and alerted. A hash, token or PIN never leaves the database layer.
  */
-import { authRepo, insertAudit, peopleRepo } from '@sds/db';
+import { authRepo, findAuditByRequestId, insertAudit, peopleRepo } from '@sds/db';
 import {
   type CreateStaffInput,
   type DeviceDto,
   type ListDevicesResponse,
   type ListStaffResponse,
+  type OutboxRecoveryInput,
+  type OutboxRecoveryResponse,
   type PatchStaffInput,
   pinSchemaFor,
   type SetStaffPinInput,
@@ -89,6 +91,62 @@ export async function revokeDevice(
     emit(securityAlert(ctx, 'device.revoked', 'warn', { staffId: actor.staffId, deviceId: id }));
     emit({ type: 'session.ended', deviceId: id, reason: 'device_revoked' });
     return toDeviceDto(revoked);
+  });
+}
+
+/**
+ * The owner took over or cleared other people's offline outbox entries on a device (the entries
+ * live in the browser; this records that it happened). Counts only: no names, no contents. A retry
+ * with the same `clientRequestId` answers the same and writes and alerts nothing more.
+ */
+export async function recordOutboxRecovery(
+  ctx: AuthContext,
+  actor: Principal,
+  deviceId: string,
+  input: OutboxRecoveryInput,
+  meta: RequestMeta,
+): Promise<{ result: OutboxRecoveryResponse; replay: boolean }> {
+  const action = `device.outbox_${input.action}`;
+  const result: OutboxRecoveryResponse = {
+    deviceId,
+    action: input.action,
+    orders: input.orders,
+    payments: input.payments,
+  };
+  return withTransaction(ctx, async (tx, emit) => {
+    // The device row lock queues two requests for one device, so both cannot miss the other's row.
+    if (!(await peopleRepo.lockDevice(tx, deviceId))) throw notFound('Device');
+    const seen = await findAuditByRequestId(tx, 'devices', deviceId, input.clientRequestId);
+    if (seen) {
+      const was = (seen.after ?? {}) as { orders?: number; payments?: number };
+      if (
+        seen.action !== action ||
+        was.orders !== input.orders ||
+        was.payments !== input.payments
+      ) {
+        throw conflict(
+          'IDEMPOTENCY_KEY_REUSED',
+          'This request id was already used for a different recovery',
+        );
+      }
+      return { result, replay: true };
+    }
+    await insertAudit(tx, {
+      ...audited(actor, meta),
+      deviceId,
+      action,
+      entity: 'devices',
+      entityId: deviceId,
+      after: {
+        clientRequestId: input.clientRequestId,
+        orders: input.orders,
+        payments: input.payments,
+      },
+    });
+    emit(
+      securityAlert(ctx, 'device.outbox_recovery', 'warn', { staffId: actor.staffId, deviceId }),
+    );
+    return { result, replay: false };
   });
 }
 
