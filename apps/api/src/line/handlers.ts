@@ -279,6 +279,9 @@ async function handleSetMethod(
   ctx: HandlerContext,
   event: Extract<RoutedEvent, { kind: 'set_method' }>,
 ): Promise<void> {
+  // Only the live run: a retry minutes or hours later (no reply token) could undo a newer choice
+  // the customer made in the app meanwhile.
+  if (!event.replyToken) return;
   const customer = await lineRepo.findCustomerByLineUserId(ctx.db, event.userId);
   if (!customer) return;
   try {

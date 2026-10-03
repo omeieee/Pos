@@ -14,6 +14,8 @@ interface LiffSdk {
   login(): void;
   getIDToken(): string | null;
   getAccessToken(): string | null;
+  getDecodedIDToken(): { exp?: number } | null;
+  getContext(): { type?: string } | null;
   isInClient(): boolean;
   sendMessages(messages: { type: 'text'; text: string }[]): Promise<void>;
 }
@@ -58,12 +60,20 @@ export async function startPlatform(liffId: string | undefined): Promise<Platfor
   }
   return {
     credential() {
+      // The ID token lasts about an hour from sign-in and a session lasts as long, so a customer
+      // who waits for their food would present an expired one. Past (or near) its expiry the
+      // access token, which the SDK keeps fresh, is used instead.
       const idToken = liff.getIDToken();
-      if (idToken) return { idToken };
+      const exp = liff.getDecodedIDToken()?.exp;
+      const fresh = typeof exp === 'number' && exp * 1000 > Date.now() + 60_000;
+      if (idToken && fresh) return { idToken };
       const accessToken = liff.getAccessToken();
-      return accessToken ? { accessToken } : null;
+      if (accessToken) return { accessToken };
+      return idToken ? { idToken } : null;
     },
-    canSendMessages: () => liff.isInClient(),
+    // `sendMessages` posts into the chat the app was opened from: only a 1:1 chat is the shop's.
+    // From a group, a room or anywhere else the confirmation would land in the wrong place.
+    canSendMessages: () => liff.isInClient() && liff.getContext()?.type === 'utou',
     async sendText(text) {
       try {
         await liff.sendMessages([{ type: 'text', text }]);

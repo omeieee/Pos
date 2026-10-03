@@ -259,7 +259,8 @@ export function CheckoutScreen({
   );
 }
 
-function PrivacyGate({ refreshInfo }: { refreshInfo: () => Promise<void> }) {
+/** Shown on first use, before anything else: the notice and a button that stores the acknowledgement. */
+export function PrivacyGate({ refreshInfo }: { refreshInfo: () => Promise<void> }) {
   const tr = useT();
   const { api } = useApp();
   const [busy, setBusy] = useState(false);

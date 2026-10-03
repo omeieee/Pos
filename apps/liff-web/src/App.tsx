@@ -5,7 +5,7 @@ import type { Cart } from './model/cart.ts';
 import { apiBaseUrl } from './platform/config.ts';
 import { type Platform, startPlatform } from './platform/liff.ts';
 import { Ctx, errorKey, localeFromBrowser, useApp, useT } from './ui/app-context.tsx';
-import { CartScreen, CheckoutScreen } from './ui/CartScreen.tsx';
+import { CartScreen, CheckoutScreen, PrivacyGate } from './ui/CartScreen.tsx';
 import { MenuScreen } from './ui/MenuScreen.tsx';
 import { OrderScreen, OrdersScreen } from './ui/OrderScreen.tsx';
 
@@ -105,6 +105,9 @@ function Shell({ path }: { path: string }) {
         </button>
       </div>
     );
+  } else if (info && !info.privacyAcknowledged) {
+    // First use (or a new notice version): the notice comes before anything else.
+    screen = <PrivacyGate refreshInfo={refreshInfo} />;
   } else if (orderId) {
     screen = <OrderScreen id={orderId} flag={flag} />;
   } else if (pathname === '/orders') {
