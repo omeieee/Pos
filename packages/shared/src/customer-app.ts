@@ -15,6 +15,11 @@ import { orderLineInputSchema } from './schemas.ts';
 
 const isoInstant = z.iso.datetime();
 
+/** Orders a customer may have open (not completed or cancelled) at once. */
+export const MAX_OPEN_ORDERS = 3;
+/** Most items, counted by quantity, in one customer order. */
+export const MAX_ORDER_QUANTITY = 50;
+
 /** What a customer can choose. Cash and ไทยช่วยไทย are paid at the hand-over; staff confirm. */
 export const APP_PAY_METHODS = ['cash', 'promptpay', 'gov_copay'] as const;
 export type AppPayMethod = (typeof APP_PAY_METHODS)[number];

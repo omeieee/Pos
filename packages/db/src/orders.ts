@@ -317,6 +317,20 @@ export async function listOrdersForCustomer(
     .limit(limit);
 }
 
+/** How many of the customer's orders are still open (not completed, not cancelled). */
+export async function countOpenOrdersForCustomer(db: Db, customerId: string): Promise<number> {
+  const [row] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(orders)
+    .where(
+      and(
+        eq(orders.customerId, customerId),
+        sql`${orders.status} not in ('completed', 'cancelled')`,
+      ),
+    );
+  return row?.n ?? 0;
+}
+
 /** One order, only when it belongs to this customer. */
 export async function findOrderForCustomer(
   db: Db,

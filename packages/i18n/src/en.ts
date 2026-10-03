@@ -1053,6 +1053,10 @@ export const en = {
     'You already reported a transfer, so the method cannot change. Tell staff in the chat.',
   'liff.error.QR_NOT_AVAILABLE': 'There is no QR for this order now.',
   'liff.error.NOT_FOUND': 'We cannot find that order.',
+  'liff.error.TOO_MANY_OPEN_ORDERS':
+    'You already have several open orders. Please wait until one is done.',
+  'liff.error.ORDER_TOO_LARGE':
+    'An order can have up to 50 items. Please reduce the quantity or split it.',
   'liff.privacy.title': 'Privacy notice',
   'liff.privacy.body':
     'The shop keeps your LINE user ID, the recipient name and building, notes and your orders, to prepare, deliver and take payment for them and to keep the shop accounts. Names and buildings are erased 30 days after an order is done. To see, correct or delete your data, write in the shop chat on LINE.',

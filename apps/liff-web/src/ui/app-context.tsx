@@ -42,6 +42,8 @@ const KNOWN: Record<string, MessageKey> = {
   PAYMENT_NOT_PENDING: 'liff.error.PAYMENT_NOT_PENDING',
   QR_NOT_AVAILABLE: 'liff.error.QR_NOT_AVAILABLE',
   NOT_FOUND: 'liff.error.NOT_FOUND',
+  TOO_MANY_OPEN_ORDERS: 'liff.error.TOO_MANY_OPEN_ORDERS',
+  ORDER_TOO_LARGE: 'liff.error.ORDER_TOO_LARGE',
   NETWORK: 'liff.error.network',
   LIFF_TOKEN_INVALID: 'liff.error.signin',
   NO_CREDENTIAL: 'liff.error.signin',

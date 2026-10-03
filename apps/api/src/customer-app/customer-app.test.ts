@@ -9,6 +9,7 @@ import { promptpayPayload } from '@sds/promptpay';
 import {
   ANONYMIZED_BUILDING,
   ANONYMIZED_RECIPIENT_NAME,
+  MAX_OPEN_ORDERS,
   type MyOrder,
   myOrderSchema,
   PRIVACY_NOTICE_VERSION,
@@ -114,6 +115,10 @@ beforeEach(async () => {
   await setPromptpay(PHONE);
   await setScheme(true);
   await h.client.query("delete from settings where key in ('payment_methods', 'opening_hours')");
+  // Earlier tests' orders must not fill the per-customer limit of open orders.
+  await h.client.query(
+    "update orders set status = 'completed' where channel = 'line' and status not in ('completed', 'cancelled')",
+  );
 });
 
 function call(
@@ -489,6 +494,56 @@ describe('placing an order', () => {
       .slice(marker)
       .find((e) => e.type === 'order.upserted' && e.id === json.order.id);
     expect(upserted).toBeDefined();
+  });
+});
+
+describe('limits on one customer', () => {
+  test('a new order is refused while the customer already has 3 open ones; finishing one frees a place', async () => {
+    const token = await customer(TOKEN_B);
+    const placed: string[] = [];
+    for (let i = 0; i < MAX_OPEN_ORDERS; i++) {
+      const { res, json } = await order(token, { paymentMethod: 'cash' });
+      expect(res.statusCode).toBe(201);
+      placed.push(json.order.id);
+    }
+    const refused = await order(token, { paymentMethod: 'cash' });
+    expect(refused.res.statusCode).toBe(409);
+    expect(refused.json).toMatchObject({ code: 'TOO_MANY_OPEN_ORDERS' });
+    // Nothing was written for the refused one, and no alert was raised.
+    const count = await h.client.query(
+      "select id from orders where customer_id = (select id from customers where line_user_id = $1) and status not in ('completed','cancelled')",
+      [U_B],
+    );
+    expect(count.rows).toHaveLength(MAX_OPEN_ORDERS);
+    // A retry of an order that already exists is not refused.
+    const payload = body({ paymentMethod: 'cash' });
+    await h.client.query("update orders set status = 'completed' where id = $1", [placed[0]]);
+    expect((await call('POST', '/v1/app/orders', token, payload)).statusCode).toBe(201);
+    expect((await call('POST', '/v1/app/orders', token, payload)).statusCode).toBe(200);
+    // Cancelled and completed orders do not count.
+    await h.client.query("update orders set status = 'cancelled' where id = $1", [placed[1]]);
+    expect((await order(token, { paymentMethod: 'cash' })).res.statusCode).toBe(201);
+  });
+
+  test("one customer's open orders do not block another", async () => {
+    const other = await customer(TOKEN_A);
+    expect((await order(other, { paymentMethod: 'cash' })).res.statusCode).toBe(201);
+  });
+
+  test('an order of more than 50 items in total is refused with 422, 50 is accepted', async () => {
+    const token = await customer(TOKEN_B);
+    const big = (qty: number) => ({
+      paymentMethod: 'cash',
+      items: [
+        { menuItemId: menu.water, qty: Math.min(qty, 40) },
+        { menuItemId: menu.water, qty: Math.max(0, qty - 40) || 1 },
+      ],
+    });
+    const tooMany = await order(token, big(51));
+    expect(tooMany.res.statusCode).toBe(422);
+    expect(tooMany.json).toMatchObject({ code: 'ORDER_TOO_LARGE' });
+    // exactly 50 in total: 40 + 10
+    expect((await order(token, big(50))).res.statusCode).toBe(201);
   });
 });
 

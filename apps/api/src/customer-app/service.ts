@@ -20,6 +20,8 @@ import {
   type AppPayMethod,
   type CheckoutInfo,
   type CustomerSessionResponse,
+  MAX_OPEN_ORDERS,
+  MAX_ORDER_QUANTITY,
   type MyOrder,
   type MyOrdersResponse,
   type MyQrResponse,
@@ -252,6 +254,20 @@ export async function placeOrder(
       });
     }
     await assertMethodOffered(ctx.db, now, input.paymentMethod);
+    const quantity = input.items.reduce((sum, line) => sum + line.qty, 0);
+    if (quantity > MAX_ORDER_QUANTITY) {
+      throw new ApiError(422, 'ORDER_TOO_LARGE', 'That is too many items for one order', {
+        max: MAX_ORDER_QUANTITY,
+      });
+    }
+    // A few open orders at a time: a bound on spam and on a stuck kitchen queue.
+    if (
+      (await ordersRepo.countOpenOrdersForCustomer(ctx.db, customer.customerId)) >= MAX_OPEN_ORDERS
+    ) {
+      throw conflict('TOO_MANY_OPEN_ORDERS', 'You already have several open orders', {
+        max: MAX_OPEN_ORDERS,
+      });
+    }
   }
 
   const { order, replay } = await createOrder(ctx, null, {
