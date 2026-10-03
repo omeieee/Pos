@@ -13,5 +13,9 @@ dist/
 coverage/
 *.tsbuildinfo
 
+# Playwright (apps/pos-web)
+test-results/
+playwright-report/
+
 # Local-only generated pages (e.g. PromptPay scan test)
 *.local.html
