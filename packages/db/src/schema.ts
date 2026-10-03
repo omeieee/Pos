@@ -666,8 +666,23 @@ export const lineMessageLog = pgTable(
     index('line_message_log_customer_id_idx').on(t.customerId),
     index('line_message_log_order_id_idx').on(t.orderId),
     check('line_message_log_kind', sql`kind in ('reply', 'push')`),
+    // One push per order and template (the "ready + receipt" push goes out once).
+    uniqueIndex('line_message_log_one_push_per_order')
+      .on(t.orderId, t.template)
+      .where(sql`kind = 'push' and order_id is not null`),
   ],
 );
+
+/**
+ * Pushes used in a LINE plan month (`YYYY-MM`, Asia/Bangkok). The quota-aware sender takes one
+ * unit with a single guarded upsert, so two orders cannot both take the last message. Not a
+ * synced table: it is a counter, read by `GET /v1/line/quota`.
+ */
+export const lineQuotaMonths = pgTable('line_quota_months', {
+  month: text('month').primaryKey(),
+  used: integer('used').notNull().default(0),
+  updatedAt: ts('updated_at').notNull().defaultNow(),
+});
 
 export const auditLog = pgTable(
   'audit_log',

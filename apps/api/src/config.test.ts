@@ -17,6 +17,28 @@ describe('loadConfig', () => {
       corsOrigins: [],
       sentryDsn: undefined,
       version: 'dev',
+      line: {
+        channelId: undefined,
+        channelSecret: undefined,
+        channelAccessToken: undefined,
+        liffId: undefined,
+      },
+    });
+  });
+
+  test('reads the optional LINE variables, treats empty as unset and never echoes them', () => {
+    const c = loadConfig({
+      ...base,
+      LINE_CHANNEL_ID: '1234567890',
+      LINE_CHANNEL_SECRET: 'fake-secret-for-test',
+      LINE_CHANNEL_ACCESS_TOKEN: '',
+      LINE_LIFF_ID: '1234567890-AbCdEfGh',
+    });
+    expect(c.line).toEqual({
+      channelId: '1234567890',
+      channelSecret: 'fake-secret-for-test',
+      channelAccessToken: undefined,
+      liffId: '1234567890-AbCdEfGh',
     });
   });
 

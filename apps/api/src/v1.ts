@@ -8,6 +8,8 @@ import { registerAuthRoutes } from './auth/routes.ts';
 import type { AuthContext } from './auth/service.ts';
 import { registerCustomerRoutes } from './customers/routes.ts';
 import type { EventBus } from './events.ts';
+import { registerLineRoutes } from './line/routes.ts';
+import { createLineRuntime, type LineRuntime } from './line/runtime.ts';
 import { registerMenuRoutes } from './menu/routes.ts';
 import { registerRecipientRoutes } from './orders/recipients.ts';
 import { registerOrderRoutes } from './orders/routes.ts';
@@ -25,6 +27,8 @@ export interface V1Deps {
   policy?: AuthPolicy;
   /** Tests shorten the socket deadlines and lower the limits. */
   realtime?: RealtimeOptions;
+  /** LINE secrets and client. Omitted: the webhook answers 503 and nothing is sent. */
+  line?: LineRuntime;
 }
 
 /**
@@ -61,6 +65,12 @@ export const FIRST_MESSAGE_AUTH_ROUTES: ReadonlySet<string> = new Set(['GET /v1/
  */
 export const PUBLIC_MEDIA_ROUTES: ReadonlySet<string> = new Set(['GET /v1/menu/items/:id/photo']);
 
+/**
+ * The fifth exception: LINE's servers call the webhook with no session. It must run a
+ * `markLineSignatureCheck` hook in `preHandler`, which verifies `X-Line-Signature` over the raw body.
+ */
+export const LINE_SIGNATURE_ROUTES: ReadonlySet<string> = new Set(['POST /v1/line/webhook']);
+
 /** What every /v1 module receives: the database, the clock, the event bus and the guard. */
 export interface ModuleContext {
   auth: AuthContext;
@@ -77,6 +87,8 @@ export async function registerV1(app: FastifyInstance, deps: V1Deps): Promise<vo
     events: deps.events,
   };
   const context: ModuleContext = { auth, guard: createGuard(auth) };
+  const lineRuntime =
+    deps.line ?? createLineRuntime({ channelSecret: undefined, channelAccessToken: undefined });
   // The WebSocket plugin lives on the root instance, ahead of the /v1 scope that declares /v1/ws.
   const realtime = await setupRealtime(app, auth, deps.realtime);
 
@@ -88,6 +100,7 @@ export async function registerV1(app: FastifyInstance, deps: V1Deps): Promise<vo
         SIGNED_URL_ROUTES,
         FIRST_MESSAGE_AUTH_ROUTES,
         PUBLIC_MEDIA_ROUTES,
+        LINE_SIGNATURE_ROUTES,
       );
       v1.decorateRequest('auth', null);
       await v1.register((scope) => registerAuthRoutes(scope, context.auth, context.guard), {
@@ -108,6 +121,10 @@ export async function registerV1(app: FastifyInstance, deps: V1Deps): Promise<vo
       await v1.register((scope) => registerSettingsRoutes(scope, context.auth, context.guard), {
         prefix: '/settings',
       });
+      await v1.register(
+        (scope) => registerLineRoutes(scope, context.auth, context.guard, lineRuntime),
+        { prefix: '/line' },
+      );
       // Payments: /v1/orders/:id/payments and /v1/payments/... (no prefix of its own).
       await v1.register((scope) => registerPaymentRoutes(scope, context.auth, context.guard));
       // Device and staff management: /v1/devices and /v1/staff (no prefix of its own).

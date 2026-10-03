@@ -9,6 +9,7 @@ import { createEventBus } from '../events.ts';
 import { createHarness, type Harness } from '../test-support/harness.ts';
 import {
   FIRST_MESSAGE_AUTH_ROUTES,
+  LINE_SIGNATURE_ROUTES,
   OPEN_ROUTES,
   PUBLIC_MEDIA_ROUTES,
   registerV1,
@@ -38,6 +39,7 @@ const OPEN = [...OPEN_ROUTES];
 const SIGNED = [...SIGNED_URL_ROUTES];
 const WS = [...FIRST_MESSAGE_AUTH_ROUTES];
 const MEDIA = [...PUBLIC_MEDIA_ROUTES];
+const LINE_WEBHOOK = [...LINE_SIGNATURE_ROUTES];
 
 describe('the real /v1 routes', () => {
   test('every one has the guard, except the sign-in routes, the public menu, the signed-URL routes and the socket', () => {
@@ -47,7 +49,7 @@ describe('the real /v1 routes', () => {
     const key = (r: { method: string; url: string }) =>
       `${r.method === 'HEAD' ? 'GET' : r.method} ${r.url}`;
     const open = [...new Set(v1.filter((r) => !r.guarded).map(key))];
-    expect(open.sort()).toEqual([...OPEN, ...SIGNED, ...WS, ...MEDIA].sort());
+    expect(open.sort()).toEqual([...OPEN, ...SIGNED, ...WS, ...MEDIA, ...LINE_WEBHOOK].sort());
     // ...and the list itself is exactly the sign-in routes and the public menu, so it cannot grow unnoticed.
     expect(OPEN.sort()).toEqual([
       'GET /v1/auth/staff',
@@ -64,6 +66,9 @@ describe('the real /v1 routes', () => {
     // The fourth: a menu item's photo, read by an <img> with no header and no signature (D-21).
     // Its hook serves only the photo of an item that is on the menu, at the version in the URL.
     expect(MEDIA.sort()).toEqual(['GET /v1/menu/items/:id/photo']);
+    // The fifth: LINE's servers call the webhook with no session; the X-Line-Signature HMAC over
+    // the raw body is the authentication (line/routes.ts, markLineSignatureCheck in preHandler).
+    expect(LINE_WEBHOOK.sort()).toEqual(['POST /v1/line/webhook']);
   });
 
   test('the inventory includes the routes we know about', () => {

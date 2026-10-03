@@ -71,6 +71,7 @@ describe('migrations on an empty Postgres', () => {
         'gov_copay_schemes',
         'line_events',
         'line_message_log',
+        'line_quota_months',
         'menu_categories',
         'menu_item_channel_prices',
         'menu_item_modifier_groups',

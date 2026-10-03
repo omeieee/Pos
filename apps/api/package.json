@@ -19,6 +19,7 @@
     "@fastify/rate-limit": "^11.2.0",
     "@fastify/websocket": "^11.3.0",
     "@sds/db": "workspace:*",
+    "@sds/line": "workspace:*",
     "@sds/promptpay": "workspace:*",
     "@sds/shared": "workspace:*",
     "@sentry/node": "^10.75.3",

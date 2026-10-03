@@ -51,6 +51,12 @@ const envSchema = z
       )
       .pipe(z.array(originSchema)),
     SENTRY_DSN: z.preprocess(emptyToUndefined, z.url().optional()),
+    // The shop's LINE channels (the TEST OA in development; real customers never get test
+    // messages). All optional: without them the webhook answers 503 and nothing is sent.
+    LINE_CHANNEL_ID: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
+    LINE_CHANNEL_SECRET: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
+    LINE_CHANNEL_ACCESS_TOKEN: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
+    LINE_LIFF_ID: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
     GIT_SHA: z.preprocess(emptyToUndefined, z.string().default('dev')),
   })
   .refine((e) => e.NODE_ENV !== 'production' || !disablesTls(e.DATABASE_URL), {
@@ -69,6 +75,13 @@ export type Config = {
   corsOrigins: string[];
   sentryDsn: string | undefined;
   version: string;
+  /** Secrets: never log them. Each is undefined when its variable is not set. */
+  line: {
+    channelId: string | undefined;
+    channelSecret: string | undefined;
+    channelAccessToken: string | undefined;
+    liffId: string | undefined;
+  };
 };
 
 export class ConfigError extends Error {}
@@ -92,5 +105,11 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     corsOrigins: e.CORS_ORIGINS,
     sentryDsn: e.SENTRY_DSN,
     version: e.GIT_SHA,
+    line: {
+      channelId: e.LINE_CHANNEL_ID,
+      channelSecret: e.LINE_CHANNEL_SECRET,
+      channelAccessToken: e.LINE_CHANNEL_ACCESS_TOKEN,
+      liffId: e.LINE_LIFF_ID,
+    },
   };
 }

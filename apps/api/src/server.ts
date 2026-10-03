@@ -4,6 +4,7 @@ import { type AlertReport, forwardAlerts } from './alerts.ts';
 import { buildApp } from './app.ts';
 import { ConfigError, loadConfig } from './config.ts';
 import { createEventBus } from './events.ts';
+import { createLineRuntime } from './line/runtime.ts';
 import { sentryOptions } from './redact.ts';
 import { registerV1 } from './v1.ts';
 
@@ -63,7 +64,12 @@ events.subscribe((event) => {
   }
 });
 if (reportAlert) forwardAlerts(events, reportAlert);
-await registerV1(app, { db, authSecretKey: config.authSecretKey, events });
+await registerV1(app, {
+  db,
+  authSecretKey: config.authSecretKey,
+  events,
+  line: createLineRuntime(config.line),
+});
 
 async function shutdown(signal: string) {
   app.log.info({ signal }, 'shutting down');

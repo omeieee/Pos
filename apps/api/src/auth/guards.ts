@@ -104,6 +104,29 @@ export function hasPublicMediaCheck(route: RouteHooks): boolean {
 }
 
 /**
+ * Marks a hook that verifies a LINE webhook signature (`X-Line-Signature`, an HMAC over the raw
+ * body). The fifth exception: LINE's servers send no bearer token, so the signature is the only
+ * authentication. The check needs the raw body, so it runs in `preHandler` (after the body was
+ * read, before any handler code); a route may not be listed without it.
+ */
+const LINE_SIGNATURE = Symbol.for('sds.line-signature');
+
+export function markLineSignatureCheck<T extends (...args: never[]) => unknown>(fn: T): T {
+  return Object.assign(fn, { [LINE_SIGNATURE]: true });
+}
+
+/** True when the route runs a LINE signature check in its own `preHandler` hooks. */
+export function hasLineSignatureCheck(route: RouteHooks): boolean {
+  return [route.preHandler]
+    .flat(2)
+    .some(
+      (hook) =>
+        typeof hook === 'function' &&
+        (hook as unknown as Record<symbol, unknown>)[LINE_SIGNATURE] === true,
+    );
+}
+
+/**
  * Marks the handler of a WebSocket route that authenticates its sockets itself: a browser
  * WebSocket cannot send an Authorization header, so the socket proves who it is with its first
  * message. The marked handler is what enforces that (`realtime/hub.ts`).
@@ -142,6 +165,7 @@ export function enforceGuardedRoutes(
   signedUrl: ReadonlySet<string> = new Set(),
   firstMessageAuth: ReadonlySet<string> = new Set(),
   publicMedia: ReadonlySet<string> = new Set(),
+  lineSignature: ReadonlySet<string> = new Set(),
 ): void {
   scope.addHook('onRoute', (route) => {
     if (!route.url.startsWith('/v1')) return;
@@ -153,6 +177,12 @@ export function enforceGuardedRoutes(
         if (hasFirstMessageAuth(route)) continue;
         throw new Error(
           `${key} is listed as a first-message-auth route but is not a WebSocket route with a handler that authenticates: use markFirstMessageAuth()`,
+        );
+      }
+      if (lineSignature.has(key)) {
+        if (hasLineSignatureCheck(route)) continue;
+        throw new Error(
+          `${key} is listed as a LINE webhook route but does not verify the signature: add markLineSignatureCheck() to its preHandler hooks`,
         );
       }
       if (publicMedia.has(key)) {
