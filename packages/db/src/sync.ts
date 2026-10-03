@@ -303,6 +303,7 @@ export const SYNC_POLICY = {
     'deliveryNote',
     'recipientKey',
     'privacyAckAt',
+    'privacyAckVersion',
     'marketingConsentAt',
     'unfollowedAt',
     'updatedAt',

@@ -1,6 +1,7 @@
 import { createHmac } from 'node:crypto';
 import { lineRepo } from '@sds/db';
 import { type LineClient, type LineMessage, quotaMonth } from '@sds/line';
+import { PRIVACY_NOTICE_VERSION } from '@sds/shared';
 import Fastify from 'fastify';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 import { enforceGuardedRoutes, markLineSignatureCheck } from '../auth/guards.ts';
@@ -82,7 +83,11 @@ async function customer(userId: string) {
     id: string;
     unfollowed_at: string | null;
     privacy_ack_at: string | null;
-  }>('select id, unfollowed_at, privacy_ack_at from customers where line_user_id = $1', [userId]);
+    privacy_ack_version: string | null;
+  }>(
+    'select id, unfollowed_at, privacy_ack_at, privacy_ack_version from customers where line_user_id = $1',
+    [userId],
+  );
   return r.rows[0];
 }
 async function eventRows(id: string) {
@@ -249,6 +254,7 @@ describe('follow, unfollow and privacy acknowledgement', () => {
     await runtime.idle();
     const first = (await customer(u))?.privacy_ack_at;
     expect(first).not.toBeNull();
+    expect((await customer(u))?.privacy_ack_version).toBe(PRIVACY_NOTICE_VERSION);
     expect(JSON.stringify(sent.at(-1)?.messages)).toContain('รับทราบ');
 
     h.clock.advanceSeconds(10);

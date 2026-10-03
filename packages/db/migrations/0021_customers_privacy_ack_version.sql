@@ -1,0 +1,1 @@
+ALTER TABLE "customers" ADD COLUMN "privacy_ack_version" text;

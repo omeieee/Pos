@@ -1,5 +1,6 @@
 import { type Db, lineRepo } from '@sds/db';
 import { followGreeting, type LineSender, privacyAcknowledged, type RoutedEvent } from '@sds/line';
+import { PRIVACY_NOTICE_VERSION } from '@sds/shared';
 import { PRIVACY_CONTACT_EMAIL, PRIVACY_CONTROLLER } from './runtime.ts';
 
 export interface HandlerContext {
@@ -36,7 +37,12 @@ export async function handleEvent(ctx: HandlerContext, event: RoutedEvent): Prom
       await lineRepo.markUnfollowed(ctx.db, event.userId, ctx.now());
       return;
     case 'ack_privacy': {
-      const customerId = await lineRepo.acknowledgePrivacy(ctx.db, event.userId, ctx.now());
+      const customerId = await lineRepo.acknowledgePrivacy(
+        ctx.db,
+        event.userId,
+        ctx.now(),
+        PRIVACY_NOTICE_VERSION,
+      );
       if (event.replyToken) {
         await ctx.sender.reply(event.replyToken, [privacyAcknowledged()], {
           template: 'privacy_ack',

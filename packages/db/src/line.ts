@@ -126,18 +126,25 @@ export async function markUnfollowed(db: Db, lineUserId: string, at: Date): Prom
 }
 
 /**
- * Stores that the customer acknowledged the privacy notice. The first acknowledgement stays: a
- * second tap does not move the time. Creates the customer if the "I understand" button came
- * before a follow event was seen. Returns the customer id.
+ * Stores that the customer acknowledged the privacy notice `version`. A second tap on the same
+ * version keeps the first time; a newer version (or an acknowledgement made before versions
+ * existed) replaces both the time and the version. Creates the customer if the "I understand"
+ * button came before a follow event was seen. Returns the customer id.
  */
-export async function acknowledgePrivacy(db: Db, lineUserId: string, at: Date): Promise<string> {
+export async function acknowledgePrivacy(
+  db: Db,
+  lineUserId: string,
+  at: Date,
+  version: string,
+): Promise<string> {
   const [row] = await db
     .insert(customers)
-    .values({ lineUserId, privacyAckAt: at })
+    .values({ lineUserId, privacyAckAt: at, privacyAckVersion: version })
     .onConflictDoUpdate({
       target: customers.lineUserId,
       set: {
-        privacyAckAt: sql`coalesce(${customers.privacyAckAt}, ${at.toISOString()}::timestamptz)`,
+        privacyAckAt: sql`case when ${customers.privacyAckVersion} is not distinct from ${version} and ${customers.privacyAckAt} is not null then ${customers.privacyAckAt} else ${at.toISOString()}::timestamptz end`,
+        privacyAckVersion: version,
       },
     })
     .returning({ id: customers.id });

@@ -148,6 +148,13 @@
       "when": 1791048998403,
       "tag": "0020_line_events_attempts",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1791049147561,
+      "tag": "0021_customers_privacy_ack_version",
+      "breakpoints": true
     }
   ]
 }

@@ -1,4 +1,5 @@
 import type { LineClient, LineMessage } from '@sds/line';
+import { PRIVACY_NOTICE_VERSION } from '@sds/shared';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 import { createHarness, type Harness } from '../test-support/harness.ts';
 import { LINE_EVENT_RETRY, retryLineEvents } from './retry.ts';
@@ -72,7 +73,11 @@ const customer = async (userId: string) =>
     await h.client.query<{
       unfollowed_at: Date | null;
       privacy_ack_at: Date | null;
-    }>('select unfollowed_at, privacy_ack_at from customers where line_user_id = $1', [userId])
+      privacy_ack_version: string | null;
+    }>(
+      'select unfollowed_at, privacy_ack_at, privacy_ack_version from customers where line_user_id = $1',
+      [userId],
+    )
   ).rows[0];
 
 describe('retryLineEvents', () => {
@@ -199,6 +204,7 @@ describe('retryLineEvents', () => {
     await retryLineEvents(deps());
     const c = await customer(user);
     expect(c?.privacy_ack_at?.toISOString()).toBe(received);
+    expect(c?.privacy_ack_version).toBe(PRIVACY_NOTICE_VERSION);
   });
 
   test('handles at most `limit` rows a run and picks the rest up on the next run', async () => {

@@ -291,6 +291,8 @@ export const customers = pgTable(
     orderCount: integer('order_count').notNull().default(0),
     totalSpentSatang: money('total_spent_satang').notNull().default(0),
     privacyAckAt: ts('privacy_ack_at'),
+    /** `PRIVACY_NOTICE_VERSION` at the time of the acknowledgement; null for one made before versions. */
+    privacyAckVersion: text('privacy_ack_version'),
     marketingConsentAt: ts('marketing_consent_at'),
     unfollowedAt: ts('unfollowed_at'),
     anonymizedAt: ts('anonymized_at'),

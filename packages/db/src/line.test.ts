@@ -1,11 +1,13 @@
 import { readFileSync } from 'node:fs';
 import type { PGlite } from '@electric-sql/pglite';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
-import { createPgliteDb } from './pglite.ts';
+import * as lineRepo from './line.ts';
+import { createPgliteDb, type PgliteDb } from './pglite.ts';
 
 let client: PGlite;
+let db: PgliteDb;
 beforeAll(async () => {
-  ({ client } = await createPgliteDb());
+  ({ client, db } = await createPgliteDb());
 }, 60_000);
 afterAll(async () => {
   await client.close();
@@ -60,5 +62,53 @@ describe('migration 0019: stored events lose their raw payload', () => {
     for (const r of rows.rows) expect(r.payload).toBeNull();
     expect(JSON.stringify(rows.rows)).not.toContain('0812345678');
     expect(JSON.stringify(rows.rows)).not.toContain('rt-secret');
+  });
+});
+
+describe('acknowledgePrivacy records the notice version', () => {
+  const at = (minute: number) => new Date(Date.UTC(2026, 9, 3, 4, minute, 0));
+  const ack = async (user: string) =>
+    (
+      await client.query<{ privacy_ack_at: Date | null; privacy_ack_version: string | null }>(
+        'select privacy_ack_at, privacy_ack_version from customers where line_user_id = $1',
+        [user],
+      )
+    ).rows[0];
+
+  test('the first acknowledgement stores the time and the version, creating the customer', async () => {
+    await lineRepo.acknowledgePrivacy(db, 'Utest-ack-v1', at(1), 'v1');
+    expect(await ack('Utest-ack-v1')).toEqual({
+      privacy_ack_at: at(1),
+      privacy_ack_version: 'v1',
+    });
+  });
+
+  test('the same version again keeps the first time', async () => {
+    const id = await lineRepo.acknowledgePrivacy(db, 'Utest-ack-v1', at(30), 'v1');
+    expect(id).toBeTruthy();
+    expect(await ack('Utest-ack-v1')).toEqual({
+      privacy_ack_at: at(1),
+      privacy_ack_version: 'v1',
+    });
+  });
+
+  test('a newer notice version replaces both the time and the version', async () => {
+    await lineRepo.acknowledgePrivacy(db, 'Utest-ack-v1', at(45), 'v2');
+    expect(await ack('Utest-ack-v1')).toEqual({
+      privacy_ack_at: at(45),
+      privacy_ack_version: 'v2',
+    });
+  });
+
+  test('an acknowledgement stored before versions existed is replaced by the first versioned one', async () => {
+    await client.query('insert into customers (line_user_id, privacy_ack_at) values ($1, $2)', [
+      'Utest-ack-old',
+      at(2).toISOString(),
+    ]);
+    await lineRepo.acknowledgePrivacy(db, 'Utest-ack-old', at(50), 'v1');
+    expect(await ack('Utest-ack-old')).toEqual({
+      privacy_ack_at: at(50),
+      privacy_ack_version: 'v1',
+    });
   });
 });

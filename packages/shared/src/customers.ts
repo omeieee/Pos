@@ -13,6 +13,15 @@ import { z } from 'zod';
 export const ANONYMIZED_RECIPIENT_NAME = 'ลบข้อมูลแล้ว';
 
 /**
+ * The version of the privacy notice a customer acknowledges (`customers.privacy_ack_version`):
+ * the date of design/privacy-notice-th.md (and the bot's short summary in `lineBot.privacy.*`).
+ * Change it whenever the notice changes in a way customers should see again; the next
+ * acknowledgement then records the new version and time. Still the draft's date until the owner
+ * approves and publishes the notice.
+ */
+export const PRIVACY_NOTICE_VERSION = '2026-10-03';
+
+/**
  * Why, as a fixed word and not free text: the reason is written to the audit log, which can never
  * be edited, and staff must not be able to type a name into it.
  */
