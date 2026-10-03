@@ -73,7 +73,9 @@ export async function claimRetryableEvents(
       ),
     )
     .orderBy(asc(lineEvents.receivedAt))
-    .limit(args.limit);
+    .limit(args.limit)
+    // A row another sweep or handler holds is skipped, never waited for.
+    .for('update', { skipLocked: true });
   const rows = await db
     .update(lineEvents)
     .set({ attempts: sql`${lineEvents.attempts} + 1` })
