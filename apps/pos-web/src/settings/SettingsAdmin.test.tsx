@@ -41,9 +41,27 @@ async function open(
     adminApi?: Partial<ApiClient['admin']>;
     freshStepUp?: boolean;
     offline?: boolean;
+    /** The auth state does not know this device's id. */
+    unknownDevice?: boolean;
   } = {},
 ) {
-  const { auth } = await createTestAuth(options.role ?? 'owner');
+  const { auth: signedIn } = await createTestAuth(options.role ?? 'owner');
+  // A snapshot per underlying state, so the store hook sees a stable value.
+  let seen: ReturnType<typeof signedIn.getState> | null = null;
+  let hidden: ReturnType<typeof signedIn.getState> | null = null;
+  const auth = options.unknownDevice
+    ? {
+        ...signedIn,
+        getState: () => {
+          const now = signedIn.getState();
+          if (now !== seen) {
+            seen = now;
+            hidden = { ...now, device: null };
+          }
+          return hidden as typeof now;
+        },
+      }
+    : signedIn;
   if (options.freshStepUp !== false) {
     await auth.submitStepUp({ method: 'owner', factors: { password: 'x', totp: '123456' } });
   }
@@ -98,6 +116,17 @@ describe('devices', () => {
       }),
     ).toBeNull();
     expect(screen.getByText(tr('settings.devices.revokeCurrent'))).toBeTruthy();
+  });
+
+  test('when this device is not known, no device can be removed and the page says why', async () => {
+    await open('devices', { adminApi: devices(), unknownDevice: true });
+    await screen.findByText('iPad เคาน์เตอร์');
+    for (const name of ['iPad เคาน์เตอร์', 'iPhone ครัว']) {
+      expect(
+        screen.queryByRole('button', { name: tr('settings.devices.revoke', { name }) }),
+      ).toBeNull();
+    }
+    expect(screen.getByText(tr('settings.devices.unknownSelf'))).toBeTruthy();
   });
 
   test('removing another device asks first, then sends the revoke once and marks the row', async () => {

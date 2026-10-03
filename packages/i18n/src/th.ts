@@ -839,6 +839,8 @@ export const th = {
   'settings.devices.thisDevice': 'เครื่องนี้',
   'settings.devices.revokedAt': 'ลบแล้ว {time}',
   'settings.devices.revoke': 'ลบเครื่อง {name}',
+  'settings.devices.unknownSelf':
+    'ยังไม่ทราบว่าเครื่องนี้คือเครื่องไหน จึงลบเครื่องจากหน้านี้ไม่ได้ ลองเข้าสู่ระบบใหม่อีกครั้ง',
   'settings.devices.revokeCurrent': 'ลบเครื่องที่กำลังใช้อยู่จากหน้านี้ไม่ได้',
   'settings.devices.revokeTitle': 'ลบเครื่องนี้?',
   'settings.devices.revokeBody':

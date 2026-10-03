@@ -51,6 +51,11 @@ export function DevicesScreen() {
         onLoad={() => void adminEditor.loadDevices()}
       >
         <p className="hint">{tr('settings.devices.registerHint')}</p>
+        {currentId === null ? (
+          <p className="notice" role="note">
+            <span>{tr('settings.devices.unknownSelf')}</span>
+          </p>
+        ) : null}
         {state.devices.items.length === 0 ? (
           <p className="muted">{tr('settings.devices.empty')}</p>
         ) : (
@@ -82,7 +87,7 @@ export function DevicesScreen() {
                       <span className="hint">{tr('settings.devices.revokeCurrent')}</span>
                     ) : null}
                   </div>
-                  {!revoked && !here ? (
+                  {!revoked && !here && currentId !== null ? (
                     <button
                       type="button"
                       className="btn btn-soft"

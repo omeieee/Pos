@@ -900,6 +900,8 @@ export const en = {
   'settings.devices.thisDevice': 'This device',
   'settings.devices.revokedAt': 'Removed {time}',
   'settings.devices.revoke': 'Remove device {name}',
+  'settings.devices.unknownSelf':
+    'This device could not be identified, so devices cannot be removed from this page. Try signing in again.',
   'settings.devices.revokeCurrent': 'You cannot remove the device you are using from this page.',
   'settings.devices.revokeTitle': 'Remove this device?',
   'settings.devices.revokeBody':
