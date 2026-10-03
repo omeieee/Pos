@@ -6,7 +6,7 @@ The owner does these steps; Claude wrote the scripts. They are grouped into **ro
 - **Never paste a secret into chat.** Secrets go only into GitHub → Settings → Secrets, or into `/opt/sds/.env` on the VM, typed with your own editor.
 - "Tell Claude" lists the only things to send back: yes/no, public names and command output that has no secrets in it.
 - Run the laptop commands in **Git Bash** from the repo root (`C:\omeie_code\project\Pos`). PowerShell's `<` and `|` into `ssh` can break the scripts.
-- The public IP `138.2.67.89` appears in two places (see RUNBOOK "IP changed"): the GitHub variable `API_HOST` and `API_HOST` in `/opt/sds/.env`. The hostname is `138-2-67-89.sslip.io`.
+- The public IP `161.118.211.42` appears in two places (see RUNBOOK "IP changed"): the GitHub variable `API_HOST` and `API_HOST` in `/opt/sds/.env`. The hostname is `161-118-211-42.sslip.io`.
 
 ---
 
@@ -120,7 +120,7 @@ The Pages projects `sds-pos` and `sds-order` are created by the workflow on its 
   - **Not** the transaction pooler (6543), and **not** `db.yejvrooxqdpynruwnegg.supabase.co`, which is IPv6-only and unreachable from the VM.
 - **Require TLS (owner step, once; do it when the shop is closed, and keep this order):**
   1. Add **`?sslmode=require`** to the end of `DATABASE_URL` in `/opt/sds/.env` (the template already has it), then `ssh deploy@sds-pos '/opt/sds/dc up -d api backup'`.
-  2. Check `curl -sS https://138-2-67-89.sslip.io/readyz` and that the next backup logs `OK` (or run `dc exec -T backup backup hourly`). If either fails, fix the URL before going on.
+  2. Check `curl -sS https://161-118-211-42.sslip.io/readyz` and that the next backup logs `OK` (or run `dc exec -T backup backup hourly`). If either fails, fix the URL before going on.
   3. Only then: Supabase → Project Settings → **Database** → SSL Configuration → turn **Enforce SSL on incoming connections** on, and repeat the two checks. (Turning it on first could cut off a client that still connects without TLS.)
 - **Optional:** Project Settings → **Data API** → disable it. We don't use PostgREST; this removes a public surface.
 
@@ -133,7 +133,7 @@ Repo → **Settings → Secrets and variables → Actions**.
 | Secret | `TS_OAUTH_SECRET` | from 1.3 |
 | Secret | `CLOUDFLARE_API_TOKEN` | from 1.8 |
 | Secret | `CLOUDFLARE_ACCOUNT_ID` | from 1.8 |
-| Variable | `API_HOST` | `138-2-67-89.sslip.io` |
+| Variable | `API_HOST` | `161-118-211-42.sslip.io` |
 | Variable | `DEPLOY_HOST` | `sds-pos` (the VM's Tailscale machine name, step 2.2) |
 | Variable | `DEPLOY_ENABLED` | leave **unset** until step 3.1 |
 | Variable | `WEB_DEPLOY_ENABLED` | leave **unset** until step 3.4 |
@@ -152,7 +152,7 @@ Repo → **Settings → Secrets and variables → Actions**.
 If `ssh pos-oracle` doesn't work yet, add this to `~/.ssh/config` (Git Bash: `notepad ~/.ssh/config`). It refers to the key by path only:
 ```
 Host pos-oracle
-    HostName 138.2.67.89
+    HostName 161.118.211.42
     User ubuntu
     IdentityFile ~/.ssh/ssh-key-2026-09-28.key
     IdentitiesOnly yes
@@ -217,7 +217,7 @@ ssh pos-ts 'sudo -u deploy tee /opt/sds/.env.example >/dev/null' < infra/compose
 ssh -t pos-ts 'sudo -u deploy cp -n /opt/sds/.env.example /opt/sds/.env; sudo chmod 600 /opt/sds/.env; sudo -u deploy nano /opt/sds/.env'
 ```
 - Fill in every value from round 1. Keep the **single quotes** around each value.
-- `API_HOST='138-2-67-89.sslip.io'`.
+- `API_HOST='161-118-211-42.sslip.io'`.
 - `ACME_EMAIL` is your email.
 - `SENTRY_DSN`: Sentry → create project (platform Node.js) → Client Keys → DSN. It may stay empty for now.
 - `AUTH_SECRET_KEY` (from P3): the master key for sign-in secrets. Generate it **once** on the VM with `openssl rand -base64 32` (43 characters and a final `=`), and keep a copy with the age backup key (USB and paper). The API refuses to start without it. If it is lost or changed, every PIN, the owner's TOTP secret and the recovery codes stop working and the owner is locked out until a reset tool exists (planned, not built yet). **Never regenerate it on a rebuild.** Claude generated the first one on the VM on 2026-10-01 and never printed it; read it yourself with `ssh deploy@sds-pos 'grep ^AUTH_SECRET_KEY /opt/sds/.env'` when you store the copy.
@@ -247,7 +247,7 @@ ssh pos-ts 'sudo ls -l /opt/sds/.env; sudo file /opt/sds/.env; sudo grep -oE "^[
 
 Check from anywhere:
 ```bash
-curl -sS https://138-2-67-89.sslip.io/healthz
+curl -sS https://161-118-211-42.sslip.io/healthz
 ssh deploy@sds-pos '/opt/sds/dc ps'            # expect: api, caddy, backup all "healthy"
 ```
 
@@ -268,7 +268,7 @@ GitHub → your profile → **Packages → pos-api → Package settings → Mana
 This needs the backend agent's `apps/pos-web` and `apps/liff-web` to exist.
 
 ### 3.5 Monitors
-- **UptimeRobot:** New monitor → HTTP(s) → `https://138-2-67-89.sslip.io/readyz` → every 5 min → alert to your email.
+- **UptimeRobot:** New monitor → HTTP(s) → `https://161-118-211-42.sslip.io/readyz` → every 5 min → alert to your email.
 - **healthchecks.io:** after the next hh:05 during opening hours (or 05:05), the `sds-backup` check turns green.
 - **Prove the missed-backup alert (exit criterion):**
   1. healthchecks.io → `sds-backup` → **Integrations** → email → **Test**, and confirm the email arrives;

@@ -1,6 +1,6 @@
 # Reserved public IP for the API host: plan (not executed)
 
-Status: **plan only**, written 2026-10-03. Nothing in OCI or on the VM has been changed. The owner said YES to reserving the IP (needed so the LINE webhook URL survives a rebuild). The owner performs every step below; Claude's SSH stays read-only (CLAUDE.md rule 11).
+Status: **EXECUTED 2026-10-03 (about 17:50 UTC)**. The old ephemeral IP `138.2.67.89` was deleted and the reserved IP `sds-pos-api` = **`161.118.211.42`** (host `161-118-211-42.sslip.io`) was attached to private IP `10.0.0.43`. Caddy got its certificate and `/healthz` answers on the new host. Remaining by hand: GitHub variable `API_HOST` + Deploy web apps, UptimeRobot URL, `~/.ssh/config`. The text below is the plan as written before the swap.
 
 Current state (from `infra/oracle/README.md`): VM `omeie_pos`, `ap-singapore-1`, ephemeral public IP `138.2.67.89` (object `publicip20260928193828`), API host `138-2-67-89.sslip.io`.
 

@@ -17,13 +17,13 @@ Recorded 2026-09-29 from the owner's OCI console screenshots.
 | Storage | Block storage only (boot volume) |
 | Image | Canonical Ubuntu 24.04 (`Canonical-Ubuntu-24.04-2026.09.18-0`) |
 | Login user | `ubuntu` |
-| Public IP | `138.2.67.89` |
+| Public IP | `161.118.211.42` |
 | VCN | `vcn-20260929-0215` |
 | Subnet | `subnet-20260929-0215` (uses the default route table for the VCN) |
 | Private IP | `10.0.0.43` |
 | VNIC hostname / internal FQDN | `omeie-vnic` / `omeie-vnic.subnet09290228.vcn09290228.oraclevcn.com` |
 | Network security groups | None. Firewall rules come from the **subnet's security list** plus the VM's own iptables |
-| Public IP type | **Ephemeral** (`publicip20260928193828`), confirmed 2026-09-29. It survives reboot and stop/start, and is **lost if the instance is terminated** (e.g. rebuilt after reclamation) or if the public IP is removed. The sslip.io hostname and the LINE URLs would then change |
+| Public IP type | **Reserved** (`sds-pos-api`, swapped in 2026-10-03; the old ephemeral `138.2.67.89` is gone). It stays with the account until deleted and can be re-attached to a rebuilt VM's private IP (see [RESERVED-IP.md](RESERVED-IP.md) section 6). Never leave it unassigned for long |
 | Capacity type | On-demand |
 | Instance metadata service | Version 2 only |
 | Account type | **Pay-As-You-Go** (owner-reported 2026-10-01; it was Free Tier before). Stay inside the Always Free limits: docs/05 §3.1 |
@@ -41,7 +41,7 @@ Recorded 2026-09-29 from the owner's OCI console screenshots.
 ## SSH config entry (optional; add to `~/.ssh/config`)
 ```
 Host pos-oracle
-    HostName 138.2.67.89
+    HostName 161.118.211.42
     User ubuntu
     IdentityFile ~/.ssh/ssh-key-2026-09-28.key
     IdentitiesOnly yes

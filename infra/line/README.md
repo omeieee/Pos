@@ -11,7 +11,7 @@ Development and the first deploys use the **TEST OA** only. Real customers never
 | `LINE_LIFF_ID` | LIFF / MINI App channel (used by the customer app and the rich menu link, later slice) |
 
 ## Webhook (Messaging API channel, Messaging API tab)
-1. Webhook URL: `https://<api host>/v1/line/webhook` (today `https://138-2-67-89.sslip.io/v1/line/webhook`). The IP is ephemeral: if it changes, update the URL (docs/10 P2 note).
+1. Webhook URL: `https://<api host>/v1/line/webhook` (today `https://161-118-211-42.sslip.io/v1/line/webhook`). The IP is reserved (since 2026-10-03), so the URL survives a rebuild.
 2. **Use webhook: on.** **Webhook redelivery: on** (the API dedupes by `webhookEventId`).
 3. Press **Verify**: the API answers 200 only with a correct secret. A 503 means `LINE_CHANNEL_SECRET` is not set on the server; 403 means the secret is wrong.
 4. In LINE Official Account Manager, Response settings: **Chat on**, **Auto-response off**, greeting message off (the bot greets on follow and shows the privacy notice).

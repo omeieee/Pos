@@ -5,11 +5,11 @@ Playbooks for when something breaks. Setup lives in [SETUP.md](SETUP.md); the de
 ## Where things are
 | Thing | Where |
 |---|---|
-| VM | Oracle `omeie_pos`, ap-singapore-1, E2.1.Micro. Public `138.2.67.89`, tailnet name `sds-pos` |
+| VM | Oracle `omeie_pos`, ap-singapore-1, E2.1.Micro. Public `161.118.211.42`, tailnet name `sds-pos` |
 | Admin SSH | `ssh pos-ts` (ubuntu) or `ssh deploy@sds-pos`, over Tailscale only |
 | Stack | `/opt/sds` (`docker-compose.yml`, `Caddyfile`, `.env` (600, deploy), `.deploy-state`, `deploy.sh`, `dc`, `run-restore-drill.sh`) |
 | Compose | **always** `/opt/sds/dc …` (it adds `.deploy-state`); e.g. `./dc ps`, `./dc logs --tail 100 api` |
-| API URL | `https://138-2-67-89.sslip.io` (`/healthz` no DB, `/readyz` with DB) |
+| API URL | `https://161-118-211-42.sslip.io` (`/healthz` no DB, `/readyz` with DB) |
 | Web apps | `https://sds-pos.pages.dev` (staff), `https://sds-order.pages.dev` (customers) |
 | Database | Supabase project `yejvrooxqdpynruwnegg` (session pooler, port 5432) |
 | Backups | OCI bucket `sds-backups`: `hourly/` 48 h, `daily/` 31 d, `monthly/` 370 d, `predeploy/` 14 d |
@@ -24,8 +24,8 @@ Playbooks for when something breaks. Setup lives in [SETUP.md](SETUP.md); the de
 ## API down (UptimeRobot alert)
 1. **Scope:**
    ```bash
-   curl -sS -m 10 https://138-2-67-89.sslip.io/healthz
-   curl -sS -m 10 https://138-2-67-89.sslip.io/readyz
+   curl -sS -m 10 https://161-118-211-42.sslip.io/healthz
+   curl -sS -m 10 https://161-118-211-42.sslip.io/readyz
    ```
    - `/healthz` fails → the API or Caddy is down (go to 2).
    - `/healthz` works but `/readyz` fails → the database (see "Database full or paused").
@@ -50,7 +50,7 @@ Playbooks for when something breaks. Setup lives in [SETUP.md](SETUP.md); the de
 - Caddy keeps certificates in the `sds_caddy_data` volume. **Never delete that volume**: re-issuing counts against ACME rate limits.
 - `sslip.io` is **not** on the Public Suffix List, so Let's Encrypt's per-domain limit is shared by all sslip.io users. If issuance is rate-limited, Caddy retries with backoff and may fall back to ZeroSSL.
 - If issuance keeps failing, switch the hostname to DuckDNS (on the PSL):
-  1. create `<name>.duckdns.org` → 138.2.67.89;
+  1. create `<name>.duckdns.org` → 161.118.211.42;
   2. do "IP changed" steps 2–5 with the new hostname.
 
 ## Database full or paused (Supabase)
@@ -239,5 +239,5 @@ Unattended-upgrades applies only Ubuntu security updates, and deploys pull only 
 1. **Docker and Tailscale packages** (their apt repos are not covered): `ssh -t pos-ts 'sudo apt update && sudo apt upgrade'`, and read the list before you say yes.
    - Docker runs with `live-restore`, so containers keep running while the daemon restarts, but do it when the shop is closed.
    - Then `ssh deploy@sds-pos '/opt/sds/dc ps'`: api, caddy and backup healthy. A pending reboot happens by itself in the Monday 03:00–05:00 window.
-2. **Caddy image** (`caddy:2-alpine` is a floating tag that deploys never pull): `ssh deploy@sds-pos '/opt/sds/dc pull caddy && /opt/sds/dc up -d caddy'`. The certificate survives in the `sds_caddy_data` volume. Then `curl -sS https://138-2-67-89.sslip.io/healthz`.
+2. **Caddy image** (`caddy:2-alpine` is a floating tag that deploys never pull): `ssh deploy@sds-pos '/opt/sds/dc pull caddy && /opt/sds/dc up -d caddy'`. The certificate survives in the `sds_caddy_data` volume. Then `curl -sS https://161-118-211-42.sslip.io/healthz`.
 3. **Backup image** (postgres, age, rclone, curl are otherwise frozen at the last build): Actions → **Deploy API** → Run workflow on `main` → tick **rebuild_backup**. It rebuilds without cache on a fresh base image and redeploys. Then `dc ps` (backup healthy) and, once, `dc exec -T backup backup hourly` ending in `OK in Ns`.
