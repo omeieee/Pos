@@ -24,6 +24,7 @@ import {
 } from '@sds/shared';
 import {
   assertOriginalStaffExists,
+  assertReplayOriginalStaff,
   requireOwnerForOriginalStaff,
 } from '../admin/original-staff.ts';
 import { hasFreshStepUp, type Principal } from '../auth/service.ts';
@@ -59,6 +60,7 @@ async function replayOf(
   db: Db,
   existing: ordersRepo.OrderRow,
   requestHash: string,
+  originalStaffId: string | undefined,
 ): Promise<{ order: OrderDto; replay: true }> {
   if (existing.requestHash !== null && existing.requestHash !== requestHash) {
     throw conflict(
@@ -66,6 +68,10 @@ async function replayOf(
       'This request id was already used for a different order. Make a new request id for a new order',
     );
   }
+  assertReplayOriginalStaff(
+    { originalStaffId: existing.originalStaffId, creatorStaffId: existing.createdByStaffId },
+    originalStaffId,
+  );
   return { order: await withItems(db, existing), replay: true };
 }
 
@@ -108,10 +114,10 @@ export async function createOrder(
     );
   }
 
-  requireOwnerForOriginalStaff(actor, input.originalStaffId);
+  requireOwnerForOriginalStaff(actor, input.originalStaffId, ctx.now());
   const requestHash = orderRequestHash(input);
   const existing = await ordersRepo.findOrderByClientRequestId(ctx.db, input.clientRequestId);
-  if (existing) return replayOf(ctx.db, existing, requestHash);
+  if (existing) return replayOf(ctx.db, existing, requestHash, input.originalStaffId);
 
   const now = ctx.now();
   const day = await loadBusinessDay(ctx.db);
@@ -229,7 +235,7 @@ export async function createOrder(
     // The transaction was rolled back (no number used); the request that won is committed.
     const winner = await ordersRepo.findOrderByClientRequestId(ctx.db, input.clientRequestId);
     if (!winner) throw error;
-    return replayOf(ctx.db, winner, requestHash);
+    return replayOf(ctx.db, winner, requestHash, input.originalStaffId);
   }
 }
 

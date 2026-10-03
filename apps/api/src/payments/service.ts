@@ -54,6 +54,7 @@ import {
 } from '@sds/shared';
 import {
   assertOriginalStaffExists,
+  assertReplayOriginalStaff,
   requireOwnerForOriginalStaff,
 } from '../admin/original-staff.ts';
 import {
@@ -198,6 +199,7 @@ async function replayOf(
   existing: paymentsRepo.PaymentRow,
   orderId: string,
   requestHash: string,
+  originalStaffId: string | undefined,
 ): Promise<{ payment: paymentsRepo.PaymentRow; order: OrderDto }> {
   if (
     existing.orderId !== orderId ||
@@ -208,6 +210,10 @@ async function replayOf(
       'This request id was already used for a different payment. Make a new request id for a new payment',
     );
   }
+  assertReplayOriginalStaff(
+    { originalStaffId: existing.originalStaffId, creatorStaffId: existing.confirmedByStaffId },
+    originalStaffId,
+  );
   const order = await ordersRepo.findOrderById(db, existing.orderId);
   if (!order) throw notFound('Order');
   return { payment: existing, order: await orderDto(db, order) };
@@ -391,10 +397,10 @@ export async function createPayment(
   meta: RequestMeta,
 ): Promise<{ result: PaymentResult; replay: boolean }> {
   const originalStaffId = input.method === 'cash' ? input.originalStaffId : undefined;
-  requireOwnerForOriginalStaff(actor, originalStaffId);
+  requireOwnerForOriginalStaff(actor, originalStaffId, ctx.now());
   const requestHash = paymentRequestHash(orderId, input);
   const replayResult = async (db: Db, existing: paymentsRepo.PaymentRow) => {
-    const { payment, order } = await replayOf(db, existing, orderId, requestHash);
+    const { payment, order } = await replayOf(db, existing, orderId, requestHash, originalStaffId);
     return { result: { payment: toPaymentDto(payment), order }, replay: true };
   };
 
@@ -458,6 +464,7 @@ export async function changePaymentMethod(
       twin,
       source.orderId,
       paymentRequestHash(source.orderId, input, source.id),
+      undefined,
     );
     return {
       result: {

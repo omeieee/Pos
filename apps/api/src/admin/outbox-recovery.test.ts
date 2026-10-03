@@ -324,3 +324,120 @@ describe('originalStaffId on cash payment create', () => {
     ).toHaveLength(1);
   });
 });
+// ---------- replay with a different originalStaffId ----------
+
+describe('originalStaffId on a replay (the attribution trail must not drift silently)', () => {
+  const cash = (over: Record<string, unknown> = {}) => ({
+    clientRequestId: crypto.randomUUID(),
+    method: 'cash',
+    tendered: 10000,
+    ...over,
+  });
+  // The same checks for orders and cash payments: send, then replay with other `originalStaffId`s.
+  const kinds = [
+    {
+      name: 'order',
+      path: async (_token: string) => '/v1/orders',
+      body: (over: Record<string, unknown>) => orderBody(over),
+      id: (json: { id: string }) => json.id,
+      table: 'orders',
+      audit: 'order.create_on_behalf',
+      auditWithoutId: 0,
+    },
+    {
+      name: 'cash payment',
+      path: async (token: string) => {
+        const res = await call('POST', '/v1/orders', token, orderBody());
+        return `/v1/orders/${res.json().id as string}/payments`;
+      },
+      body: (over: Record<string, unknown>) => cash(over),
+      id: (json: { payment: { id: string } }) => json.payment.id,
+      table: 'payments',
+      audit: 'payment.confirm',
+      auditWithoutId: 1, // cash always audits its confirmation
+    },
+  ];
+
+  for (const k of kinds) {
+    describe(k.name, () => {
+      const send = (token: string, path: string, body: unknown) => call('POST', path, token, body);
+      const storedOriginal = async (id: string) =>
+        (await rows(`select original_staff_id from ${k.table} where id = $1`, [id]))[0]
+          ?.original_staff_id;
+      const auditCount = async (id: string) =>
+        (await h.auditRows(id)).filter((a) => a.action === k.audit).length;
+
+      test('the same id replays: stored row back, no second audit row', async () => {
+        const token = await steppedOwner();
+        const path = await k.path(token);
+        const body = k.body({ originalStaffId: cashier.id });
+        const first = await send(token, path, body);
+        expect(first.statusCode).toBe(201);
+        const again = await send(token, path, body);
+        expect(again.statusCode).toBe(200);
+        expect(await auditCount(k.id(first.json()))).toBe(1);
+      });
+
+      test('a different id is 409 IDEMPOTENCY_KEY_REUSED and the stored attribution is unchanged', async () => {
+        const token = await steppedOwner();
+        const path = await k.path(token);
+        const body = k.body({ originalStaffId: cashier.id });
+        const first = await send(token, path, body);
+        const other = await h.newStaff('cashier', '4821');
+        const again = await send(token, path, { ...body, originalStaffId: other.id });
+        expect(again.statusCode).toBe(409);
+        expect(again.json()).toMatchObject({ code: 'IDEMPOTENCY_KEY_REUSED' });
+        const id = k.id(first.json());
+        expect(await storedOriginal(id)).toBe(cashier.id);
+        expect(await auditCount(id)).toBe(1);
+      });
+
+      test('an omitted id is a plain replay', async () => {
+        const token = await steppedOwner();
+        const path = await k.path(token);
+        const body: Record<string, unknown> = k.body({ originalStaffId: cashier.id });
+        const first = await send(token, path, body);
+        const { originalStaffId: _omit, ...without } = body;
+        const again = await send(token, path, without);
+        expect(again.statusCode).toBe(200);
+        expect(await auditCount(k.id(first.json()))).toBe(1);
+      });
+
+      test('nothing stored, then the creator id (the owner) is a plain replay and writes nothing', async () => {
+        const token = await steppedOwner();
+        const path = await k.path(token);
+        const body = k.body({});
+        const first = await send(token, path, body);
+        expect(first.statusCode).toBe(201);
+        const again = await send(token, path, { ...body, originalStaffId: owner.staffId });
+        expect(again.statusCode).toBe(200);
+        const id = k.id(first.json());
+        expect(await storedOriginal(id)).toBeNull();
+        expect(await auditCount(id)).toBe(k.auditWithoutId);
+      });
+
+      test('nothing stored, then another id is 409', async () => {
+        const token = await steppedOwner();
+        const path = await k.path(token);
+        const body = k.body({});
+        const first = await send(token, path, body);
+        const again = await send(token, path, { ...body, originalStaffId: cashier.id });
+        expect(again.statusCode).toBe(409);
+        expect(again.json()).toMatchObject({ code: 'IDEMPOTENCY_KEY_REUSED' });
+        expect(await storedOriginal(k.id(first.json()))).toBeNull();
+      });
+
+      test('naming someone needs a fresh step-up; without the field no step-up is needed', async () => {
+        const fresh = await steppedOwner();
+        const path = await k.path(fresh);
+        h.clock.advanceSeconds(10 * 60); // past the step-up window
+        const stale = await h.ownerSession(owner);
+        const refused = await send(stale, path, k.body({ originalStaffId: cashier.id }));
+        expect(refused.statusCode).toBe(403);
+        expect(refused.json()).toMatchObject({ code: 'STEP_UP_REQUIRED' });
+        const ok = await send(stale, path, k.body({}));
+        expect(ok.statusCode).toBe(201);
+      });
+    });
+  }
+});
