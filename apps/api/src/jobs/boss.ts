@@ -1,5 +1,5 @@
 import { postgresOptions } from '@sds/db';
-import { PgBoss } from 'pg-boss';
+import { type ConstructorOptions, PgBoss } from 'pg-boss';
 import { JOBS, type JobDeps } from './jobs.ts';
 
 export interface JobLogger {
@@ -52,32 +52,42 @@ export async function startJobs(args: {
   databaseUrl: string;
   deps: JobDeps;
   log: JobLogger;
+  /** Tests pass a fake. */
+  createBoss?: (options: ConstructorOptions) => PgBoss;
 }): Promise<{ stop(): Promise<void> }> {
-  const boss = new PgBoss({
+  const options: ConstructorOptions = {
     ...pgBossConnection(args.databaseUrl),
     schema: 'pgboss',
     max: 2,
     application_name: 'sds-api-jobs',
-  });
+  };
+  const boss = args.createBoss ? args.createBoss(options) : new PgBoss(options);
   boss.on('error', (error) => {
     args.log.error({ errorName: error instanceof Error ? error.name : 'Error' }, 'job queue error');
   });
-  await boss.start();
-  for (const job of JOBS) {
-    await boss.createQueue(job.name, { retryLimit: 0, expireInSeconds: 600 });
-    await boss.work(job.name, async () => {
-      try {
-        const counts = await job.run(args.deps);
-        args.log.info({ job: job.name, ...counts }, 'job finished');
-      } catch (error) {
-        args.log.error(
-          { job: job.name, errorName: error instanceof Error ? error.name : 'Error' },
-          'job failed',
-        );
-        throw error;
-      }
-    });
-    await boss.schedule(job.name, job.cron, null, { tz: 'Asia/Bangkok' });
+  const stop = () => boss.stop({ graceful: true, timeout: 10_000 });
+  try {
+    await boss.start();
+    for (const job of JOBS) {
+      await boss.createQueue(job.name, { retryLimit: 0, expireInSeconds: 600 });
+      await boss.work(job.name, async () => {
+        try {
+          const counts = await job.run(args.deps);
+          args.log.info({ job: job.name, ...counts }, 'job finished');
+        } catch (error) {
+          args.log.error(
+            { job: job.name, errorName: error instanceof Error ? error.name : 'Error' },
+            'job failed',
+          );
+          throw error;
+        }
+      });
+      await boss.schedule(job.name, job.cron, null, { tz: 'Asia/Bangkok' });
+    }
+  } catch (error) {
+    // Do not leak the pool, the workers or the timers of a half-started queue.
+    await stop().catch(() => undefined);
+    throw error;
   }
-  return { stop: () => boss.stop({ graceful: true, timeout: 10_000 }) };
+  return { stop };
 }

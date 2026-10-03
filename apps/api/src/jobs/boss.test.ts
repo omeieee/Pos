@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { pgBossConnection } from './boss.ts';
+import { pgBossConnection, startJobs } from './boss.ts';
 
 // Made-up connection strings: the password is not real.
 const pooler = 'aws-0-region.pooler.example.com:5432/postgres';
@@ -34,5 +34,47 @@ describe('pgBossConnection: TLS the same way as the rest of the API', () => {
     expect(pgBossConnection(url('?sslmode=require&application_name=x')).connectionString).toContain(
       'application_name=x',
     );
+  });
+});
+
+describe('startJobs cleans up after a partial failure', () => {
+  const deps = {} as never;
+  const log = { info: () => {}, error: () => {} };
+  const databaseUrl = 'postgresql://u:p@localhost/db';
+  function fakeBoss(failAt: 'start' | 'createQueue' | 'work' | 'schedule' | null) {
+    const calls: string[] = [];
+    const step = (name: string) => async () => {
+      calls.push(name);
+      if (failAt === name) throw new Error('boom');
+    };
+    return {
+      calls,
+      boss: {
+        on: () => {},
+        start: step('start'),
+        createQueue: step('createQueue'),
+        work: step('work'),
+        schedule: step('schedule'),
+        stop: step('stop'),
+      },
+    };
+  }
+
+  for (const failAt of ['start', 'createQueue', 'work', 'schedule'] as const) {
+    test(`a failure in ${failAt} stops pg-boss and rethrows`, async () => {
+      const { boss, calls } = fakeBoss(failAt);
+      await expect(
+        startJobs({ databaseUrl, deps, log, createBoss: () => boss as never }),
+      ).rejects.toThrow('boom');
+      expect(calls).toContain('stop');
+    });
+  }
+
+  test('on success it keeps running until stop() is called', async () => {
+    const { boss, calls } = fakeBoss(null);
+    const jobs = await startJobs({ databaseUrl, deps, log, createBoss: () => boss as never });
+    expect(calls).not.toContain('stop');
+    await jobs.stop();
+    expect(calls).toContain('stop');
   });
 });
