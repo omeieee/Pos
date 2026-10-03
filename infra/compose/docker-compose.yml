@@ -25,6 +25,10 @@ services:
       CORS_ORIGINS: ${CORS_ORIGINS:?CORS_ORIGINS missing in .env}
       AUTH_SECRET_KEY: ${AUTH_SECRET_KEY:?AUTH_SECRET_KEY missing in .env - see .env.example}
       SENTRY_DSN: ${SENTRY_DSN:-}
+      LINE_CHANNEL_ID: ${LINE_CHANNEL_ID:-}
+      LINE_CHANNEL_SECRET: ${LINE_CHANNEL_SECRET:-}
+      LINE_CHANNEL_ACCESS_TOKEN: ${LINE_CHANNEL_ACCESS_TOKEN:-}
+      LINE_LIFF_ID: ${LINE_LIFF_ID:-}
       GIT_SHA: ${GIT_SHA:-unknown}
     # Reachable only by caddy on the internal network; nothing published.
     expose:
