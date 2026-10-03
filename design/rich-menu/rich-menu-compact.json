@@ -1,0 +1,65 @@
+{
+  "size": {
+    "width": 2500,
+    "height": 843
+  },
+  "selected": true,
+  "name": "sds-main-compact-v1",
+  "chatBarText": "สั่งอาหาร",
+  "areas": [
+    {
+      "bounds": {
+        "x": 0,
+        "y": 0,
+        "width": 1000,
+        "height": 843
+      },
+      "action": {
+        "type": "uri",
+        "label": "สั่งอาหาร",
+        "uri": "{{LIFF_BASE_URL}}/menu"
+      }
+    },
+    {
+      "bounds": {
+        "x": 1000,
+        "y": 0,
+        "width": 500,
+        "height": 843
+      },
+      "action": {
+        "type": "uri",
+        "label": "ออเดอร์ของฉัน",
+        "uri": "{{LIFF_BASE_URL}}/orders"
+      }
+    },
+    {
+      "bounds": {
+        "x": 1500,
+        "y": 0,
+        "width": 500,
+        "height": 843
+      },
+      "action": {
+        "type": "postback",
+        "label": "วิธีชำระเงิน",
+        "data": "rm=pay-info",
+        "displayText": "วิธีชำระเงิน"
+      }
+    },
+    {
+      "bounds": {
+        "x": 2000,
+        "y": 0,
+        "width": 500,
+        "height": 843
+      },
+      "action": {
+        "type": "postback",
+        "label": "ติดต่อร้าน",
+        "data": "rm=contact",
+        "displayText": "ติดต่อร้าน"
+      }
+    }
+  ]
+}
