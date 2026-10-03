@@ -38,6 +38,7 @@ describe('the job list', () => {
         'retention-line-events',
         'retention-orders',
         'retention-recipients',
+        'retention-line-customers',
       ]),
     );
     for (const j of JOBS) expect(j.cron.trim().split(/\s+/)).toHaveLength(5);
@@ -107,6 +108,20 @@ describe('retention jobs', () => {
     ).rows[0];
     expect(c?.anonymized_at).not.toBeNull();
     expect(c?.recipient_name).toBeNull();
+
+    // An app visitor who never ordered or acknowledged is erased by the line-customers job.
+    const visitor = await h.client.query<{ id: string }>(
+      "insert into customers (line_user_id, first_seen_at) values ('Utest-job-visitor', $1) returning id",
+      [new Date(deps.now().getTime() - 40 * 86_400_000).toISOString()],
+    );
+    expect(await job('retention-line-customers').run(deps)).toEqual({ customers: 1 });
+    expect(
+      (
+        await h.client.query('select line_user_id from customers where id = $1', [
+          visitor.rows[0]?.id,
+        ])
+      ).rows[0],
+    ).toMatchObject({ line_user_id: null });
 
     // Idempotent: nothing left to change.
     expect(await job('retention-orders').run(deps)).toEqual({ anonymized: 0 });

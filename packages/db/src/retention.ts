@@ -161,3 +161,46 @@ export async function expireRecipientsBatch(
     return { customers: erased, orders: rewritten };
   });
 }
+
+/**
+ * Erases up to `limit` LINE customers who never ordered and never acknowledged the privacy notice
+ * and were first seen before `before` (30 days): people who followed the OA or opened the app and
+ * went no further. The row stays anonymised (no LINE id) so nothing else breaks; one `system`
+ * audit row says how many, never who.
+ */
+export async function expireEmptyLineCustomersBatch(
+  db: Db,
+  args: { before: Date; limit: number; now: Date },
+): Promise<{ customers: number }> {
+  return db.transaction(async (tx) => {
+    const due = await tx
+      .select({ id: customers.id })
+      .from(customers)
+      .where(
+        and(
+          isNull(customers.anonymizedAt),
+          isNotNull(customers.lineUserId),
+          isNull(customers.privacyAckAt),
+          lt(customers.firstSeenAt, args.before),
+          sql`not exists (select 1 from ${orders} where ${orders.customerId} = ${customers.id})`,
+        ),
+      )
+      .orderBy(asc(customers.id))
+      .limit(args.limit)
+      .for('update', { of: customers, skipLocked: true });
+    let erased = 0;
+    for (const { id } of due) {
+      const result = await anonymizeCustomer(tx, id, args.now);
+      if (result.found && result.changed) erased += 1;
+    }
+    if (erased > 0) {
+      await insertAudit(tx, {
+        actorType: 'system',
+        action: 'retention.line_customers.expire',
+        entity: 'customers',
+        after: { customers: erased, afterDays: RETENTION_DAYS.recipientBook },
+      });
+    }
+    return { customers: erased };
+  });
+}

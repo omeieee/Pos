@@ -62,3 +62,19 @@ export async function expireRecipients(deps: JobDeps, bounds: Bounds = {}) {
   });
   return total;
 }
+
+/** LINE customers who followed or opened the app 30+ days ago and never ordered or acknowledged. */
+export async function expireEmptyLineCustomers(deps: JobDeps, bounds: Bounds = {}) {
+  const before = cutoff(deps, RETENTION_DAYS.recipientBook);
+  let customers = 0;
+  await drain(bounds, async (limit) => {
+    const result = await retentionRepo.expireEmptyLineCustomersBatch(deps.db, {
+      before,
+      limit,
+      now: deps.now(),
+    });
+    customers += result.customers;
+    return result.customers;
+  });
+  return { customers };
+}

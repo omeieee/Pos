@@ -330,3 +330,67 @@ describe('expireRecipientsBatch', () => {
     for (const id of ids) expect(audits).not.toContain(id);
   });
 });
+
+describe('expireEmptyLineCustomersBatch', () => {
+  const cutoff = () => new Date(NOW.getTime() - RETENTION_DAYS.recipientBook * 86_400_000);
+  const run = (limit = 100) =>
+    retention.expireEmptyLineCustomersBatch(db, { before: cutoff(), limit, now: NOW });
+  let n = 0;
+  async function liff(args: { firstSeenDaysAgo: number; acked?: boolean }) {
+    const [row] = await q<{ id: string }>(
+      `insert into customers (line_user_id, first_seen_at, privacy_ack_at, privacy_ack_version)
+       values ($1, $2, $3, $4) returning id`,
+      [
+        `Utest-empty-${++n}`,
+        daysAgo(args.firstSeenDaysAgo),
+        args.acked ? daysAgo(args.firstSeenDaysAgo) : null,
+        args.acked ? 'v1' : null,
+      ],
+    );
+    return row?.id as string;
+  }
+  const state = async (id: string) =>
+    (
+      await q<{ anonymized_at: Date | null; line_user_id: string | null }>(
+        'select anonymized_at, line_user_id from customers where id = $1',
+        [id],
+      )
+    )[0];
+
+  test('erases a LINE customer with no order and no acknowledgement after 30 days', async () => {
+    const stale = await liff({ firstSeenDaysAgo: 45 });
+    const fresh = await liff({ firstSeenDaysAgo: 5 });
+    expect((await run()).customers).toBeGreaterThanOrEqual(1);
+    expect(await state(stale)).toMatchObject({ line_user_id: null });
+    expect((await state(stale))?.anonymized_at).not.toBeNull();
+    expect((await state(fresh))?.anonymized_at).toBeNull();
+    expect((await state(fresh))?.line_user_id).not.toBeNull();
+  });
+
+  test('keeps one who acknowledged the notice, and one who has any order', async () => {
+    const acked = await liff({ firstSeenDaysAgo: 90, acked: true });
+    const ordered = await liff({ firstSeenDaysAgo: 90 });
+    await order({ customerId: ordered, completedDaysAgo: 80 });
+    await run();
+    expect((await state(acked))?.anonymized_at).toBeNull();
+    expect((await state(ordered))?.anonymized_at).toBeNull();
+  });
+
+  test('leaves counter customers alone, is idempotent, and audits counts only', async () => {
+    const counter = await q<{ id: string }>(
+      "insert into customers (building, recipient_name, recipient_key, first_seen_at) values ('A1', 'Counter', 'counter', $1) returning id",
+      [daysAgo(90)],
+    );
+    const stale = await liff({ firstSeenDaysAgo: 60 });
+    await run();
+    expect(await run()).toEqual({ customers: 0 });
+    expect((await state(counter[0]?.id as string))?.anonymized_at).toBeNull();
+    const audits = JSON.stringify(
+      await q(
+        "select after, entity_id from audit_log where action = 'retention.line_customers.expire'",
+      ),
+    );
+    expect(audits).not.toContain('Utest-empty');
+    expect(audits).not.toContain(stale);
+  });
+});
