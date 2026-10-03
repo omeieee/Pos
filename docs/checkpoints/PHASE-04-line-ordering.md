@@ -35,7 +35,10 @@ Customers order and pay through the shop's LINE OA, within the free message budg
 - Infra: reserved public IP `sds-pos-api` 161.118.211.42, host `161-118-211-42.sslip.io`; compose passes `LINE_CHANNEL_ID/SECRET/ACCESS_TOKEN`, `LINE_LIFF_ID` from the VM `.env` (test OA values).
 - LINE test OA `omeie`: webhook set and verified, redelivery on, built-in auto-reply and greeting off. LIFF lives on the separate LINE Login channel `omeOrderingTest`.
 - Design: `design/logo/`, `design/rich-menu/` (full and compact), `design/privacy-notice-th.md` (draft, not published).
-- Not built: ordering flow in `liff-web`, LINE order handlers, slip/claim, rich menu upload, retention jobs.
+- Retention and retry: pg-boss jobs (`line-events-retry` every 5 min; nightly `retention-line-events`, `-orders`, `-recipients`, `-line-customers`), `line_events` keeps ids only, privacy ack stores the notice version.
+- Ordering: `/v1/app/*` (LIFF token login, own-orders only, order cap 3 open / 50 items), `apps/liff-web`, chat Flex replies, one completion push per LINE order, rich-menu CLI (`pnpm --filter @sds/api richmenu:upload`); rich menu `full` is default on the test OA; LIFF app `Order Menu` -> `sds-order.pages.dev`.
+- Not built or not verified: real-device E2E, slip storage and 90-day deletion, Playwright for liff-web.
 
 ## Log
 - 2026-10-04: kickoff, LINE package and webhook, reserved IP, webhook verified ([PROGRESS](../PROGRESS.md)).
+- 2026-10-04: retention jobs, ordering flow, rich menu ([PROGRESS](../PROGRESS.md)).
