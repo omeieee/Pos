@@ -175,3 +175,24 @@ On 2026-10-01 the owner authorized Claude to proceed automatically; for each que
 - **Stranded outbox entries:** **yes**, an owner recovery path: on a shared device the owner can take over the unsynced entries of other people (with step-up and a confirmation) so they replay under the owner's session, or clear them.
 - **Menu management:** staff and owners add, edit and delete menu items, including **images** and details, from the Settings menu. Defaults taken (say if you want different): `menu.edit` (create, edit prices and details, photos, archive) stays with **managers and the owner**; cashiers and the kitchen keep only the sold-out toggle (`menu.availability`). "Delete" means **archive**: orders and payments reference items, so rows are never deleted. Photos are stored **in the database** (decision D-21), which replaces the Supabase Storage recommendation made earlier today.
 - **Gmail OAuth client secret:** "yes" again; rotating it needs a sign-in to the owner's Google Cloud console, which Claude cannot do. Steps for the owner: Google Cloud console, APIs and Services, Credentials, the OAuth client, reset the secret, download the JSON to `~/.gmail-mcp/gcp-oauth.keys.json`, then run `npx -y @klodr/gmail-mcp@1.4.2 auth --scopes=gmail.readonly`. Optional: nothing in the POS depends on it.
+
+### P4 kickoff answers (owner, 2026-10-03)
+1. **LINE OA:** the Free plan (300 messages a month) for production; the owner switches to the real account later. A **test account is already registered** (local development uses it, rule in CLAUDE.md).
+2. **LINE Developers console:** set up by the owner.
+3. **Secrets:** `LINE_CHANNEL_ID`, `LINE_CHANNEL_SECRET`, `LINE_CHANNEL_ACCESS_TOKEN` and `LINE_LIFF_ID` are in the VM `/opt/sds/.env`; local development uses a separate `.env.test`. Claude never reads, prints or commits their values.
+4. **Webhook URL:** not set yet. The owner asked Claude to set it through Chrome DevTools once the owner has signed in to the console themselves (Claude never types the sign-in). It can only be verified after the webhook route is deployed.
+5. **Fulfilment:** as agreed (delivery to the building entrance only; Building + Name + optional note).
+6. **ไทยช่วยไทย in LINE:** the owner wrote "staff will capture the QR code and send it via LINE". **CONFLICT with CLAUDE.md rule 4 and the P4 exit criterion (the ถุงเงิน QR is never sent through LINE). Not built; asked back, see below.**
+7. **Free message budget:** Claude manages it (quota tracker, reply first, push policy); no paid plan.
+8. **Privacy notice and retention:** Claude drafts the Thai notice in the name of an individual (the shop manager); names and room/building details are **anonymised or deleted 30 days after order completion**. Open detail: the manager's name, and how this fits "remember recipients" (asked back below).
+9. **Receipts (Q11):** default is an **automatic e-receipt through LINE** when the order completes, or when the customer asks in the system. Budget note: a completion push counts against the 300; the plan is one push per LINE order that carries both "ready" and the receipt, with the receipt otherwise on request by free reply.
+10. **Brand assets:** the ux-ui-designer creates the Rich Menu and the logo from `design/brand.md`; real images can replace them later.
+
+### P4 kickoff answers, second batch (owner, 2026-10-03)
+- **ไทยช่วยไทย in LINE:** shown only as a payment option; no QR and no extra system input; staff handle the payment with the customer directly. Consistent with rule 4 (item 6 conflict resolved).
+- **Reserve the Oracle public IP:** yes. The devops-engineer writes a plan first (`infra/oracle/RESERVED-IP.md`); nothing in OCI changes until the owner runs or approves the steps.
+- **VM LINE credentials belong to the TEST OA:** yes. Production stays test-only until the owner switches the four variables and re-points the webhook.
+- **Retention:** default accepted (order snapshots anonymised 30 days after completion; the recipient book kept until 30 days after that recipient's last order or an erasure request).
+- **Privacy notice:** manager name "omeie"; data-request contact `omeza25482548@gmail.com`.
+- **Receipt budget:** accepted (one push per LINE order carrying "ready" and the receipt; at the cap pushes stop, receipt by free reply only, staff get a warning).
+- **Standing instruction:** proceed automatically. P4 starts with the P3 real-device checks still open.
