@@ -325,3 +325,19 @@ export async function getMonthUsage(db: Db, month: string): Promise<number> {
     .limit(1);
   return row?.used ?? 0;
 }
+
+/** True when a push with this template was counted for the order (it is in the message log). */
+export async function hasPushForOrder(db: Db, orderId: string, template: string): Promise<boolean> {
+  const [row] = await db
+    .select({ id: lineMessageLog.id })
+    .from(lineMessageLog)
+    .where(
+      and(
+        eq(lineMessageLog.orderId, orderId),
+        eq(lineMessageLog.template, template),
+        eq(lineMessageLog.kind, 'push'),
+      ),
+    )
+    .limit(1);
+  return row !== undefined;
+}

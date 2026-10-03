@@ -307,7 +307,7 @@ export async function placeOrder(
  * A payment the customer already reported (`claimed`), or a paid or closed order, cannot change.
  */
 export async function selectPayment(
-  ctx: AuthContext,
+  ctx: CoreContext,
   customerId: string,
   orderId: string,
   input: SelectPaymentInput,
@@ -350,7 +350,7 @@ export async function selectPayment(
  * Claiming again answers 200 with nothing written.
  */
 export async function claimPayment(
-  ctx: AuthContext,
+  ctx: CoreContext,
   customerId: string,
   orderId: string,
   meta: RequestMeta,

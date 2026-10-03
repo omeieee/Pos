@@ -158,6 +158,8 @@ async function processEvents(
           db: ctx.db,
           sender,
           now: ctx.now,
+          events: ctx.events,
+          liffUrl: runtime.liffUrl,
           noticeUrl: runtime.noticeUrl,
           privacy: runtime.privacy,
         },

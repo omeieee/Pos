@@ -9,6 +9,7 @@ import type { AuthContext } from './auth/service.ts';
 import { registerCustomerAppRoutes } from './customer-app/routes.ts';
 import { registerCustomerRoutes } from './customers/routes.ts';
 import type { EventBus } from './events.ts';
+import { registerCompletionPush } from './line/completion-push.ts';
 import { registerLineRoutes } from './line/routes.ts';
 import { createLineRuntime, type LineRuntime } from './line/runtime.ts';
 import { registerMenuRoutes } from './menu/routes.ts';
@@ -94,6 +95,8 @@ export async function registerV1(app: FastifyInstance, deps: V1Deps): Promise<vo
   const context: ModuleContext = { auth, guard: createGuard(auth) };
   const lineRuntime =
     deps.line ?? createLineRuntime({ channelSecret: undefined, channelAccessToken: undefined });
+  // One push per LINE order when staff complete it, through the quota-aware sender.
+  registerCompletionPush({ db: deps.db, runtime: lineRuntime, events: deps.events, now: auth.now });
   // The WebSocket plugin lives on the root instance, ahead of the /v1 scope that declares /v1/ws.
   const realtime = await setupRealtime(app, auth, deps.realtime);
 

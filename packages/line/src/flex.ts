@@ -1,4 +1,4 @@
-import { formatBaht, type Locale, t } from '@sds/i18n';
+import { formatBaht, type Locale, type MessageKey, type MessageParams, t } from '@sds/i18n';
 import { type ChatPayMethod, encodePostback } from './postback.ts';
 
 /** The parts of the LINE Flex Message format this shop uses. */
@@ -14,6 +14,11 @@ export interface TextMessage {
   text: string;
 }
 export type LineMessage = FlexMessage | TextMessage;
+
+/** A plain text reply from the message catalog (Thai by default). */
+export function botText(key: MessageKey, params?: MessageParams, locale: Locale = 'th'): TextMessage {
+  return { type: 'text', text: t(locale, key, params) };
+}
 
 export interface ReceiptItem {
   name: string;
