@@ -114,6 +114,42 @@ describe('signature', () => {
     expect((await webhook(b)).statusCode).toBe(200);
   });
 
+  test('LINE sends a charset in the content type: the raw body still reaches the check', async () => {
+    for (const type of ['application/json; charset=utf-8', 'application/json;charset=UTF-8']) {
+      const b = body(follow('Utest-charset-1'));
+      const res = await webhook(b, { 'x-line-signature': sign(b), 'content-type': type });
+      expect(res.statusCode, type).toBe(200);
+    }
+  });
+
+  test('a database failure while storing answers 500 and leaves nothing stored (LINE redelivers)', async () => {
+    const first = eventId();
+    const second = eventId();
+    // The second id is too long for nothing; force a failure with a type that violates NOT NULL.
+    await h.client.query(
+      'alter table line_events add constraint tmp_fail check (webhook_event_id <> $1)'.replace(
+        '$1',
+        `'${second}'`,
+      ),
+    );
+    try {
+      const res = await webhook(
+        body(follow('Utest-atomic-1', first), follow('Utest-atomic-2', second)),
+      );
+      expect(res.statusCode).toBe(500);
+      expect(await eventRows(first)).toHaveLength(0);
+    } finally {
+      await h.client.query('alter table line_events drop constraint tmp_fail');
+    }
+    // Redelivery after the fault is handled normally.
+    expect(
+      (await webhook(body(follow('Utest-atomic-1', first), follow('Utest-atomic-2', second))))
+        .statusCode,
+    ).toBe(200);
+    await runtime.idle();
+    expect((await eventRows(first))[0]?.processed_at).not.toBeNull();
+  });
+
   test('the console Verify call (no events) answers 200', async () => {
     expect((await webhook(body())).statusCode).toBe(200);
   });

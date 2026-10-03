@@ -960,7 +960,7 @@ export const en = {
     'Tap "Order" in the menu below to order. We deliver to the building entrance only.',
   'lineBot.privacy.title': 'Privacy notice',
   'lineBot.privacy.summary':
-    'The shop keeps your LINE user ID, display name, the recipient name and building, and your orders, only to prepare and deliver them. Data controller: {controller}. To see, correct or delete your data, write to {contact}.',
+    'The shop keeps your LINE user ID, display name, the recipient name and building, and your orders, to prepare, deliver and take payment for them and to keep the shop accounts. Data controller: {controller}. To see, correct or delete your data, write to {contact}.',
   'lineBot.privacy.readNotice': 'Read the full notice',
   'lineBot.privacy.ackButton': 'I understand',
   'lineBot.privacy.acked': 'Thank you. Your acknowledgement of the privacy notice is saved.',

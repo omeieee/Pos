@@ -1,7 +1,13 @@
 import { eventUserId, type WebhookEvent } from './events.ts';
 import { parsePostback } from './postback.ts';
 
-export const KEYWORDS = { menu: 'เมนู', status: 'สถานะ', contact: 'ติดต่อ' } as const;
+export const KEYWORDS = {
+  menu: 'เมนู',
+  status: 'สถานะ',
+  contact: 'ติดต่อ',
+  payment: 'วิธีชำระเงิน',
+  hours: 'เวลาเปิด',
+} as const;
 export type Keyword = keyof typeof KEYWORDS;
 
 /** What the API should do for one event. `ignore` events are left for staff in OA Manager. */

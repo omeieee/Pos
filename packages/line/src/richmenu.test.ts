@@ -1,9 +1,17 @@
 import { describe, expect, test } from 'vitest';
 import { DEFAULT_RICH_MENU, loadRichMenu } from './richmenu.ts';
+import { KEYWORDS } from './router.ts';
 
 const LIFF = 'https://liff.example.test/app';
 
 describe('rich menu', () => {
+  test('every message button of the default menu is a keyword the router answers', () => {
+    const keywords: string[] = Object.values(KEYWORDS);
+    for (const area of DEFAULT_RICH_MENU.areas) {
+      if (area.action.type === 'message') expect(keywords).toContain(area.action.text);
+    }
+  });
+
   test('the default loads, fills the app URL and has six areas', () => {
     const menu = loadRichMenu(DEFAULT_RICH_MENU, { liffUrl: LIFF });
     expect(menu.areas).toHaveLength(6);

@@ -87,18 +87,23 @@ export async function registerLineRoutes(
         if (!envelope.success) throw new ApiError(400, 'BAD_REQUEST', 'Unexpected body');
 
         // Store first. Only events that were never seen are handled; a redelivery is skipped.
-        const fresh: ReturnType<typeof webhookEventSchema.parse>[] = [];
-        for (const raw of envelope.data.events) {
-          const event = webhookEventSchema.safeParse(raw);
-          if (!event.success) continue; // not an event we can name or dedupe; LINE needs a 200
-          const isNew = await lineRepo.insertEventIfNew(ctx.db, {
-            webhookEventId: event.data.webhookEventId,
-            type: event.data.type,
-            ...(eventUserId(event.data) ? { userId: eventUserId(event.data) as string } : {}),
-            payload: raw,
-          });
-          if (isNew) fresh.push(event.data);
-        }
+        // All or nothing: if one insert fails the request is a 500 and nothing stays stored, so
+        // LINE's redelivery is not mistaken for a duplicate and skipped.
+        const fresh = await ctx.db.transaction(async (tx) => {
+          const stored: ReturnType<typeof webhookEventSchema.parse>[] = [];
+          for (const raw of envelope.data.events) {
+            const event = webhookEventSchema.safeParse(raw);
+            if (!event.success) continue; // not an event we can name or dedupe; LINE needs a 200
+            const isNew = await lineRepo.insertEventIfNew(tx, {
+              webhookEventId: event.data.webhookEventId,
+              type: event.data.type,
+              ...(eventUserId(event.data) ? { userId: eventUserId(event.data) as string } : {}),
+              payload: raw,
+            });
+            if (isNew) stored.push(event.data);
+          }
+          return stored;
+        });
 
         if (fresh.length > 0) {
           runtime.track(processEvents(ctx, runtime, fresh, request.log));
