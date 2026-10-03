@@ -2,6 +2,7 @@ export * from './admin.ts';
 export * from './auth.ts';
 export * from './business-date.ts';
 export * from './cash.ts';
+export * from './customer-app.ts';
 export * from './customers.ts';
 export * from './delivery.ts';
 export * from './enums.ts';

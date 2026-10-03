@@ -21,7 +21,7 @@ import {
   newRecoveryCodes,
   newToken,
 } from '../auth/crypto.ts';
-import { createGuard, isGuarded } from '../auth/guards.ts';
+import { createGuard, hasCustomerGuard, isGuarded } from '../auth/guards.ts';
 import { type AuthPolicy, DEFAULT_AUTH_POLICY } from '../auth/policy.ts';
 import type { AuthContext } from '../auth/service.ts';
 import { generateTotpSecret, hotp, timeStep } from '../auth/totp.ts';
@@ -98,7 +98,7 @@ export interface Harness {
   /** For tests that subscribe their own handler. */
   bus: EventBus;
   /** Every route the app registered, and whether it runs the guard. */
-  routes: { method: string; url: string; guarded: boolean }[];
+  routes: { method: string; url: string; guarded: boolean; customerGuarded: boolean }[];
   /** Menu rows for order tests (built by hand: seed() holds the test PromptPay ID). */
   newMenu(): Promise<Menu>;
   /** Everything the logger wrote, as one string. */
@@ -155,7 +155,12 @@ export async function createHarness(
   // The global buckets are effectively off here; their own test turns them down.
   app.addHook('onRoute', (route) => {
     for (const method of [route.method].flat()) {
-      routes.push({ method, url: route.url, guarded: isGuarded(route) });
+      routes.push({
+        method,
+        url: route.url,
+        guarded: isGuarded(route),
+        customerGuarded: hasCustomerGuard(route),
+      });
     }
   });
   app.addHook('onRequest', async (request) => {

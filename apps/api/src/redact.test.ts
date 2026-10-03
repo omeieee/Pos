@@ -275,6 +275,10 @@ describe('log redaction of credentials', () => {
       authorization: 'Bearer sds_ses_secret-value',
       'x-device-token': 'sds_dev_secret-value',
       idValue: '0987654321',
+      idToken: 'liff-id-token-secret',
+      accessToken: 'liff-access-token-secret',
+      token: 'sds_cst.customer-session-secret',
+      lineUserId: 'Utest-line-user-secret',
     };
     app.log.info({ body: secrets }, 'top');
     app.log.info({ req: { headers: secrets } }, 'request');

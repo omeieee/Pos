@@ -81,7 +81,7 @@ export function hasFreshStepUp(principal: Principal, now: Date): boolean {
 }
 
 export function securityAlert(
-  ctx: AuthContext,
+  ctx: Pick<AuthContext, 'now'>,
   kind: string,
   severity: SecurityAlertEvent['severity'],
   who: {

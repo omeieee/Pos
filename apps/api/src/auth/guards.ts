@@ -127,6 +127,29 @@ export function hasLineSignatureCheck(route: RouteHooks): boolean {
 }
 
 /**
+ * Marks the guard of the customer app's routes (`/v1/app/...`). A customer session is a different
+ * credential from a staff session: it is a signed token tied to one LINE user, it carries no staff
+ * permission, and `guard()` (staff) never accepts it. Customer routes must run it in `onRequest`
+ * for the same reason staff routes must: the body is not parsed for someone who is not signed in.
+ */
+const CUSTOMER_GUARDED = Symbol.for('sds.customer-guarded');
+
+export function markCustomerGuard<T extends (...args: never[]) => unknown>(fn: T): T {
+  return Object.assign(fn, { [CUSTOMER_GUARDED]: true });
+}
+
+/** True when the route runs a customer guard in its own `onRequest` hooks. */
+export function hasCustomerGuard(route: RouteHooks): boolean {
+  return [route.onRequest]
+    .flat(2)
+    .some(
+      (hook) =>
+        typeof hook === 'function' &&
+        (hook as unknown as Record<symbol, unknown>)[CUSTOMER_GUARDED] === true,
+    );
+}
+
+/**
  * Marks the handler of a WebSocket route that authenticates its sockets itself: a browser
  * WebSocket cannot send an Authorization header, so the socket proves who it is with its first
  * message. The marked handler is what enforces that (`realtime/hub.ts`).
@@ -169,7 +192,7 @@ export function enforceGuardedRoutes(
 ): void {
   scope.addHook('onRoute', (route) => {
     if (!route.url.startsWith('/v1')) return;
-    if (isGuarded(route)) return;
+    if (isGuarded(route) || hasCustomerGuard(route)) return;
     for (const method of [route.method].flat()) {
       const key = `${method === 'HEAD' ? 'GET' : method} ${route.url}`;
       if (open.has(key)) continue;

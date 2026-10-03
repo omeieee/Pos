@@ -28,6 +28,12 @@ const CREDENTIAL_KEYS = [
   'x-device-token',
   'cookie',
   'idvalue',
+  // The customer app: a LIFF token sent to sign in, the session token we hand back, and the
+  // LINE user id they stand for.
+  'idtoken',
+  'accesstoken',
+  'token',
+  'lineuserid',
 ];
 const CREDENTIAL_FIELDS = [
   'password',
@@ -40,6 +46,10 @@ const CREDENTIAL_FIELDS = [
   'x-device-token',
   'cookie',
   'idValue',
+  'idToken',
+  'accessToken',
+  'token',
+  'lineUserId',
 ];
 
 /**

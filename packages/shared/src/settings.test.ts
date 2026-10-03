@@ -12,6 +12,7 @@ import {
   openingWindow,
   paymentsSettingsSchema,
   promptpayPatchInputSchema,
+  serviceOpenAt,
   shopPatchInputSchema,
   shopSettingsSchema,
 } from './settings.ts';
@@ -133,6 +134,29 @@ describe('opening hours', () => {
       openMinute: 780,
       closeMinute: 1380,
     });
+  });
+
+  test('serviceOpenAt: the wall clock in Bangkok decides, opening included and closing excluded', () => {
+    // Wednesday 2026-10-07, delivery 13:00 to 23:00 Bangkok (06:00 to 16:00 UTC).
+    const at = (utc: string) => serviceOpenAt(hours, new Date(utc), 'delivery');
+    expect(at('2026-10-07T05:59:00Z').open).toBe(false); // 12:59
+    expect(at('2026-10-07T06:00:00Z').open).toBe(true); // 13:00
+    expect(at('2026-10-07T15:59:00Z').open).toBe(true); // 22:59
+    expect(at('2026-10-07T16:00:00Z').open).toBe(false); // 23:00
+    expect(at('2026-10-07T06:00:00Z').window).toEqual({ openMinute: 780, closeMinute: 1380 });
+  });
+
+  test('serviceOpenAt: the calendar day is the wall clock day, not the business day', () => {
+    // 00:30 Bangkok on Thursday 2026-10-08 is still Wednesday's business day, but it is Thursday
+    // on the wall clock, where delivery has not opened yet.
+    expect(serviceOpenAt(hours, new Date('2026-10-07T17:30:00Z'), 'delivery').open).toBe(false);
+    // A day with no window is closed all day (Sunday 2026-10-04 has no delivery).
+    expect(serviceOpenAt(hours, new Date('2026-10-04T08:00:00Z'), 'delivery')).toEqual({
+      open: false,
+      window: null,
+    });
+    // A closure override closes everything.
+    expect(serviceOpenAt(hours, new Date('2026-12-31T08:00:00Z'), 'storefront').open).toBe(false);
   });
 
   test('a patch replaces whichever top-level parts it names', () => {

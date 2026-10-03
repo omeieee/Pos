@@ -76,7 +76,7 @@ import {
 } from '../errors.ts';
 import { toOrderDto } from '../orders/dto.ts';
 import { currentPromptpayId } from '../settings/service.ts';
-import { type Emit, withTransaction } from '../tx.ts';
+import { type CoreContext, type Emit, withTransaction } from '../tx.ts';
 import { toPaymentDto } from './dto.ts';
 import { QR_URL_TTL_SECONDS, qrPng, signQrLink } from './qr.ts';
 import { paymentRequestHash } from './request-hash.ts';
@@ -277,7 +277,7 @@ async function replayOf(
  */
 async function insertPaymentFor(
   tx: Db,
-  ctx: AuthContext,
+  ctx: CoreContext,
   actor: PaymentActor,
   meta: RequestMeta,
   order: ordersRepo.OrderRow,
@@ -434,7 +434,7 @@ async function insertPaymentFor(
  * nothing is written, so a retry (or an offline outbox replay) never takes the money twice.
  */
 export async function createPayment(
-  ctx: AuthContext,
+  ctx: CoreContext,
   actor: PaymentActor,
   orderId: string,
   input: CreatePaymentInput,
@@ -493,7 +493,7 @@ export async function createPayment(
  * a confirmed one a manager void.
  */
 export async function changePaymentMethod(
-  ctx: AuthContext,
+  ctx: CoreContext,
   actor: PaymentActor,
   paymentId: string,
   input: ChangePaymentMethodInput,
@@ -598,7 +598,7 @@ export async function changePaymentMethod(
  * and only staff can cancel it. Nothing waiting: nothing changes, so a retry is harmless.
  */
 export async function withdrawPendingPayment(
-  ctx: AuthContext,
+  ctx: CoreContext,
   actor: CustomerActor,
   orderId: string,
   meta: RequestMeta,
@@ -665,7 +665,7 @@ export interface MoveInput {
  * retried.
  */
 export async function movePayment(
-  ctx: AuthContext,
+  ctx: CoreContext,
   actor: PaymentActor,
   paymentId: string,
   moveName: PaymentMove,

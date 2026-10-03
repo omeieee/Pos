@@ -154,6 +154,59 @@ export async function acknowledgePrivacy(
   return row.id;
 }
 
+export interface LiffCustomer {
+  id: string;
+  privacyAckVersion: string | null;
+}
+
+/**
+ * The customer behind a verified LIFF login, created on first use (they may order before ever
+ * following the shop's chat). An existing row keeps everything it holds, including a recorded
+ * privacy acknowledgement; `unfollowed_at` is not touched (using the app is not following).
+ */
+export async function upsertLiffCustomer(db: Db, lineUserId: string): Promise<LiffCustomer> {
+  await db.insert(customers).values({ lineUserId }).onConflictDoNothing({
+    target: customers.lineUserId,
+  });
+  const [row] = await db
+    .select({ id: customers.id, privacyAckVersion: customers.privacyAckVersion })
+    .from(customers)
+    .where(eq(customers.lineUserId, lineUserId))
+    .limit(1);
+  if (!row) throw new Error('customer upsert returned no row');
+  return row;
+}
+
+/** A live customer by id, with the LINE user id it must still hold (an erased one holds none). */
+export async function findLiveCustomer(
+  db: Db,
+  id: string,
+): Promise<{ id: string; lineUserId: string; privacyAckVersion: string | null } | undefined> {
+  const [row] = await db
+    .select({
+      id: customers.id,
+      lineUserId: customers.lineUserId,
+      privacyAckVersion: customers.privacyAckVersion,
+    })
+    .from(customers)
+    .where(and(eq(customers.id, id), isNull(customers.anonymizedAt)))
+    .limit(1);
+  return row?.lineUserId ? { ...row, lineUserId: row.lineUserId } : undefined;
+}
+
+/** The live customer for a LINE user id (chat events), or undefined. */
+export async function findCustomerByLineUserId(
+  db: Db,
+  lineUserId: string,
+): Promise<{ id: string; privacyAckVersion: string | null } | undefined> {
+  const [row] = await db
+    .select({ id: customers.id, privacyAckVersion: customers.privacyAckVersion })
+    .from(customers)
+    .where(and(eq(customers.lineUserId, lineUserId), isNull(customers.anonymizedAt)))
+    .limit(1);
+  return row;
+}
+
 class RollbackReservation extends Error {
   constructor(readonly reason: 'capped' | 'duplicate') {
     super(reason);

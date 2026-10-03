@@ -42,6 +42,14 @@ export const businessDaySettingsSchema = z.object({
 });
 export type BusinessDaySettings = z.infer<typeof businessDaySettingsSchema>;
 
+/** One line of an order request: what, how many and which options. No price: the server prices it. */
+export const orderLineInputSchema = z.object({
+  menuItemId: z.uuid(),
+  qty: z.number().int().min(1).max(99),
+  modifierOptionIds: z.array(z.uuid()).max(20).default([]),
+  note: z.string().max(200).optional(),
+});
+
 /** POST /v1/orders body. Prices are NOT accepted from clients; the server computes them. */
 export const createOrderInputSchema = z
   .object({
@@ -60,17 +68,7 @@ export const createOrderInputSchema = z
      */
     originalStaffId: z.uuid().optional(),
     note: z.string().max(500).optional(),
-    items: z
-      .array(
-        z.object({
-          menuItemId: z.uuid(),
-          qty: z.number().int().min(1).max(99),
-          modifierOptionIds: z.array(z.uuid()).max(20).default([]),
-          note: z.string().max(200).optional(),
-        }),
-      )
-      .min(1)
-      .max(50),
+    items: z.array(orderLineInputSchema).min(1).max(50),
   })
   .refine((o) => o.fulfillment !== 'room_delivery' || o.roomNo !== undefined, {
     message: 'roomNo is required for room delivery',

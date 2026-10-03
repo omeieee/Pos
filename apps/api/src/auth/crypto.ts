@@ -45,6 +45,8 @@ export interface AuthKeys {
   pinPepper: Buffer;
   /** HMAC key that signs the short-lived PromptPay QR image links. */
   qrUrlKey: Buffer;
+  /** HMAC key that signs the customer-app session tokens (a LIFF login becomes one of these). */
+  customerSessionKey: Buffer;
 }
 
 const HKDF_SALT = Buffer.from('sds-auth-v1');
@@ -59,6 +61,7 @@ export function deriveAuthKeys(master: Buffer): AuthKeys {
     totpKey: derive(master, 'totp-encryption'),
     pinPepper: derive(master, 'pin-pepper'),
     qrUrlKey: derive(master, 'payment-qr-url'),
+    customerSessionKey: derive(master, 'customer-session'),
   };
 }
 

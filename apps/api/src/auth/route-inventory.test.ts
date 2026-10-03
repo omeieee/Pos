@@ -48,12 +48,13 @@ describe('the real /v1 routes', () => {
     // Fastify adds a HEAD route next to every GET; it counts as the GET.
     const key = (r: { method: string; url: string }) =>
       `${r.method === 'HEAD' ? 'GET' : r.method} ${r.url}`;
-    const open = [...new Set(v1.filter((r) => !r.guarded).map(key))];
+    const open = [...new Set(v1.filter((r) => !r.guarded && !r.customerGuarded).map(key))];
     expect(open.sort()).toEqual([...OPEN, ...SIGNED, ...WS, ...MEDIA, ...LINE_WEBHOOK].sort());
     // ...and the list itself is exactly the sign-in routes and the public menu, so it cannot grow unnoticed.
     expect(OPEN.sort()).toEqual([
       'GET /v1/auth/staff',
       'GET /v1/menu',
+      'POST /v1/app/session',
       'POST /v1/auth/owner',
       'POST /v1/auth/pin',
     ]);
@@ -69,6 +70,24 @@ describe('the real /v1 routes', () => {
     // The fifth: LINE's servers call the webhook with no session; the X-Line-Signature HMAC over
     // the raw body is the authentication (line/routes.ts, markLineSignatureCheck in preHandler).
     expect(LINE_WEBHOOK.sort()).toEqual(['POST /v1/line/webhook']);
+  });
+
+  test('the customer app routes run the customer guard, which is not the staff guard', () => {
+    const key = (r: { method: string; url: string }) =>
+      `${r.method === 'HEAD' ? 'GET' : r.method} ${r.url}`;
+    const customer = [...new Set(h.routes.filter((r) => r.customerGuarded).map(key))].sort();
+    expect(customer).toEqual([
+      'GET /v1/app/checkout',
+      'GET /v1/app/orders',
+      'GET /v1/app/orders/:id',
+      'GET /v1/app/orders/:id/qr',
+      'POST /v1/app/orders',
+      'POST /v1/app/orders/:id/claim',
+      'POST /v1/app/orders/:id/payment',
+      'POST /v1/app/privacy-ack',
+    ]);
+    // None of them is also a staff route: one credential kind per route.
+    expect(h.routes.filter((r) => r.customerGuarded && r.guarded)).toEqual([]);
   });
 
   test('the inventory includes the routes we know about', () => {

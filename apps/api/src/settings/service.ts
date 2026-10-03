@@ -42,8 +42,10 @@ import {
   govCopaySchemeSchema,
   maskPromptpayId,
   numberingPatchInputSchema,
+  type OpeningHours,
   openingHoursPatchInputSchema,
   openingHoursSchema,
+  type PaymentsSettings,
   type PromptpaySettings,
   paymentsPatchInputSchema,
   paymentsSettingsSchema,
@@ -174,6 +176,18 @@ export async function currentPromptpayId(db: Db): Promise<PromptpaySettings | nu
 export async function currentDeliverySettings(db: Db): Promise<DeliverySettings> {
   const row = await getSettingRow(db, 'delivery');
   return row ? deliverySettingsSchema.parse(row.value) : DEFAULT_DELIVERY_SETTINGS;
+}
+
+/** The opening hours now in force: the saved ones, or the defaults when never saved. */
+export async function currentOpeningHours(db: Db): Promise<OpeningHours> {
+  const row = await getSettingRow(db, 'opening_hours');
+  return row ? openingHoursSchema.parse(row.value) : DEFAULT_OPENING_HOURS;
+}
+
+/** The payment methods the shop takes now: the saved switches, or the defaults when never saved. */
+export async function currentPaymentsSettings(db: Db): Promise<PaymentsSettings> {
+  const row = await getSettingRow(db, 'payment_methods');
+  return paymentsSettingsSchema.parse(row?.value ?? {});
 }
 
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);

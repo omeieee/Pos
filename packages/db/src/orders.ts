@@ -5,6 +5,8 @@
  * packages/shared.
  */
 import {
+  ANONYMIZED_BUILDING,
+  ANONYMIZED_RECIPIENT_NAME,
   type CatalogGroup,
   type CatalogItem,
   type CatalogOption,
@@ -16,7 +18,7 @@ import {
   type PricedModifier,
   satang,
 } from '@sds/shared';
-import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNotNull, isNull, ne, sql } from 'drizzle-orm';
 import type { Db } from './client.ts';
 import {
   customers,
@@ -297,4 +299,89 @@ export async function loadCatalog(
     });
   }
   return catalog;
+}
+
+// ---------- A customer's own orders (the customer app and the LINE chat) ----------
+
+/** The customer's latest orders, newest first. Only their own: the filter is the ownership check. */
+export async function listOrdersForCustomer(
+  db: Db,
+  customerId: string,
+  limit: number,
+): Promise<OrderRow[]> {
+  return db
+    .select()
+    .from(orders)
+    .where(eq(orders.customerId, customerId))
+    .orderBy(desc(orders.placedAt), desc(orders.id))
+    .limit(limit);
+}
+
+/** One order, only when it belongs to this customer. */
+export async function findOrderForCustomer(
+  db: Db,
+  customerId: string,
+  orderId: string,
+): Promise<OrderRow | undefined> {
+  const [row] = await db
+    .select()
+    .from(orders)
+    .where(and(eq(orders.id, orderId), eq(orders.customerId, customerId)))
+    .limit(1);
+  return row;
+}
+
+/**
+ * The customer's most recent order with this display number. Numbers repeat from day to day, so
+ * the newest one of THEIR orders is the one they mean.
+ */
+export async function findOrderForCustomerByNo(
+  db: Db,
+  customerId: string,
+  orderNo: string,
+): Promise<OrderRow | undefined> {
+  const [row] = await db
+    .select()
+    .from(orders)
+    .where(and(eq(orders.customerId, customerId), eq(orders.orderNo, orderNo)))
+    .orderBy(desc(orders.placedAt))
+    .limit(1);
+  return row;
+}
+
+/**
+ * Who the customer's last entrance delivery was for, for reference on the next order. It is read
+ * from the order itself, so it follows the retention rules with no copy of its own: once an order
+ * is anonymised (30 days after completion, or an erasure request) its stand-in text is skipped
+ * and nothing is offered.
+ */
+export async function latestRecipientForCustomer(
+  db: Db,
+  customerId: string,
+): Promise<{ building: string; recipientName: string; deliveryNote: string | null } | undefined> {
+  const [row] = await db
+    .select({
+      building: orders.deliveryBuilding,
+      recipientName: orders.recipientName,
+      deliveryNote: orders.deliveryNote,
+    })
+    .from(orders)
+    .where(
+      and(
+        eq(orders.customerId, customerId),
+        eq(orders.fulfillment, 'entrance_delivery'),
+        isNotNull(orders.deliveryBuilding),
+        isNotNull(orders.recipientName),
+        ne(orders.recipientName, ANONYMIZED_RECIPIENT_NAME),
+        ne(orders.deliveryBuilding, ANONYMIZED_BUILDING),
+      ),
+    )
+    .orderBy(desc(orders.placedAt), desc(orders.id))
+    .limit(1);
+  if (!row?.building || !row.recipientName) return undefined;
+  return {
+    building: row.building,
+    recipientName: row.recipientName,
+    deliveryNote: row.deliveryNote,
+  };
 }

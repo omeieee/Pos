@@ -6,6 +6,7 @@ import { createGuard, enforceGuardedRoutes, type GuardFactory } from './auth/gua
 import { type AuthPolicy, DEFAULT_AUTH_POLICY } from './auth/policy.ts';
 import { registerAuthRoutes } from './auth/routes.ts';
 import type { AuthContext } from './auth/service.ts';
+import { registerCustomerAppRoutes } from './customer-app/routes.ts';
 import { registerCustomerRoutes } from './customers/routes.ts';
 import type { EventBus } from './events.ts';
 import { registerLineRoutes } from './line/routes.ts';
@@ -33,13 +34,17 @@ export interface V1Deps {
 
 /**
  * The only /v1 routes that may run without `guard()`: the sign-ins (/auth/staff and /auth/pin
- * authenticate with the registered device's token; /auth/owner is the password + TOTP login) and
- * the public menu.
+ * authenticate with the registered device's token; /auth/owner is the password + TOTP login), the
+ * customer app's token exchange, and the public menu. The other `/v1/app` routes are not here:
+ * they run the customer guard (`markCustomerGuard`), which the start-up check accepts as its own
+ * kind of guard.
  */
 export const OPEN_ROUTES: ReadonlySet<string> = new Set([
   'GET /v1/auth/staff',
   'POST /v1/auth/pin',
   'POST /v1/auth/owner',
+  // The customer app trades a LIFF token that LINE confirms for a customer session. Rate limited.
+  'POST /v1/app/session',
   // The menu a customer or a till reads before signing in: prices of what is on sale, no costs.
   'GET /v1/menu',
 ]);
@@ -125,6 +130,10 @@ export async function registerV1(app: FastifyInstance, deps: V1Deps): Promise<vo
         (scope) => registerLineRoutes(scope, context.auth, context.guard, lineRuntime),
         { prefix: '/line' },
       );
+      // The customer app (LIFF): its own session and guard, never the staff ones.
+      await v1.register((scope) => registerCustomerAppRoutes(scope, context.auth, lineRuntime), {
+        prefix: '/app',
+      });
       // Payments: /v1/orders/:id/payments and /v1/payments/... (no prefix of its own).
       await v1.register((scope) => registerPaymentRoutes(scope, context.auth, context.guard));
       // Device and staff management: /v1/devices and /v1/staff (no prefix of its own).

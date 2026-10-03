@@ -6,6 +6,7 @@
  * Pure: no I/O. Nothing here holds a PromptPay ID or a scheme figure; the owner enters them.
  */
 import { z } from 'zod';
+import { businessDate, SHOP_TIME_ZONE } from './business-date.ts';
 import { buildingNameSchema } from './delivery.ts';
 import {
   businessDaySettingsSchema,
@@ -177,6 +178,35 @@ export function openingWindow(
   const weekly = weekday ? hours.weekly[weekday]?.[service] : undefined;
   if (weekly !== undefined) return weekly;
   return hours[service];
+}
+
+/** Minutes since local midnight of an instant in a time zone (Asia/Bangkok by default). */
+export function localMinuteOfDay(instant: Date, timeZone: string = SHOP_TIME_ZONE): number {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone,
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(instant);
+  const part = (type: string) => Number(parts.find((p) => p.type === type)?.value ?? 0);
+  return part('hour') * 60 + part('minute');
+}
+
+/**
+ * Whether a service is open at this instant. The calendar date is the plain local date (cutoff 0),
+ * because opening hours belong to the day on the wall clock, not to the business day. Opening
+ * included, closing excluded. `window` is today's window (null when closed all day).
+ */
+export function serviceOpenAt(
+  hours: OpeningHours,
+  instant: Date,
+  service: OpeningService,
+  timeZone: string = SHOP_TIME_ZONE,
+): { open: boolean; window: DayWindow | null } {
+  const window = openingWindow(hours, businessDate(instant, 0, timeZone), service);
+  if (!window) return { open: false, window: null };
+  const minute = localMinuteOfDay(instant, timeZone);
+  return { open: minute >= window.openMinute && minute < window.closeMinute, window };
 }
 
 // ---------- Numbering and business day ----------
