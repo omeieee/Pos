@@ -62,6 +62,10 @@ export async function devBackend(): Promise<
         soldOut: server.soldOut,
         // The owner changes the PromptPay ID on the server: __sdsMock.setPromptpayId('0899990000').
         setPromptpayId: server.setPromptpayId,
+        // What the owner reported about other people's outbox entries, and who each order and cash
+        // payment was made by and named for (the take-over, see mock-original-staff.ts).
+        recoveries: () => server.recoveries(),
+        attributions: () => server.attributions(),
         // What the last menu photo upload carried: its type, size and any camera metadata found.
         lastPhoto: () => {
           const photo = server.lastPhoto();

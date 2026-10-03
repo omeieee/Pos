@@ -394,6 +394,8 @@ export function createMockServer(options: MockServerOptions = {}) {
       {
         role: session.staff.role,
         stepUpFresh: (stepUps.get(session.token) ?? 0) > now(),
+        staffId: session.staff.id,
+        staffKnown: (id) => people.some((p) => p.id === id),
       },
       raw,
     );
@@ -456,6 +458,10 @@ export function createMockServer(options: MockServerOptions = {}) {
     /** Dev: the owner changes the PromptPay ID, as if done while a counter was offline. */
     setPromptpayId: shop.setPromptpayId,
     calls,
+    /** Dev and tests: what the owner reported about other people's outbox entries. */
+    recoveries: () => admin.recoveries(),
+    /** Dev and tests: who made each order and cash payment, and who it was named for. */
+    attributions: shop.attributions,
     /** A device token the server accepts, as if the owner had registered it earlier. */
     issueDeviceToken(name = 'iPad ตัวอย่าง', kind: 'ipad' | 'iphone' | 'laptop' = 'ipad') {
       counter += 1;

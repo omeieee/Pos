@@ -12,6 +12,8 @@ import {
   type DeviceDto,
   type DeviceKind,
   idParamSchema,
+  type OutboxRecoveryInput,
+  outboxRecoveryInputSchema,
   patchStaffInputSchema,
   pinSchemaFor,
   ROLE_PERMISSIONS,
@@ -64,6 +66,8 @@ const conflict = (version: number) => error(409, 'VERSION_CONFLICT', { currentVe
 
 export function createMockAdmin(deps: Deps) {
   const iso = (ms: number) => new Date(ms).toISOString();
+  /** What the owner reported, by request id: a retry answers 200 and writes nothing more. */
+  const recoveries = new Map<string, OutboxRecoveryInput & { deviceId: string }>();
 
   const deviceDto = (device: MockDevice): DeviceDto => ({ ...device });
   const staffDto = (person: MockPerson): StaffDto => {
@@ -89,12 +93,48 @@ export function createMockAdmin(deps: Deps) {
     return null;
   }
 
+  /**
+   * The owner took over or cleared what other people left in a device's offline outbox: owner only,
+   * a fresh step-up, counts only. 201 the first time (the real route writes an audit row and a
+   * warn alert), 200 for a retry of the same request id, 409 IDEMPOTENCY_KEY_REUSED when that id
+   * comes back with other counts or another action.
+   */
+  function recordRecovery(rawId: string, body: unknown, caller: MockCaller): MockAnswer {
+    const refused = gate(caller, 'device.manage');
+    if (refused) return refused;
+    const input = outboxRecoveryInputSchema.safeParse(body);
+    if (!input.success) return error(400, 'VALIDATION_ERROR');
+    const id = idParamSchema.safeParse({ id: rawId });
+    if (!id.success || !deps.devices.some((d) => d.id === id.data.id))
+      return error(404, 'NOT_FOUND');
+    const answer = {
+      deviceId: id.data.id,
+      action: input.data.action,
+      orders: input.data.orders,
+      payments: input.data.payments,
+    };
+    const seen = recoveries.get(input.data.clientRequestId);
+    if (seen) {
+      const same =
+        seen.deviceId === answer.deviceId &&
+        seen.action === answer.action &&
+        seen.orders === answer.orders &&
+        seen.payments === answer.payments;
+      return same ? { status: 200, body: answer } : error(409, 'IDEMPOTENCY_KEY_REUSED');
+    }
+    recoveries.set(input.data.clientRequestId, { ...input.data, deviceId: id.data.id });
+    return { status: 201, body: answer };
+  }
+
   function handle(
     method: string,
     path: string,
     body: unknown,
     caller: MockCaller,
   ): MockAnswer | null {
+    const recovery = /^\/v1\/devices\/([^/]+)\/outbox-recovery$/.exec(path);
+    if (method === 'POST' && recovery) return recordRecovery(recovery[1] ?? '', body, caller);
+
     if (path === '/v1/devices' || /^\/v1\/devices\/[^/]+\/revoke$/.test(path)) {
       const refused = gate(caller, 'device.manage');
       if (refused) return refused;
@@ -179,5 +219,9 @@ export function createMockAdmin(deps: Deps) {
     return null;
   }
 
-  return { handle };
+  return {
+    handle,
+    /** Dev and tests: what the owner reported so far (each request id once). */
+    recoveries: () => [...recoveries.values()],
+  };
 }

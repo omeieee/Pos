@@ -33,6 +33,7 @@ import {
 } from '@sds/shared';
 import type { SocketFactory, SocketHandlers } from '../platform/socket.ts';
 import { createMockMenuAdmin, type RawBody } from './mock-menu-admin.ts';
+import { createAttribution, originalStaffGate, originalStaffKnown } from './mock-original-staff.ts';
 import { createMockPayments, type MockCaller } from './mock-payments.ts';
 import { createMockSettings } from './mock-settings.ts';
 
@@ -207,6 +208,7 @@ export function createMockShop(options: MockShopOptions = {}) {
   let rev = 0;
   const latest = new Map<string, SyncChange>();
   const orders = new Map<string, OrderDto>();
+  const attribution = createAttribution();
   const byRequest = new Map<string, OrderDto>();
   /** What each request id carried, so a reused id with another body is refused like the server does. */
   const requestBodies = new Map<string, string>();
@@ -288,6 +290,7 @@ export function createMockShop(options: MockShopOptions = {}) {
     nextRev: () => ++rev,
     newUuid,
     publish: (frame) => publish(frame as SyncChange),
+    attribution,
   });
   for (const frame of payments.settingsFrames()) publish(frame as SyncChange);
 
@@ -425,18 +428,33 @@ export function createMockShop(options: MockShopOptions = {}) {
     return { status: 200, body: { recipients: rows } };
   }
 
-  function createOrder(body: unknown): MockAnswer {
+  function createOrder(
+    body: unknown,
+    caller: MockCaller = { role: 'owner', stepUpFresh: true },
+  ): MockAnswer {
     const input = createOrderInputSchema.safeParse(body);
     if (!input.success) return { status: 400, body: errorBody('VALIDATION_ERROR') };
-    const { clientRequestId, ...content } = input.data;
+    // The name of the person an owner took the order over from is not part of the order itself.
+    const { clientRequestId, originalStaffId, ...content } = input.data;
+    // Owner only and a fresh step-up, before the request id is looked at (see mock-original-staff).
+    const gate = originalStaffGate(caller, originalStaffId);
+    if (gate) return gate;
     const fingerprint = JSON.stringify(content);
     const existing = byRequest.get(clientRequestId);
     if (existing) {
       // The same id with another body is a client bug, not a retry (the real server hashes it).
-      return requestBodies.get(clientRequestId) === fingerprint
-        ? { status: 200, body: existing }
-        : { status: 409, body: errorBody('IDEMPOTENCY_KEY_REUSED') };
+      if (requestBodies.get(clientRequestId) !== fingerprint) {
+        return { status: 409, body: errorBody('IDEMPOTENCY_KEY_REUSED') };
+      }
+      return (
+        attribution.replayRefusal(clientRequestId, originalStaffId) ?? {
+          status: 200,
+          body: existing,
+        }
+      );
     }
+    const unknownStaff = originalStaffKnown(caller, originalStaffId);
+    if (unknownStaff) return unknownStaff;
 
     // Like the server: only entrance deliveries (and platform orders for their channels), and
     // only to a building on the list.
@@ -522,6 +540,7 @@ export function createMockShop(options: MockShopOptions = {}) {
     orders.set(order.id, order);
     byRequest.set(clientRequestId, order);
     requestBodies.set(clientRequestId, fingerprint);
+    attribution.remember(clientRequestId, originalStaffId, caller.staffId);
     publish({ type: 'order.upserted', id: order.id, rev: r, data: order });
     const alert: RealtimeFrame = {
       type: 'alert.new_order',
@@ -664,7 +683,7 @@ export function createMockShop(options: MockShopOptions = {}) {
     if (method === 'GET' && path === '/v1/recipients') return listRecipients(query);
     const settled = settings.handle(method, path, body, caller);
     if (settled) return settled;
-    if (method === 'POST' && path === '/v1/orders') return createOrder(body);
+    if (method === 'POST' && path === '/v1/orders') return createOrder(body, caller);
     const one = /^\/v1\/orders\/([^/]+)$/.exec(path);
     if (method === 'GET' && one) {
       const params = orderIdParamSchema.safeParse({ id: one[1] });
@@ -731,6 +750,8 @@ export function createMockShop(options: MockShopOptions = {}) {
     simulateIncomingOrder,
     setOffline,
     isOffline: () => offline,
+    /** Dev and tests: who made each order and cash payment, and who it was named for. */
+    attributions: attribution.list,
     /** Dev: the last menu photo the app uploaded (what a server would have stored). */
     lastPhoto: menuAdmin.lastPhoto,
     /** Dev: the owner changes the PromptPay ID (the feed gets a masked notice with a newer rev). */

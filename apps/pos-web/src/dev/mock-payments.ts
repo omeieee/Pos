@@ -42,10 +42,21 @@ import {
   transitionOrderInputSchema,
 } from '@sds/shared';
 
+import {
+  type Attribution,
+  createAttribution,
+  originalStaffGate,
+  originalStaffKnown,
+} from './mock-original-staff.ts';
+
 export interface MockCaller {
   role: StaffRole;
   /** Has this session passed a step-up in the last five minutes? */
   stepUpFresh: boolean;
+  /** Who is calling, for the trail of an order or cash they made. */
+  staffId?: string;
+  /** Is this a staff member the server knows (the owner naming someone, see mock-original-staff)? */
+  staffKnown?: (id: string) => boolean;
 }
 
 export interface MockAnswer {
@@ -59,6 +70,8 @@ interface Deps {
   nextRev: () => number;
   newUuid: () => string;
   publish: (frame: RealtimeFrame & { rev: number }) => void;
+  /** Who made a row and who it was named for; shared with the orders (default: its own). */
+  attribution?: Attribution;
 }
 
 const errorBody = (code: string, details: Record<string, unknown> = {}) => ({
@@ -77,6 +90,7 @@ export const MOCK_PROMPTPAY_ID = '0800001234';
 export const MOCK_PROMPTPAY_MASKED = maskPromptpayId(MOCK_PROMPTPAY_ID);
 
 export function createMockPayments(deps: Deps) {
+  const attribution = deps.attribution ?? createAttribution();
   const payments = new Map<string, PaymentDto>();
   // The ID the dev shop pays to now, and the rev/version of its setting row (see `setPromptpayId`).
   let promptpayId = MOCK_PROMPTPAY_ID;
@@ -298,20 +312,33 @@ export function createMockPayments(deps: Deps) {
     if (!input.success) return fail(400, 'VALIDATION_ERROR');
     const order = deps.orders.get(orderId);
     if (!order) return fail(404, 'NOT_FOUND');
-    const requestKey = JSON.stringify([orderId, { ...input.data, clientRequestId: undefined }]);
+    // Cash may name the person who took it (the owner, with a fresh step-up): checked before the
+    // request id is looked at, like the server.
+    const named = input.data.method === 'cash' ? input.data.originalStaffId : undefined;
+    const gate = originalStaffGate(caller, named);
+    if (gate) return gate;
+    const requestKey = JSON.stringify([
+      orderId,
+      { ...input.data, clientRequestId: undefined, originalStaffId: undefined },
+    ]);
     const known = byRequest.get(input.data.clientRequestId);
     if (known) {
       if (known.requestKey !== requestKey) return fail(409, 'IDEMPOTENCY_KEY_REUSED');
+      const refused = attribution.replayRefusal(input.data.clientRequestId, named);
+      if (refused) return refused;
       const payment = payments.get(known.paymentId);
       const current = deps.orders.get(orderId);
       return payment && current
         ? { status: 200, body: { payment, order: current } }
         : fail(404, 'NOT_FOUND');
     }
+    const unknown = originalStaffKnown(caller, named);
+    if (unknown) return unknown;
     const made = insertPayment(order, input.data, caller);
     if ('status' in made && 'body' in made) return made as MockAnswer;
     const payment = publishPayment(made as PaymentDto);
     byRequest.set(input.data.clientRequestId, { paymentId: payment.id, requestKey });
+    attribution.remember(input.data.clientRequestId, named, caller.staffId);
     return { status: 201, body: { payment, order: settleOrder(order) } };
   }
 
