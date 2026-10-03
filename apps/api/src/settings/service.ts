@@ -332,6 +332,16 @@ export async function patchGovCopay(
     }
     const base = row ? fieldsOf(row) : {};
     const scheme = parse(enablingSchemeSchema, { ...base, ...given });
+    // Rule 4: face to face only. A scheme may be ON only with channels exactly ['storefront'];
+    // switching OFF, or saving other fields while it stays off, is always allowed.
+    if (scheme.enabled && !(scheme.channels.length === 1 && scheme.channels[0] === 'storefront')) {
+      throw new ApiError(
+        422,
+        'COPAY_CHANNELS_NOT_STOREFRONT',
+        'The scheme can be enabled only for storefront orders',
+        { issues: [{ path: 'channels', code: 'custom' }] },
+      );
+    }
     if (!row && nameTh === undefined) {
       throw new ApiError(400, 'VALIDATION_ERROR', 'The request is not valid', {
         issues: [{ path: 'nameTh', code: 'invalid_type' }],

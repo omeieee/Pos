@@ -910,6 +910,64 @@ describe('government co-pay scheme', () => {
     expect(now).toMatchObject({ version, enabled: false, activeFrom: '2026-10-01' });
   });
 
+  test('rule 4: it cannot be enabled unless channels is exactly storefront (422 COPAY_CHANNELS_NOT_STOREFRONT)', async () => {
+    await reset();
+    const created = await call('PATCH', '/v1/settings/gov-copay', await ownerStepped(), full);
+    const version = created.json().scheme.version;
+    for (const channels of [['line'], ['storefront', 'line'], ['storefront', 'storefront']]) {
+      const res = await call('PATCH', '/v1/settings/gov-copay', await ownerStepped(), {
+        expectedVersion: version,
+        enabled: true,
+        channels,
+      });
+      expect(res.statusCode, JSON.stringify(channels)).toBe(422);
+      expect(res.json()).toMatchObject({ code: 'COPAY_CHANNELS_NOT_STOREFRONT' });
+    }
+    // Creating a scheme already enabled with a wrong channel list is refused the same way.
+    await reset();
+    const born = await call('PATCH', '/v1/settings/gov-copay', await ownerStepped(), {
+      ...full,
+      enabled: true,
+      channels: ['storefront', 'line'],
+    });
+    expect(born.statusCode).toBe(422);
+    const rows = await h.client.query('select count(*)::int as n from gov_copay_schemes');
+    expect((rows.rows[0] as { n: number }).n).toBe(0);
+  });
+
+  test('rule 4: a stored scheme with other channels can be switched off, edited while off, and fixed while turning on', async () => {
+    await reset();
+    await h.client.query(`insert into gov_copay_schemes
+      (code, name_th, gov_share_bp, gov_daily_cap_satang, gov_total_cap_satang, active_from, active_to,
+       active_from_minute, active_to_minute, channels, enabled)
+      values ('bad', 'ทดสอบ', 6000, 20000, 100000, '2026-10-01', '2026-11-30', 360, 1380, '{storefront,line}', true)`);
+    const read = (await call('GET', '/v1/settings/gov-copay', await ownerStepped())).json().scheme;
+    const off = await call('PATCH', '/v1/settings/gov-copay', await ownerStepped(), {
+      expectedVersion: read.version,
+      enabled: false,
+    });
+    expect(off.statusCode).toBe(200);
+    expect(off.json().scheme).toMatchObject({ enabled: false, channels: ['storefront', 'line'] });
+    const v = off.json().scheme.version;
+    const edited = await call('PATCH', '/v1/settings/gov-copay', await ownerStepped(), {
+      expectedVersion: v,
+      govShareBp: 5000,
+    });
+    expect(edited.statusCode).toBe(200);
+    const tryOn = await call('PATCH', '/v1/settings/gov-copay', await ownerStepped(), {
+      expectedVersion: v + 1,
+      enabled: true,
+    });
+    expect(tryOn.statusCode).toBe(422);
+    const fixed = await call('PATCH', '/v1/settings/gov-copay', await ownerStepped(), {
+      expectedVersion: v + 1,
+      enabled: true,
+      channels: ['storefront'],
+    });
+    expect(fixed.statusCode).toBe(200);
+    expect(fixed.json().scheme).toMatchObject({ enabled: true, channels: ['storefront'] });
+  });
+
   test('inconsistent dates are refused even while it stays disabled', async () => {
     await reset();
     const res = await call('PATCH', '/v1/settings/gov-copay', await ownerStepped(), {
