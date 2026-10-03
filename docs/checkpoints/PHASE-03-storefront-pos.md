@@ -28,7 +28,7 @@ Staff can run the counter on the iPad and iPhone: menu, orders, kitchen view and
 - [ ] Method change and void leave a complete audit trail
 - [ ] Internet unplugged → cash and PromptPay orders still work → they sync without duplicates when reconnected
 - [ ] Changing the PromptPay ID requires step-up and alerts the owner
-- [ ] E2E tests (Playwright, iPad and iPhone viewports) cover the main flows
+- [x] E2E tests (Playwright, iPad and iPhone viewports) cover the main flows — 36 tests on each of ipad-chromium, iphone-chromium, ipad-webkit, iphone-webkit, ipad-firefox against the dev mock (2026-10-03, [PROGRESS](../PROGRESS.md)); gaps: Grab/LINE MAN, void/refund, a real network drop, real devices
 
 ## Draft task order (proposal of 2026-10-01 for the owner to review; nothing started)
 Starting point (read from the repo): `packages/shared` already has the order/payment state machines, money, permissions and Zod schemas; `packages/db` has schema v1 with sync triggers; `packages/promptpay` has the QR payload; `apps/api` serves health endpoints only; `apps/pos-web` is a shell with the platform seam. So P3 is mostly API modules, realtime and the staff UI.
@@ -81,3 +81,4 @@ Tasks 1 (except the TOTP app choice) and 4 need no owner answers. Tasks 1–6 ar
 - 2026-10-03 · Menu editor screen `#/settings/menu` QA-reviewed and pushed as de3c68a; Gmail alert check done ([PROGRESS](../PROGRESS.md))
 - 2026-10-03 · Settings screens (hub, shop, hours, PromptPay ID, co-pay scheme, devices, staff) QA-reviewed and pushed as cb9e6ad ([PROGRESS](../PROGRESS.md))
 - 2026-10-03 · Settings review fixes (staff create, co-pay channels, devices) QA-reviewed and pushed as 8244323 ([PROGRESS](../PROGRESS.md))
+- 2026-10-03 · Playwright E2E (36 tests, five browser/viewport projects against the dev mock) QA-reviewed and pushed ([PROGRESS](../PROGRESS.md))

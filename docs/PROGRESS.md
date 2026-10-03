@@ -32,6 +32,15 @@ Newest entries first. Add entries with `/checkpoint`. Each entry covers what cha
 
 ---
 
+## 2026-10-03 · P3 · Playwright E2E pushed
+- **Summary:** pos-frontend-engineer built the E2E suite in a worktree (2 commits), merged fast-forward, QA-reviewed (OK, no Blocker or High) and pushed with two reviewer follow-ups applied (the 20 s timing is now recorded as an annotation instead of asserted; Playwright pinned to 1.63.0).
+- **Changed:** `apps/pos-web/playwright.config.ts` (projects ipad-chromium, iphone-chromium, ipad-webkit, iphone-webkit, ipad-firefox; Vite dev server with `VITE_MOCK_API=1` on 127.0.0.1:5199), `apps/pos-web/e2e/*.e2e.ts` (36 tests: sign-in, order entry with modifiers, cash change, PromptPay QR with masked target, claim then staff confirm, co-pay full total and estimate, board moves and cancel, kitchen, offline cash and PromptPay orders synced without duplicates, menu editor, settings permission gating, PromptPay ID change with step-up, 44 px tap targets, no horizontal scroll at 390 px), `tsconfig.e2e.json` (chained into `typecheck`), `.gitignore`. Run with `pnpm --filter @sds/pos-web e2e` (not part of `pnpm test`); no CI job yet.
+- **Verification:** agent: 36/36 on each of the five projects, one project at a time. Main session: `pnpm lint` (516 files), `pnpm build --force` (11/11), pos-web typecheck, and E2E 36/36 on ipad-chromium and 36/36 on iphone-webkit; after the follow-ups ipad-chromium order-entry 4/4. Reviewer: lint, 1470 unit tests, typecheck, build and a grep of `dist/` for the mock (none). No app bug found.
+- **Decisions:** none.
+- **Open issues:** offline in the tests uses the mock's own `__sdsMock.setOffline` (the mock answers inside the page, so the browser offline switch does not reach it): a real network drop is untested; Playwright WebKit on Windows has no Web Audio (the kitchen sound unlock ran on chromium and firefox only); no E2E yet for Grab/LINE MAN entry, co-pay refusal on platform orders, void/refund or the service worker; the QR is a dev sample, not a real EMVCo scan; WebKit is not iOS Safari.
+- **Next:** the owner's real-device pass (20-second order on the iPad, cash and PromptPay with a real bank-app scan, airplane-mode test, Home Screen audio unlock, iPhone one-handed), the phase-end qa-security-reviewer, then P3 exit.
+- **Commit:** see git log (E2E commits adce675, 2fbdf17)
+
 ## 2026-10-03 · P3 · Settings review fixes pushed (8244323)
 - **Summary:** the two Mediums and one Low from the Settings review were fixed by pos-frontend-engineer (3 commits), QA-reviewed (OK, no Blocker, High or Medium) and pushed.
 - **Changed:** staff create: on a lost answer the dialog closes, the typed name and PIN are cleared and the list is re-read with the 'check the list' message (set-PIN and revoke are harmless to repeat, left alone); co-pay: the switch is refused unless `channels` is exactly storefront (an already-on bad scheme can still be saved or switched off; channels never sent); devices: with the current device id unknown, no Remove and a note.
