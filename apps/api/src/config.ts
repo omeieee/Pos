@@ -32,6 +32,16 @@ function disablesTls(databaseUrl: string): boolean {
   }
 }
 
+/**
+ * The data controller and the contact for data requests named in the Thai privacy notice (owner,
+ * 2026-10-03: an individual, "omeie"). Draft for owner review: design/privacy-notice-th.md. These
+ * are the defaults; `PRIVACY_CONTROLLER_NAME` and `PRIVACY_CONTACT_EMAIL` override them.
+ */
+export const DEFAULT_PRIVACY = {
+  controller: 'omeie',
+  contactEmail: 'omeza25482548@gmail.com',
+} as const;
+
 const envSchema = z
   .object({
     NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -57,6 +67,14 @@ const envSchema = z
     LINE_CHANNEL_SECRET: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
     LINE_CHANNEL_ACCESS_TOKEN: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
     LINE_LIFF_ID: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
+    PRIVACY_CONTROLLER_NAME: z.preprocess(
+      emptyToUndefined,
+      z.string().min(1).max(100).default(DEFAULT_PRIVACY.controller),
+    ),
+    PRIVACY_CONTACT_EMAIL: z.preprocess(
+      emptyToUndefined,
+      z.email().default(DEFAULT_PRIVACY.contactEmail),
+    ),
     GIT_SHA: z.preprocess(emptyToUndefined, z.string().default('dev')),
   })
   .refine((e) => e.NODE_ENV !== 'production' || !disablesTls(e.DATABASE_URL), {
@@ -82,6 +100,8 @@ export type Config = {
     channelAccessToken: string | undefined;
     liffId: string | undefined;
   };
+  /** Named in the privacy notice the LINE bot sends. */
+  privacy: { controller: string; contactEmail: string };
 };
 
 export class ConfigError extends Error {}
@@ -111,5 +131,6 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
       channelAccessToken: e.LINE_CHANNEL_ACCESS_TOKEN,
       liffId: e.LINE_LIFF_ID,
     },
+    privacy: { controller: e.PRIVACY_CONTROLLER_NAME, contactEmail: e.PRIVACY_CONTACT_EMAIL },
   };
 }

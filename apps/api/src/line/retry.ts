@@ -76,6 +76,7 @@ export async function retryLineEvents(
             sender,
             now: () => event.receivedAt,
             noticeUrl: deps.line.noticeUrl,
+            privacy: deps.line.privacy,
           },
           fromStoredRoute(route),
         );

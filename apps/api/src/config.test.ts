@@ -23,7 +23,24 @@ describe('loadConfig', () => {
         channelAccessToken: undefined,
         liffId: undefined,
       },
+      privacy: { controller: 'omeie', contactEmail: 'omeza25482548@gmail.com' },
     });
+  });
+
+  test('the privacy notice controller and contact come from the environment, empty means the default', () => {
+    expect(
+      loadConfig({
+        ...base,
+        PRIVACY_CONTROLLER_NAME: 'Test Controller',
+        PRIVACY_CONTACT_EMAIL: 'privacy@example.test',
+      }).privacy,
+    ).toEqual({ controller: 'Test Controller', contactEmail: 'privacy@example.test' });
+    expect(
+      loadConfig({ ...base, PRIVACY_CONTROLLER_NAME: '', PRIVACY_CONTACT_EMAIL: '' }).privacy,
+    ).toEqual({ controller: 'omeie', contactEmail: 'omeza25482548@gmail.com' });
+    expect(() => loadConfig({ ...base, PRIVACY_CONTACT_EMAIL: 'not-an-email' })).toThrow(
+      ConfigError,
+    );
   });
 
   test('reads the optional LINE variables, treats empty as unset and never echoes them', () => {

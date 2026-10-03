@@ -29,6 +29,8 @@ services:
       LINE_CHANNEL_SECRET: ${LINE_CHANNEL_SECRET:-}
       LINE_CHANNEL_ACCESS_TOKEN: ${LINE_CHANNEL_ACCESS_TOKEN:-}
       LINE_LIFF_ID: ${LINE_LIFF_ID:-}
+      PRIVACY_CONTROLLER_NAME: ${PRIVACY_CONTROLLER_NAME:-}
+      PRIVACY_CONTACT_EMAIL: ${PRIVACY_CONTACT_EMAIL:-}
       GIT_SHA: ${GIT_SHA:-unknown}
     # Reachable only by caddy on the internal network; nothing published.
     expose:

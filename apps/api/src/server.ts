@@ -65,7 +65,7 @@ events.subscribe((event) => {
   }
 });
 if (reportAlert) forwardAlerts(events, reportAlert);
-const line = createLineRuntime(config.line);
+const line = createLineRuntime(config.line, { privacy: config.privacy });
 await registerV1(app, { db, authSecretKey: config.authSecretKey, events, line });
 
 // Background jobs (D-16). A job queue that cannot start must not take the API down: log it and

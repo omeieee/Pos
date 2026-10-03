@@ -396,6 +396,42 @@ describe('stored events keep no raw payload or chat text', () => {
   });
 });
 
+describe('privacy notice contact', () => {
+  test('the greeting names the controller and contact from the runtime settings', async () => {
+    const sentHere: LineMessage[][] = [];
+    const custom = createLineRuntime(
+      { channelSecret: SECRET, channelAccessToken: undefined },
+      {
+        client: {
+          reply: async (_t, messages) => {
+            sentHere.push(messages);
+            return { ok: true };
+          },
+          push: async () => ({ ok: true }),
+        },
+        privacy: { controller: 'Test Controller', contactEmail: 'privacy@example.test' },
+      },
+    );
+    const c = await createHarness({ line: custom });
+    try {
+      const b = body(follow('Utest-privacy-1'));
+      await c.app.inject({
+        method: 'POST',
+        url: '/v1/line/webhook',
+        headers: { 'content-type': 'application/json', 'x-line-signature': sign(b) },
+        payload: b,
+      });
+      await custom.idle();
+      const text = JSON.stringify(sentHere[0]);
+      expect(text).toContain('Test Controller');
+      expect(text).toContain('privacy@example.test');
+      expect(text).not.toContain('omeza25482548');
+    } finally {
+      await c.close();
+    }
+  });
+});
+
 describe('route inventory', () => {
   test('the webhook is the only unguarded LINE route and it is signature-checked', () => {
     const line = h.routes.filter((r) => r.url.startsWith('/v1/line') && r.method !== 'HEAD');

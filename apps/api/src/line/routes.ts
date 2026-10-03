@@ -154,7 +154,13 @@ async function processEvents(
     let failure: string | undefined;
     try {
       await handleEvent(
-        { db: ctx.db, sender, now: ctx.now, noticeUrl: runtime.noticeUrl },
+        {
+          db: ctx.db,
+          sender,
+          now: ctx.now,
+          noticeUrl: runtime.noticeUrl,
+          privacy: runtime.privacy,
+        },
         event.routed,
       );
     } catch (error) {

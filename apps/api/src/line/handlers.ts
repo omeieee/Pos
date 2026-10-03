@@ -1,13 +1,14 @@
 import { type Db, lineRepo } from '@sds/db';
 import { followGreeting, type LineSender, privacyAcknowledged, type RoutedEvent } from '@sds/line';
 import { PRIVACY_NOTICE_VERSION } from '@sds/shared';
-import { PRIVACY_CONTACT_EMAIL, PRIVACY_CONTROLLER } from './runtime.ts';
+import type { LineRuntime } from './runtime.ts';
 
 export interface HandlerContext {
   db: Db;
   sender: LineSender;
   now: () => Date;
   noticeUrl: string | undefined;
+  privacy: LineRuntime['privacy'];
 }
 
 /**
@@ -25,8 +26,8 @@ export async function handleEvent(ctx: HandlerContext, event: RoutedEvent): Prom
       await ctx.sender.reply(
         event.replyToken,
         followGreeting({
-          controller: PRIVACY_CONTROLLER,
-          contactEmail: PRIVACY_CONTACT_EMAIL,
+          controller: ctx.privacy.controller,
+          contactEmail: ctx.privacy.contactEmail,
           ...(ctx.noticeUrl ? { noticeUrl: ctx.noticeUrl } : {}),
         }),
         { template: 'follow_greeting', customerId },
