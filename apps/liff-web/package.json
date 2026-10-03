@@ -12,6 +12,9 @@
   },
   "dependencies": {
     "@sds/i18n": "workspace:*",
+    "@sds/line": "workspace:*",
+    "@sds/shared": "workspace:*",
+    "@sds/ui": "workspace:*",
     "react": "^19.3.0",
     "react-dom": "^19.3.0"
   },

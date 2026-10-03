@@ -236,6 +236,15 @@ importers:
       '@sds/i18n':
         specifier: workspace:*
         version: link:../../packages/i18n
+      '@sds/line':
+        specifier: workspace:*
+        version: link:../../packages/line
+      '@sds/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
+      '@sds/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
       react:
         specifier: ^19.3.0
         version: 19.3.0
@@ -341,7 +350,7 @@ importers:
         version: link:../shared
       drizzle-orm:
         specifier: 0.45.3
-        version: 0.45.3(@electric-sql/pglite@0.4.6)(@opentelemetry/api@1.9.1)(postgres@3.4.9)
+        version: 0.45.3(@electric-sql/pglite@0.4.6)(@opentelemetry/api@1.9.1)(pg@8.23.1)(postgres@3.4.9)
       postgres:
         specifier: ^3.4.9
         version: 3.4.9
@@ -5722,10 +5731,11 @@ snapshots:
       esbuild: 0.25.12
       tsx: 4.23.15
 
-  drizzle-orm@0.45.3(@electric-sql/pglite@0.4.6)(@opentelemetry/api@1.9.1)(postgres@3.4.9):
+  drizzle-orm@0.45.3(@electric-sql/pglite@0.4.6)(@opentelemetry/api@1.9.1)(pg@8.23.1)(postgres@3.4.9):
     optionalDependencies:
       '@electric-sql/pglite': 0.4.6
       '@opentelemetry/api': 1.9.1
+      pg: 8.23.1
       postgres: 3.4.9
 
   dunder-proto@1.0.1:
