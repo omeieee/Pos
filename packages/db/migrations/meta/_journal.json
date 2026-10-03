@@ -134,6 +134,13 @@
       "when": 1791046090358,
       "tag": "0018_line_quota_months",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1791048832692,
+      "tag": "0019_line_events_minimal",
+      "breakpoints": true
     }
   ]
 }

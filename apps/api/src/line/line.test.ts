@@ -322,6 +322,74 @@ describe('follow, unfollow and privacy acknowledgement', () => {
   });
 });
 
+describe('stored events keep no raw payload or chat text', () => {
+  const TYPED = 'ขอเส้นเล็ก ห้อง 1203 โทร 0812345678';
+  const ORDER = '0194f1c2-7a3b-7c11-8d22-4e5f60718293';
+
+  test('a stored row holds the type, the user id and id fields only', async () => {
+    const text = eventId();
+    const image = eventId();
+    const key = eventId();
+    const paid = eventId();
+    const ack = eventId();
+    await webhook(
+      body(
+        {
+          type: 'message',
+          webhookEventId: text,
+          replyToken: 'rt-text',
+          source: { type: 'user', userId: U2 },
+          message: { type: 'text', id: 'm1', text: TYPED },
+        },
+        {
+          type: 'message',
+          webhookEventId: image,
+          replyToken: 'rt-image',
+          source: { type: 'user', userId: U2 },
+          message: { type: 'image', id: 'm2' },
+        },
+        {
+          type: 'message',
+          webhookEventId: key,
+          replyToken: 'rt-key',
+          source: { type: 'user', userId: U2 },
+          message: { type: 'text', id: 'm3', text: 'เมนู' },
+        },
+        postback(U2, `action=paid&order=${ORDER}&note=${encodeURIComponent(TYPED)}`, paid),
+        postback(U2, 'action=ack_privacy', ack),
+      ),
+    );
+    await runtime.idle();
+    const rows = await h.client.query<{
+      webhook_event_id: string;
+      type: string;
+      user_id: string | null;
+      payload: unknown;
+      route: Record<string, unknown> | null;
+    }>(
+      'select webhook_event_id, type, user_id, payload, route from line_events where webhook_event_id = any($1)',
+      [[text, image, key, paid, ack]],
+    );
+    const byId = new Map(rows.rows.map((r) => [r.webhook_event_id, r]));
+    for (const r of rows.rows) {
+      expect(r.payload).toBeNull();
+      expect(r.user_id).toBe(U2);
+      expect(JSON.stringify(r)).not.toContain('1203');
+      expect(JSON.stringify(r)).not.toContain('0812345678');
+      expect(JSON.stringify(r)).not.toContain('rt-'); // reply tokens are not kept either
+    }
+    expect(byId.get(text)?.route).toEqual({ kind: 'ignore' });
+    expect(byId.get(image)?.route).toEqual({ kind: 'slip_image', userId: U2, messageId: 'm2' });
+    expect(byId.get(key)?.route).toEqual({ kind: 'keyword', keyword: 'menu', userId: U2 });
+    expect(byId.get(paid)?.route).toEqual({
+      kind: 'payment_claimed',
+      userId: U2,
+      orderId: ORDER,
+    });
+    expect(byId.get(ack)?.route).toEqual({ kind: 'ack_privacy', userId: U2 });
+  });
+});
+
 describe('route inventory', () => {
   test('the webhook is the only unguarded LINE route and it is signature-checked', () => {
     const line = h.routes.filter((r) => r.url.startsWith('/v1/line') && r.method !== 'HEAD');

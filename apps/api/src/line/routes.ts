@@ -2,6 +2,7 @@ import { lineRepo } from '@sds/db';
 import {
   eventUserId,
   quotaMonth,
+  type RoutedEvent,
   routeEvent,
   verifySignature,
   webhookBodySchema,
@@ -14,6 +15,7 @@ import type { AuthContext } from '../auth/service.ts';
 import { ApiError } from '../errors.ts';
 import { handleEvent } from './handlers.ts';
 import { buildSender, type LineRuntime, readPolicy } from './runtime.ts';
+import { toStoredRoute } from './stored-route.ts';
 
 /** LINE's bodies are a few KB; anything bigger is not LINE. */
 const WEBHOOK_BODY_LIMIT = 256 * 1024;
@@ -90,17 +92,24 @@ export async function registerLineRoutes(
         // All or nothing: if one insert fails the request is a 500 and nothing stays stored, so
         // LINE's redelivery is not mistaken for a duplicate and skipped.
         const fresh = await ctx.db.transaction(async (tx) => {
-          const stored: ReturnType<typeof webhookEventSchema.parse>[] = [];
+          const stored: FreshEvent[] = [];
           for (const raw of envelope.data.events) {
             const event = webhookEventSchema.safeParse(raw);
             if (!event.success) continue; // not an event we can name or dedupe; LINE needs a 200
+            // The raw event (chat text, reply token) is not kept: only the router's result.
+            const routed = routeEvent(event.data);
             const isNew = await lineRepo.insertEventIfNew(tx, {
               webhookEventId: event.data.webhookEventId,
               type: event.data.type,
               ...(eventUserId(event.data) ? { userId: eventUserId(event.data) as string } : {}),
-              payload: raw,
+              route: toStoredRoute(routed),
             });
-            if (isNew) stored.push(event.data);
+            if (isNew)
+              stored.push({
+                webhookEventId: event.data.webhookEventId,
+                type: event.data.type,
+                routed,
+              });
           }
           return stored;
         });
@@ -127,11 +136,17 @@ export async function registerLineRoutes(
   });
 }
 
+interface FreshEvent {
+  webhookEventId: string;
+  type: string;
+  routed: RoutedEvent;
+}
+
 /** Runs after the 200. One failing event never stops the others; the row records only a class name. */
 async function processEvents(
   ctx: AuthContext,
   runtime: LineRuntime,
-  events: ReturnType<typeof webhookEventSchema.parse>[],
+  events: FreshEvent[],
   log: FastifyRequest['log'],
 ): Promise<void> {
   const sender = buildSender({ db: ctx.db, runtime, events: ctx.events, now: ctx.now });
@@ -140,7 +155,7 @@ async function processEvents(
     try {
       await handleEvent(
         { db: ctx.db, sender, now: ctx.now, noticeUrl: runtime.noticeUrl },
-        routeEvent(event),
+        event.routed,
       );
     } catch (error) {
       failure = error instanceof Error ? error.name : 'Error';

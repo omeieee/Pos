@@ -640,11 +640,19 @@ export const settings = pgTable(
   (t) => [index('settings_rev_idx').on(t.rev), index('settings_updated_by_idx').on(t.updatedBy)],
 );
 
+/**
+ * Webhook dedupe and the retry queue. Personal data (PDPA): a row holds NO raw event, so no chat
+ * text and no reply token. `route` is what the router made of the event, cut to ids and fixed
+ * words (kind, user id, order id, message id, keyword name), enough to run the handler again.
+ * Rows are deleted 30 days after `received_at` (retention job).
+ */
 export const lineEvents = pgTable('line_events', {
   webhookEventId: text('webhook_event_id').primaryKey(),
   type: text('type').notNull(),
   userId: text('user_id'),
-  payload: jsonb('payload').notNull(),
+  /** Always null now (the raw event is no longer stored). Dropped in a later contract migration. */
+  payload: jsonb('payload'),
+  route: jsonb('route'),
   receivedAt: ts('received_at').notNull().defaultNow(),
   processedAt: ts('processed_at'),
   error: text('error'),

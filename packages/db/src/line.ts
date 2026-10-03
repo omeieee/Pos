@@ -1,8 +1,8 @@
 /**
  * The LINE module's tables: webhook dedupe (`line_events`), the message log and the monthly push
  * counter, and the few customer writes a LINE event causes. Personal data note (PDPA): a
- * `line_events` row holds the event as LINE sent it (user id, message text), so it is meant to be
- * deleted after 30 days (docs/03). That retention job does not exist yet.
+ * `line_events` row holds the user id and a `route` of ids and fixed words, never chat text or a
+ * reply token, and is deleted 30 days after it arrived (`retention.ts`).
  */
 import { and, eq, sql } from 'drizzle-orm';
 import type { Db } from './client.ts';
@@ -14,7 +14,7 @@ import { customers, lineEvents, lineMessageLog, lineQuotaMonths } from './schema
  */
 export async function insertEventIfNew(
   db: Db,
-  event: { webhookEventId: string; type: string; userId?: string; payload: unknown },
+  event: { webhookEventId: string; type: string; userId?: string; route: unknown },
 ): Promise<boolean> {
   const rows = await db
     .insert(lineEvents)
@@ -22,7 +22,7 @@ export async function insertEventIfNew(
       webhookEventId: event.webhookEventId,
       type: event.type,
       userId: event.userId ?? null,
-      payload: event.payload,
+      route: event.route,
     })
     .onConflictDoNothing({ target: lineEvents.webhookEventId })
     .returning({ id: lineEvents.webhookEventId });
