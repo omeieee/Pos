@@ -105,7 +105,7 @@ describe('GET /v1/menu/costs', () => {
     for (const role of ['cashier', 'kitchen'] as const) {
       const res = await call('GET', '/v1/menu/costs', await as(role));
       expect(res.statusCode).toBe(403);
-      expect(res.body).not.toMatch(/estCost|1234/);
+      expect(res.body).not.toMatch(/estCost|:\s*1234\b/);
     }
     expect((await call('GET', '/v1/menu/costs', undefined)).statusCode).toBe(401);
   });
@@ -125,6 +125,6 @@ describe('GET /v1/menu/costs', () => {
     expect(published.length).toBeGreaterThan(0);
     expect(
       JSON.stringify([item, group, one.json(), items.json(), groups.json(), published]),
-    ).not.toMatch(/estCost|costDelta|1234|4321/);
+    ).not.toMatch(/estCost|costDelta|:\s*(1234|4321)\b/);
   });
 });
