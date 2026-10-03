@@ -35,6 +35,9 @@ export function entryErrorText(tr: Translate, error: string | null): string {
   if (error === ERROR_QR_TARGET) return tr('outbox.error.qrId');
   if (error === 'ORDER_ALREADY_PAID') return tr('outbox.error.alreadyPaid');
   if (error === 'PAYMENT_ALREADY_OPEN') return tr('outbox.error.alreadyOpen');
+  // From the outbox a reused id means the server already has this order or cash: ringing it again
+  // (what the generic message says) would be a duplicate.
+  if (error === 'IDEMPOTENCY_KEY_REUSED') return tr('outbox.error.alreadyThere');
   return tr('outbox.refused', { reason: codeText(tr, error ?? 'UNKNOWN') });
 }
 

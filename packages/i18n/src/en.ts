@@ -595,6 +595,8 @@ export const en = {
     'The shop changed the PromptPay ID after this QR was shown. The money may have gone to the old account. Check the bank app and deal with it by hand.',
   'outbox.error.alreadyPaid':
     'This order was already paid from another device. The customer may have paid twice: check, and refund if needed.',
+  'outbox.error.alreadyThere':
+    'The system already has this entry, possibly under another staff member’s name. Check the orders list before removing it, and do not enter it again.',
   'outbox.error.alreadyOpen':
     'This order already has a payment waiting in the system. Check on the order page whether the money was taken twice.',
   'payment.copay.reason.needsInternet': 'Needs the internet',
