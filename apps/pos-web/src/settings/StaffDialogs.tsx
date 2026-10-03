@@ -79,8 +79,15 @@ function Frame({
   );
 }
 
-/** Runs one store call for a dialog: the failure stays inside the dialog, a success closes it. */
-function useDialogRun(onDone: (outcome: AdminOutcome<StaffDto>) => void) {
+/**
+ * Runs one store call for a dialog: the failure stays inside the dialog, a success closes it. With
+ * `onUncertain`, a lost answer is handed to the caller instead (the dialog is closed there, so the
+ * typed values cannot be sent again).
+ */
+function useDialogRun(
+  onDone: (outcome: AdminOutcome<StaffDto>) => void,
+  onUncertain?: (text: string) => void,
+) {
   const tr = useT();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -90,13 +97,24 @@ function useDialogRun(onDone: (outcome: AdminOutcome<StaffDto>) => void) {
     const outcome = await call;
     setSaving(false);
     if (outcome.ok) onDone(outcome);
-    else setError(adminFailureText(tr, outcome));
+    else if (onUncertain && outcome.reason === 'error' && outcome.uncertain) {
+      onUncertain(adminFailureText(tr, outcome) ?? '');
+    } else setError(adminFailureText(tr, outcome));
   }
   return { saving, error, run };
 }
 
 /** A new person: a name, a role (never the owner) and a PIN typed twice. */
-export function AddStaffDialog({ onClose, onAdded }: { onClose: () => void; onAdded: () => void }) {
+export function AddStaffDialog({
+  onClose,
+  onAdded,
+  onUncertain,
+}: {
+  onClose: () => void;
+  onAdded: () => void;
+  /** The answer was lost: the caller closes this dialog and tells the person to look at the list. */
+  onUncertain: (text: string) => void;
+}) {
   const { adminEditor } = useServices();
   const tr = useT();
   const [form, setForm] = useState({
@@ -106,10 +124,18 @@ export function AddStaffDialog({ onClose, onAdded }: { onClose: () => void; onAd
     pin2: '',
   });
   const [tried, setTried] = useState(false);
-  const { saving, error, run } = useDialogRun(() => {
-    onAdded();
-    onClose();
-  });
+  const { saving, error, run } = useDialogRun(
+    () => {
+      onAdded();
+      onClose();
+    },
+    (text) => {
+      // Nothing typed here is kept: a second Save would add the person twice.
+      setForm({ displayName: '', role: 'cashier', pin: '', pin2: '' });
+      onUncertain(text);
+      onClose();
+    },
+  );
   const problems: NewStaffField[] = tried ? validateNewStaff(form) : [];
   const fieldError = (field: NewStaffField) =>
     problems.includes(field) ? tr(`settings.staff.error.${field}`) : undefined;

@@ -171,6 +171,7 @@ export function StaffScreen() {
         <AddStaffDialog
           onClose={() => setDialog(null)}
           onAdded={() => setMessage({ kind: 'ok', text: tr('settings.staff.added') })}
+          onUncertain={(text) => setMessage({ kind: 'error', text })}
         />
       ) : null}
       {dialog?.kind === 'rename' ? (

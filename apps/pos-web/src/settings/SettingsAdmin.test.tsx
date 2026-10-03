@@ -292,10 +292,18 @@ describe('staff', () => {
     fill(dialog, tr('settings.staff.pin'), '4321');
     fill(dialog, tr('settings.staff.pin2'), '4321');
     fireEvent.click(within(dialog).getByRole('button', { name: th['common.save'] }));
-    expect(await within(dialog).findByText(tr('settings.admin.uncertain'))).toBeTruthy();
+    // The dialog closes (the typed PIN goes with it) and the page says to look at the list first.
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(await screen.findByText(tr('settings.admin.uncertain'))).toBeTruthy();
     expect(creates).toBe(1);
+    expect(document.body.innerHTML).not.toContain('4321');
     // The list was read again so the person can see whether it happened.
     expect(env.adminApi.staff).toHaveBeenCalledTimes(2);
+    // Saving again is not possible with what was typed: the next dialog is empty and sends nothing.
+    fireEvent.click(screen.getByRole('button', { name: tr('settings.staff.add') }));
+    const again = screen.getByRole('dialog');
+    fireEvent.click(within(again).getByRole('button', { name: th['common.save'] }));
+    expect(creates).toBe(1);
   });
 
   test('deactivating asks first, then sends the version the row had', async () => {
