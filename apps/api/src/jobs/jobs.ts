@@ -1,5 +1,5 @@
-import type { LineJobDeps } from '../line/retry.ts';
-import { retryLineEvents } from '../line/retry.ts';
+import { type LineJobDeps, retryLineEvents } from '../line/retry.ts';
+import { anonymizeOrders, expireRecipients, purgeLineEvents } from './retention.ts';
 
 /** What every job gets. Jobs are plain functions of this, so tests call them directly. */
 export type JobDeps = LineJobDeps;
@@ -19,4 +19,8 @@ export const JOBS: readonly JobDefinition[] = [
     cron: '*/5 * * * *',
     run: async (deps) => ({ ...(await retryLineEvents(deps)) }),
   },
+  // Retention (owner decisions 2026-10-03), nightly, staggered. Each is idempotent and bounded.
+  { name: 'retention-line-events', cron: '30 3 * * *', run: purgeLineEvents },
+  { name: 'retention-orders', cron: '40 3 * * *', run: anonymizeOrders },
+  { name: 'retention-recipients', cron: '50 3 * * *', run: expireRecipients },
 ];

@@ -6,9 +6,9 @@
  * name key is `recipientKey()` from `@sds/shared`, computed by the caller.
  *
  * This is personal data (PDPA). `anonymizeCustomer` below erases it on request (owner-only route
- * `POST /v1/customers/{id}/anonymize`). Nothing erases it by itself: there is NO retention job yet
- * because the retention period needs an owner decision, so until then a recipient is kept until
- * someone anonymises it. `listRecipients` returns nothing but the five fields staff need.
+ * `POST /v1/customers/{id}/anonymize`). The retention job `expireRecipientsBatch` (retention.ts)
+ * erases a recipient 30 days after their last order (owner, 2026-10-03), or the owner does it on
+ * request. `listRecipients` returns nothing but the five fields staff need.
  */
 import { ANONYMIZED_RECIPIENT_NAME } from '@sds/shared';
 import { and, desc, eq, isNotNull, isNull, or, sql } from 'drizzle-orm';
@@ -172,7 +172,14 @@ export async function anonymizeCustomer(db: Db, id: string, at: Date): Promise<A
     .where(
       and(
         eq(orders.customerId, id),
-        or(isNotNull(orders.recipientName), isNotNull(orders.deliveryNote)),
+        // Skip orders that already hold the erased text (the retention job may have got there first).
+        or(
+          and(
+            isNotNull(orders.recipientName),
+            sql`${orders.recipientName} <> ${ANONYMIZED_RECIPIENT_NAME}`,
+          ),
+          isNotNull(orders.deliveryNote),
+        ),
       ),
     )
     .returning({ id: orders.id });

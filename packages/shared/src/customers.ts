@@ -13,6 +13,20 @@ import { z } from 'zod';
 export const ANONYMIZED_RECIPIENT_NAME = 'ลบข้อมูลแล้ว';
 
 /**
+ * The same for the building of an entrance-delivery order whose personal details were erased by
+ * the retention job (owner, 2026-10-03: name and building go 30 days after completion). The
+ * database check needs a non-empty building, so the text stands in for it.
+ */
+export const ANONYMIZED_BUILDING = 'ลบข้อมูลแล้ว';
+
+/**
+ * How long personal data is kept (owner decisions, 2026-10-03; design/privacy-notice-th.md §3).
+ * Days after: a LINE webhook event arrived; an order was completed (or cancelled); a remembered
+ * recipient last ordered. Slip images (90 days) are not here: nothing stores slip images yet.
+ */
+export const RETENTION_DAYS = { lineEvents: 30, orderPersonalData: 30, recipientBook: 30 } as const;
+
+/**
  * The version of the privacy notice a customer acknowledges (`customers.privacy_ack_version`):
  * the date of design/privacy-notice-th.md (and the bot's short summary in `lineBot.privacy.*`).
  * Change it whenever the notice changes in a way customers should see again; the next

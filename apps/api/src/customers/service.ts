@@ -3,8 +3,8 @@
  * Owner only with step-up (the route guard checks); audited and alerted. The audit row and the
  * alert carry ids, a count and a fixed reason word, never a name, a phone or a note.
  *
- * There is no retention job: nothing here runs by itself. How long a customer is kept needs an
- * owner decision first; until then the owner anonymises on request.
+ * This is the owner's request path. The nightly retention jobs (`jobs/retention.ts`) erase
+ * remembered recipients 30 days after their last order on their own.
  */
 import { customersRepo, insertAudit, ordersRepo } from '@sds/db';
 import type { AnonymizeCustomerInput, AnonymizeCustomerResponse } from '@sds/shared';

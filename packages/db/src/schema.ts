@@ -276,8 +276,8 @@ export const customers = pgTable(
     /**
      * The recipient the shop last delivered to for this customer (owner, 2026-10-02), remembered
      * automatically from orders so the next order can show it. Personal data (PDPA): cleared by
-     * `anonymizeCustomer` (owner-only `POST /v1/customers/{id}/anonymize`); nothing clears it
-     * automatically, because a retention period has not been decided. `recipientKey` is the name
+     * `anonymizeCustomer` (owner-only `POST /v1/customers/{id}/anonymize`) and, 30 days after the
+     * recipient's last order, by the retention job (`retention.ts`). `recipientKey` is the name
      * normalised by `recipientKey()` in `@sds/shared` (case, spacing, Unicode form). Only counter
      * and phone customers hold it: they are matched by (building, recipientKey). A LINE customer
      * is matched by `lineUserId` only and an order never writes these fields onto it.
@@ -413,7 +413,8 @@ export const orders = pgTable(
      * receives it, and optional free-text details. Personal data (PDPA): when the order's customer
      * is anonymised the details are cleared and `recipientName` becomes the text
      * `ANONYMIZED_RECIPIENT_NAME` (the check below needs a name), while the building stays because
-     * orders are tax records. The order's `note` stays the kitchen note. Null on platform and
+     * orders are tax records. The retention job replaces name and building 30 days after the order
+     * is completed or cancelled (`ANONYMIZED_BUILDING`). The order's `note` stays the kitchen note. Null on platform and
      * legacy orders.
      */
     deliveryBuilding: text('delivery_building'),
