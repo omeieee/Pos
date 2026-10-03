@@ -40,6 +40,12 @@ export interface OutboxEntry {
    * this mark may already be on the server (the answer can be lost), so its content is frozen.
    */
   sentAt?: number;
+  /**
+   * Set when the owner takes the entry over from another person: who rang it up. A replay under the
+   * owner's session names that person (`originalStaffId`) so the server keeps them in the record.
+   * Kept beside the body, never inside it: the saved body is exactly what the first attempt sent.
+   */
+  originalStaffId?: string;
 }
 
 export interface LocalStore {

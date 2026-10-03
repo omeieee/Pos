@@ -42,6 +42,15 @@ const refused = (code: string, status = 422) => new ApiClientError(code, { statu
 
 type CreateOrder = OutboxDeps['api']['orders']['create'];
 type CreatePayment = OutboxDeps['api']['payments']['create'];
+type Recover = OutboxDeps['api']['devices']['outboxRecovery'];
+
+const okRecovery: Recover = async (deviceId, input, options) => ({
+  result: { deviceId, ...input },
+  replay: false,
+  clientRequestId: options?.clientRequestId ?? '',
+});
+/** A request that never answers: the entry stays in flight and nothing behind it moves. */
+const hangs = () => new Promise<never>(() => undefined);
 
 const placed = (id: string, rev = 10, over: Partial<OrderDto> = {}) =>
   orderDto(id, rev, { orderNo: 'S-001', totalSatang: 2500 as never, ...over });
@@ -78,6 +87,9 @@ function setup(
     staff?: string | null;
     role?: string;
     online?: boolean;
+    recover?: Recover;
+    /** What the step-up dialog answers (omitted: the app has no way to ask). */
+    requestStepUp?: () => Promise<boolean>;
   } = {},
 ) {
   const store = options.store ?? persistentStore();
@@ -102,6 +114,8 @@ function setup(
   });
   const create = vi.fn<CreateOrder>(options.create ?? okOrder());
   const pay = vi.fn<CreatePayment>(options.pay ?? okPayment);
+  const recover = vi.fn<Recover>(options.recover ?? okRecovery);
+  const requestStepUp = options.requestStepUp ? vi.fn(options.requestStepUp) : undefined;
   const outbox = createOutboxStore({
     api: {
       orders: { create },
@@ -111,9 +125,10 @@ function setup(
           throw new Error('confirm was not expected');
         },
       },
+      devices: { outboxRecovery: recover },
     },
     entities,
-    auth,
+    auth: requestStepUp ? Object.assign(auth, { requestStepUp }) : auth,
     lifecycle: life.lifecycle,
     connection,
     localStore: async () => store,
@@ -127,7 +142,20 @@ function setup(
         ? { phase: 'locked', session: null }
         : { phase: 'signedIn', session: { staff: { id: staff } } },
     );
-  return { outbox, store, entities, life, auth, connection, create, pay, unbind, signInAs };
+  return {
+    outbox,
+    store,
+    entities,
+    life,
+    auth,
+    connection,
+    create,
+    pay,
+    recover,
+    requestStepUp,
+    unbind,
+    signInAs,
+  };
 }
 
 const settle = async () => {
@@ -791,7 +819,9 @@ describe('the owner recovers entries left by other people', () => {
     ...over,
   });
 
-  async function withStranded(options: { role?: string; create?: CreateOrder } = {}) {
+  async function withStranded(
+    options: { role?: string; create?: CreateOrder; online?: boolean; recover?: Recover } = {},
+  ) {
     const store = persistentStore();
     await store.outbox.put(stranded(uuid(10), { createdAt: Date.now() - 2000 }));
     await store.outbox.put(
@@ -806,35 +836,63 @@ describe('the owner recovers entries left by other people', () => {
         },
       }),
     );
-    const made = setup({ store, online: false, ...options });
+    const made = setup({ store, ...options, online: options.online ?? true });
     await settle();
     return made;
   }
 
-  test('take over: the entries become the owner’s, are shown, and replay under the owner’s session', async () => {
-    const { outbox, store, create, pay, life } = await withStranded({
+  test('take over: the server is told first (counts only), then the entries become the owner’s and replay naming the person who rang them up', async () => {
+    const { outbox, store, create, pay, recover } = await withStranded({
       role: 'owner',
       create: okOrder(uuid(100)),
     });
     expect(outbox.getState()).toMatchObject({ othersCount: 2, items: [] });
     expect(await outbox.takeOverOthers()).toEqual({ ok: true, count: 2, failed: 0 });
+    expect(recover).toHaveBeenCalledTimes(1);
+    expect(recover.mock.calls[0]?.[0]).toBe(DEVICE);
+    expect(recover.mock.calls[0]?.[1]).toEqual({ action: 'take_over', orders: 1, payments: 1 });
+    expect(recover.mock.calls[0]?.[2]?.clientRequestId).toMatch(/^[0-9a-f-]{36}$/);
     expect(outbox.getState().othersCount).toBe(0);
     expect(outbox.getState().recovered).toEqual({ action: 'takeOver', count: 2, failed: 0 });
-    expect(outbox.getState().items.map((i) => i.kind)).toEqual(['order', 'payment']);
-    expect((await store.outbox.list()).map((r) => [r.staffId, r.deviceId])).toEqual([
-      [ME, DEVICE],
-      [ME, DEVICE],
-    ]);
-    life.goOnline();
     await settle();
     expect(create).toHaveBeenCalledTimes(1);
+    expect(create.mock.calls[0]?.[0]).toEqual({ ...body, originalStaffId: OTHER });
     expect(create.mock.calls[0]?.[1]).toEqual({ clientRequestId: uuid(10) });
     expect(pay).toHaveBeenCalledTimes(1);
+    expect(pay.mock.calls[0]?.[1]).toEqual({
+      method: 'cash',
+      tendered: 10000,
+      originalStaffId: OTHER,
+    });
     expect(await store.outbox.count()).toBe(0);
   });
 
+  test('take over keeps who rang the entry up on the row, as its own field and never inside the saved body', async () => {
+    const { outbox, store } = await withStranded({ role: 'owner', create: hangs });
+    await outbox.takeOverOthers();
+    const rows = await store.outbox.list();
+    expect(rows.map((r) => [r.staffId, r.deviceId, r.originalStaffId])).toEqual([
+      [ME, DEVICE, OTHER],
+      [ME, DEVICE, OTHER],
+    ]);
+    expect(JSON.stringify(rows[0]?.payload)).not.toContain(OTHER);
+    expect(outbox.getState().items.map((i) => i.kind)).toEqual(['order', 'payment']);
+  });
+
+  test('a row of the owner on another device id has nobody else to name, and one already named keeps its name', async () => {
+    const store = persistentStore();
+    await store.outbox.put(stranded(uuid(10), { staffId: ME, deviceId: uuid(99) }));
+    await store.outbox.put(stranded(uuid(11), { originalStaffId: uuid(77) }));
+    const { outbox } = setup({ store, role: 'owner', create: hangs });
+    await settle();
+    await outbox.takeOverOthers();
+    const rows = await store.outbox.list();
+    expect(rows.find((r) => r.id === uuid(10))?.originalStaffId).toBeUndefined();
+    expect(rows.find((r) => r.id === uuid(11))?.originalStaffId).toBe(uuid(77));
+  });
+
   test('take over leaves the owner’s own entries alone', async () => {
-    const { outbox, store } = await withStranded({ role: 'owner' });
+    const { outbox, store, recover } = await withStranded({ role: 'owner', create: hangs });
     await outbox.enqueueOrder({
       clientRequestId: uuid(12),
       body,
@@ -842,12 +900,19 @@ describe('the owner recovers entries left by other people', () => {
       estimateSatang: 2500,
     });
     await outbox.takeOverOthers();
+    expect(recover.mock.calls[0]?.[1]).toMatchObject({ orders: 1, payments: 1 });
     expect(outbox.getState().items).toHaveLength(3);
     expect(await store.outbox.count()).toBe(3);
+    expect((await store.outbox.list()).find((r) => r.id === uuid(12))?.originalStaffId).toBe(
+      undefined,
+    );
   });
 
-  test('clear: the entries of other people are deleted, nothing of the owner’s', async () => {
-    const { outbox, store, create, life } = await withStranded({ role: 'owner' });
+  test('clear: the server is told first, the entries of other people are deleted, nothing of the owner’s', async () => {
+    const { outbox, store, create, recover } = await withStranded({
+      role: 'owner',
+      create: hangs,
+    });
     await outbox.enqueueOrder({
       clientRequestId: uuid(12),
       body,
@@ -855,11 +920,117 @@ describe('the owner recovers entries left by other people', () => {
       estimateSatang: 2500,
     });
     expect(await outbox.clearOthers()).toEqual({ ok: true, count: 2, failed: 0 });
+    expect(recover.mock.calls[0]?.[1]).toEqual({ action: 'clear', orders: 1, payments: 1 });
     expect(outbox.getState().othersCount).toBe(0);
     expect((await store.outbox.list()).map((r) => r.id)).toEqual([uuid(12)]);
-    life.goOnline();
     await settle();
     expect(create.mock.calls.map((c) => c[1]?.clientRequestId)).toEqual([uuid(12)]);
+  });
+
+  test('offline: it refuses (the audit has to be written), touches nothing and never calls the server', async () => {
+    const { outbox, store, recover } = await withStranded({ role: 'owner', online: false });
+    expect(await outbox.takeOverOthers()).toEqual({ ok: false, reason: 'offline' });
+    expect(await outbox.clearOthers()).toEqual({ ok: false, reason: 'offline' });
+    expect(recover).not.toHaveBeenCalled();
+    expect(await store.outbox.count()).toBe(2);
+    expect((await store.outbox.list()).every((r) => r.staffId === OTHER)).toBe(true);
+    expect(outbox.getState()).toMatchObject({ othersCount: 2, recovered: null });
+  });
+
+  test('a connection that is down counts as offline too', async () => {
+    const { outbox, connection, recover } = await withStranded({ role: 'owner' });
+    connection.setState({ status: 'reconnecting' });
+    expect(await outbox.clearOthers()).toEqual({ ok: false, reason: 'offline' });
+    expect(recover).not.toHaveBeenCalled();
+  });
+
+  test('when the server call fails the rows stay exactly as they were and the error is returned', async () => {
+    for (const code of ['NETWORK', 'INTERNAL', 'FORBIDDEN', 'IDEMPOTENCY_KEY_REUSED']) {
+      const failure = new ApiClientError(code, { status: code === 'NETWORK' ? null : 500 });
+      const { outbox, store, recover } = await withStranded({
+        role: 'owner',
+        recover: async () => {
+          throw failure;
+        },
+      });
+      expect(await outbox.takeOverOthers()).toEqual({ ok: false, reason: 'error', error: failure });
+      expect(await outbox.clearOthers()).toEqual({ ok: false, reason: 'error', error: failure });
+      expect(recover).toHaveBeenCalledTimes(2);
+      expect((await store.outbox.list()).map((r) => [r.id, r.staffId])).toEqual([
+        [uuid(10), OTHER],
+        [uuid(11), OTHER],
+      ]);
+      expect(outbox.getState()).toMatchObject({ othersCount: 2, items: [], recovered: null });
+    }
+  });
+
+  test('a stale step-up is thrown, so the caller asks again, and nothing was written; the second try is the one that counts', async () => {
+    let first = true;
+    const { outbox, store, recover } = await withStranded({
+      role: 'owner',
+      create: hangs,
+      recover: async (deviceId, input, options) => {
+        if (first) {
+          first = false;
+          throw new ApiClientError('STEP_UP_REQUIRED', { status: 403 });
+        }
+        return okRecovery(deviceId, input, options);
+      },
+    });
+    await expect(outbox.takeOverOthers()).rejects.toMatchObject({ code: 'STEP_UP_REQUIRED' });
+    expect((await store.outbox.list()).every((r) => r.staffId === OTHER)).toBe(true);
+    expect(outbox.getState().recovered).toBeNull();
+    expect(await outbox.takeOverOthers()).toEqual({ ok: true, count: 2, failed: 0 });
+    expect(recover).toHaveBeenCalledTimes(2);
+  });
+
+  test('what is counted: a PromptPay create with its confirm is one payment, an unreadable row counts so the total is never empty', async () => {
+    const store = persistentStore();
+    await store.outbox.put(stranded(uuid(10), { createdAt: Date.now() - 3000 }));
+    await store.outbox.put(
+      stranded(uuid(11), {
+        kind: 'payment.promptpay.create',
+        createdAt: Date.now() - 2000,
+        payload: {
+          target: { entryId: uuid(10) },
+          qrAmountSatang: 2500,
+          amountKind: 'estimate',
+          qrTargetMasked: '******1234',
+          label: 'XK-01',
+        },
+      }),
+    );
+    await store.outbox.put(
+      stranded(uuid(12), {
+        kind: 'payment.promptpay.confirm',
+        createdAt: Date.now() - 1000,
+        payload: {
+          target: { createEntryId: uuid(11) },
+          qrAmountSatang: 2500,
+          amountKind: 'estimate',
+          label: 'XK-01',
+        },
+      }),
+    );
+    const { outbox, recover } = setup({ store, role: 'owner', create: hangs });
+    await settle();
+    await outbox.clearOthers();
+    expect(recover.mock.calls[0]?.[1]).toEqual({ action: 'clear', orders: 1, payments: 1 });
+
+    const odd = persistentStore();
+    await odd.outbox.put(stranded(uuid(20), { kind: 'something.else', payload: 7 }));
+    const second = setup({ store: odd, role: 'owner' });
+    await settle();
+    await second.outbox.clearOthers();
+    expect(second.recover.mock.calls[0]?.[1]).toEqual({ action: 'clear', orders: 0, payments: 1 });
+  });
+
+  test('with nothing of other people’s on the device the server is not called', async () => {
+    const { outbox, recover } = setup({ role: 'owner' });
+    await settle();
+    expect(await outbox.takeOverOthers()).toEqual({ ok: true, count: 0, failed: 0 });
+    expect(recover).not.toHaveBeenCalled();
+    expect(outbox.getState().recovered).toBeNull();
   });
 
   test('only the owner role may do either, whoever asks', async () => {
@@ -882,7 +1053,7 @@ describe('the owner recovers entries left by other people', () => {
   });
 
   test('a row that cannot be written stays with its owner and is counted as failed', async () => {
-    const { outbox, store } = await withStranded({ role: 'owner' });
+    const { outbox, store } = await withStranded({ role: 'owner', create: hangs });
     const realPut = store.outbox.put.bind(store.outbox);
     store.outbox.put = async (entry) => {
       if (entry.kind === 'payment.cash') throw new DOMException('full', 'QuotaExceededError');
@@ -1002,6 +1173,246 @@ describe('entries that never sync', () => {
     expect(await store.outbox.count()).toBe(1);
     expect(outbox.getState().purgedCount).toBe(0);
     expect(outbox.getState().othersCount).toBe(1);
+  });
+});
+
+describe('replaying entries the owner took over (originalStaffId)', () => {
+  /** An entry the owner took over: theirs now, naming the person who rang it up. */
+  const taken = (id: string, over: Partial<OutboxEntry> = {}): OutboxEntry => ({
+    id,
+    kind: 'order.create',
+    payload: { body, label: 'XK-01', lines, estimateSatang: 2500 },
+    createdAt: Date.now(),
+    attempts: 0,
+    state: 'queued',
+    staffId: ME,
+    deviceId: DEVICE,
+    originalStaffId: OTHER,
+    ...over,
+  });
+  /** The same entry as the owner’s own: nobody to name. */
+  const plain = (id: string, over: Partial<OutboxEntry> = {}): OutboxEntry => {
+    const { originalStaffId: _name, ...rest } = taken(id, over);
+    return rest;
+  };
+  const stepUpNeeded = () => new ApiClientError('STEP_UP_REQUIRED', { status: 403 });
+
+  async function owner(
+    rows: OutboxEntry[],
+    options: Omit<Parameters<typeof setup>[0], 'store' | 'role'> = {},
+  ) {
+    const store = persistentStore();
+    for (const row of rows) await store.outbox.put(row);
+    const made = setup({ store, role: 'owner', ...options });
+    await settle();
+    return { ...made, store };
+  }
+
+  test('a taken-over entry survives a reload with its name, and the same id and body go again', async () => {
+    const { create, store } = await owner([taken(uuid(10))]);
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(create.mock.calls[0]).toEqual([
+      { ...body, originalStaffId: OTHER },
+      { clientRequestId: uuid(10) },
+    ]);
+    expect(await store.outbox.count()).toBe(0);
+  });
+
+  test('only the owner’s session names someone: another role, or the person themselves, sends it plain', async () => {
+    const asManager = setup({
+      store: await (async () => {
+        const store = persistentStore();
+        await store.outbox.put(taken(uuid(10)));
+        return store;
+      })(),
+      role: 'manager',
+    });
+    await settle();
+    expect(asManager.create.mock.calls[0]?.[0]).toEqual(body);
+
+    const self = await owner([taken(uuid(11), { originalStaffId: ME })]);
+    expect(self.create.mock.calls[0]?.[0]).toEqual({ ...body, originalStaffId: ME });
+  });
+
+  test('cash names the person too; PromptPay never does (the API takes it on cash only)', async () => {
+    const pay = vi.fn<CreatePayment>(okPayment);
+    const { create } = await owner(
+      [
+        taken(uuid(10), { createdAt: 1 }),
+        taken(uuid(11), {
+          kind: 'payment.cash',
+          createdAt: 2,
+          payload: {
+            target: { entryId: uuid(10) },
+            tenderedSatang: 10000,
+            label: 'XK-01',
+            totalSatang: 2500,
+          },
+        }),
+        taken(uuid(12), {
+          kind: 'payment.promptpay.create',
+          createdAt: 3,
+          payload: {
+            target: { orderId: uuid(100) },
+            qrAmountSatang: 2500,
+            amountKind: 'server',
+            qrTargetMasked: '******1234',
+            label: 'S-001',
+          },
+        }),
+      ],
+      { create: okOrder(uuid(100)), pay },
+    );
+    expect(create).toHaveBeenCalledTimes(1);
+    const sent = pay.mock.calls.map((call) => call[1]);
+    expect(sent).toContainEqual({ method: 'cash', tendered: 10000, originalStaffId: OTHER });
+    expect(sent).toContainEqual({ method: 'promptpay' });
+  });
+
+  test('a 403 step-up on a named entry keeps it queued, asks for the step-up once, does not hold back the others and tells the screen', async () => {
+    let answer: (ok: boolean) => void = () => undefined;
+    const waiting = new Promise<boolean>((resolve) => {
+      answer = resolve;
+    });
+    const create = vi.fn<CreateOrder>(async (input, options) => {
+      if (input.originalStaffId !== undefined) throw stepUpNeeded();
+      return okOrder(uuid(101))(input, options);
+    });
+    const { outbox, store, requestStepUp } = await owner(
+      [taken(uuid(10), { createdAt: 1 }), plain(uuid(11), { createdAt: 2 })],
+      { create, requestStepUp: () => waiting },
+    );
+    // The plain entry behind it still went while the dialog is open.
+    expect(create.mock.calls.map((c) => c[1]?.clientRequestId)).toEqual([uuid(10), uuid(11)]);
+    expect(requestStepUp).toHaveBeenCalledTimes(1);
+    expect(outbox.getState().stepUpNeeded).toBe(true);
+    expect(outbox.getState().items).toMatchObject([{ id: uuid(10), state: 'queued' }]);
+    expect(await store.outbox.count()).toBe(1);
+
+    // Passed: the same body goes again under the same id and the entry is done.
+    create.mockImplementation(okOrder(uuid(100)));
+    answer(true);
+    await settle();
+    expect(create).toHaveBeenCalledTimes(3);
+    expect(create.mock.calls[2]).toEqual([
+      { ...body, originalStaffId: OTHER },
+      { clientRequestId: uuid(10) },
+    ]);
+    expect(outbox.getState().stepUpNeeded).toBe(false);
+    expect(await store.outbox.count()).toBe(0);
+  });
+
+  test('a cancelled step-up leaves the entry waiting with the notice up, never failed or dropped, and the button asks again', async () => {
+    const answers = [false, true];
+    const create = vi.fn<CreateOrder>(async (input, options) => {
+      if (answers.length === 0) return okOrder(uuid(100))(input, options);
+      throw stepUpNeeded();
+    });
+    const { outbox, store, requestStepUp } = await owner([taken(uuid(10))], {
+      create,
+      requestStepUp: async () => answers.shift() ?? false,
+    });
+    expect(requestStepUp).toHaveBeenCalledTimes(1);
+    expect(outbox.getState().stepUpNeeded).toBe(true);
+    expect(outbox.getState().items[0]).toMatchObject({ state: 'queued', error: null });
+    expect(await store.outbox.count()).toBe(1);
+    // Time passing and the network coming back do not open the dialog again by themselves.
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(requestStepUp).toHaveBeenCalledTimes(1);
+
+    answers.length = 0;
+    answers.push(true);
+    await outbox.confirmOwner();
+    await settle();
+    expect(requestStepUp).toHaveBeenCalledTimes(2);
+    expect(outbox.getState().stepUpNeeded).toBe(false);
+    expect(await store.outbox.count()).toBe(0);
+  });
+
+  test('a second 403 right after a passed step-up backs off instead of opening the dialog in a loop', async () => {
+    const create = vi.fn<CreateOrder>(async () => {
+      throw stepUpNeeded();
+    });
+    const { outbox, requestStepUp } = await owner([taken(uuid(10))], {
+      create,
+      requestStepUp: async () => true,
+    });
+    await settle();
+    expect(requestStepUp).toHaveBeenCalledTimes(1);
+    expect(create).toHaveBeenCalledTimes(2);
+    expect(outbox.getState().stepUpNeeded).toBe(true);
+    expect(outbox.getState().items[0]).toMatchObject({ state: 'queued' });
+  });
+
+  test('where nothing can ask for a step-up the entry still waits, visibly', async () => {
+    const create = vi.fn<CreateOrder>(async () => {
+      throw stepUpNeeded();
+    });
+    const { outbox, store } = await owner([taken(uuid(10))], { create });
+    expect(outbox.getState().stepUpNeeded).toBe(true);
+    expect(await store.outbox.count()).toBe(1);
+  });
+
+  test('the same 403 on an entry that names nobody is an ordinary refusal for a person', async () => {
+    const { outbox } = await owner([plain(uuid(10))], {
+      create: async () => {
+        throw stepUpNeeded();
+      },
+      requestStepUp: async () => true,
+    });
+    expect(outbox.getState().items[0]).toMatchObject({ state: 'attention' });
+    expect(outbox.getState().stepUpNeeded).toBe(false);
+  });
+
+  test('a reused request id and an unknown staff member need a person: kept, shown, never sent again by themselves', async () => {
+    for (const [code, status] of [
+      ['IDEMPOTENCY_KEY_REUSED', 409],
+      ['UNKNOWN_STAFF', 422],
+    ] as const) {
+      const create = vi.fn<CreateOrder>(async () => {
+        throw refused(code, status);
+      });
+      const { outbox, store } = await owner([taken(uuid(10))], { create });
+      expect(outbox.getState().items[0]).toMatchObject({
+        state: 'attention',
+        error: code,
+        canRetry: false,
+      });
+      expect(await store.outbox.count()).toBe(1);
+      await vi.advanceTimersByTimeAsync(120_000);
+      expect(create).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  test('the same two answers on cash are kept for a person too, with no retry', async () => {
+    for (const [code, status] of [
+      ['IDEMPOTENCY_KEY_REUSED', 409],
+      ['UNKNOWN_STAFF', 422],
+    ] as const) {
+      const { outbox } = await owner(
+        [
+          taken(uuid(11), {
+            kind: 'payment.cash',
+            payload: {
+              target: { orderId: uuid(100) },
+              tenderedSatang: 10000,
+              label: 'S-001',
+              totalSatang: 2500,
+            },
+          }),
+        ],
+        {
+          pay: async () => {
+            throw refused(code, status);
+          },
+        },
+      );
+      expect(outbox.getState().items[0]).toMatchObject({
+        state: 'attention',
+        error: code,
+        canRetry: false,
+      });
+    }
   });
 });
 

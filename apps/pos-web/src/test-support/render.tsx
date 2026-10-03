@@ -110,6 +110,7 @@ export function createFakeApi(
     payments?: Partial<Payments>;
     recipients?: Partial<ApiClient['recipients']>;
     settings?: Partial<ApiClient['settings']>;
+    devices?: Partial<ApiClient['devices']>;
   } = {},
 ) {
   const orders = {
@@ -159,7 +160,18 @@ export function createFakeApi(
         })),
     ),
   };
-  return { orders, payments, auth, recipients, settings };
+  // The owner's take-over reports here (default: the server accepts it).
+  const devices = {
+    outboxRecovery: vi.fn<ApiClient['devices']['outboxRecovery']>(
+      overrides.devices?.outboxRecovery ??
+        (async (deviceId, input, options) => ({
+          result: { deviceId, ...input },
+          replay: false,
+          clientRequestId: options?.clientRequestId ?? '',
+        })),
+    ),
+  };
+  return { orders, payments, auth, recipients, settings, devices };
 }
 
 export function createTestServices(
@@ -170,6 +182,8 @@ export function createTestServices(
     getOrder?: ApiClient['orders']['get'];
     orders?: Partial<Orders>;
     payments?: Partial<Payments>;
+    /** What the owner's take-over reports to (default: the server accepts it). */
+    devices?: Partial<ApiClient['devices']>;
     /** What the order screen's chips read (default: nobody remembered). */
     recipients?: Partial<ApiClient['recipients']>;
     /** Put the delivery buildings in the store as the feed would (default: the shared list). */
@@ -212,6 +226,7 @@ export function createTestServices(
       ...options.orders,
     },
     payments: options.payments ?? {},
+    ...(options.devices ? { devices: options.devices } : {}),
   });
   const create = api.orders.create;
   const getOrder = api.orders.get;

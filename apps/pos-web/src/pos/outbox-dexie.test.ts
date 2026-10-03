@@ -25,7 +25,12 @@ const settle = async () => {
   for (let i = 0; i < 20; i += 1) await vi.advanceTimersByTimeAsync(0);
 };
 
-function boot(name: string, create: OutboxDeps['api']['orders']['create'], online: boolean) {
+function boot(
+  name: string,
+  create: OutboxDeps['api']['orders']['create'],
+  online: boolean,
+  role?: string,
+) {
   const life = createFakeLifecycle({ online });
   const outbox = createOutboxStore({
     api: {
@@ -38,11 +43,16 @@ function boot(name: string, create: OutboxDeps['api']['orders']['create'], onlin
           throw new Error('not expected');
         },
       },
+      devices: {
+        outboxRecovery: async () => {
+          throw new Error('not expected');
+        },
+      },
     },
     entities: createEntityStore(),
     auth: createStore({
       phase: 'signedIn' as const,
-      session: { staff: { id: uuid(1) } },
+      session: { staff: { id: uuid(1), ...(role ? { role } : {}) } },
       device: { id: uuid(3) },
     }),
     lifecycle: life.lifecycle,
@@ -55,6 +65,32 @@ function boot(name: string, create: OutboxDeps['api']['orders']['create'], onlin
 }
 
 describe('the outbox over IndexedDB (Dexie)', () => {
+  test('the name of the person an owner took an entry over from survives a reload and is sent with it', async () => {
+    const stored = await createDexieLocalStore('outbox-test-c');
+    await stored.outbox.put({
+      id: uuid(30),
+      kind: 'order.create',
+      payload: { body, label: 'XK-01', lines: [], estimateSatang: 2500 },
+      createdAt: Date.now(),
+      attempts: 0,
+      state: 'queued',
+      staffId: uuid(1),
+      deviceId: uuid(3),
+      originalStaffId: uuid(2),
+    });
+    const create = vi.fn<OutboxDeps['api']['orders']['create']>(async (_input, options) => ({
+      order: orderDto(uuid(900), 500, { orderNo: 'S-032' }),
+      replay: false,
+      clientRequestId: options?.clientRequestId ?? '',
+    }));
+    boot('outbox-test-c', create, true, 'owner');
+    await settle();
+    expect(create).toHaveBeenCalledWith(
+      { ...body, originalStaffId: uuid(2) },
+      { clientRequestId: uuid(30) },
+    );
+  });
+
   test('an order saved offline survives a reload and is replayed once, under the same id and body', async () => {
     const first = boot(
       'outbox-test-a',

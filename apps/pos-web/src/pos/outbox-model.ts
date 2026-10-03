@@ -108,6 +108,8 @@ export type PromptpayConfirmPayload = z.infer<typeof promptpayConfirmPayloadSche
 export const ERROR_NOT_UNDERSTOOD = 'ENTRY_UNREADABLE';
 export const ERROR_PARENT_MISSING = 'ORDER_ENTRY_MISSING';
 const ERROR_REUSED = 'IDEMPOTENCY_KEY_REUSED';
+/** The person an owner named when taking an entry over is not in the system: a person decides. */
+export const ERROR_UNKNOWN_STAFF = 'UNKNOWN_STAFF';
 /** The payment the server made is for another amount than the QR showed: money was taken, reconcile. */
 export const ERROR_QR_AMOUNT = 'QR_AMOUNT_DIFFERS';
 /** The server's PromptPay account is not the one the QR paid: money may have gone to the old account. */
@@ -116,6 +118,7 @@ export const ERROR_QR_TARGET = 'QR_ID_CHANGED';
 const NO_RETRY_CODES: readonly string[] = [
   ERROR_QR_AMOUNT,
   ERROR_QR_TARGET,
+  ERROR_UNKNOWN_STAFF,
   'ORDER_ALREADY_PAID',
   'PAYMENT_ALREADY_OPEN',
 ];
@@ -253,7 +256,7 @@ export function toQueueItems(
         ...base,
         kind: 'order',
         state: attention ? 'attention' : 'queued',
-        canRetry: attention && base.error !== ERROR_REUSED,
+        canRetry: attention && base.error !== ERROR_REUSED && base.error !== ERROR_UNKNOWN_STAFF,
         channel: body.channel,
         recipient:
           body.deliveryBuilding !== undefined && body.recipientName !== undefined
@@ -301,6 +304,7 @@ export function toQueueItems(
           state === 'attention' &&
           error !== ERROR_PARENT_MISSING &&
           error !== ERROR_REUSED &&
+          error !== ERROR_UNKNOWN_STAFF &&
           error !== ERROR_TENDER_BELOW,
         orderId,
         dependsOn,
@@ -553,6 +557,24 @@ export function ownsEntry(
   who: { staffId: string; deviceId: string },
 ): boolean {
   return entry.staffId === who.staffId && entry.deviceId === who.deviceId;
+}
+
+// ---------- What the server is told about a take-over or a clear ----------
+
+/**
+ * The counts the owner reports to the server before touching other people's rows: how many orders
+ * and how many payments. A PromptPay create and its confirm are one payment; a row nobody can read
+ * counts as a payment so the total is never empty while there is something to recover.
+ */
+export function recoveryCountsOf(rows: readonly OutboxEntry[]): {
+  orders: number;
+  payments: number;
+} {
+  const orders = rows.filter((row) => row.kind === KIND_ORDER).length;
+  const joined = rows.filter(
+    (row) => row.kind === KIND_PROMPTPAY_CONFIRM && rows.some((r) => r.id === parentIdOf(row)),
+  ).length;
+  return { orders, payments: rows.length - orders - joined };
 }
 
 // ---------- Entries that never sync ----------

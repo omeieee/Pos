@@ -1,4 +1,5 @@
 import { useContext, useState } from 'react';
+import { errorText } from '../api/errors.ts';
 import type { AuthStore } from '../auth/auth-store.ts';
 import { AuthContext, useServices, useStoreState, useT } from '../ui/hooks.ts';
 import { Icon } from '../ui/Icon.tsx';
@@ -10,8 +11,9 @@ type Action = 'takeOver' | 'clear';
  * The entries other people left on this device: a count, never their contents (an order carries a
  * recipient's name). For everyone but the owner that is all there is. The owner can also take them
  * over (they then replay under the owner's session, and the server records the owner as the
- * creator) or clear them. Both ask for the step-up first and then for a confirmation that names
- * the count.
+ * creator and keeps the original staff member's name) or clear them. Both need the internet (the
+ * server writes the audit first), ask for the step-up and then for a confirmation that names the
+ * count. Whatever stops it is said on screen: a closed step-up, no connection, a refusal.
  */
 export function OtherEntries() {
   const tr = useT();
@@ -50,21 +52,46 @@ export function OtherEntries() {
 function OwnerRecovery({ auth, count }: { auth: AuthStore; count: number }) {
   const tr = useT();
   const { outbox } = useServices();
+  const offline = useStoreState(outbox).offline;
   const owner = useStoreState(auth).session?.staff.role === 'owner';
   const [asking, setAsking] = useState<Action | null>(null);
   const [busy, setBusy] = useState(false);
-  const [forbidden, setForbidden] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
+
+  /** Offline there is nobody to record it with: say so now, before a password is asked for. */
+  function ask(action: Action) {
+    if (offline) {
+      setProblem(tr('outbox.others.offline'));
+      return;
+    }
+    setProblem(null);
+    setAsking(action);
+  }
 
   async function run(action: Action) {
     setBusy(true);
-    setForbidden(false);
+    setProblem(null);
     // The step-up comes first, then the action: cancelling it changes nothing.
     const done = await auth.runSensitive(() =>
       action === 'takeOver' ? outbox.takeOverOthers() : outbox.clearOthers(),
     );
     setBusy(false);
     setAsking(null);
-    if (done.ok && !done.value.ok) setForbidden(true);
+    if (!done.ok) {
+      // No error: the owner closed the step-up. Anything else is the server's own answer.
+      if (done.duplicate) return;
+      setProblem(done.error === null ? tr('error.ownerSignInNeeded') : errorText(tr, done.error));
+      return;
+    }
+    const result = done.value;
+    if (result.ok) return;
+    setProblem(
+      result.reason === 'offline'
+        ? tr('outbox.others.offline')
+        : result.reason === 'error'
+          ? errorText(tr, result.error)
+          : tr('outbox.others.forbidden'),
+    );
   }
 
   if (!owner) return null;
@@ -72,17 +99,17 @@ function OwnerRecovery({ auth, count }: { auth: AuthStore; count: number }) {
     <>
       {count > 0 ? (
         <div className="qactions__row">
-          <button type="button" className="btn btn-primary" onClick={() => setAsking('takeOver')}>
+          <button type="button" className="btn btn-primary" onClick={() => ask('takeOver')}>
             {tr('outbox.others.takeOver')}
           </button>
-          <button type="button" className="btn btn-soft" onClick={() => setAsking('clear')}>
+          <button type="button" className="btn btn-soft" onClick={() => ask('clear')}>
             {tr('outbox.others.clear')}
           </button>
         </div>
       ) : null}
-      {forbidden ? (
+      {problem ? (
         <p className="error" role="alert">
-          {tr('outbox.others.forbidden')}
+          {problem}
         </p>
       ) : null}
       {asking ? (

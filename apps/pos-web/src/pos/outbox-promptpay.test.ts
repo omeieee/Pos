@@ -98,7 +98,15 @@ function setup(
   const createPayment = vi.fn<CreatePayment>(options.createPayment ?? okCreate());
   const confirm = vi.fn<Confirm>(options.confirm ?? okConfirm);
   const outbox = createOutboxStore({
-    api: { orders: { create: createOrder }, payments: { create: createPayment, confirm } },
+    api: {
+      orders: { create: createOrder },
+      payments: { create: createPayment, confirm },
+      devices: {
+        outboxRecovery: async () => {
+          throw new Error('outbox recovery was not expected');
+        },
+      },
+    },
     entities,
     auth,
     lifecycle: life.lifecycle,

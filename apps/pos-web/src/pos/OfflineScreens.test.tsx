@@ -381,11 +381,14 @@ describe('the owner and the entries other people left on the device', () => {
       deviceId: IDS.device,
     }));
 
-  async function counterWithStrangers(role: 'owner' | 'cashier') {
+  async function counterWithStrangers(
+    role: 'owner' | 'cashier',
+    options: Parameters<typeof createTestServices>[0] = {},
+  ) {
     const { auth } = await createTestAuth(role);
     const localStore = { ...createMemoryLocalStore(), persistent: true };
     for (const row of strangerRows()) await localStore.outbox.put(row);
-    const made = createTestServices({ queue: true, offline: true, auth, localStore });
+    const made = createTestServices({ queue: true, auth, localStore, ...options });
     renderScreen(<OrdersScreen />, made.services);
     await settle();
     return { made, auth, localStore };
@@ -434,6 +437,73 @@ describe('the owner and the entries other people left on the device', () => {
     );
     expect(made.outbox.getState().items).toHaveLength(2);
     expect(made.outbox.getState().othersCount).toBe(0);
+    // The server heard about it first, with counts only.
+    expect(made.api.devices.outboxRecovery).toHaveBeenCalledTimes(1);
+    expect(made.api.devices.outboxRecovery.mock.calls[0]?.[1]).toEqual({
+      action: 'take_over',
+      orders: 2,
+      payments: 0,
+    });
+  });
+
+  test('offline it says so before asking for a password, and changes nothing', async () => {
+    const { made, auth, localStore } = await counterWithStrangers('owner', { offline: true });
+    const stepUp = vi.spyOn(auth, 'runSensitive');
+    click(screen.getByRole('button', { name: th['outbox.others.takeOver'] }));
+    expect(screen.getByText(th['outbox.others.offline'])).toBeTruthy();
+    expect(screen.queryByRole('dialog')).toBeNull();
+    click(screen.getByRole('button', { name: th['outbox.others.clear'] }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(stepUp).not.toHaveBeenCalled();
+    expect(made.api.devices.outboxRecovery).not.toHaveBeenCalled();
+    expect(await localStore.outbox.count()).toBe(2);
+  });
+
+  test('when the server refuses the report the reason is shown and the entries stay with their owners', async () => {
+    const { made, auth, localStore } = await counterWithStrangers('owner', {
+      devices: {
+        outboxRecovery: async () => {
+          throw new ApiClientError('IDEMPOTENCY_KEY_REUSED', { status: 409 });
+        },
+      },
+    });
+    vi.spyOn(auth, 'runSensitive').mockImplementation(async (call) => {
+      try {
+        return { ok: true as const, value: await call() };
+      } catch (error) {
+        return { ok: false as const, error: error as ApiClientError };
+      }
+    });
+    click(screen.getByRole('button', { name: th['outbox.others.takeOver'] }));
+    click(
+      within(screen.getByRole('dialog')).getByRole('button', {
+        name: th['outbox.others.takeOver.confirm'],
+      }),
+    );
+    await waitFor(() => expect(screen.getByText(th['error.idempotencyKeyReused'])).toBeTruthy());
+    expect(made.outbox.getState().othersCount).toBe(2);
+    expect((await localStore.outbox.list()).every((row) => row.staffId === uuid(78))).toBe(true);
+  });
+
+  test('a server answer that is an error on the report itself is shown, not swallowed', async () => {
+    const { auth } = await counterWithStrangers('owner', {
+      devices: {
+        outboxRecovery: async () => {
+          throw new ApiClientError('NETWORK');
+        },
+      },
+    });
+    vi.spyOn(auth, 'runSensitive').mockImplementation(async (call) => ({
+      ok: true as const,
+      value: await call(),
+    }));
+    click(screen.getByRole('button', { name: th['outbox.others.clear'] }));
+    click(
+      within(screen.getByRole('dialog')).getByRole('button', {
+        name: th['outbox.others.clear.confirm'],
+      }),
+    );
+    await waitFor(() => expect(screen.getByText(th['error.network'])).toBeTruthy());
   });
 
   test('clear deletes them after the step-up; a cancelled step-up changes nothing', async () => {
@@ -447,6 +517,8 @@ describe('the owner and the entries other people left on the device', () => {
     click(within(dialog).getByRole('button', { name: th['outbox.others.clear.confirm'] }));
     await waitFor(() => expect(spy).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    // Not silent: it says the owner has to sign in, online.
+    expect(screen.getByText(th['error.ownerSignInNeeded'])).toBeTruthy();
     expect(await localStore.outbox.count()).toBe(2);
 
     spy.mockImplementation(async (call) => ({ ok: true as const, value: await call() }));
@@ -461,6 +533,59 @@ describe('the owner and the entries other people left on the device', () => {
     );
     expect(await localStore.outbox.count()).toBe(0);
     expect(made.outbox.getState().othersCount).toBe(0);
+  });
+});
+
+describe('an entry the owner took over, waiting for the owner’s step-up', () => {
+  const taken = (): OutboxEntry => ({
+    id: uuid(81),
+    kind: 'order.create',
+    payload: {
+      body: {
+        channel: 'storefront',
+        fulfillment: 'entrance_delivery',
+        deliveryBuilding: 'B1',
+        recipientName: 'Fah ตัวอย่าง',
+        items: [{ menuItemId: MENU.tea, qty: 1, modifierOptionIds: [] }],
+      },
+      label: 'XZ-01',
+      lines: [
+        { name: { th: 'ชาเย็น', en: null }, options: [], qty: 1, note: '', lineTotalSatang: 2500 },
+      ],
+      estimateSatang: 2500,
+    },
+    createdAt: Date.now() - 1000,
+    attempts: 0,
+    state: 'queued',
+    staffId: IDS.owner,
+    deviceId: IDS.device,
+    originalStaffId: uuid(78),
+  });
+
+  test('says so, keeps the entry, and the button asks for the step-up again', async () => {
+    const { auth } = await createTestAuth('owner');
+    const localStore = { ...createMemoryLocalStore(), persistent: true };
+    await localStore.outbox.put(taken());
+    const made = createTestServices({
+      queue: true,
+      auth,
+      localStore,
+      create: async () => {
+        throw new ApiClientError('STEP_UP_REQUIRED', { status: 403 });
+      },
+    });
+    renderScreen(<OrdersScreen />, made.services);
+    await settle();
+    // The step-up dialog came up by itself; the owner closes it.
+    await waitFor(() => expect(auth.getState().stepUpOpen).toBe(true));
+    act(() => auth.cancelStepUp());
+    await waitFor(() => expect(screen.getByText(th['outbox.stepUp.waiting'])).toBeTruthy());
+    expect(made.outbox.getState().items[0]).toMatchObject({ state: 'queued' });
+    expect(await localStore.outbox.count()).toBe(1);
+
+    click(screen.getByRole('button', { name: th['outbox.stepUp.ask'] }));
+    await waitFor(() => expect(auth.getState().stepUpOpen).toBe(true));
+    expect(await localStore.outbox.count()).toBe(1);
   });
 });
 

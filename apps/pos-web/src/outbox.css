@@ -151,3 +151,9 @@
 .oqr .qr--local {
   width: min(100%, 320px);
 }
+
+/* A notice with a button (the owner's step-up): the button drops below the words on a narrow screen. */
+.notice--ask {
+  flex-wrap: wrap;
+  align-items: center;
+}

@@ -85,6 +85,21 @@ function PaymentCard({ item }: { item: QueuedPayment }) {
   );
 }
 
+/** Entries the owner took over wait for the owner's step-up: said plainly, with a way to ask again. */
+function OwnerStepUpNotice() {
+  const tr = useT();
+  const { outbox } = useServices();
+  return (
+    <div className="notice notice--ask" role="status">
+      <Icon name="alert" />
+      <span>{tr('outbox.stepUp.waiting')}</span>
+      <button type="button" className="btn btn-soft" onClick={() => void outbox.confirmOwner()}>
+        {tr('outbox.stepUp.ask')}
+      </button>
+    </div>
+  );
+}
+
 /**
  * The orders, and the cash for orders, that are saved on this device and have not reached the
  * server: shown at once, with a "waiting to sync" badge and a temporary number. They are not in
@@ -117,6 +132,7 @@ export function QueuedOrders() {
             <span className="board__count">{state.items.length}</span>
           </h2>
           <p className="hint">{tr('outbox.section.hint')}</p>
+          {state.stepUpNeeded ? <OwnerStepUpNotice /> : null}
           <ul className="queued__list">
             {orders.map((order) => (
               <OrderEntryCard key={order.id} item={order} payment={own(order)} />

@@ -36,7 +36,7 @@
  */
 import type { OrderDto, PaymentResult, RealtimeFrame } from '@sds/shared';
 import type { ApiClient, NewOrderInput } from '../api/client.ts';
-import { isApiClientError } from '../api/errors.ts';
+import { ApiClientError, isApiClientError } from '../api/errors.ts';
 import type { AuthPhase } from '../auth/auth-store.ts';
 import { createStore, type ReadableStore } from '../lib/store.ts';
 import { newUuid } from '../platform/ids.ts';
@@ -72,6 +72,7 @@ import {
   provisionalLabel,
   purgeableIds,
   type QueueItem,
+  recoveryCountsOf,
   toQueueItems,
 } from './outbox-model.ts';
 import { framesOf } from './payment-store.ts';
@@ -96,6 +97,11 @@ export interface OutboxState {
   recovered: { action: 'takeOver' | 'clear'; count: number; failed: number } | null;
   /** Other people's entries that were older than 14 days and were removed at sign-in (a count only). */
   purgedCount: number;
+  /**
+   * An entry the owner took over is waiting for the owner's step-up (the server wants a fresh one
+   * to accept a name on a sale). Nothing was dropped: the entry stays and goes once it passes.
+   */
+  stepUpNeeded: boolean;
   /** Order entry id -> the server order id it became, for this run (so its page can follow). */
   synced: Readonly<Record<string, string>>;
 }
@@ -107,19 +113,26 @@ export type EnqueueResult =
 /** The result of the owner's recovery actions: how many entries were handled and how many were not. */
 export type RecoverResult =
   | { ok: true; count: number; failed: number }
-  | { ok: false; reason: 'forbidden' | 'noSession' };
+  | { ok: false; reason: 'forbidden' | 'noSession' | 'offline' }
+  /** The server did not accept the report, so nothing on the device was touched. */
+  | { ok: false; reason: 'error'; error: ApiClientError };
 
 export interface OutboxDeps {
   api: {
     orders: { create: ApiClient['orders']['create'] };
     payments: Pick<ApiClient['payments'], 'create' | 'confirm'>;
+    /** The owner's take-over or clear is reported here first, so it is audited. */
+    devices: Pick<ApiClient['devices'], 'outboxRecovery'>;
   };
   entities: Pick<EntityStore, 'apply' | 'applyMany'>;
   auth: ReadableStore<{
     phase: AuthPhase;
     session: { staff: { id: string; role?: string } } | null;
     device: { id: string } | null;
-  }>;
+  }> & {
+    /** Opens the step-up dialog; true once it passed. Without it an entry that needs one just waits. */
+    requestStepUp?: () => Promise<boolean>;
+  };
   lifecycle: Lifecycle;
   connection: ReadableStore<{ status: ConnectionStatus }>;
   localStore: () => Promise<LocalStore>;
@@ -176,6 +189,8 @@ export interface OutboxStore extends ReadableStore<OutboxState> {
   discard(id: string): Promise<void>;
   /** Try now (a person tapped "send now"). */
   kick(): void;
+  /** Asks the owner for the step-up an entry is waiting for, and sends it when it passes. */
+  confirmOwner(): Promise<void>;
   /**
    * Owner only (the caller asks for the step-up first): the entries other people left on this device
    * become the owner's and replay under the owner's session. The server records the owner as the
@@ -189,6 +204,8 @@ export interface OutboxStore extends ReadableStore<OutboxState> {
 const SEQ_KEY = 'outbox.seq';
 /** After a lost session the queue looks again at this interval, in case nothing signed us out. */
 const PAUSED_RETRY_MS = 30_000;
+/** A step-up that passed this recently and was still refused is not asked for again by itself. */
+const OWNER_LOOP_GUARD_MS = 10_000;
 
 export function createOutboxStore(deps: OutboxDeps): OutboxStore {
   const now = deps.now ?? Date.now;
@@ -202,6 +219,7 @@ export function createOutboxStore(deps: OutboxDeps): OutboxStore {
     items: [],
     othersCount: 0,
     purgedCount: 0,
+    stepUpNeeded: false,
     recovered: null,
     synced: {},
   });
@@ -217,6 +235,12 @@ export function createOutboxStore(deps: OutboxDeps): OutboxStore {
   const dueAt = new Map<string, number>();
   /** Entries whose request is on its way right now. */
   const inFlight = new Set<string>();
+  /** Entries that need the owner's step-up before the server takes them (see `stepUpNeeded`). */
+  const awaitingOwner = new Set<string>();
+  /** The step-up dialog is open for them right now. */
+  let askingOwner = false;
+  /** When a step-up last passed for them: a "still required" right after it must not loop the dialog. */
+  let ownerPassedAt = Number.NEGATIVE_INFINITY;
   /** After a 429: nothing is sent before this time, whatever else happens (a queue-wide wait). */
   let notBefore = 0;
   let running = false;
@@ -246,6 +270,7 @@ export function createOutboxStore(deps: OutboxDeps): OutboxStore {
     store.setState({
       items: toQueueItems(mine, attempts),
       offline: isOffline(),
+      stepUpNeeded: awaitingOwner.size > 0,
       ...extra,
     });
   }
@@ -304,6 +329,7 @@ export function createOutboxStore(deps: OutboxDeps): OutboxStore {
     if (at < notBefore) return undefined;
     return mine.find((entry) => {
       if (entry.state === 'attention') return false;
+      if (awaitingOwner.has(entry.id)) return false;
       if ((dueAt.get(entry.id) ?? 0) > at) return false;
       if (entry.kind === KIND_CASH) {
         // A payment goes only once its order is known to the server.
@@ -329,7 +355,7 @@ export function createOutboxStore(deps: OutboxDeps): OutboxStore {
     if (who === null || lifecycleOffline()) return;
     const at = now();
     const waiting = mine
-      .filter((e) => e.state !== 'attention')
+      .filter((e) => e.state !== 'attention' && !awaitingOwner.has(e.id))
       .map((e) => dueAt.get(e.id))
       .filter((due): due is number => due !== undefined)
       .map((due) => Math.max(due, notBefore));
@@ -540,7 +566,50 @@ export function createOutboxStore(deps: OutboxDeps): OutboxStore {
     }
   }
 
+  /**
+   * The person an owner took this entry over from, to be named on the request: only for an entry
+   * that carries a name and only while the owner is signed in (the server refuses anyone else).
+   */
+  function namedOn(entry: OutboxEntry): string | undefined {
+    if (entry.originalStaffId === undefined) return undefined;
+    return deps.auth.getState().session?.staff.role === 'owner' ? entry.originalStaffId : undefined;
+  }
+
+  /**
+   * The server wants a fresh owner step-up before it takes a named entry. The entry stays queued
+   * and is skipped until the step-up passes; the pass goes on with the others (the dialog must
+   * never hold up the queue). The dialog opens once, and not again right after a step-up that just
+   * passed (a clock that disagrees with the server would otherwise loop it).
+   */
+  function waitForOwner(entry: OutboxEntry, startedIn: number) {
+    awaitingOwner.add(entry.id);
+    publish();
+    if (now() - ownerPassedAt > OWNER_LOOP_GUARD_MS) void askOwner(startedIn);
+  }
+
+  async function askOwner(startedIn: number): Promise<void> {
+    const ask = deps.auth.requestStepUp;
+    if (!ask || askingOwner) return;
+    askingOwner = true;
+    let passed = false;
+    try {
+      passed = await ask();
+    } catch {
+      passed = false;
+    } finally {
+      askingOwner = false;
+    }
+    if (epoch !== startedIn) return;
+    if (passed) {
+      ownerPassedAt = now();
+      awaitingOwner.clear();
+      publish();
+      void pump();
+    }
+  }
+
   async function send(entry: OutboxEntry, startedIn: number): Promise<boolean> {
+    const named = namedOn(entry);
     try {
       if (entry.kind === KIND_ORDER) {
         const payload = orderPayloadOf(entry);
@@ -548,9 +617,10 @@ export function createOutboxStore(deps: OutboxDeps): OutboxStore {
           await markRefused(entry, ERROR_NOT_UNDERSTOOD, startedIn);
           return true;
         }
-        const { order } = await deps.api.orders.create(payload.body, {
-          clientRequestId: entry.id,
-        });
+        const { order } = await deps.api.orders.create(
+          named === undefined ? payload.body : { ...payload.body, originalStaffId: named },
+          { clientRequestId: entry.id },
+        );
         await orderSynced(entry, order, startedIn);
         return true;
       }
@@ -587,13 +657,21 @@ export function createOutboxStore(deps: OutboxDeps): OutboxStore {
       }
       const { result } = await deps.api.payments.create(
         payload.target.orderId,
-        { method: 'cash', tendered: payload.tenderedSatang },
+        {
+          method: 'cash',
+          tendered: payload.tenderedSatang,
+          ...(named === undefined ? {} : { originalStaffId: named }),
+        },
         { clientRequestId: entry.id },
       );
       await paymentSynced(entry, framesOf(result), startedIn);
       return true;
     } catch (error) {
       if (epoch !== startedIn) return false;
+      if (named !== undefined && isApiClientError(error) && error.code === 'STEP_UP_REQUIRED') {
+        waitForOwner(entry, startedIn);
+        return true;
+      }
       const verdict = classifyReplayError(error);
       if (verdict === 'refused') {
         await markRefused(entry, errorCodeOf(error), startedIn);
@@ -959,6 +1037,25 @@ export function createOutboxStore(deps: OutboxDeps): OutboxStore {
         // The device cannot be read: nothing was touched.
         return { ok: true, count: 0, failed: store.getState().othersCount };
       }
+      if (others.length === 0) return { ok: true, count: 0, failed: 0 };
+      // The server is told first and has to accept it (audit, alert): offline there is nobody to
+      // tell, so nothing is done.
+      if (isOffline()) return { ok: false, reason: 'offline' };
+      try {
+        await deps.api.devices.outboxRecovery(
+          person.deviceId,
+          { action: action === 'takeOver' ? 'take_over' : 'clear', ...recoveryCountsOf(others) },
+          { clientRequestId: newId() },
+        );
+      } catch (error) {
+        // A stale step-up is the caller's to answer (it asks and calls again); nothing was written.
+        if (isApiClientError(error) && error.code === 'STEP_UP_REQUIRED') throw error;
+        return {
+          ok: false,
+          reason: 'error',
+          error: isApiClientError(error) ? error : new ApiClientError('UNKNOWN'),
+        };
+      }
       const handled: OutboxEntry[] = [];
       const handledIds = new Set<string>();
       for (const row of others) {
@@ -990,7 +1087,17 @@ export function createOutboxStore(deps: OutboxDeps): OutboxStore {
 
   const takeOverOthers = () =>
     recoverOthers('takeOver', async (opened, row, person) => {
-      const taken: OutboxEntry = { ...row, staffId: person.staffId, deviceId: person.deviceId };
+      // Who rang it up stays on the row, so the replay can name them. Someone already named, or
+      // the owner themselves on an older device id, is left as it is.
+      const original =
+        row.originalStaffId ??
+        (row.staffId !== undefined && row.staffId !== person.staffId ? row.staffId : undefined);
+      const taken: OutboxEntry = {
+        ...row,
+        staffId: person.staffId,
+        deviceId: person.deviceId,
+        ...(original === undefined ? {} : { originalStaffId: original }),
+      };
       await opened.outbox.put(taken);
       return taken;
     });
@@ -1013,11 +1120,15 @@ export function createOutboxStore(deps: OutboxDeps): OutboxStore {
     timer = null;
     running = false;
     again = false;
+    awaitingOwner.clear();
+    askingOwner = false;
+    ownerPassedAt = Number.NEGATIVE_INFINITY;
     store.setState({
       ready: false,
       items: [],
       othersCount: 0,
       purgedCount: 0,
+      stepUpNeeded: false,
       recovered: null,
       synced: {},
     });
@@ -1051,7 +1162,19 @@ export function createOutboxStore(deps: OutboxDeps): OutboxStore {
     enqueuePromptpay,
     retry,
     discard,
-    kick: () => kick(true),
+    kick: () => {
+      // A person asked: an entry that was waiting for the owner tries again (and asks again).
+      if (awaitingOwner.size > 0) {
+        awaitingOwner.clear();
+        publish();
+      }
+      kick(true);
+    },
+    confirmOwner: async () => {
+      if (who === null) return;
+      ownerPassedAt = Number.NEGATIVE_INFINITY;
+      await askOwner(epoch);
+    },
     takeOverOthers,
     clearOthers,
     bind() {
