@@ -88,6 +88,20 @@ describe('error code -> message', () => {
     for (const code of needed) expect(Object.hasOwn(API_ERROR_KEYS, code), code).toBe(true);
   });
 
+  test('the owner take-over and the co-pay channel codes say what is wrong, in both languages', () => {
+    for (const [code, key] of [
+      ['UNKNOWN_STAFF', 'error.unknownStaff'],
+      ['COPAY_CHANNELS_NOT_STOREFRONT', 'error.copayChannelsNotStorefront'],
+    ] as const) {
+      expect(Object.hasOwn(API_ERROR_KEYS, code), code).toBe(true);
+      const error = new ApiClientError(code, { status: 422 });
+      expect(errorText(th, error)).toBe(t('th', key));
+      expect(errorText(en, error)).toBe(t('en', key));
+      expect(errorText(th, error)).not.toBe(t('th', 'common.error'));
+      expect(errorText(en, error)).not.toBe(t('en', 'common.error'));
+    }
+  });
+
   test('an entrance order refused for its fulfilment or building says so, in both languages', () => {
     for (const [code, key] of [
       ['FULFILLMENT_NOT_OFFERED', 'error.fulfillmentNotOffered'],

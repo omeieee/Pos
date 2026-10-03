@@ -446,6 +446,12 @@ export const en = {
     'That way of receiving the order is not offered on this channel. The shop delivers to the building entrance only.',
   'error.unknownBuilding':
     'The shop does not deliver to that building. Choose a building from the list again.',
+  'error.unknownStaff':
+    'The staff member who took this entry is not in the system. The owner should check it.',
+  'error.copayChannelsNotStorefront':
+    'The government co-pay scheme can only be on for the storefront channel. Choose "Storefront" only.',
+  'error.ownerSignInNeeded':
+    'The owner has to sign in and confirm their identity, while online, to do this.',
   'error.methodDisabled': 'The shop has switched this payment method off',
   'error.paymentAlreadyOpen': 'This order already has an unfinished payment',
   'error.orderAlreadyPaid': 'This order is already paid',
@@ -487,7 +493,7 @@ export const en = {
   'outbox.others.clear': 'Clear these entries',
   'outbox.others.takeOver.title': 'Take over {count} entries left by other staff?',
   'outbox.others.takeOver.body':
-    'They will be sent under your name: the server will record you, not the original staff member, as the creator of the orders and the one who took the cash, and you will see their details.',
+    'They will be sent under your name: the server will record you as the creator of the orders and the one who took the cash, and keep the original staff member’s name in the record. Taking over or clearing is logged on the server (the internet is needed), and you will see the entries’ details.',
   'outbox.others.takeOver.confirm': 'Take over',
   'outbox.others.clear.title': 'Clear {count} entries left by other staff?',
   'outbox.others.clear.body':
@@ -497,6 +503,11 @@ export const en = {
   'outbox.others.done.clear': 'Cleared {count} entries.',
   'outbox.others.failed': '{count} could not be done. Try again.',
   'outbox.others.forbidden': 'Only the owner can do this.',
+  'outbox.others.offline':
+    'Taking over or clearing other staff’s entries needs the internet, because the server must record the action. Try again when the signal is back.',
+  'outbox.stepUp.waiting':
+    'Some entries are sent under the original staff member’s name and need the owner to confirm their identity first. They are still on this device.',
+  'outbox.stepUp.ask': 'Confirm owner identity',
   'catalogue.offline':
     'Using the saved menu (offline), saved {time}. Prices are an estimate; the system prices the order when it is sent.',
   'outbox.sendNow': 'Send now',

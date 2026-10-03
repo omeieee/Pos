@@ -39,6 +39,8 @@ export const API_ERROR_KEYS = {
   PROMPTPAY_NOT_CONFIGURED: 'error.promptpayNotConfigured',
   PROMPTPAY_PAYLOAD_INVALID: 'error.promptpayPayloadInvalid',
   GOV_COPAY_UNAVAILABLE: 'error.govCopayUnavailable',
+  COPAY_CHANNELS_NOT_STOREFRONT: 'error.copayChannelsNotStorefront',
+  UNKNOWN_STAFF: 'error.unknownStaff',
   METHOD_DISABLED: 'error.methodDisabled',
   PAYMENT_ALREADY_OPEN: 'error.paymentAlreadyOpen',
   ORDER_ALREADY_PAID: 'error.orderAlreadyPaid',

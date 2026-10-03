@@ -386,6 +386,110 @@ describe('idempotent order creation', () => {
   });
 });
 
+describe('originalStaffId (the owner replaying another person’s entry)', () => {
+  const NAMED = IDS.cashier;
+
+  test('an order create carries it in the body when given, and not otherwise', async () => {
+    const { api, calls } = clientWith(() => ({ status: 201, json: orderBody }));
+    await api.orders.create({ ...newOrder, originalStaffId: NAMED });
+    await api.orders.create(newOrder);
+    expect(bodyOf(calls[0]).originalStaffId).toBe(NAMED);
+    expect('originalStaffId' in bodyOf(calls[1])).toBe(false);
+  });
+
+  test('a cash create carries it; the other methods refuse it before anything is sent', async () => {
+    const { api, calls } = clientWith(() => ({ status: 201, json: {} }));
+    // The answer is not a payment result, so only the request is looked at.
+    await api.payments
+      .create(IDS.order, { method: 'cash', tendered: 10000, originalStaffId: NAMED })
+      .catch(() => undefined);
+    expect(bodyOf(calls[0]).originalStaffId).toBe(NAMED);
+    for (const method of ['promptpay', 'gov_copay', 'platform', 'other'] as const) {
+      await expect(
+        api.payments.create(IDS.order, { method, originalStaffId: NAMED } as never),
+      ).rejects.toMatchObject({ code: 'REQUEST_INVALID' });
+    }
+    expect(calls).toHaveLength(1);
+  });
+
+  test('a value that is not an id is refused before anything is sent', async () => {
+    const { api, calls } = clientWith(() => ({ status: 201, json: orderBody }));
+    await expect(
+      api.orders.create({ ...newOrder, originalStaffId: 'not-an-id' }),
+    ).rejects.toMatchObject({ code: 'REQUEST_INVALID' });
+    expect(calls).toHaveLength(0);
+  });
+});
+
+describe('devices.outboxRecovery', () => {
+  const DEVICE = IDS.device;
+  const answer = { deviceId: DEVICE, action: 'take_over', orders: 2, payments: 1 };
+
+  test('posts the counts and the request id to the device, with the session', async () => {
+    const id = newClientRequestId();
+    const { api, calls } = clientWith(() => ({ status: 201, json: answer }));
+    const result = await api.devices.outboxRecovery(
+      DEVICE,
+      { action: 'take_over', orders: 2, payments: 1 },
+      { clientRequestId: id },
+    );
+    expect(calls[0]?.method).toBe('POST');
+    expect(calls[0]?.url).toBe(`${BASE}/v1/devices/${DEVICE}/outbox-recovery`);
+    expect(bodyOf(calls[0])).toEqual({
+      clientRequestId: id,
+      action: 'take_over',
+      orders: 2,
+      payments: 1,
+    });
+    expect(calls[0]?.headers.authorization).toBe(`Bearer ${FAKE_SESSION_TOKEN}`);
+    expect(result).toEqual({ result: answer, replay: false, clientRequestId: id });
+  });
+
+  test('a fresh request id is made when none is given, and 200 means replay', async () => {
+    const { api, calls } = clientWith(() => ({ status: 200, json: answer }));
+    const first = await api.devices.outboxRecovery(DEVICE, {
+      action: 'take_over',
+      orders: 2,
+      payments: 1,
+    });
+    expect(first.replay).toBe(true);
+    expect(bodyOf(calls[0]).clientRequestId).toBe(first.clientRequestId);
+  });
+
+  test('nothing to recover, counts out of range and unknown actions never reach the network', async () => {
+    const { api, calls } = clientWith(() => ({ status: 201, json: answer }));
+    for (const bad of [
+      { action: 'clear', orders: 0, payments: 0 },
+      { action: 'clear', orders: 1001, payments: 0 },
+      { action: 'clear', orders: -1, payments: 2 },
+      { action: 'clear', orders: 1.5, payments: 0 },
+      { action: 'wipe', orders: 1, payments: 0 },
+    ]) {
+      await expect(api.devices.outboxRecovery(DEVICE, bad as never)).rejects.toMatchObject({
+        code: 'REQUEST_INVALID',
+      });
+    }
+    await expect(
+      api.devices.outboxRecovery('not-an-id', { action: 'clear', orders: 1, payments: 0 }),
+    ).rejects.toMatchObject({ code: 'REQUEST_INVALID' });
+    expect(calls).toHaveLength(0);
+  });
+
+  test('a reused request id with other counts is a conflict the caller can see', async () => {
+    const { api } = clientWith(() => apiError(409, 'IDEMPOTENCY_KEY_REUSED'));
+    await expect(
+      api.devices.outboxRecovery(DEVICE, { action: 'clear', orders: 1, payments: 0 }),
+    ).rejects.toMatchObject({ code: 'IDEMPOTENCY_KEY_REUSED', status: 409 });
+  });
+
+  test('a stale step-up is the API’s STEP_UP_REQUIRED, unchanged', async () => {
+    const { api } = clientWith(() => apiError(403, 'STEP_UP_REQUIRED'));
+    await expect(
+      api.devices.outboxRecovery(DEVICE, { action: 'clear', orders: 1, payments: 0 }),
+    ).rejects.toMatchObject({ code: 'STEP_UP_REQUIRED', status: 403 });
+  });
+});
+
 describe('orders: other calls', () => {
   test('PATCH sends expectedVersion and goes to the encoded order path', async () => {
     const { api, calls } = clientWith(() => ({ status: 200, json: orderBody }));
