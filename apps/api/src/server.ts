@@ -5,6 +5,7 @@ import { buildApp } from './app.ts';
 import { ConfigError, loadConfig } from './config.ts';
 import { createEventBus } from './events.ts';
 import { startJobs } from './jobs/boss.ts';
+import { alertOnAttempt, superviseJobs } from './jobs/supervisor.ts';
 import { createLineRuntime } from './line/runtime.ts';
 import { sentryOptions } from './redact.ts';
 import { registerV1 } from './v1.ts';
@@ -68,28 +69,43 @@ if (reportAlert) forwardAlerts(events, reportAlert);
 const line = createLineRuntime(config.line, { privacy: config.privacy });
 await registerV1(app, { db, authSecretKey: config.authSecretKey, events, line });
 
-// Background jobs (D-16). A job queue that cannot start must not take the API down: log it and
-// keep serving; the jobs are catch-up work, not the request path.
-let jobs: { stop(): Promise<void> } | undefined;
-try {
-  jobs = await startJobs({
-    databaseUrl: config.databaseUrl,
-    deps: { db, events, now: () => new Date(), line },
-    log: app.log,
-  });
-} catch (error) {
-  app.log.error({ errorName: error instanceof Error ? error.name : 'Error' }, 'jobs not started');
-}
+// 0.0.0.0 so Caddy can reach the container over the Docker network.
+await app.listen({ host: '0.0.0.0', port: config.port });
+
+// Background jobs (D-16), started AFTER the server listens and in the background, so /healthz
+// never waits on pg-boss. A failed start is logged (class name and code only), retried with
+// backoff up to 5 minutes, and the owner is alerted (no personal data in the event).
+const jobs = superviseJobs({
+  start: () =>
+    startJobs({
+      databaseUrl: config.databaseUrl,
+      deps: { db, events, now: () => new Date(), line },
+      log: app.log,
+    }),
+  onFailure: (failure) => {
+    app.log.error(
+      { attempt: failure.attempt, errorName: failure.errorName, code: failure.code },
+      'jobs not started, will retry',
+    );
+    if (alertOnAttempt(failure.attempt)) {
+      events.publish({
+        type: 'alert.security',
+        kind: 'jobs.start_failed',
+        severity: 'warn',
+        at: new Date().toISOString(),
+        staffId: null,
+        deviceId: null,
+      });
+    }
+  },
+});
 
 async function shutdown(signal: string) {
   app.log.info({ signal }, 'shutting down');
-  await jobs?.stop().catch(() => undefined);
+  await jobs.stop();
   await app.close();
   await close();
   process.exit(0);
 }
 process.once('SIGTERM', () => void shutdown('SIGTERM'));
 process.once('SIGINT', () => void shutdown('SIGINT'));
-
-// 0.0.0.0 so Caddy can reach the container over the Docker network.
-await app.listen({ host: '0.0.0.0', port: config.port });
