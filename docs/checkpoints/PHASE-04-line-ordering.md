@@ -1,6 +1,6 @@
 # Phase 4 — LINE Ordering
 
-**Status:** ⚪ Not started · **Depends on:** P3, Q2, Q4, Q10 · **Agents:** line-integration-engineer, backend-engineer, ux-ui-designer, qa-security-reviewer
+**Status:** 🟡 In progress (started 2026-10-04, while P3 real-device checks are open) · **Depends on:** P3, Q2, Q4, Q10 · **Agents:** line-integration-engineer, backend-engineer, ux-ui-designer, qa-security-reviewer
 
 ## Goal
 Customers order and pay through the shop's LINE OA, within the free message budget.
@@ -30,7 +30,12 @@ Customers order and pay through the shop's LINE OA, within the free message budg
 - [ ] The privacy notice is shown and its acknowledgement stored
 
 ## As built
-_Fill in with `/checkpoint`._
+- `packages/line`: signature check, event schemas, Thai Flex builders (co-pay card has no QR input), quota-aware sender (replies free; pushes by policy `off`/`essential`/`all`), rich-menu loader. Text in `packages/i18n` `lineBot.*`.
+- `apps/api/src/line/`: `POST /v1/line/webhook` (raw body, 401 missing / 403 bad signature, 503 if unconfigured, batch stored atomically, dedupe by `webhookEventId`), follow/unfollow and privacy acknowledgement handlers; `GET /v1/line/quota` (`settings.view`). Migration 0018 (`line_quota_months`, one push per order and template).
+- Infra: reserved public IP `sds-pos-api` 161.118.211.42, host `161-118-211-42.sslip.io`; compose passes `LINE_CHANNEL_ID/SECRET/ACCESS_TOKEN`, `LINE_LIFF_ID` from the VM `.env` (test OA values).
+- LINE test OA `omeie`: webhook set and verified, redelivery on, built-in auto-reply and greeting off. LIFF lives on the separate LINE Login channel `omeOrderingTest`.
+- Design: `design/logo/`, `design/rich-menu/` (full and compact), `design/privacy-notice-th.md` (draft, not published).
+- Not built: ordering flow in `liff-web`, LINE order handlers, slip/claim, rich menu upload, retention jobs.
 
 ## Log
-_Empty._
+- 2026-10-04: kickoff, LINE package and webhook, reserved IP, webhook verified ([PROGRESS](../PROGRESS.md)).
