@@ -8,6 +8,7 @@ import {
   type CopayField,
   type CopayForm as CopayValues,
   copayFormFrom,
+  isStorefrontOnly,
   validateCopayForm,
 } from './copay-model.ts';
 import { SaveBar } from './SaveBar.tsx';
@@ -25,9 +26,11 @@ export function CopayForm({ loaded, editable, saving, busy, submit }: SectionBod
   const scheme = loaded.value;
   const [form, setForm] = useState<CopayValues>(() => copayFormFrom(scheme));
   const [tried, setTried] = useState(false);
-  // A new scheme is created for the storefront (one channel); a saved one keeps its own.
-  const channelCount = scheme ? scheme.channels.length : 1;
-  const problems = tried ? validateCopayForm(form, { channels: channelCount }) : [];
+  // A new scheme is created for the storefront; a saved one keeps its own channels.
+  const channels = scheme ? scheme.channels : ['storefront'];
+  const rule = { channels, wasEnabled: scheme?.enabled ?? false };
+  const storefrontOnly = isStorefrontOnly(channels);
+  const problems = tried ? validateCopayForm(form, rule) : [];
   const set = (patch: Partial<CopayValues>) => setForm({ ...form, ...patch });
   const fieldError = (field: CopayField) =>
     problems.includes(field) ? tr(`settings.copay.error.${field}`) : undefined;
@@ -38,7 +41,7 @@ export function CopayForm({ loaded, editable, saving, busy, submit }: SectionBod
 
   async function onSubmit() {
     setTried(true);
-    if (validateCopayForm(form, { channels: channelCount }).length > 0) return;
+    if (validateCopayForm(form, rule).length > 0) return;
     await submit(buildCopayInput(scheme, loaded.version, form));
   }
 
@@ -63,6 +66,11 @@ export function CopayForm({ loaded, editable, saving, busy, submit }: SectionBod
             })}
           </p>
           <p className="hint">{tr('settings.copay.channelsNote')}</p>
+          {storefrontOnly ? null : (
+            <p className="notice" role="alert">
+              <span>{tr('settings.copay.channelsWarn')}</span>
+            </p>
+          )}
         </>
       ) : (
         <p className="muted">{tr('settings.copay.new')}</p>
@@ -161,7 +169,7 @@ export function CopayForm({ loaded, editable, saving, busy, submit }: SectionBod
             className="visually-hidden"
             type="checkbox"
             checked={form.enabled}
-            disabled={!editable}
+            disabled={!editable || (!storefrontOnly && !form.enabled)}
             onChange={(event) => set({ enabled: event.target.checked })}
           />
           {tr('settings.copay.enabled')}

@@ -106,11 +106,19 @@ function readCap(text: string): { ok: true; satang: number | null } | { ok: fals
   return parsed.ok ? { ok: true, satang: parsed.satang } : { ok: false };
 }
 
+/** Co-pay is face to face: only a scheme whose channels are exactly the storefront may be on. */
+export const isStorefrontOnly = (channels: readonly string[]): boolean =>
+  channels.length === 1 && channels[0] === 'storefront';
+
 /**
- * What is wrong with the form. `channels` is how many channels the saved scheme has (a new one is
- * given the storefront): the server refuses to turn a scheme on with none.
+ * What is wrong with the form. `channels` are the saved scheme's (a new one is given the
+ * storefront). Switching a scheme on needs them to be exactly the storefront; `wasEnabled` lets a
+ * scheme that is already on be saved (and switched off) without being blocked.
  */
-export function validateCopayForm(form: CopayForm, scheme: { channels: number }): CopayField[] {
+export function validateCopayForm(
+  form: CopayForm,
+  scheme: { channels: readonly string[]; wasEnabled: boolean },
+): CopayField[] {
   const errors: CopayField[] = [];
   if (form.nameTh.trim() === '' || form.nameTh.trim().length > 80) errors.push('nameTh');
 
@@ -129,7 +137,9 @@ export function validateCopayForm(form: CopayForm, scheme: { channels: number })
   if (from === null) errors.push('fromTime');
   if (to === null || (from !== null && from >= to)) errors.push('toTime');
 
-  if (form.enabled && scheme.channels === 0) errors.push('enabled');
+  if (form.enabled && !scheme.wasEnabled && !isStorefrontOnly(scheme.channels)) {
+    errors.push('enabled');
+  }
   return errors;
 }
 

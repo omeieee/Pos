@@ -5,6 +5,7 @@ import {
   basisPointsToPercentText,
   buildCopayInput,
   copayFormFrom,
+  isStorefrontOnly,
   parsePercentText,
   validateCopayForm,
 } from './copay-model.ts';
@@ -88,8 +89,11 @@ describe('the form', () => {
 
 describe('validation', () => {
   const ok = () => copayFormFrom(scheme());
-  const errors = (over: Partial<ReturnType<typeof ok>>, channels = 1) =>
-    validateCopayForm({ ...ok(), ...over }, { channels });
+  const errors = (
+    over: Partial<ReturnType<typeof ok>>,
+    channels: readonly string[] = ['storefront'],
+    wasEnabled = false,
+  ) => validateCopayForm({ ...ok(), ...over }, { channels, wasEnabled });
 
   test('a good form has no errors', () => {
     expect(errors({})).toEqual([]);
@@ -120,7 +124,19 @@ describe('validation', () => {
   test('turning it on needs a share above 0 and at least one channel', () => {
     expect(errors({ enabled: true, share: '0' })).toEqual(['share']);
     expect(errors({ enabled: false, share: '0' })).toEqual([]);
-    expect(errors({ enabled: true }, 0)).toEqual(['enabled']);
+    expect(errors({ enabled: true }, [])).toEqual(['enabled']);
+  });
+
+  test('turning it on needs the channels to be exactly the storefront', () => {
+    expect(isStorefrontOnly(['storefront'])).toBe(true);
+    expect(isStorefrontOnly([])).toBe(false);
+    expect(isStorefrontOnly(['storefront', 'line'])).toBe(false);
+    expect(isStorefrontOnly(['line'])).toBe(false);
+    expect(errors({ enabled: true }, ['storefront', 'line'])).toEqual(['enabled']);
+    expect(errors({ enabled: true }, ['line'])).toEqual(['enabled']);
+    // Off stays savable; a scheme already on is not blocked from saving other fields.
+    expect(errors({ enabled: false }, ['storefront', 'line'])).toEqual([]);
+    expect(errors({ enabled: true }, ['storefront', 'line'], true)).toEqual([]);
   });
 });
 

@@ -878,7 +878,9 @@ export const en = {
   'settings.copay.error.fromTime': 'Enter a time as hours:minutes, like 06:00.',
   'settings.copay.error.toTime': 'The end must be after the start, like 23:00 or 24:00.',
   'settings.copay.error.enabled':
-    'This scheme has no channel to be used in, so it cannot be switched on.',
+    'This scheme is not set for the storefront alone, so it cannot be switched on.',
+  'settings.copay.channelsWarn':
+    'This scheme is not set for the storefront alone, which conflicts with face-to-face payment, so it cannot be switched on (only off). Have an administrator set its channels to the storefront first.',
   'settings.admin.locked': 'You need to confirm who you are before this list is shown.',
   'settings.admin.unlock': 'Confirm who I am',
   'settings.admin.loading': 'Loading the list…',

@@ -151,6 +151,57 @@ describe('an existing scheme', () => {
   });
 });
 
+describe('a stored scheme whose channels are not exactly the storefront', () => {
+  test('warns, cannot be switched on, and other fields still save (channels never sent)', async () => {
+    const env = await open({
+      settingsApi: {
+        govCopay: {
+          read: async () => ({ scheme: scheme({ channels: ['storefront', 'line'] }) }),
+          save: async () => ({ scheme: scheme({ channels: ['storefront', 'line'], version: 4 }) }),
+        },
+      },
+    });
+    const sw = (await screen.findByLabelText(tr('settings.copay.enabled'))) as HTMLInputElement;
+    expect(screen.getByText(tr('settings.copay.channelsWarn'))).toBeTruthy();
+    expect(sw.disabled).toBe(true);
+    expect(sw.checked).toBe(false);
+    type(tr('settings.copay.share'), '55');
+    save();
+    await waitFor(() => expect(env.settingsApi.govCopay.save).toHaveBeenCalledTimes(1));
+    expect(env.settingsApi.govCopay.save).toHaveBeenCalledWith({
+      expectedVersion: 3,
+      govShareBp: 5500,
+    });
+  });
+
+  test('a storefront-only scheme shows no warning and the switch works', async () => {
+    await open({ settingsApi: existing() });
+    const sw = (await screen.findByLabelText(tr('settings.copay.enabled'))) as HTMLInputElement;
+    expect(screen.queryByText(tr('settings.copay.channelsWarn'))).toBeNull();
+    expect(sw.disabled).toBe(false);
+  });
+
+  test('one already switched on can still be switched off', async () => {
+    const env = await open({
+      settingsApi: {
+        govCopay: {
+          read: async () => ({ scheme: scheme({ channels: ['line'], enabled: true }) }),
+          save: async () => ({ scheme: scheme({ channels: ['line'], version: 4 }) }),
+        },
+      },
+    });
+    const sw = (await screen.findByLabelText(tr('settings.copay.enabled'))) as HTMLInputElement;
+    expect(sw.disabled).toBe(false);
+    fireEvent.click(sw);
+    save();
+    await waitFor(() => expect(env.settingsApi.govCopay.save).toHaveBeenCalledTimes(1));
+    expect(env.settingsApi.govCopay.save).toHaveBeenCalledWith({
+      expectedVersion: 3,
+      enabled: false,
+    });
+  });
+});
+
 describe('no scheme yet', () => {
   test('starts empty and OFF, and a first save carries the whole scheme for the storefront only', async () => {
     const env = await open({
