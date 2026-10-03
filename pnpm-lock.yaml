@@ -196,6 +196,9 @@ importers:
       '@sds/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@sds/line':
+        specifier: workspace:*
+        version: link:../../packages/line
       '@sds/promptpay':
         specifier: workspace:*
         version: link:../../packages/promptpay
@@ -351,6 +354,19 @@ importers:
         version: 0.31.11
 
   packages/i18n:
+    devDependencies:
+      '@sds/config':
+        specifier: workspace:*
+        version: link:../config
+
+  packages/line:
+    dependencies:
+      '@sds/i18n':
+        specifier: workspace:*
+        version: link:../i18n
+      zod:
+        specifier: 4.6.5
+        version: 4.6.5
     devDependencies:
       '@sds/config':
         specifier: workspace:*

@@ -955,4 +955,36 @@ export const en = {
   'settings.staff.working': 'Working…',
   'settings.admin.confirm': 'Confirm',
   'settings.staff.activateLabel': 'Reactivate',
+  'lineBot.greeting': 'Welcome to Saap Don Sen',
+  'lineBot.greetingHow':
+    'Tap "Order" in the menu below to order. We deliver to the building entrance only.',
+  'lineBot.privacy.title': 'Privacy notice',
+  'lineBot.privacy.summary':
+    'The shop keeps your LINE user ID, display name, the recipient name and building, and your orders, only to prepare and deliver them. Data controller: {controller}. To see, correct or delete your data, write to {contact}.',
+  'lineBot.privacy.readNotice': 'Read the full notice',
+  'lineBot.privacy.ackButton': 'I understand',
+  'lineBot.privacy.acked': 'Thank you. Your acknowledgement of the privacy notice is saved.',
+  'lineBot.order.title': 'Order {orderNo} confirmed',
+  'lineBot.order.altText': 'Order {orderNo} confirmed, total {total}',
+  'lineBot.order.total': 'Total',
+  'lineBot.order.deliverTo': 'Deliver to the entrance of building {building} · {name}',
+  'lineBot.pay.title': 'How to pay · {orderNo}',
+  'lineBot.pay.altText': 'How to pay order {orderNo}, total {total}',
+  'lineBot.pay.cash':
+    'Pay cash when you collect the food at the building entrance. Total {amount}.',
+  'lineBot.pay.promptpay': 'Transfer by PromptPay to {promptpayId}, exactly {amount}.',
+  'lineBot.pay.promptpayAfter':
+    'After you transfer, tap "I have paid" or send the slip in this chat. Staff will check that the money arrived.',
+  'lineBot.pay.govCopay':
+    'Pay with Thai Chuay Thai at the building entrance when you collect the food only. Staff create the QR in front of you and you scan it with Paotang. Full price {amount}.',
+  'lineBot.pay.govCopayNote': 'The shop never sends this QR through LINE.',
+  'lineBot.pay.paidButton': 'I have paid',
+  'lineBot.pay.changeButton': 'Change payment method',
+  'lineBot.ready.title': 'Your food is ready · {orderNo}',
+  'lineBot.ready.body': 'Order {orderNo} is ready at the entrance of building {building}',
+  'lineBot.ready.altText': 'Your food is ready, order {orderNo}',
+  'lineBot.receipt.title': 'Electronic receipt',
+  'lineBot.receipt.total': 'Amount paid',
+  'lineBot.receipt.method': 'Paid by {method}',
+  'lineBot.receipt.thanks': 'Thank you for ordering from Saap Don Sen.',
 } as const satisfies Record<MessageKey, string>;

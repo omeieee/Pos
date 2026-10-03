@@ -1,0 +1,442 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`followGreeting > greeting text, then the privacy card with the controller, contact and ack button 1`] = `
+[
+  {
+    "text": "สวัสดีค่ะ ยินดีต้อนรับสู่แซ่บโดนเส้น
+กดปุ่ม "สั่งอาหาร" ในเมนูด้านล่างเพื่อสั่ง ร้านส่งถึงทางเข้าอาคารเท่านั้น",
+    "type": "text",
+  },
+  {
+    "altText": "ประกาศความเป็นส่วนตัว",
+    "contents": {
+      "body": {
+        "contents": [
+          {
+            "text": "ประกาศความเป็นส่วนตัว",
+            "type": "text",
+            "weight": "bold",
+            "wrap": true,
+          },
+          {
+            "size": "sm",
+            "text": "ร้านเก็บรหัสผู้ใช้ LINE ชื่อที่แสดง ชื่อและตึกผู้รับ และรายการสั่งซื้อ เพื่อทำและส่งออเดอร์เท่านั้น ผู้ควบคุมข้อมูล: คุณ omeie ขอดู แก้ไข หรือลบข้อมูลได้ที่ owner@example.test",
+            "type": "text",
+            "wrap": true,
+          },
+        ],
+        "layout": "vertical",
+        "spacing": "md",
+        "type": "box",
+      },
+      "footer": {
+        "contents": [
+          {
+            "action": {
+              "data": "action=ack_privacy",
+              "label": "รับทราบ",
+              "type": "postback",
+            },
+            "style": "primary",
+            "type": "button",
+          },
+        ],
+        "layout": "vertical",
+        "spacing": "sm",
+        "type": "box",
+      },
+      "type": "bubble",
+    },
+    "type": "flex",
+  },
+]
+`;
+
+exports[`orderConfirmation > snapshot 1`] = `
+{
+  "altText": "ยืนยันออเดอร์ L-012 ยอด ฿120.00",
+  "contents": {
+    "body": {
+      "contents": [
+        {
+          "size": "lg",
+          "text": "ยืนยันออเดอร์ L-012",
+          "type": "text",
+          "weight": "bold",
+          "wrap": true,
+        },
+        {
+          "color": "#666666",
+          "size": "sm",
+          "text": "ส่งที่ทางเข้าตึก B1 · คุณ ฟ้า",
+          "type": "text",
+          "wrap": true,
+        },
+        {
+          "type": "separator",
+        },
+        {
+          "contents": [
+            {
+              "flex": 4,
+              "size": "sm",
+              "text": "2 × ก๋วยเตี๋ยวต้มยำ",
+              "type": "text",
+              "wrap": true,
+            },
+            {
+              "align": "end",
+              "flex": 2,
+              "size": "sm",
+              "text": "฿110.00",
+              "type": "text",
+              "wrap": true,
+            },
+          ],
+          "layout": "horizontal",
+          "type": "box",
+        },
+        {
+          "contents": [
+            {
+              "flex": 4,
+              "size": "sm",
+              "text": "1 × น้ำเปล่า",
+              "type": "text",
+              "wrap": true,
+            },
+            {
+              "align": "end",
+              "flex": 2,
+              "size": "sm",
+              "text": "฿10.00",
+              "type": "text",
+              "wrap": true,
+            },
+          ],
+          "layout": "horizontal",
+          "type": "box",
+        },
+        {
+          "type": "separator",
+        },
+        {
+          "contents": [
+            {
+              "flex": 4,
+              "size": "sm",
+              "text": "ยอดรวม",
+              "type": "text",
+              "weight": "bold",
+              "wrap": true,
+            },
+            {
+              "align": "end",
+              "flex": 2,
+              "size": "sm",
+              "text": "฿120.00",
+              "type": "text",
+              "weight": "bold",
+              "wrap": true,
+            },
+          ],
+          "layout": "horizontal",
+          "type": "box",
+        },
+      ],
+      "layout": "vertical",
+      "spacing": "md",
+      "type": "box",
+    },
+    "type": "bubble",
+  },
+  "type": "flex",
+}
+`;
+
+exports[`paymentInstructions > cash: pay at hand-over, no image 1`] = `
+{
+  "altText": "วิธีชำระเงินออเดอร์ L-012 ยอด ฿120.50",
+  "contents": {
+    "body": {
+      "contents": [
+        {
+          "size": "lg",
+          "text": "วิธีชำระเงิน · L-012",
+          "type": "text",
+          "weight": "bold",
+          "wrap": true,
+        },
+        {
+          "text": "ชำระเงินสดตอนรับอาหารที่ทางเข้าตึก ยอด ฿120.50",
+          "type": "text",
+          "wrap": true,
+        },
+      ],
+      "layout": "vertical",
+      "spacing": "md",
+      "type": "box",
+    },
+    "footer": {
+      "contents": [
+        {
+          "action": {
+            "data": "action=change_method&order=0191a8f0-0000-7000-8000-000000000001",
+            "label": "เปลี่ยนวิธีชำระเงิน",
+            "type": "postback",
+          },
+          "style": "secondary",
+          "type": "button",
+        },
+      ],
+      "layout": "vertical",
+      "spacing": "sm",
+      "type": "box",
+    },
+    "type": "bubble",
+  },
+  "type": "flex",
+}
+`;
+
+exports[`paymentInstructions > gov_copay: pay at the hand-over, and the message holds no image, no QR, no URL 1`] = `
+{
+  "altText": "วิธีชำระเงินออเดอร์ L-012 ยอด ฿120.50",
+  "contents": {
+    "body": {
+      "contents": [
+        {
+          "size": "lg",
+          "text": "วิธีชำระเงิน · L-012",
+          "type": "text",
+          "weight": "bold",
+          "wrap": true,
+        },
+        {
+          "text": "ชำระด้วยไทยช่วยไทย ที่ทางเข้าตึกตอนรับอาหารเท่านั้น พนักงานจะสร้าง QR ให้ต่อหน้า แล้วสแกนด้วยเป๋าตัง ยอดเต็ม ฿120.50",
+          "type": "text",
+          "wrap": true,
+        },
+        {
+          "color": "#666666",
+          "size": "sm",
+          "text": "ร้านจะไม่ส่ง QR ทาง LINE",
+          "type": "text",
+          "wrap": true,
+        },
+      ],
+      "layout": "vertical",
+      "spacing": "md",
+      "type": "box",
+    },
+    "footer": {
+      "contents": [
+        {
+          "action": {
+            "data": "action=change_method&order=0191a8f0-0000-7000-8000-000000000001",
+            "label": "เปลี่ยนวิธีชำระเงิน",
+            "type": "postback",
+          },
+          "style": "secondary",
+          "type": "button",
+        },
+      ],
+      "layout": "vertical",
+      "spacing": "sm",
+      "type": "box",
+    },
+    "type": "bubble",
+  },
+  "type": "flex",
+}
+`;
+
+exports[`paymentInstructions > promptpay: QR image, ID and exact amount in the text, paid and change buttons 1`] = `
+{
+  "altText": "วิธีชำระเงินออเดอร์ L-012 ยอด ฿120.50",
+  "contents": {
+    "body": {
+      "contents": [
+        {
+          "size": "lg",
+          "text": "วิธีชำระเงิน · L-012",
+          "type": "text",
+          "weight": "bold",
+          "wrap": true,
+        },
+        {
+          "text": "โอนพร้อมเพย์ไปที่ 0812345678 ยอด ฿120.50 ให้ตรงตามจำนวน",
+          "type": "text",
+          "wrap": true,
+        },
+        {
+          "color": "#666666",
+          "size": "sm",
+          "text": "โอนเสร็จแล้วกด "โอนแล้ว" หรือส่งสลิปในแชทนี้ พนักงานจะตรวจสอบยอดเงินเข้าอีกครั้ง",
+          "type": "text",
+          "wrap": true,
+        },
+      ],
+      "layout": "vertical",
+      "spacing": "md",
+      "type": "box",
+    },
+    "footer": {
+      "contents": [
+        {
+          "action": {
+            "data": "action=paid&order=0191a8f0-0000-7000-8000-000000000001",
+            "label": "โอนแล้ว",
+            "type": "postback",
+          },
+          "style": "primary",
+          "type": "button",
+        },
+        {
+          "action": {
+            "data": "action=change_method&order=0191a8f0-0000-7000-8000-000000000001",
+            "label": "เปลี่ยนวิธีชำระเงิน",
+            "type": "postback",
+          },
+          "style": "secondary",
+          "type": "button",
+        },
+      ],
+      "layout": "vertical",
+      "spacing": "sm",
+      "type": "box",
+    },
+    "hero": {
+      "aspectMode": "fit",
+      "aspectRatio": "1:1",
+      "size": "full",
+      "type": "image",
+      "url": "https://api.example.test/v1/payments/x/qr.png?exp=1&sig=abc",
+    },
+    "type": "bubble",
+  },
+  "type": "flex",
+}
+`;
+
+exports[`readyWithReceipt > snapshot 1`] = `
+{
+  "altText": "อาหารพร้อมแล้ว ออเดอร์ L-012",
+  "contents": {
+    "body": {
+      "contents": [
+        {
+          "size": "lg",
+          "text": "อาหารพร้อมแล้ว · L-012",
+          "type": "text",
+          "weight": "bold",
+          "wrap": true,
+        },
+        {
+          "size": "sm",
+          "text": "ออเดอร์ L-012 พร้อมรับที่ทางเข้าตึก B1",
+          "type": "text",
+          "wrap": true,
+        },
+        {
+          "type": "separator",
+        },
+        {
+          "size": "sm",
+          "text": "ใบเสร็จรับเงินอิเล็กทรอนิกส์",
+          "type": "text",
+          "weight": "bold",
+          "wrap": true,
+        },
+        {
+          "contents": [
+            {
+              "flex": 4,
+              "size": "sm",
+              "text": "2 × ก๋วยเตี๋ยวต้มยำ",
+              "type": "text",
+              "wrap": true,
+            },
+            {
+              "align": "end",
+              "flex": 2,
+              "size": "sm",
+              "text": "฿110.00",
+              "type": "text",
+              "wrap": true,
+            },
+          ],
+          "layout": "horizontal",
+          "type": "box",
+        },
+        {
+          "contents": [
+            {
+              "flex": 4,
+              "size": "sm",
+              "text": "1 × น้ำเปล่า",
+              "type": "text",
+              "wrap": true,
+            },
+            {
+              "align": "end",
+              "flex": 2,
+              "size": "sm",
+              "text": "฿10.00",
+              "type": "text",
+              "wrap": true,
+            },
+          ],
+          "layout": "horizontal",
+          "type": "box",
+        },
+        {
+          "type": "separator",
+        },
+        {
+          "contents": [
+            {
+              "flex": 4,
+              "size": "sm",
+              "text": "ยอดชำระ",
+              "type": "text",
+              "weight": "bold",
+              "wrap": true,
+            },
+            {
+              "align": "end",
+              "flex": 2,
+              "size": "sm",
+              "text": "฿120.00",
+              "type": "text",
+              "weight": "bold",
+              "wrap": true,
+            },
+          ],
+          "layout": "horizontal",
+          "type": "box",
+        },
+        {
+          "color": "#666666",
+          "size": "xs",
+          "text": "ชำระด้วย พร้อมเพย์",
+          "type": "text",
+          "wrap": true,
+        },
+        {
+          "color": "#666666",
+          "size": "xs",
+          "text": "ขอบคุณที่อุดหนุนแซ่บโดนเส้นค่ะ",
+          "type": "text",
+          "wrap": true,
+        },
+      ],
+      "layout": "vertical",
+      "spacing": "md",
+      "type": "box",
+    },
+    "type": "bubble",
+  },
+  "type": "flex",
+}
+`;

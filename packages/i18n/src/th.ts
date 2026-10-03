@@ -888,6 +888,37 @@ export const th = {
   'settings.staff.working': 'กำลังทำรายการ…',
   'settings.admin.confirm': 'ยืนยัน',
   'settings.staff.activateLabel': 'เปิดใช้งานอีกครั้ง',
+  // LINE bot messages (greeting, privacy notice, Flex cards)
+  'lineBot.greeting': 'สวัสดีค่ะ ยินดีต้อนรับสู่แซ่บโดนเส้น',
+  'lineBot.greetingHow': 'กดปุ่ม "สั่งอาหาร" ในเมนูด้านล่างเพื่อสั่ง ร้านส่งถึงทางเข้าอาคารเท่านั้น',
+  'lineBot.privacy.title': 'ประกาศความเป็นส่วนตัว',
+  'lineBot.privacy.summary':
+    'ร้านเก็บรหัสผู้ใช้ LINE ชื่อที่แสดง ชื่อและตึกผู้รับ และรายการสั่งซื้อ เพื่อทำและส่งออเดอร์เท่านั้น ผู้ควบคุมข้อมูล: คุณ {controller} ขอดู แก้ไข หรือลบข้อมูลได้ที่ {contact}',
+  'lineBot.privacy.readNotice': 'อ่านประกาศฉบับเต็ม',
+  'lineBot.privacy.ackButton': 'รับทราบ',
+  'lineBot.privacy.acked': 'ขอบคุณค่ะ บันทึกการรับทราบประกาศความเป็นส่วนตัวแล้ว',
+  'lineBot.order.title': 'ยืนยันออเดอร์ {orderNo}',
+  'lineBot.order.altText': 'ยืนยันออเดอร์ {orderNo} ยอด {total}',
+  'lineBot.order.total': 'ยอดรวม',
+  'lineBot.order.deliverTo': 'ส่งที่ทางเข้าตึก {building} · คุณ {name}',
+  'lineBot.pay.title': 'วิธีชำระเงิน · {orderNo}',
+  'lineBot.pay.altText': 'วิธีชำระเงินออเดอร์ {orderNo} ยอด {total}',
+  'lineBot.pay.cash': 'ชำระเงินสดตอนรับอาหารที่ทางเข้าตึก ยอด {amount}',
+  'lineBot.pay.promptpay': 'โอนพร้อมเพย์ไปที่ {promptpayId} ยอด {amount} ให้ตรงตามจำนวน',
+  'lineBot.pay.promptpayAfter':
+    'โอนเสร็จแล้วกด "โอนแล้ว" หรือส่งสลิปในแชทนี้ พนักงานจะตรวจสอบยอดเงินเข้าอีกครั้ง',
+  'lineBot.pay.govCopay':
+    'ชำระด้วยไทยช่วยไทย ที่ทางเข้าตึกตอนรับอาหารเท่านั้น พนักงานจะสร้าง QR ให้ต่อหน้า แล้วสแกนด้วยเป๋าตัง ยอดเต็ม {amount}',
+  'lineBot.pay.govCopayNote': 'ร้านจะไม่ส่ง QR ทาง LINE',
+  'lineBot.pay.paidButton': 'โอนแล้ว',
+  'lineBot.pay.changeButton': 'เปลี่ยนวิธีชำระเงิน',
+  'lineBot.ready.title': 'อาหารพร้อมแล้ว · {orderNo}',
+  'lineBot.ready.body': 'ออเดอร์ {orderNo} พร้อมรับที่ทางเข้าตึก {building}',
+  'lineBot.ready.altText': 'อาหารพร้อมแล้ว ออเดอร์ {orderNo}',
+  'lineBot.receipt.title': 'ใบเสร็จรับเงินอิเล็กทรอนิกส์',
+  'lineBot.receipt.total': 'ยอดชำระ',
+  'lineBot.receipt.method': 'ชำระด้วย {method}',
+  'lineBot.receipt.thanks': 'ขอบคุณที่อุดหนุนแซ่บโดนเส้นค่ะ',
 } as const;
 
 export type MessageKey = keyof typeof th;
