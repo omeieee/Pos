@@ -168,7 +168,7 @@ describe('changing the account', () => {
     expect(JSON.stringify(env.settingsEditor.getState())).not.toContain(NEW_ID);
   });
 
-  test('without a fresh step-up the owner is asked first; closing that asks nothing of the server and leaves the review open', async () => {
+  test('without a fresh step-up the owner is asked first; closing that asks nothing of the server, leaves the review open and says the owner has to sign in', async () => {
     const env = await open({ freshStepUp: false });
     const dialog = await fillAndReview();
     fireEvent.click(
@@ -183,8 +183,9 @@ describe('changing the account', () => {
     );
     await waitFor(() => expect(screen.queryByText(th['auth.stepUp.title'])).toBeNull());
     expect(env.settingsApi.promptpayMasked.save).not.toHaveBeenCalled();
-    // Still on the review step, no error shown.
+    // Still on the review step, and it says why nothing happened instead of closing silently.
     expect(screen.getByText(tr('settings.promptpay.dialog.confirmTitle'))).toBeTruthy();
+    expect(within(dialog).getByText(th['error.ownerSignInNeeded'])).toBeTruthy();
     expect(screen.queryByText(th['error.stepUpRequired'])).toBeNull();
   });
 

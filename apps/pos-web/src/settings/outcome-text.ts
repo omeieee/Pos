@@ -5,16 +5,17 @@ type Failure = Extract<SaveOutcome<unknown>, { ok: false }>;
 
 /**
  * What to tell the person when a settings change did not happen; null when there is nothing to say
- * (a second tap on a change already on its way, an answer from before a sign-out, or a step-up the
- * person closed). A conflict adds that the latest values were loaded, so the person knows to look
+ * (a second tap on a change already on its way, or an answer from before a sign-out). A step-up the
+ * person closed says the owner has to sign in, online: the change did not happen. A conflict adds that the latest values were loaded, so the person knows to look
  * again before saving.
  */
 export function failureText(tr: Translate, failure: Failure): string | null {
   switch (failure.reason) {
     case 'busy':
     case 'stale':
-    case 'cancelled':
       return null;
+    case 'cancelled':
+      return tr('error.ownerSignInNeeded');
     case 'offline':
       return tr('settings.offline');
     case 'error': {

@@ -149,6 +149,22 @@ describe('an existing scheme', () => {
     save();
     expect(await screen.findByText(tr('error.validation'))).toBeTruthy();
   });
+
+  test('the server refusing it for channels other than the storefront says so in its own words', async () => {
+    await open({
+      settingsApi: {
+        govCopay: {
+          read: async () => ({ scheme: scheme() }),
+          save: async () => {
+            throw new ApiClientError('COPAY_CHANNELS_NOT_STOREFRONT', { status: 422 });
+          },
+        },
+      },
+    });
+    fireEvent.click(await screen.findByLabelText(tr('settings.copay.enabled')));
+    save();
+    expect(await screen.findByText(tr('error.copayChannelsNotStorefront'))).toBeTruthy();
+  });
 });
 
 describe('a stored scheme whose channels are not exactly the storefront', () => {
