@@ -4,6 +4,7 @@ import { type AlertReport, forwardAlerts } from './alerts.ts';
 import { buildApp } from './app.ts';
 import { ConfigError, loadConfig } from './config.ts';
 import { createEventBus } from './events.ts';
+import { startJobs } from './jobs/boss.ts';
 import { createLineRuntime } from './line/runtime.ts';
 import { sentryOptions } from './redact.ts';
 import { registerV1 } from './v1.ts';
@@ -64,15 +65,25 @@ events.subscribe((event) => {
   }
 });
 if (reportAlert) forwardAlerts(events, reportAlert);
-await registerV1(app, {
-  db,
-  authSecretKey: config.authSecretKey,
-  events,
-  line: createLineRuntime(config.line),
-});
+const line = createLineRuntime(config.line);
+await registerV1(app, { db, authSecretKey: config.authSecretKey, events, line });
+
+// Background jobs (D-16). A job queue that cannot start must not take the API down: log it and
+// keep serving; the jobs are catch-up work, not the request path.
+let jobs: { stop(): Promise<void> } | undefined;
+try {
+  jobs = await startJobs({
+    databaseUrl: config.databaseUrl,
+    deps: { db, events, now: () => new Date(), line },
+    log: app.log,
+  });
+} catch (error) {
+  app.log.error({ errorName: error instanceof Error ? error.name : 'Error' }, 'jobs not started');
+}
 
 async function shutdown(signal: string) {
   app.log.info({ signal }, 'shutting down');
+  await jobs?.stop().catch(() => undefined);
   await app.close();
   await close();
   process.exit(0);

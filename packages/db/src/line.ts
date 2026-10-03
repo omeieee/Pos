@@ -4,7 +4,7 @@
  * `line_events` row holds the user id and a `route` of ids and fixed words, never chat text or a
  * reply token, and is deleted 30 days after it arrived (`retention.ts`).
  */
-import { and, eq, sql } from 'drizzle-orm';
+import { and, asc, eq, gt, inArray, isNotNull, isNull, lte, or, sql } from 'drizzle-orm';
 import type { Db } from './client.ts';
 import { customers, lineEvents, lineMessageLog, lineQuotaMonths } from './schema.ts';
 
@@ -40,6 +40,74 @@ export async function markEventProcessed(
     .update(lineEvents)
     .set({ processedAt: at, error: error ?? null })
     .where(eq(lineEvents.webhookEventId, webhookEventId));
+}
+
+export interface RetryableEvent {
+  webhookEventId: string;
+  type: string;
+  userId: string | null;
+  route: unknown;
+  receivedAt: Date;
+}
+
+/**
+ * Takes the events the retry sweep should run now: stored with a route, never handled or handled
+ * with an error, old enough not to race the live handler and recent enough to still matter, and
+ * not yet tried `maxAttempts` times. Each one's `attempts` goes up by one in the same statement,
+ * so an event that keeps crashing the process still runs out of attempts. Oldest first.
+ */
+export async function claimRetryableEvents(
+  db: Db,
+  args: { receivedBefore: Date; receivedAfter: Date; maxAttempts: number; limit: number },
+): Promise<RetryableEvent[]> {
+  const candidates = db
+    .select({ id: lineEvents.webhookEventId })
+    .from(lineEvents)
+    .where(
+      and(
+        isNotNull(lineEvents.route),
+        or(isNull(lineEvents.processedAt), isNotNull(lineEvents.error)),
+        sql`${lineEvents.attempts} < ${args.maxAttempts}`,
+        lte(lineEvents.receivedAt, args.receivedBefore),
+        gt(lineEvents.receivedAt, args.receivedAfter),
+      ),
+    )
+    .orderBy(asc(lineEvents.receivedAt))
+    .limit(args.limit);
+  const rows = await db
+    .update(lineEvents)
+    .set({ attempts: sql`${lineEvents.attempts} + 1` })
+    .where(inArray(lineEvents.webhookEventId, candidates))
+    .returning({
+      webhookEventId: lineEvents.webhookEventId,
+      type: lineEvents.type,
+      userId: lineEvents.userId,
+      route: lineEvents.route,
+      receivedAt: lineEvents.receivedAt,
+    });
+  return rows.sort((a, b) => a.receivedAt.getTime() - b.receivedAt.getTime());
+}
+
+/**
+ * True when LINE delivered a later follow or unfollow for the same user: the older one must not
+ * be applied again, or it would undo what the later one set.
+ */
+export async function hasLaterFollowEvent(
+  db: Db,
+  event: { webhookEventId: string; userId: string; receivedAt: Date },
+): Promise<boolean> {
+  const [row] = await db
+    .select({ id: lineEvents.webhookEventId })
+    .from(lineEvents)
+    .where(
+      and(
+        eq(lineEvents.userId, event.userId),
+        inArray(lineEvents.type, ['follow', 'unfollow']),
+        gt(lineEvents.receivedAt, event.receivedAt),
+      ),
+    )
+    .limit(1);
+  return row !== undefined;
 }
 
 /** A new or returning follower. Clears `unfollowed_at`. Returns the customer id. */

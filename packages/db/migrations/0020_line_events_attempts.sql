@@ -1,0 +1,1 @@
+ALTER TABLE "line_events" ADD COLUMN "attempts" integer DEFAULT 0 NOT NULL;

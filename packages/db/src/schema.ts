@@ -656,6 +656,8 @@ export const lineEvents = pgTable('line_events', {
   receivedAt: ts('received_at').notNull().defaultNow(),
   processedAt: ts('processed_at'),
   error: text('error'),
+  /** How many times the retry sweep has run this event (a first, live run is not counted). */
+  attempts: integer('attempts').notNull().default(0),
 });
 
 export const lineMessageLog = pgTable(
