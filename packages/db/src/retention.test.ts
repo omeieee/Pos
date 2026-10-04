@@ -5,9 +5,11 @@ import {
   ANONYMIZED_ROOM_NO,
   RETENTION_DAYS,
 } from '@sds/shared';
+import { drizzle } from 'drizzle-orm/pglite';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 import { createPgliteDb, type PgliteDb } from './pglite.ts';
 import * as retention from './retention.ts';
+import * as schema from './schema.ts';
 
 let db: PgliteDb;
 let client: PGlite;
@@ -397,5 +399,26 @@ describe('expireEmptyLineCustomersBatch', () => {
     );
     expect(audits).not.toContain('Utest-empty');
     expect(audits).not.toContain(stale);
+  });
+});
+
+// postgres-js (production) rejects a raw `Date` parameter, PGlite accepts it. A `Date` compared
+// with a `sql` expression has no column encoder, so it must be passed as an ISO string.
+describe('retention queries send no Date parameter to the driver', () => {
+  test('every batch passes only driver-safe parameters', async () => {
+    const seen: unknown[] = [];
+    const logged = drizzle({
+      client,
+      schema,
+      logger: { logQuery: (_query, params) => void seen.push(...params) },
+    });
+    const args = { before: new Date(NOW.getTime() - 30 * 86_400_000), limit: 10, now: NOW };
+    await retention.purgeLineEventsBatch(logged, args);
+    await retention.purgeStaffInvitesBatch(logged, args);
+    await retention.anonymizeOrderSnapshotsBatch(logged, args);
+    await retention.expireRecipientsBatch(logged, args);
+    await retention.expireEmptyLineCustomersBatch(logged, args);
+    expect(seen.length).toBeGreaterThan(0);
+    expect(seen.filter((value) => value instanceof Date)).toEqual([]);
   });
 });

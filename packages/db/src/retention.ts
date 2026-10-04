@@ -110,7 +110,7 @@ export async function anonymizeOrderSnapshotsBatch(
       .where(
         and(
           inArray(orders.status, ['completed', 'cancelled']),
-          lt(sql`coalesce(${orders.completedAt}, ${orders.cancelledAt})`, args.before),
+          sql`coalesce(${orders.completedAt}, ${orders.cancelledAt}) < ${args.before.toISOString()}::timestamptz`,
           or(
             sql`${orders.recipientName} is distinct from ${nameAfter}`,
             sql`${orders.deliveryBuilding} is distinct from ${buildingAfter}`,
@@ -165,7 +165,7 @@ export async function expireRecipientsBatch(
             isNotNull(customers.recipientName),
             isNotNull(customers.recipientKey),
           ),
-          lt(sql`coalesce(${customers.lastOrderAt}, ${customers.firstSeenAt})`, args.before),
+          sql`coalesce(${customers.lastOrderAt}, ${customers.firstSeenAt}) < ${args.before.toISOString()}::timestamptz`,
           sql`not exists (select 1 from ${orders} where ${orders.customerId} = ${customers.id} and ${orders.status} in ('new', 'preparing', 'ready'))`,
         ),
       )
