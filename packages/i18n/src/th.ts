@@ -1194,7 +1194,7 @@ export const th = {
   'liff.method.title.gov_copay': 'ไทยช่วยไทย พลัส',
   'liff.method.sub.promptpay': 'สแกน QR หลังกดสั่ง · ร้านยืนยันเอง',
   'liff.method.sub.cash': 'จ่ายพนักงานที่ทางเข้าอาคาร',
-  'liff.method.sub.gov_copay': 'ชำระกับพนักงานตอนรับของ ในช่วงเวลาโครงการ',
+  'liff.method.sub.gov_copay': 'จ่ายกับพนักงานตอนรับของ · พนักงานตรวจสิทธิ์ให้',
   'liff.order.steps': 'ขั้นตอนของออเดอร์',
   'liff.order.step.ordered': 'สั่งแล้ว',
   'liff.order.step.pay': 'ชำระเงิน',

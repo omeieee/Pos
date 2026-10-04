@@ -86,6 +86,10 @@ export interface PaymentPatch {
   confirmedAt?: Date;
   referenceNote?: string;
   voidReason?: string;
+  /** Set when a co-pay request made while the scheme was off is confirmed. */
+  schemeId?: string;
+  estGovShareSatang?: number;
+  estCustomerShareSatang?: number;
 }
 
 export async function findPaymentById(db: Db, id: string): Promise<PaymentRow | undefined> {

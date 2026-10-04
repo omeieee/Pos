@@ -26,6 +26,36 @@ export function localeFromBrowser(): Locale {
     : 'th';
 }
 
+const LOCALE_KEY = 'sds.locale';
+
+/** The language the customer picked last time, if this browser lets us remember it. */
+export function readStoredLocale(): Locale | null {
+  try {
+    const v = localStorage.getItem(LOCALE_KEY);
+    return v === 'th' || v === 'en' ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+export function storeLocale(locale: Locale): void {
+  try {
+    localStorage.setItem(LOCALE_KEY, locale);
+  } catch {
+    // Private mode or blocked storage: the choice just lasts until the app closes.
+  }
+}
+
+/** The language switch lives outside `Ctx` so the loading and error screens can use it too. */
+export const LocaleCtx = createContext<{ locale: Locale; setLocale: (l: Locale) => void }>({
+  locale: 'th',
+  setLocale: () => {},
+});
+
+export function useLocale() {
+  return useContext(LocaleCtx);
+}
+
 export function useT() {
   const { locale } = useApp();
   return (key: MessageKey, params?: MessageParams) => t(locale, key, params);

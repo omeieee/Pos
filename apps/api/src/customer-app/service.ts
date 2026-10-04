@@ -40,7 +40,6 @@ import {
   changePaymentMethod,
   createPayment,
   movePayment,
-  offeredCopay,
   paymentQrUrl,
   withdrawPendingPayment,
 } from '../payments/service.ts';
@@ -99,15 +98,16 @@ export async function acknowledgePrivacy(
 
 /**
  * The methods a LINE customer can pick right now. PromptPay needs the owner's switch and a
- * PromptPay ID; ไทยช่วยไทย only while the scheme is enabled and inside its dates and hours
- * (`offeredCopay`, the same check that creates the payment); cash needs the owner's switch.
+ * PromptPay ID; cash needs the owner's switch. ไทยช่วยไทย is always listed: choosing it only tells
+ * staff the customer wants it, and staff check the scheme at the hand-over (`insertPaymentFor`
+ * records no scheme figures when the scheme is not running).
  */
-export async function methodsOffered(db: Db, now: Date): Promise<AppPayMethod[]> {
+export async function methodsOffered(db: Db): Promise<AppPayMethod[]> {
   const settings = await currentPaymentsSettings(db);
   const methods: AppPayMethod[] = [];
   if (settings.cash) methods.push('cash');
   if (settings.promptpay && (await currentPromptpayId(db)) !== null) methods.push('promptpay');
-  if (await offeredCopay(db, 'line', 'entrance_delivery', now)) methods.push('gov_copay');
+  methods.push('gov_copay');
   return methods;
 }
 
@@ -121,7 +121,7 @@ export async function checkoutInfo(
   return {
     delivery: open,
     buildings: (await currentDeliverySettings(ctx.db)).buildings,
-    methods: await methodsOffered(ctx.db, now),
+    methods: await methodsOffered(ctx.db),
     lastRecipient: recipient ?? null,
     privacyAcknowledged: customer.privacyAckVersion === PRIVACY_NOTICE_VERSION,
     privacyVersion: PRIVACY_NOTICE_VERSION,
@@ -182,7 +182,7 @@ export async function viewOrder(ctx: CoreContext, order: ordersRepo.OrderRow): P
       claim: !closed && open?.method === 'promptpay' && open.status === 'pending',
       changeMethod: canChange,
       showQr: !closed && open?.method === 'promptpay',
-      methods: canChange ? await methodsOffered(ctx.db, ctx.now()) : [],
+      methods: canChange ? await methodsOffered(ctx.db) : [],
     },
   });
 }
@@ -213,8 +213,8 @@ export async function getMyOrder(
 // ---------- Placing an order ----------
 
 /** The method is on offer now, or the order is refused before anything is written. */
-async function assertMethodOffered(db: Db, now: Date, method: AppPayMethod): Promise<void> {
-  if (!(await methodsOffered(db, now)).includes(method)) {
+async function assertMethodOffered(db: Db, method: AppPayMethod): Promise<void> {
+  if (!(await methodsOffered(db)).includes(method)) {
     throw new ApiError(422, 'METHOD_UNAVAILABLE', 'That payment method is not available right now');
   }
 }
@@ -253,7 +253,7 @@ export async function placeOrder(
         window: open.window,
       });
     }
-    await assertMethodOffered(ctx.db, now, input.paymentMethod);
+    await assertMethodOffered(ctx.db, input.paymentMethod);
     const quantity = input.items.reduce((sum, line) => sum + line.qty, 0);
     if (quantity > MAX_ORDER_QUANTITY) {
       throw new ApiError(422, 'ORDER_TOO_LARGE', 'That is too many items for one order', {

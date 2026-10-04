@@ -1285,7 +1285,7 @@ export const en = {
   'liff.method.title.gov_copay': 'Thai Chuay Thai Plus',
   'liff.method.sub.promptpay': 'Scan the QR after ordering · the shop confirms',
   'liff.method.sub.cash': 'Pay staff at the building entrance',
-  'liff.method.sub.gov_copay': 'Pay with staff when you collect, during the scheme period',
+  'liff.method.sub.gov_copay': 'Pay staff when you collect · staff check your eligibility',
   'liff.order.steps': 'Order progress',
   'liff.order.step.ordered': 'Ordered',
   'liff.order.step.pay': 'Payment',

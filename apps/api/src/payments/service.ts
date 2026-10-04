@@ -390,6 +390,17 @@ async function insertPaymentFor(
     }
     case 'gov_copay': {
       const offered = await offeredCopay(tx, order.channel, order.fulfillment as Fulfillment, now);
+      if (
+        !offered &&
+        isCustomer(actor) &&
+        order.channel === 'line' &&
+        order.fulfillment === 'entrance_delivery'
+      ) {
+        // A LINE customer's choice is a request for staff to see: no scheme figures are saved,
+        // and staff can only take the payment as ไทยช่วยไทย while the scheme really runs.
+        row = await paymentsRepo.insertPayment(tx, { ...base, status: 'pending' });
+        break;
+      }
       if (!offered) {
         throw unprocessable(
           'GOV_COPAY_UNAVAILABLE',
@@ -702,6 +713,32 @@ export async function movePayment(
     if (result.stepUp && !hasFreshStepUp(staffOf(actor), ctx.now())) throw stepUpRequired();
 
     const now = ctx.now();
+    // Rule 4: ไทยช่วยไทย is taken only while the scheme runs. A request a customer made earlier
+    // (no scheme figures yet) gets them now, from the scheme in force at confirmation.
+    let copaySnapshot: paymentsRepo.PaymentPatch = {};
+    if (spec.to === 'confirmed' && row.method === 'gov_copay') {
+      const offered = await offeredCopay(tx, order.channel, order.fulfillment as Fulfillment, now);
+      if (!offered) {
+        throw unprocessable(
+          'GOV_COPAY_UNAVAILABLE',
+          'The government co-pay scheme is not available for this order right now. Change the payment method',
+        );
+      }
+      if (row.schemeId === null) {
+        let split: ReturnType<typeof estimateGovCopaySplit>;
+        try {
+          split = estimateGovCopaySplit(satang(row.amountSatang), offered.scheme);
+        } catch (error) {
+          if (!(error instanceof RangeError)) throw error;
+          throw unprocessable('AMOUNT_TOO_LARGE', 'This amount is too large for the co-pay scheme');
+        }
+        copaySnapshot = {
+          schemeId: offered.row.id,
+          estGovShareSatang: split.govShare,
+          estCustomerShareSatang: split.customerShare,
+        };
+      }
+    }
     const patch: paymentsRepo.PaymentPatch =
       spec.to === 'claimed'
         ? { status: 'claimed', claimedAt: now }
@@ -710,6 +747,7 @@ export async function movePayment(
               status: 'confirmed',
               confirmedByStaffId: staffOf(actor).staffId,
               confirmedAt: now,
+              ...copaySnapshot,
               ...(input.referenceNote ? { referenceNote: input.referenceNote } : {}),
             }
           : { status: spec.to, voidReason: reason ?? '' };

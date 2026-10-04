@@ -1,11 +1,20 @@
-import { type MessageKey, t } from '@sds/i18n';
+import { type Locale, type MessageKey, t } from '@sds/i18n';
 import type { CheckoutInfo, PublicMenuResponse } from '@sds/shared';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { type Api, createApi } from './api/client.ts';
 import type { Cart } from './model/cart.ts';
 import { apiBaseUrl } from './platform/config.ts';
 import { type Platform, startPlatform } from './platform/liff.ts';
-import { Ctx, errorKey, localeFromBrowser, useApp, useT } from './ui/app-context.tsx';
+import {
+  Ctx,
+  errorKey,
+  LocaleCtx,
+  localeFromBrowser,
+  readStoredLocale,
+  storeLocale,
+  useApp,
+  useT,
+} from './ui/app-context.tsx';
 import { CheckoutScreen, PrivacyGate } from './ui/CartScreen.tsx';
 import { Body, Frame, Header, Notice } from './ui/Chrome.tsx';
 import { MenuScreen } from './ui/MenuScreen.tsx';
@@ -38,7 +47,17 @@ const tr = (locale: 'th' | 'en', key: MessageKey) => t(locale, key);
 export function App() {
   const [boot, setBoot] = useState<Boot>({ state: 'loading' });
   const [path, go] = usePath();
-  const locale = useMemo(localeFromBrowser, []);
+  const [locale, setLocaleState] = useState<Locale>(
+    () => readStoredLocale() ?? localeFromBrowser(),
+  );
+  const setLocale = useCallback((next: Locale) => {
+    storeLocale(next);
+    setLocaleState(next);
+  }, []);
+  useEffect(() => {
+    document.documentElement.lang = locale;
+  }, [locale]);
+  const localeValue = useMemo(() => ({ locale, setLocale }), [locale, setLocale]);
 
   useEffect(() => {
     startPlatform(import.meta.env.VITE_LIFF_ID)
@@ -54,26 +73,30 @@ export function App() {
 
   if (boot.state !== 'ready') {
     return (
-      <Frame>
-        <Header title={tr(locale, 'liff.app.name')} />
-        <Body>
-          {boot.state === 'error' ? (
-            <Notice tone="bad" icon="warn" alert>
-              {tr(locale, 'liff.error.signin')}
-            </Notice>
-          ) : (
-            <Notice icon="clock">{tr(locale, 'liff.loading')}</Notice>
-          )}
-        </Body>
-      </Frame>
+      <LocaleCtx.Provider value={localeValue}>
+        <Frame>
+          <Header title={tr(locale, 'liff.app.name')} />
+          <Body>
+            {boot.state === 'error' ? (
+              <Notice tone="bad" icon="warn" alert>
+                {tr(locale, 'liff.error.signin')}
+              </Notice>
+            ) : (
+              <Notice icon="clock">{tr(locale, 'liff.loading')}</Notice>
+            )}
+          </Body>
+        </Frame>
+      </LocaleCtx.Provider>
     );
   }
   return (
-    <Ctx.Provider value={{ api: boot.api, platform: boot.platform, locale, go }}>
-      <Frame>
-        <Screens path={path} />
-      </Frame>
-    </Ctx.Provider>
+    <LocaleCtx.Provider value={localeValue}>
+      <Ctx.Provider value={{ api: boot.api, platform: boot.platform, locale, go }}>
+        <Frame>
+          <Screens path={path} />
+        </Frame>
+      </Ctx.Provider>
+    </LocaleCtx.Provider>
   );
 }
 

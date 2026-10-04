@@ -405,7 +405,7 @@ describe('placing an order', () => {
     expect(cash.json.order.paymentStatus).toBe('unpaid');
   });
 
-  test('ไทยช่วยไทย is offered only while the scheme runs, and creates a pending payment with no QR', async () => {
+  test('ไทยช่วยไทย is always on offer: a pending payment with no QR, with scheme figures only while the scheme runs', async () => {
     const token = await customer(TOKEN_A);
     expect((await call('GET', '/v1/app/checkout', token)).json().methods).toContain('gov_copay');
     const ok = await order(token, { paymentMethod: 'gov_copay' });
@@ -425,21 +425,28 @@ describe('placing an order', () => {
       ).rows[0]?.qr_payload,
     ).toBeNull();
 
-    await setScheme(false);
-    expect((await call('GET', '/v1/app/checkout', token)).json().methods).not.toContain(
-      'gov_copay',
-    );
-    const closed = await order(token, { paymentMethod: 'gov_copay' });
-    expect(closed.res.statusCode).toBe(422);
-    expect(closed.json).toMatchObject({ code: 'METHOD_UNAVAILABLE' });
-    // Nothing was saved for the refused order.
+    // With the scheme off the option stays: it is a request staff see, with no scheme figures.
     expect(
       (
-        await h.client.query('select id from orders where client_request_id = $1', [
-          body().clientRequestId,
-        ])
-      ).rows,
-    ).toHaveLength(0);
+        await h.client.query<{ scheme_id: string | null }>(
+          'select scheme_id from payments where order_id = $1',
+          [ok.json.order.id],
+        )
+      ).rows[0]?.scheme_id,
+    ).not.toBeNull();
+    await setScheme(false);
+    expect((await call('GET', '/v1/app/checkout', token)).json().methods).toContain('gov_copay');
+    const request = await order(token, { paymentMethod: 'gov_copay' });
+    expect(request.res.statusCode).toBe(201);
+    expect(request.json.order.payment).toMatchObject({ method: 'gov_copay', status: 'pending' });
+    expect(
+      (
+        await h.client.query<{ scheme_id: string | null; est_gov_share_satang: string | null }>(
+          'select scheme_id, est_gov_share_satang from payments where order_id = $1',
+          [request.json.order.id],
+        )
+      ).rows[0],
+    ).toMatchObject({ scheme_id: null, est_gov_share_satang: null });
   });
 
   test('methods the owner switched off are not on offer', async () => {
@@ -761,16 +768,37 @@ describe('"โอนแล้ว" and the payment choices', () => {
     expect(view.actions).toMatchObject({ changeMethod: false, claim: false, methods: [] });
   });
 
-  test('ไทยช่วยไทย cannot be chosen once the scheme has closed, and the old choice stays', async () => {
+  test('ไทยช่วยไทย can still be chosen once the scheme has closed: staff see the request', async () => {
     const token = await customer(TOKEN_A);
     const o = (await order(token, { paymentMethod: 'promptpay' })).json.order;
     await setScheme(false);
     const res = await call('POST', `/v1/app/orders/${o.id}/payment`, token, {
       method: 'gov_copay',
     });
-    expect(res.statusCode).toBe(422);
+    expect(res.statusCode).toBe(200);
     const view = (await call('GET', `/v1/app/orders/${o.id}`, token)).json() as MyOrder;
-    expect(view.payment).toMatchObject({ method: 'promptpay', status: 'pending' });
+    expect(view.payment).toMatchObject({ method: 'gov_copay', status: 'pending' });
+  });
+
+  test('staff cannot confirm a ไทยช่วยไทย request while the scheme is off; once it runs the figures are saved', async () => {
+    const token = await customer(TOKEN_A);
+    await setScheme(false);
+    const o = (await order(token, { paymentMethod: 'gov_copay' })).json.order;
+    const staffToken = await h.ownerSession(owner);
+    const refused = await call('POST', `/v1/payments/${o.payment?.id}/confirm`, staffToken, {});
+    expect(refused.statusCode).toBe(422);
+    expect(refused.json().code).toBe('GOV_COPAY_UNAVAILABLE');
+    await setScheme(true);
+    const ok = await call('POST', `/v1/payments/${o.payment?.id}/confirm`, staffToken, {});
+    expect(ok.statusCode).toBe(200);
+    expect(
+      (
+        await h.client.query<{ scheme_id: string | null; est_gov_share_satang: string | null }>(
+          'select scheme_id, est_gov_share_satang from payments where id = $1',
+          [o.payment?.id],
+        )
+      ).rows[0],
+    ).toMatchObject({ scheme_id: expect.any(String), est_gov_share_satang: expect.anything() });
   });
 
   test('after staff confirm, the customer sees paid and cannot change or claim', async () => {

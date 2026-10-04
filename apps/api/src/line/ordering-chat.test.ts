@@ -319,7 +319,7 @@ describe('"โอนแล้ว" from the chat', () => {
 });
 
 describe('changing the payment method from the chat', () => {
-  test('the picker offers ไทยช่วยไทย only while the scheme runs, with no QR and no link', async () => {
+  test('the picker always offers ไทยช่วยไทย, with no QR and no link', async () => {
     const token = await signIn('id-token-a-0000000000000000000000');
     const order = await place(token);
     await deliver(postback(U_A, `action=change_method&order=${order.id}`));
@@ -331,7 +331,8 @@ describe('changing the payment method from the chat', () => {
     await h.client.query("update gov_copay_schemes set enabled = false where code = 'test'");
     sent.length = 0;
     await deliver(postback(U_A, `action=change_method&order=${order.id}`));
-    expect(JSON.stringify(lastReply())).not.toContain('gov_copay');
+    expect(JSON.stringify(lastReply())).toContain('gov_copay');
+    expect(JSON.stringify(lastReply())).not.toMatch(/https?:|"image"/i);
   });
 
   test('choosing a method updates the POS the same way the app does, and replies with the new instructions', async () => {

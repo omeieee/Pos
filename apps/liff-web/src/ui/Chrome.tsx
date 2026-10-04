@@ -1,6 +1,7 @@
 import type { CSSProperties, ReactNode } from 'react';
 import { Gi, type GiName } from '../design/icons.tsx';
 import { s } from '../design/style.ts';
+import { useLocale } from './app-context.tsx';
 
 /**
  * The frame of every customer screen, taken from the LINE boards of the design: a warm glass
@@ -38,6 +39,26 @@ export function BarButton({
   );
 }
 
+/** Thai / English switch: one button that names the language it switches to. */
+function LangToggle() {
+  const { locale, setLocale } = useLocale();
+  const next = locale === 'th' ? 'en' : 'th';
+  return (
+    <button
+      type="button"
+      className="g-btn"
+      style={s(
+        'min-width:44px;height:44px;padding:0 10px;background:transparent;box-shadow:none;flex:none;font-weight:600',
+      )}
+      lang={next}
+      aria-label={next === 'en' ? 'English' : 'ภาษาไทย'}
+      onClick={() => setLocale(next)}
+    >
+      {next === 'en' ? 'EN' : 'ไทย'}
+    </button>
+  );
+}
+
 export function Header({
   left,
   title,
@@ -69,6 +90,7 @@ export function Header({
         >
           {title}
         </h1>
+        <LangToggle />
         {right ?? <span style={s('width:44px;flex:none')} />}
       </div>
       {children}
