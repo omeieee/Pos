@@ -67,6 +67,16 @@ export async function pingDb(db: Db): Promise<void> {
   await db.execute(sql`select 1`);
 }
 
+/** Like `pingDb`, but on a brand-new connection that bypasses the long-lived pool. */
+export async function pingFreshDb(url: string): Promise<void> {
+  const client = postgres(url, postgresOptions(url, 1));
+  try {
+    await client`select 1`;
+  } finally {
+    await client.end({ timeout: 2 });
+  }
+}
+
 /** Applies every pending migration with one connection, then closes it. */
 export async function runMigrations(
   url: string,

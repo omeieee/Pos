@@ -1,4 +1,4 @@
-import { createDb, pingDb } from '@sds/db';
+import { createDb, pingDb, pingFreshDb } from '@sds/db';
 import type { FastifyInstance } from 'fastify';
 import { type AlertReport, forwardAlerts } from './alerts.ts';
 import { buildApp } from './app.ts';
@@ -7,6 +7,7 @@ import { createEventBus } from './events.ts';
 import { startJobs } from './jobs/boss.ts';
 import { alertOnAttempt, superviseJobs } from './jobs/supervisor.ts';
 import { createLineRuntime } from './line/runtime.ts';
+import { createPoolWatchdog } from './pool-watchdog.ts';
 import { sentryOptions } from './redact.ts';
 import { registerV1 } from './v1.ts';
 
@@ -100,8 +101,21 @@ const jobs = superviseJobs({
   },
 });
 
+// A pool that fails while fresh connections work is wedged (seen 2026-10-04: queries hung while
+// the database was healthy, cause not found yet): exit so Docker restarts the API. A real
+// database outage does not trigger this.
+const watchdog = createPoolWatchdog({
+  checkPool: () => pingDb(db),
+  checkFresh: () => pingFreshDb(config.databaseUrl),
+  onWedged: () => {
+    app.log.error('database pool is wedged while the database is reachable, exiting to restart');
+    process.exit(1);
+  },
+});
+
 async function shutdown(signal: string) {
   app.log.info({ signal }, 'shutting down');
+  watchdog.stop();
   await jobs.stop();
   await app.close();
   await close();
