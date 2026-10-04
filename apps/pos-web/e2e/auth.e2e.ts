@@ -1,4 +1,24 @@
-import { expect, mainNav, OWNER_LOGIN, STAFF, signInWithPin, tapPin, test, tr } from './support.ts';
+import type { Page } from '@playwright/test';
+import {
+  expect,
+  mainNav,
+  OWNER_LOGIN,
+  openAccount,
+  STAFF,
+  signInWithPin,
+  tapPin,
+  test,
+  tr,
+} from './support.ts';
+
+async function expectSignedInAs(page: Page, role: 'owner' | 'manager' | 'cashier') {
+  await expect(await openAccount(page)).toContainText(tr(`role.${role}`));
+}
+
+async function signOut(page: Page) {
+  const menu = await openAccount(page);
+  await menu.getByRole('button', { name: tr('shell.signOut') }).click();
+}
 
 test.describe('sign in', () => {
   test.describe('first run on an unregistered device', () => {
@@ -34,13 +54,13 @@ test.describe('sign in', () => {
 
       // The device is registered and the owner is in, on a device with its name.
       await expect(mainNav(page)).toBeVisible();
-      await expect(page.locator('.chip--person')).toContainText(tr('role.owner'));
+      await expectSignedInAs(page, 'owner');
       await expect(
         page.getByText(tr('shell.device', { name: 'iPad เคาน์เตอร์ (ทดสอบ)' })),
       ).toBeVisible();
 
       // From now on the device shows the staff tiles for PIN sign-in.
-      await page.getByRole('button', { name: tr('shell.signOut') }).click();
+      await signOut(page);
       await expect(
         page.getByRole('heading', { level: 1, name: tr('auth.pin.title') }),
       ).toBeVisible();
@@ -67,15 +87,15 @@ test.describe('sign in', () => {
     await page.getByRole('button', { name: new RegExp(STAFF.manager.name) }).click();
     await tapPin(page, STAFF.manager.pin);
     await expect(mainNav(page)).toBeVisible();
-    await expect(page.getByText(STAFF.manager.name)).toBeVisible();
-    await expect(page.locator('.chip--person')).toContainText(tr('role.manager'));
+    await expectSignedInAs(page, 'manager');
+    await expect(await openAccount(page)).toContainText(STAFF.manager.name);
 
     // Sign out returns to the tiles; the cashier's 4-digit PIN needs OK.
-    await page.getByRole('button', { name: tr('shell.signOut') }).click();
+    await signOut(page);
     await page.getByRole('button', { name: new RegExp(STAFF.cashier.name) }).click();
     await tapPin(page, STAFF.cashier.pin);
     await expect(mainNav(page)).toBeVisible();
-    await expect(page.locator('.chip--person')).toContainText(tr('role.cashier'));
+    await expectSignedInAs(page, 'cashier');
   });
 
   test('a wrong PIN is refused and the pad clears', async ({ page }) => {
@@ -97,14 +117,14 @@ test.describe('sign in', () => {
     await page.getByLabel(tr('auth.owner.code'), { exact: true }).fill(OWNER_LOGIN.codes[0]);
     await page.getByRole('button', { name: tr('auth.owner.submit'), exact: true }).click();
     await expect(mainNav(page)).toBeVisible();
-    await expect(page.locator('.chip--person')).toContainText(tr('role.owner'));
+    await expectSignedInAs(page, 'owner');
   });
 
   test('a signed-out device shows no orders and no navigation', async ({ page }) => {
     await signInWithPin(page, 'cashier');
-    await page.getByRole('button', { name: tr('shell.signOut') }).click();
+    await signOut(page);
     await expect(page.getByRole('heading', { level: 1, name: tr('auth.pin.title') })).toBeVisible();
     await expect(mainNav(page)).toHaveCount(0);
-    await expect(page.locator('.dishes')).toHaveCount(0);
+    await expect(page.locator('button.g-tile')).toHaveCount(0);
   });
 });

@@ -1,5 +1,6 @@
+import { Gi } from '../design/icons.tsx';
+import { s } from '../design/style.ts';
 import { useEntities, useServices, useStoreState, useT } from '../ui/hooks.ts';
-import { Icon } from '../ui/Icon.tsx';
 import {
   duplicatePlatformRef,
   isPlatformChannel,
@@ -36,35 +37,46 @@ export function PlatformFields({ locked }: { locked: boolean }) {
     );
 
   return (
-    <div className="platform">
-      <div className="field-group">
-        <label className="label" htmlFor="platform-ref">
+    <div
+      className="g-sunk"
+      style={s('padding:14px 16px;display:flex;flex-direction:column;gap:10px')}
+    >
+      <div style={s('display:flex;flex-direction:column;gap:6px')}>
+        <label className="g-t-c" htmlFor="platform-ref">
           {tr('platform.ref')}
         </label>
-        <input
-          id="platform-ref"
-          className="input"
-          type="text"
-          inputMode="text"
-          autoCapitalize="characters"
-          autoComplete="off"
-          autoCorrect="off"
-          spellCheck={false}
-          maxLength={PLATFORM_REF_MAX}
-          placeholder={tr('platform.refPlaceholder')}
-          disabled={locked}
-          value={state.platformRef}
-          aria-invalid={filled && !valid}
-          onChange={(event) => cart.setPlatformRef(event.target.value)}
-        />
+        <div className="g-field" style={s('height:46px;border-radius:14px;font-size:14px')}>
+          <Gi n="receipt2" size="sm" />
+          <input
+            id="platform-ref"
+            type="text"
+            inputMode="text"
+            autoCapitalize="characters"
+            autoComplete="off"
+            autoCorrect="off"
+            spellCheck={false}
+            maxLength={PLATFORM_REF_MAX}
+            placeholder={tr('platform.refPlaceholder')}
+            disabled={locked}
+            value={state.platformRef}
+            aria-invalid={filled && !valid}
+            onChange={(event) => cart.setPlatformRef(event.target.value)}
+          />
+        </div>
       </div>
       {duplicate ? (
-        <p className="notice" role="status">
-          <Icon name="alert" />
+        <p
+          className="g-badge g-b-warn"
+          role="status"
+          style={s('height:auto;padding:8px 12px;white-space:normal')}
+        >
+          <Gi n="warn" />
           <span>{tr('platform.duplicate')}</span>
         </p>
       ) : null}
-      <p className="hint">{tr('platform.hint')}</p>
+      <p className="g-t-c" style={s('margin:0')}>
+        {tr('platform.hint')}
+      </p>
     </div>
   );
 }

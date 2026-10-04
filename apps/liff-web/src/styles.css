@@ -1,253 +1,359 @@
-/* Customer app. Colours, sizes and spacing come from the shared design tokens (--sds-*), which
-   main.tsx writes onto :root for the iPhone profile. Safe-area insets keep content clear of the
-   notch and the home bar inside the LINE in-app browser. */
+/* Customer app (LIFF). The look is the shared design stylesheet (`@sds/ui/design.css`, imported
+   last in main.tsx): warm glass on a paper backdrop. This file only holds what the customer
+   screens need on top of it: the window frame, the dish row, the payment card and the order
+   tracker, written as the LINE boards of the design draw them. Rules that refine a `g-` class
+   use two classes, because design.css loads after this file. */
 * {
   box-sizing: border-box;
 }
 html {
   -webkit-text-size-adjust: 100%;
 }
+html,
+body,
+#root {
+  height: 100%;
+}
 body {
   margin: 0;
-  background: var(--sds-color-bg);
-  color: var(--sds-color-text);
-  font-family: var(--sds-font-sans);
-  font-size: var(--sds-font-size-md);
-  line-height: var(--sds-line-height-body);
-  padding-left: env(safe-area-inset-left);
-  padding-right: env(safe-area-inset-right);
+  background: #fbf4ec;
+  color: #1c1411;
+  font-family:
+    "Anuphan Variable", "Anuphan", "Noto Sans Thai", "Sukhumvit Set", system-ui, sans-serif;
+  -webkit-tap-highlight-color: transparent;
 }
-h1 {
-  font-size: var(--sds-font-size-xl);
-  line-height: var(--sds-line-height-tight);
-  margin: var(--sds-space-md) 0 var(--sds-space-xs);
+button,
+input,
+select {
+  font-family: inherit;
 }
-h2 {
-  font-size: var(--sds-font-size-lg);
-  margin: var(--sds-space-lg) 0 var(--sds-space-xs);
-}
-.page {
+
+/* The LIFF window: header, scrolling body and a floating dock; the window itself never scrolls. */
+.liff-frame.g-root {
+  height: 100vh;
   max-width: 560px;
   margin: 0 auto;
-  padding: var(--sds-space-sm) var(--sds-layout-gutter) calc(140px + env(safe-area-inset-bottom));
-}
-.bar {
-  position: sticky;
-  top: 0;
-  z-index: 5;
   display: flex;
-  gap: var(--sds-space-xs);
-  padding: var(--sds-space-xs) var(--sds-layout-gutter);
-  background: var(--sds-color-surface);
-  border-bottom: 1px solid var(--sds-color-border);
-  padding-top: calc(var(--sds-space-xs) + env(safe-area-inset-top));
+  flex-direction: column;
 }
-.tab {
-  flex: 1;
-  min-height: var(--sds-touch-min);
-  border: 0;
-  border-radius: var(--sds-radius-md);
-  background: transparent;
-  font: inherit;
-  color: var(--sds-color-text-muted);
-}
-.tab[aria-current="page"] {
-  background: var(--sds-color-brand-subtle);
-  color: var(--sds-color-brand-text);
-  font-weight: var(--sds-font-weight-bold);
-}
-.list {
-  list-style: none;
-  margin: 0;
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
   padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
 }
-.row {
+
+/* `clip`, not `hidden`, where it exists: nothing may scroll the window itself (focus or
+   scrollIntoView would). */
+@supports (overflow: clip) {
+  .liff-frame.g-root {
+    overflow: clip;
+  }
+}
+@supports (height: 100dvh) {
+  .liff-frame.g-root {
+    height: 100dvh;
+  }
+}
+
+/* Menu: one dish per glass row (line-menu). The dish name is the real button; its ::after
+   stretches over the whole row, so the row is tappable without nesting buttons. */
+.dish.g-glass {
   display: flex;
+  gap: 14px;
   align-items: center;
-  gap: var(--sds-space-sm);
-  padding: var(--sds-space-sm) 0;
-  border-bottom: 1px solid var(--sds-color-border);
+  padding: 12px;
+  border-radius: 30px;
+  position: relative;
+  cursor: pointer;
+  transition:
+    transform 0.4s var(--spring),
+    box-shadow 0.4s var(--ease);
 }
-.grow {
-  flex: 1;
-  min-width: 0;
+.dish.g-glass:hover {
+  transform: translateY(-3px);
+  box-shadow:
+    var(--sh2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.7);
 }
-.strong {
-  font-weight: var(--sds-font-weight-bold);
+.dish.g-glass:active {
+  transform: scale(0.98);
 }
-.muted {
-  color: var(--sds-color-text-muted);
+.liff-thumb {
+  flex: none;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: linear-gradient(160deg, var(--g1), var(--g2));
 }
-.small {
-  font-size: var(--sds-font-size-sm);
+.liff-thumb img {
+  filter: drop-shadow(0 6px 8px rgba(110, 50, 20, 0.2));
+  transition: transform 0.6s var(--ease);
 }
-.btn {
-  min-height: var(--sds-touch-min);
-  min-width: var(--sds-touch-min);
-  padding: 0 var(--sds-space-md);
-  border: 1px solid var(--sds-color-border-strong);
-  border-radius: var(--sds-radius-md);
-  background: var(--sds-color-surface);
-  color: var(--sds-color-text);
+.liff-thumb img.photo {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: none;
+}
+.dish:hover .liff-thumb img:not(.photo) {
+  transform: scale(1.08) rotate(-3deg);
+}
+.dish-open {
+  background: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
   font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
 }
-.btn:focus-visible,
-.tab:focus-visible,
-input:focus-visible,
-select:focus-visible {
-  outline: 3px solid var(--sds-color-focus);
+.dish-open::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 30px;
+}
+.dish-open:focus-visible {
+  outline: none;
+}
+.dish-open:focus-visible::after {
+  outline: 3px solid #1d5fd6;
   outline-offset: 2px;
 }
-.btn.primary {
-  min-height: var(--sds-touch-primary);
-  background: var(--sds-color-brand);
-  border-color: var(--sds-color-brand);
-  color: var(--sds-color-on-brand);
-  font-weight: var(--sds-font-weight-bold);
+.dish .g-add,
+.dish .g-step {
+  position: relative;
+  z-index: 1;
 }
-.btn:disabled {
-  opacity: 0.5;
-}
-.btn.wide {
-  display: block;
-  width: 100%;
-  margin-top: var(--sds-space-sm);
-}
-.btn.left {
-  text-align: left;
-}
-.dock {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  padding: var(--sds-space-sm) var(--sds-layout-gutter)
-    calc(var(--sds-space-sm) + env(safe-area-inset-bottom));
-  background: var(--sds-color-surface);
-  border-top: 1px solid var(--sds-color-border);
-}
-.dock .btn.wide {
-  max-width: 560px;
-  margin: 0 auto;
-}
-.dock p {
-  margin: 0 0 var(--sds-space-xs);
-  text-align: center;
-}
-.notice,
-.error,
-.success {
-  padding: var(--sds-space-sm);
-  border-radius: var(--sds-radius-md);
-  margin: var(--sds-space-sm) 0;
-}
-.notice {
-  background: var(--sds-color-info-subtle);
-  color: var(--sds-color-info-text);
-}
-.error {
-  background: var(--sds-color-danger-subtle);
-  color: var(--sds-color-danger-text);
-}
-.success {
-  background: var(--sds-color-success-subtle);
-  color: var(--sds-color-success-text);
-}
-.field {
-  display: block;
-  margin-top: var(--sds-space-md);
-}
-.field span {
-  display: block;
-  font-size: var(--sds-font-size-sm);
-  color: var(--sds-color-text-muted);
-}
-input[type="text"],
-input:not([type]),
-select {
-  width: 100%;
-  min-height: var(--sds-touch-comfortable);
-  padding: 0 var(--sds-space-sm);
-  border: 1px solid var(--sds-color-border-strong);
-  border-radius: var(--sds-radius-md);
-  background: var(--sds-color-surface);
-  color: inherit;
-  /* 16px or more stops iOS from zooming into the field */
-  font: inherit;
-  font-size: max(16px, var(--sds-font-size-md));
-}
-.group {
+.dish .g-add {
   border: 0;
   padding: 0;
-  margin: var(--sds-space-md) 0 0;
+  cursor: pointer;
 }
-.group legend {
-  font-weight: var(--sds-font-weight-bold);
-  padding: 0;
+.dish .g-step button {
+  position: relative;
 }
-.choice {
+.dish .g-add::after,
+.dish .g-step button::after {
+  content: "";
+  position: absolute;
+  inset: -5px;
+}
+
+/* Fields: the shared field look also covers the building picker. */
+.g-field select {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  font: inherit;
+  color: var(--ink);
+  appearance: none;
+  -webkit-appearance: none;
+  text-overflow: ellipsis;
+}
+.g-field select[data-empty="true"] {
+  color: var(--ink3);
+}
+.g-field input::placeholder {
+  color: var(--ink3);
+}
+
+/* Payment cards (line-checkout): a radio card with a chili dot when chosen. */
+.pay {
   display: flex;
+  gap: 14px;
   align-items: center;
-  gap: var(--sds-space-sm);
-  min-height: var(--sds-touch-min);
+  width: 100%;
+  padding: 14px 16px;
+  border-radius: 24px;
+  cursor: pointer;
+  position: relative;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  background: var(--glass);
+  border: 1.5px solid var(--line);
+  transition:
+    border-color 0.3s var(--ease),
+    box-shadow 0.3s var(--ease),
+    transform 0.3s var(--spring),
+    background 0.3s;
 }
-.choice input {
-  width: 22px;
-  height: 22px;
+.pay:active {
+  transform: scale(0.98);
 }
-.qty {
-  min-width: 2ch;
-  text-align: center;
-  font-weight: var(--sds-font-weight-bold);
+.pay:has(input:focus-visible),
+.pay:focus-visible {
+  outline: 3px solid #1d5fd6;
+  outline-offset: 2px;
 }
-.facts {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: var(--sds-space-xxs) var(--sds-space-md);
-  margin: var(--sds-space-sm) 0;
+.pay:disabled:not([aria-pressed="true"]) {
+  opacity: 0.6;
+  cursor: default;
 }
-.facts dd {
-  margin: 0;
-}
-.qr {
-  text-align: center;
-}
-.qr img {
-  max-width: 100%;
-  height: auto;
-  background: #fff;
-  border: 1px solid var(--sds-color-border);
-}
-.amount {
-  font-size: var(--sds-font-size-amount);
-  font-weight: var(--sds-font-weight-bold);
-  margin: var(--sds-space-xs) 0;
-}
-.sheet-backdrop {
-  position: fixed;
+.pay input {
+  position: absolute;
+  opacity: 0;
   inset: 0;
-  z-index: 10;
-  background: var(--sds-color-overlay);
+  margin: 0;
+  cursor: pointer;
+}
+.pay .rd {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2px solid rgba(70, 35, 20, 0.28);
+  flex: none;
+  display: grid;
+  place-items: center;
+  transition: all 0.3s var(--spring);
+}
+.pay .rd::after {
+  content: "";
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #fff;
+  transform: scale(0);
+  transition: transform 0.35s var(--spring);
+}
+.pay:is(:has(input:checked), [aria-pressed="true"]) {
+  border-color: rgba(198, 40, 40, 0.55);
+  background: var(--glass2);
+  box-shadow: 0 8px 24px rgba(198, 40, 40, 0.14);
+}
+.pay:is(:has(input:checked), [aria-pressed="true"]) .rd {
+  background: var(--chili);
+  border-color: var(--chili);
+}
+.pay:is(:has(input:checked), [aria-pressed="true"]) .rd::after {
+  transform: scale(1);
+}
+
+/* Order tracker (line-status): four dots on a line, the current one breathes. */
+.st {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  position: relative;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink3);
+  text-align: center;
+  line-height: 1.35;
+}
+.st .d {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: rgba(70, 35, 20, 0.09);
+  color: var(--ink3);
+  font-weight: 700;
+  font-size: 14px;
+  position: relative;
+  z-index: 1;
+}
+.st.done .d {
+  background: var(--jade);
+  color: #fff;
+}
+.st.now {
+  color: var(--ink);
+  font-weight: 600;
+}
+.st.now .d {
+  background: var(--chili);
+  color: #fff;
+  box-shadow: 0 0 0 6px rgba(198, 40, 40, 0.15);
+  animation: g-breathe 2.6s ease-in-out infinite;
+}
+.st::before {
+  content: "";
+  position: absolute;
+  top: 14px;
+  left: -50%;
+  width: 100%;
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(70, 35, 20, 0.1);
+}
+.st:first-child::before {
+  display: none;
+}
+.st.done::before {
+  background: var(--jade);
+}
+.st.now::before {
+  background: linear-gradient(90deg, var(--jade), var(--chili));
+}
+
+/* The options sheet: a bottom sheet over a blurred scrim, inside the window. */
+.liff-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
   display: flex;
   align-items: flex-end;
+  justify-content: center;
 }
-.sheet {
+.liff-scrim {
+  position: absolute;
+  inset: 0;
   width: 100%;
-  max-height: 90vh;
-  overflow: auto;
-  background: var(--sds-color-surface);
-  border-radius: var(--sds-radius-lg) var(--sds-radius-lg) 0 0;
-  padding: var(--sds-space-md) var(--sds-layout-gutter)
-    calc(var(--sds-space-md) + env(safe-area-inset-bottom));
+  border: 0;
+  padding: 0;
+  background: transparent;
+  cursor: default;
 }
-@media (prefers-reduced-motion: no-preference) {
-  .sheet {
-    animation: rise 160ms ease-out;
-  }
-  @keyframes rise {
-    from {
-      transform: translateY(24px);
-      opacity: 0;
-    }
-  }
+.g-root .liff-sheet.sheet {
+  position: relative;
+  width: 100%;
+  max-height: 92%;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 24px 20px calc(22px + env(safe-area-inset-bottom, 0px));
+  border-radius: 32px 32px 0 0;
+  overflow: hidden;
+  outline: none;
+}
+
+/* My orders list: a whole glass row is the button. */
+.liff-orderrow.g-glass {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 14px 16px;
+  border-radius: 24px;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.liff-orderrow:focus-visible {
+  outline: 3px solid #1d5fd6;
+  outline-offset: 2px;
+}
+
+/* Disabled controls keep their shape and say so. */
+.g-btn:disabled,
+.g-step button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
 }

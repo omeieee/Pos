@@ -1,4 +1,4 @@
-import { type FormEvent, useState } from 'react';
+import { useState } from 'react';
 import { errorText } from '../api/errors.ts';
 import { stepUpMethodFor } from '../auth/auth-store.ts';
 import {
@@ -7,6 +7,8 @@ import {
   type OwnerDraft,
   ownerStepUpRequest,
 } from '../auth/owner-form.ts';
+import { s } from '../design/style.ts';
+import { DialogLayout } from './DialogParts.tsx';
 import { useAuthState, useAuthStore, useT } from './hooks.ts';
 import { Modal } from './Modal.tsx';
 import { OwnerFields } from './OwnerFields.tsx';
@@ -38,8 +40,7 @@ function StepUpForm({
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
 
-  async function submitOwner(event: FormEvent) {
-    event.preventDefault();
+  async function submitOwner() {
     const factors = ownerStepUpRequest(draft);
     if (!factors || busy) return;
     setBusy(true);
@@ -67,45 +68,58 @@ function StepUpForm({
     }
   }
 
+  const hint = method === 'owner' ? tr('auth.stepUp.ownerHint') : tr('auth.stepUp.pinHint');
+  const cancel = (
+    <button type="button" className="g-btn g-btn-lg" onClick={() => auth.cancelStepUp()}>
+      {tr('common.cancel')}
+    </button>
+  );
+
   return (
     <Modal labelledBy="stepup-title" onClose={() => auth.cancelStepUp()}>
-      <h2 id="stepup-title" className="sheet__title">
-        {tr('auth.stepUp.title')}
-      </h2>
-      <p className="muted">
-        {method === 'owner' ? tr('auth.stepUp.ownerHint') : tr('auth.stepUp.pinHint')}
-      </p>
       {method === 'owner' ? (
-        <form className="stack" onSubmit={submitOwner} noValidate>
-          <OwnerFields draft={draft} onChange={setDraft} withEmail={false} disabled={busy} />
-          <div className="error-slot">
-            {error ? (
-              <p className="error" role="alert">
-                {error}
-              </p>
-            ) : null}
-          </div>
-          <button
-            type="submit"
-            className="btn btn-primary btn-lg btn-block"
-            disabled={busy || ownerStepUpRequest(draft) === null}
-          >
-            {tr('auth.stepUp.submit')}
-          </button>
-        </form>
-      ) : (
-        <PinPad
-          key={attempt}
-          role={role}
-          disabled={busy}
+        <DialogLayout
+          titleId="stepup-title"
+          title={tr('auth.stepUp.title')}
+          subtitle={hint}
+          onClose={() => auth.cancelStepUp()}
+          onSubmit={() => void submitOwner()}
           error={error}
-          submitLabel={tr('auth.stepUp.submit')}
-          onSubmit={submitPin}
-        />
+          actions={
+            <>
+              {cancel}
+              <button
+                type="submit"
+                className="g-btn g-btn-p g-btn-lg"
+                disabled={busy || ownerStepUpRequest(draft) === null}
+              >
+                {tr('auth.stepUp.submit')}
+              </button>
+            </>
+          }
+        >
+          <OwnerFields draft={draft} onChange={setDraft} withEmail={false} disabled={busy} />
+        </DialogLayout>
+      ) : (
+        <DialogLayout
+          titleId="stepup-title"
+          title={tr('auth.stepUp.title')}
+          subtitle={hint}
+          onClose={() => auth.cancelStepUp()}
+          actions={cancel}
+        >
+          <div style={s('padding-top:4px')}>
+            <PinPad
+              key={attempt}
+              role={role}
+              disabled={busy}
+              error={error}
+              submitLabel={tr('auth.stepUp.submit')}
+              onSubmit={submitPin}
+            />
+          </div>
+        </DialogLayout>
       )}
-      <button type="button" className="btn btn-soft btn-block" onClick={() => auth.cancelStepUp()}>
-        {tr('common.cancel')}
-      </button>
     </Modal>
   );
 }

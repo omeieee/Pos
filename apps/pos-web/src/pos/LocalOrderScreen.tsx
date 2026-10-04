@@ -1,13 +1,18 @@
 import { formatBaht } from '@sds/i18n';
 import { satang } from '@sds/shared';
 import { useState } from 'react';
+import { Gi } from '../design/icons.tsx';
+import { useLayout } from '../design/layout.ts';
+import { s } from '../design/style.ts';
 import { useLocale, useNow, useServices, useStoreState, useT } from '../ui/hooks.ts';
-import { Icon } from '../ui/Icon.tsx';
 import { CashPanel } from './CashPanel.tsx';
-import { MethodTiles } from './MethodTiles.tsx';
+import { dishArt } from './dish-art.ts';
+import { MethodNotes, MethodTiles } from './MethodTiles.tsx';
 import { localName } from './names.ts';
 import { OfflinePromptPay } from './OfflinePromptPay.tsx';
+import { OrderSummary, type SummaryLine } from './OrderSummary.tsx';
 import type { QueuedOrder, QueuedPayment } from './outbox-model.ts';
+import { Callout, PayFrame, PayPage } from './PayParts.tsx';
 import { localMethodOptions, type PayMethod } from './payment-model.ts';
 import { isPlatformChannel } from './platform-model.ts';
 import { QueueActions, QueueStateBadge } from './QueueActions.tsx';
@@ -34,6 +39,7 @@ export function LocalOrderScreen({ item }: { item: QueuedOrder }) {
   useNow(30_000);
   const tr = useT();
   const locale = useLocale();
+  const phone = useLayout() === 'phone';
   const money = (value: number) => formatBaht(value, locale);
   const [method, setMethod] = useState<PayMethod>('cash');
   const methods = localMethodOptions(promptpay.idStatus());
@@ -46,144 +52,125 @@ export function LocalOrderScreen({ item }: { item: QueuedOrder }) {
     item.state !== 'attention' &&
     !isPlatformChannel(item.channel) &&
     item.estimateSatang !== null;
-
-  return (
-    <section className="odetail odetail--wide" aria-labelledby="order-title">
-      <a className="link link--back" href="#/orders">
-        <Icon name="back" />
-        {tr('order.detail.back')}
-      </a>
-      <header className="odetail__head">
-        <h1 id="order-title" className="order-no">
-          {tr('outbox.order.title', { label: item.label })}
-        </h1>
-        <div className="odetail__badges">
-          <QueueStateBadge item={item} />
-        </div>
-        <p className="muted">{tr('outbox.order.notYet')}</p>
-        {item.recipient ? (
-          <p className="odetail__to">
-            <strong>{`${item.recipient.building} · ${item.recipient.name}`}</strong>
-            {item.recipient.note ? <span className="muted"> {item.recipient.note}</span> : null}
-          </p>
-        ) : null}
-      </header>
-
+  const lines: SummaryLine[] = item.lines.map((line, index) => ({
+    // The lines were saved in order and never change, so the position is a stable key.
+    key: String(index),
+    name: localName(locale, line.name.th, line.name.en),
+    options: line.options.map((option) => localName(locale, option.th, option.en)).join(' · '),
+    qty: line.qty,
+    note: line.note,
+    amount: line.lineTotalSatang === null ? '' : money(line.lineTotalSatang),
+    art: dishArt(line.name.th, line.name.en),
+    imageUrl: null,
+  }));
+  const count = item.lines.reduce((sum, line) => sum + line.qty, 0);
+  const actions = (
+    <>
       <QueueActions item={item} />
-
-      <div className="opay">
-        <div className="opay__order">
-          <h2 className="odetail__h">{tr('order.detail.items')}</h2>
-          <ul className="odetail__lines">
-            {item.lines.map((line, index) => (
-              // The lines were saved in order and never change, so the position is a stable key.
-              // biome-ignore lint/suspicious/noArrayIndexKey: see above
-              <li key={index} className="oline">
-                <span className="oline__qty">{tr('order.detail.qty', { count: line.qty })}</span>
-                <span className="oline__what">
-                  <span>{localName(locale, line.name.th, line.name.en)}</span>
-                  {line.options.length > 0 ? (
-                    <span className="muted">
-                      {line.options
-                        .map((option) => localName(locale, option.th, option.en))
-                        .join(' · ')}
-                    </span>
-                  ) : null}
-                  {line.note ? <span className="line__note">{line.note}</span> : null}
-                </span>
-                <span className="money">
-                  {line.lineTotalSatang === null ? '' : money(line.lineTotalSatang)}
-                </span>
-              </li>
-            ))}
-          </ul>
-          {item.note ? <p className="muted">{`${tr('common.note')}: ${item.note}`}</p> : null}
-          <div className="sumrow total odetail__total">
-            <span>{tr('pos.orderEntry.estimate')}</span>
-            <span className="money">
-              {item.estimateSatang === null ? '' : money(item.estimateSatang)}
-            </span>
-          </div>
-          <p className="hint">{tr('outbox.order.estimateHint')}</p>
-        </div>
-
-        <section className="ppanel" aria-labelledby="pay-title">
-          <header className="ppanel__head">
-            <h2 id="pay-title" className="ppanel__title">
-              {tr('payment.title')}
-            </h2>
-            {item.estimateSatang === null ? null : (
-              <div className="due">
-                <span className="lbl">{tr('pos.orderEntry.estimate')}</span>
-                <span className="amount-hero money">{money(item.estimateSatang)}</span>
-              </div>
-            )}
-          </header>
-          <div className="ppanel__body">
-            {payment ? (
-              <QueuedPaymentView item={payment} />
-            ) : isPlatformChannel(item.channel) ? (
-              <p className="notice">{tr('platform.payment.hint')}</p>
-            ) : item.estimateSatang === null ? (
-              <p className="notice">{tr('outbox.order.noEstimate')}</p>
-            ) : canTakeCash ? (
-              <>
-                <p className="notice">
-                  <Icon name="wifi-off" />
-                  <span>
-                    {tr(
-                      methods.some((m) => m.method === 'promptpay' && m.enabled)
-                        ? 'outbox.onlineOnlyCopay'
-                        : 'outbox.onlineOnly',
-                    )}
-                  </span>
-                </p>
-                {methods.length > 1 ? (
-                  <MethodTiles
-                    options={methods}
-                    choice={choice}
-                    name="local-pay-method"
-                    onChoose={setMethod}
-                  />
-                ) : null}
-                {choice === 'promptpay' ? (
-                  <OfflinePromptPay
-                    amountSatang={item.estimateSatang}
-                    amountKind="estimate"
-                    submit={(qr) =>
-                      outbox.enqueuePromptpay({
-                        target: { entryId: item.id },
-                        qrAmountSatang: qr.qrAmountSatang,
-                        amountKind: 'estimate',
-                        qrTargetMasked: qr.qrTargetMasked,
-                        label: item.label,
-                      })
-                    }
-                  />
-                ) : (
-                  <CashPanel
-                    order={{ id: item.id, totalSatang: satang(item.estimateSatang) }}
-                    queue={{
-                      estimated: true,
-                      submit: (tender) =>
-                        outbox.enqueueCash({
-                          target: { entryId: item.id },
-                          tenderedSatang: tender,
-                          totalSatang: item.estimateSatang,
-                          label: item.label,
-                        }),
-                    }}
-                  />
-                )}
-              </>
-            ) : null}
-          </div>
-        </section>
-      </div>
-
-      <a className="btn btn-primary" href="#/new">
+      <a className="g-btn" href="#/new">
+        <Gi n="plus" />
         {tr('order.detail.takeAnother')}
       </a>
-    </section>
+    </>
+  );
+
+  return (
+    <PayPage labelledBy="order-title">
+      <OrderSummary
+        title={tr('outbox.order.title', { label: item.label })}
+        subtitle={tr('outbox.order.notYet')}
+        badges={<QueueStateBadge item={item} />}
+        recipient={
+          item.recipient
+            ? {
+                headline: `${item.recipient.building} · ${item.recipient.name}`,
+                note: item.recipient.note || null,
+              }
+            : null
+        }
+        lines={lines}
+        orderNote={item.note}
+        countText={tr('pos.orderEntry.itemsCount', { count })}
+        totalLabel={tr('pos.orderEntry.estimate')}
+        totalText={item.estimateSatang === null ? '' : money(item.estimateSatang)}
+        totalHint={tr('outbox.order.estimateHint')}
+        below={phone ? undefined : actions}
+      />
+      <PayFrame
+        title={tr(payment ? 'payment.titleDone' : 'payment.title')}
+        notes={canTakeCash ? <MethodNotes options={methods} choice={choice} /> : null}
+        amountLabel={tr('pos.orderEntry.estimate')}
+        amountText={item.estimateSatang === null ? undefined : money(item.estimateSatang)}
+        switcher={
+          canTakeCash && methods.length > 1 ? (
+            <MethodTiles
+              options={methods}
+              choice={choice}
+              name="local-pay-method"
+              onChoose={setMethod}
+              fill={phone}
+            />
+          ) : null
+        }
+      >
+        <div className="pay-body">
+          {payment ? (
+            <QueuedPaymentView item={payment} />
+          ) : isPlatformChannel(item.channel) ? (
+            <Callout tone="info" icon="store">
+              {tr('platform.payment.hint')}
+            </Callout>
+          ) : item.estimateSatang === null ? (
+            <Callout tone="warn" icon="warn">
+              {tr('outbox.order.noEstimate')}
+            </Callout>
+          ) : canTakeCash ? (
+            <>
+              <Callout tone="info" icon="info" role="status">
+                {tr(
+                  methods.some((m) => m.method === 'promptpay' && m.enabled)
+                    ? 'outbox.onlineOnlyCopay'
+                    : 'outbox.onlineOnly',
+                )}
+              </Callout>
+              {choice === 'promptpay' ? (
+                <OfflinePromptPay
+                  amountSatang={item.estimateSatang}
+                  amountKind="estimate"
+                  submit={(qr) =>
+                    outbox.enqueuePromptpay({
+                      target: { entryId: item.id },
+                      qrAmountSatang: qr.qrAmountSatang,
+                      amountKind: 'estimate',
+                      qrTargetMasked: qr.qrTargetMasked,
+                      label: item.label,
+                    })
+                  }
+                />
+              ) : (
+                <CashPanel
+                  order={{ id: item.id, totalSatang: satang(item.estimateSatang) }}
+                  queue={{
+                    estimated: true,
+                    submit: (tender) =>
+                      outbox.enqueueCash({
+                        target: { entryId: item.id },
+                        tenderedSatang: tender,
+                        totalSatang: item.estimateSatang,
+                        label: item.label,
+                      }),
+                  }}
+                />
+              )}
+            </>
+          ) : null}
+        </div>
+      </PayFrame>
+      {phone ? (
+        <div style={s('display:flex;flex-direction:column;gap:12px;padding-bottom:8px')}>
+          {actions}
+        </div>
+      ) : null}
+    </PayPage>
   );
 }

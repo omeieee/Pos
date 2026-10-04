@@ -1,5 +1,7 @@
+import { Gi } from '../design/icons.tsx';
+import { s } from '../design/style.ts';
 import { useAuthState, useT } from '../ui/hooks.ts';
-import { Icon } from '../ui/Icon.tsx';
+import { Callout } from '../ui/Notice.tsx';
 import { CopayForm } from './CopayForm.tsx';
 import { DeliveryForm } from './DeliveryForm.tsx';
 import { DevicesScreen } from './DevicesScreen.tsx';
@@ -8,6 +10,7 @@ import { NumberingForm } from './NumberingForm.tsx';
 import { PaymentsForm } from './PaymentsForm.tsx';
 import { PromptpayForm } from './PromptpayForm.tsx';
 import { SettingSection } from './SettingSection.tsx';
+import { SettingsPage } from './SettingsPage.tsx';
 import { ShopForm } from './ShopForm.tsx';
 import { StaffScreen } from './StaffScreen.tsx';
 import { type SectionDef, sectionById } from './sections.ts';
@@ -15,8 +18,8 @@ import { type SectionDef, sectionById } from './sections.ts';
 function BackLink() {
   const tr = useT();
   return (
-    <a className="btn btn-soft sset__back" href="#/settings">
-      <Icon name="back" />
+    <a className="g-btn gset-back" href="#/settings">
+      <Gi n="chevronLeft" size="sm" />
       <span>{tr('settings.back')}</span>
     </a>
   );
@@ -73,7 +76,7 @@ function SectionBody({ def, editable }: { def: SectionDef; editable: boolean }) 
     case 'staff':
       return <StaffScreen />;
     default:
-      return <p className="muted">{tr('settings.soon')}</p>;
+      return <p className="g-t-s">{tr('settings.soon')}</p>;
   }
 }
 
@@ -89,29 +92,30 @@ export function SettingsSectionScreen({ section }: { section: string }) {
 
   if (!def || !permissions.includes(def.view)) {
     return (
-      <section className="sset" aria-labelledby="sset-title">
+      <SettingsPage labelledBy="sset-title">
         <BackLink />
-        <h1 id="sset-title" className="sset__title">
+        <h1 id="sset-title" className="g-t-1" style={s('margin:0')}>
           {tr('settings.title')}
         </h1>
-        <p className="notice" role="status">
-          <Icon name="info" />
-          <span>{tr('settings.notFound')}</span>
-        </p>
-      </section>
+        <Callout tone="info" role="status">
+          {tr('settings.notFound')}
+        </Callout>
+      </SettingsPage>
     );
   }
 
   return (
-    <section className="sset" aria-labelledby="sset-title">
+    <SettingsPage labelledBy="sset-title">
       <BackLink />
-      <header className="sset__head">
-        <h1 id="sset-title" className="sset__title">
+      <header>
+        <h1 id="sset-title" className="g-t-1" style={s('margin:0')}>
           {tr(def.titleKey)}
         </h1>
-        <p className="muted">{tr(def.descKey)}</p>
+        <p className="g-t-s" style={s('margin:2px 0 0')}>
+          {tr(def.descKey)}
+        </p>
       </header>
       <SectionBody def={def} editable={permissions.includes(def.edit)} />
-    </section>
+    </SettingsPage>
   );
 }

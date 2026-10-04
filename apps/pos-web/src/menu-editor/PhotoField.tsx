@@ -1,9 +1,14 @@
 import { type ChangeEvent, useId, useState } from 'react';
+import { Gi } from '../design/icons.tsx';
+import { s } from '../design/style.ts';
 import { apiUrl } from '../platform/config.ts';
 import { useEntities, useServices, useT } from '../ui/hooks.ts';
+import { FieldMessage } from '../ui/TextField.tsx';
 import { useEditorContext } from './editor-context.ts';
 import { rowKey } from './menu-editor-store.ts';
 import { failureText } from './outcome-text.ts';
+import { Thumb } from './RowParts.tsx';
+import './menu-glass.css';
 
 /**
  * The photo of an existing dish: shows it, picks a new one, removes it. A picked file is never
@@ -45,43 +50,54 @@ export function PhotoField({
     else setError(failureText(tr, outcome));
   }
 
+  const off = ctx.offline || working;
   return (
-    <fieldset className="group mphoto">
-      <legend className="label">{tr('menuEditor.photo.title')}</legend>
-      <div className="mphoto__row">
-        <span className="mphoto__frame">
-          {item.photoUrl ? (
-            <img
-              src={apiUrl(item.photoUrl)}
-              alt={tr('menuEditor.photo.alt', { name: item.nameTh })}
-              width="120"
-              height="120"
-            />
-          ) : null}
-        </span>
-        <div className="mphoto__buttons">
+    <fieldset className="gset mephoto">
+      <legend>{tr('menuEditor.photo.title')}</legend>
+      <div style={s('display:flex;align-items:center;gap:16px;flex-wrap:wrap')}>
+        {item.photoUrl ? (
+          <span
+            className="g-tile mthumb g-tg-sand"
+            style={s('width:96px;height:96px;border-radius:24px')}
+          >
+            <span className="g-ph" style={s('border-radius:24px')}>
+              <img
+                className="g-photo"
+                src={apiUrl(item.photoUrl)}
+                alt={tr('menuEditor.photo.alt', { name: item.nameTh })}
+                width="96"
+                height="96"
+              />
+            </span>
+          </span>
+        ) : (
+          <Thumb id={item.id} src={null} />
+        )}
+        <div style={s('display:flex;flex-wrap:wrap;gap:8px')}>
+          <input
+            id={inputId}
+            className="gvh"
+            type="file"
+            accept="image/*"
+            disabled={off}
+            onChange={(event) => void pick(event)}
+          />
           <label
             htmlFor={inputId}
-            className={`btn btn-soft${ctx.offline || working ? ' btn--off' : ''}`}
-            aria-disabled={ctx.offline || working}
+            className="g-btn gbtn-row"
+            aria-disabled={off}
+            style={off ? s('opacity:.5;cursor:not-allowed') : undefined}
           >
+            <Gi n="camera" size="sm" />
             {working
               ? tr('menuEditor.photo.working')
               : tr(hasPhoto ? 'menuEditor.photo.change' : 'menuEditor.photo.choose')}
           </label>
-          <input
-            id={inputId}
-            className="visually-hidden"
-            type="file"
-            accept="image/*"
-            disabled={ctx.offline || working}
-            onChange={(event) => void pick(event)}
-          />
           {hasPhoto ? (
             <button
               type="button"
-              className="btn btn-soft"
-              disabled={ctx.offline || working}
+              className="g-btn gbtn-row"
+              disabled={off}
               onClick={() => void remove()}
             >
               {tr('menuEditor.photo.remove')}
@@ -89,13 +105,9 @@ export function PhotoField({
           ) : null}
         </div>
       </div>
-      <p className="hint">{tr('menuEditor.photo.hint')}</p>
-      <p className="hint">{tr('menuEditor.photo.savedNow')}</p>
-      {error ? (
-        <p className="error" role="alert">
-          {error}
-        </p>
-      ) : null}
+      <FieldMessage tone="hint">{tr('menuEditor.photo.hint')}</FieldMessage>
+      <FieldMessage tone="hint">{tr('menuEditor.photo.savedNow')}</FieldMessage>
+      {error ? <FieldMessage tone="bad">{error}</FieldMessage> : null}
     </fieldset>
   );
 }

@@ -1,8 +1,11 @@
+import '@fontsource-variable/anuphan/wght.css';
 import { resolveTokens, toCssVariables } from '@sds/ui';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App.tsx';
 import './styles.css';
+// Last, so the redesign ("Hot bowl, calm glass") wins over any older rule of the same weight.
+import '@sds/ui/design.css';
 
 const root = document.getElementById('root');
 if (!root) throw new Error('#root not found');

@@ -1,14 +1,16 @@
 import { formatBaht } from '@sds/i18n';
 import type { ItemDto } from '@sds/shared';
 import { useState } from 'react';
+import { Gi } from '../design/icons.tsx';
+import { s } from '../design/style.ts';
 import { apiUrl } from '../platform/config.ts';
 import { localName } from '../pos/names.ts';
 import { useEntities, useLocale, useServices, useT } from '../ui/hooks.ts';
-import { Icon } from '../ui/Icon.tsx';
 import { useEditorContext } from './editor-context.ts';
 import { categoryRows, itemRowsOf } from './lists.ts';
 import { reorderKey, rowKey } from './menu-editor-store.ts';
-import { MoveButtons, RowButtons, SoldOutSwitch } from './RowParts.tsx';
+import { MoveButtons, RowBadge, RowButtons, SoldOutSwitch, Thumb } from './RowParts.tsx';
+import './menu-glass.css';
 
 function ItemRow({
   item,
@@ -30,34 +32,39 @@ function ItemRow({
   const channels = item.channels.map((c) => tr(`orders.channel.${c}`)).join(' · ');
 
   return (
-    <li className={`mrow${archived ? ' mrow--archived' : ''}`}>
-      <span className="mrow__thumb" aria-hidden="true">
-        {item.photoUrl ? (
-          <img src={apiUrl(item.photoUrl)} alt="" loading="lazy" width="56" height="56" />
-        ) : (
-          <Icon name="bowl" />
-        )}
-      </span>
-      <span className="mrow__main">
-        <span className="mrow__name">{name}</span>
-        <span className="mrow__meta">
-          <span className="money">
+    <li className={`g-row merow${archived ? ' merow--archived' : ''}`}>
+      <Thumb id={item.id} src={item.photoUrl ? apiUrl(item.photoUrl) : null} />
+      <span className="merow__main">
+        <span className="merow__name">{name}</span>
+        <span className="merow__meta">
+          <span className="merow__price g-num">
             {formatBaht(item.priceSatang, locale, { decimals: 'auto' })}
           </span>
           {cost === undefined ? null : (
-            <span className="muted">
+            <span>
               {tr('menuEditor.costLabel', {
                 amount: formatBaht(cost, locale, { decimals: 'auto' }),
               })}
             </span>
           )}
-          <span className="muted">{tr('menuEditor.channels.on', { channels })}</span>
+          <span>{tr('menuEditor.channels.on', { channels })}</span>
         </span>
+        {archived || !item.isAvailable ? (
+          <span className="merow__badges">
+            {archived ? (
+              <RowBadge tone="mute" icon="x">
+                {tr('menuEditor.archived')}
+              </RowBadge>
+            ) : (
+              <RowBadge tone="warn" icon="warn">
+                {tr('menuEditor.soldOut')}
+              </RowBadge>
+            )}
+          </span>
+        ) : null}
       </span>
-      <span className="mrow__actions">
-        {archived ? (
-          <span className="tag">{tr('menuEditor.archived')}</span>
-        ) : (
+      <span className="merow__actions">
+        {archived ? null : (
           <>
             <SoldOutSwitch
               name={name}
@@ -102,19 +109,24 @@ export function ItemsTab() {
   const [chosen, setChosen] = useState<string | null>(null);
   const category = categories.find((c) => c.id === chosen) ?? categories[0];
 
-  if (!category) return <p className="muted medit__empty">{tr('menuEditor.empty.categories')}</p>;
+  if (!category)
+    return (
+      <p className="g-t-s" style={s('margin:0')}>
+        {tr('menuEditor.empty.categories')}
+      </p>
+    );
   const { live, archived } = itemRowsOf(state, category.id);
   const liveIds = live.map((i) => i.id);
 
   return (
-    <div className="medit__panel">
-      <fieldset className="mcats">
-        <legend className="visually-hidden">{tr('menuEditor.category.pick')}</legend>
+    <div style={s('display:flex;flex-direction:column;gap:16px;min-width:0')}>
+      <fieldset className="mscroll">
+        <legend className="gvh">{tr('menuEditor.category.pick')}</legend>
         {categories.map((c) => (
           <button
             key={c.id}
             type="button"
-            className={`choice${c.id === category.id ? ' choice--on' : ''}`}
+            className={c.id === category.id ? 'g-chip g-on' : 'g-chip'}
             aria-pressed={c.id === category.id}
             onClick={() => setChosen(c.id)}
           >
@@ -124,22 +136,24 @@ export function ItemsTab() {
         ))}
       </fieldset>
 
-      <div className="medit__bar">
+      <div>
         <button
           type="button"
-          className="btn btn-primary"
+          className="g-btn g-btn-p"
           disabled={ctx.offline}
           onClick={() => ctx.open({ kind: 'item', categoryId: category.id })}
         >
-          <Icon name="plus" />
+          <Gi n="plus" size="sm" />
           <span>{tr('menuEditor.add.item')}</span>
         </button>
       </div>
 
       {live.length === 0 ? (
-        <p className="muted medit__empty">{tr('menuEditor.empty.items')}</p>
+        <p className="g-t-s" style={s('margin:0')}>
+          {tr('menuEditor.empty.items')}
+        </p>
       ) : (
-        <ul className="mlist">
+        <ul className="g-glass gset-grp gset-list">
           {live.map((item) => (
             <ItemRow key={item.id} item={item} liveIds={liveIds} archived={false} />
           ))}
@@ -148,8 +162,10 @@ export function ItemsTab() {
 
       {ctx.showArchived && archived.length > 0 ? (
         <>
-          <h2 className="medit__sub">{tr('menuEditor.archivedHeading')}</h2>
-          <ul className="mlist">
+          <h2 className="gset-lbl" style={s('margin:0;padding-bottom:0')}>
+            {tr('menuEditor.archivedHeading')}
+          </h2>
+          <ul className="g-glass gset-grp gset-list" style={s('margin-top:-8px')}>
             {archived.map((item) => (
               <ItemRow key={item.id} item={item} liveIds={liveIds} archived />
             ))}

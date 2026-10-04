@@ -30,6 +30,16 @@ async function expectTapTargets(page: Page, selector: string, where: string) {
     page.locator(selector).first(),
     `${where}: nothing matches ${selector}`,
   ).toBeVisible();
+  // Measure the settled page: a panel that has just appeared may still be rising into place.
+  // (Looping animations such as the breathing dot never finish, so they are left out.)
+  await page.evaluate(() =>
+    Promise.all(
+      document
+        .getAnimations()
+        .filter((animation) => animation.effect?.getComputedTiming().iterations !== Infinity)
+        .map((animation) => animation.finished.catch(() => null)),
+    ),
+  );
   const small = await page.locator(selector).evaluateAll(
     (elements, min) =>
       elements
@@ -74,33 +84,33 @@ test.describe('basic layout checks', () => {
 
   test('order entry: navigation, dishes, cart controls and the place button', async ({ page }) => {
     await signInWithPin(page, 'cashier');
-    await expect(page.locator('.dishes')).toBeVisible();
-    await expectTapTargets(page, '.nav__item, .topbar__signout', 'navigation');
-    await expectTapTargets(page, '.dish, .cat', 'menu');
+    await expect(page.locator('button.g-tile').first()).toBeVisible();
+    await expectTapTargets(page, '.g-nav, .g-tab, .g-side', 'navigation');
+    await expectTapTargets(page, 'button.g-tile, nav[aria-label] > .g-chip', 'menu');
     await expectNoHorizontalScroll(page, 'order entry');
 
     // A dish with options: the sheet's choices and buttons.
     await page
-      .locator('.dishes')
-      .getByRole('button', { name: /^ก๋วยเตี๋ยวต้มยำ/ })
+      .locator('button.g-tile', { has: page.getByText('ก๋วยเตี๋ยวต้มยำ', { exact: true }) })
       .click();
     const sheet = page.getByRole('dialog');
     await expect(sheet).toBeVisible();
-    await expectTapTargets(page, '[role=dialog] .pick, [role=dialog] .btn', 'options sheet');
+    await expectTapTargets(page, '[role=dialog] .g-chip, [role=dialog] .g-btn', 'options sheet');
     await expectNoHorizontalScroll(page, 'options sheet');
     for (const option of ['เส้นเล็ก', 'เผ็ดน้อย']) {
-      await sheet.locator('label.pick', { hasText: option }).click();
+      await sheet.locator('label.g-chip', { hasText: option }).click();
     }
     await sheet.getByRole('button', { name: /^เพิ่ม ·/ }).click();
 
     // The cart: steppers, buildings, place.
     if ((page.viewportSize()?.width ?? 1000) <= 719) {
-      await expectTapTargets(page, '.oe__bar .btn', 'cart bar');
-      await page.locator('.oe__bar button').click();
+      await expectTapTargets(page, '[data-testid=cart-bar]', 'cart bar');
+      await page.getByTestId('cart-bar').click();
     }
     await expectTapTargets(
       page,
-      '.cart .btn, .cart .bld__item, .cart .rchip, .cart__place',
+      // the channel switch is the design's 40px pill inside a 48px track: not measured here
+      '[data-testid=cart] .g-btn, [data-testid=cart] .g-chip:not(.g-seg > .g-chip), [role=dialog] .g-btn, [role=dialog] .g-chip:not(.g-seg > .g-chip)',
       'cart',
     );
     await expectNoHorizontalScroll(page, 'cart');
@@ -111,16 +121,16 @@ test.describe('basic layout checks', () => {
   }) => {
     await signInWithPin(page, 'manager');
     await ringOrder(page, { dish: 'ชาเย็น' });
-    await expectTapTargets(page, '.omoves .btn, .method, .odetail .btn', 'order page');
+    await expectTapTargets(page, 'main .g-btn, main .g-chip', 'order page');
     const panel = paymentPanel(page);
-    await expectTapTargets(page, '.cash .btn, .cash .keypad__key', 'cash keypad');
+    await expectTapTargets(page, 'main .g-btn', 'cash keypad');
     await expectNoHorizontalScroll(page, 'order page (cash)');
-    await panel.locator('label.method', { hasText: tr('payment.method.promptpay') }).click();
+    await panel.locator('label.g-chip', { hasText: tr('payment.method.promptpay') }).click();
     await panel.getByRole('button', { name: tr('payment.start.promptpay') }).click();
     await expect(
       panel.getByRole('button', { name: tr('payment.promptpay.customerSays') }),
     ).toBeVisible();
-    await expectTapTargets(page, '.ppanel .btn', 'PromptPay actions');
+    await expectTapTargets(page, 'main .g-btn', 'PromptPay actions');
     await expectNoHorizontalScroll(page, 'order page (PromptPay)');
   });
 
@@ -137,6 +147,6 @@ test.describe('basic layout checks', () => {
       await expect(page.locator('main h1').first()).toBeVisible();
       await expectNoHorizontalScroll(page, where);
     }
-    await expectTapTargets(page, 'main .btn, main .link--back', 'menu editor buttons');
+    await expectTapTargets(page, 'main .g-btn', 'menu editor buttons');
   });
 });

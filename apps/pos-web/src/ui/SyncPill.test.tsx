@@ -1,23 +1,20 @@
 import { catalogs } from '@sds/i18n';
 import { renderToString } from 'react-dom/server';
 import { describe, expect, test } from 'vitest';
-import { ConnectionBadgeView } from './ConnectionBadge.tsx';
 import { LocaleContext } from './hooks.ts';
+import { SyncPillView } from './SyncPill.tsx';
 
 const th = catalogs.th;
 const en = catalogs.en;
 
-const render = (
-  status: Parameters<typeof ConnectionBadgeView>[0]['status'],
-  locale: 'th' | 'en' = 'th',
-) =>
+const render = (status: Parameters<typeof SyncPillView>[0]['status'], locale: 'th' | 'en' = 'th') =>
   renderToString(
     <LocaleContext.Provider value={locale}>
-      <ConnectionBadgeView status={status} />
+      <SyncPillView status={status} />
     </LocaleContext.Provider>,
   );
 
-describe('the connection status indicator', () => {
+describe('the sync pill', () => {
   test('says online, reconnecting and offline in words, never by colour alone', () => {
     expect(render('online')).toContain(th['net.online']);
     expect(render('reconnecting')).toContain(th['net.reconnecting']);

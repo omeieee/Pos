@@ -1,7 +1,8 @@
 import { formatBaht } from '@sds/i18n';
 import { useEffect, useMemo, useState } from 'react';
+import { Gi } from '../design/icons.tsx';
+import { s } from '../design/style.ts';
 import { useEntities, useLocale, useT } from '../ui/hooks.ts';
-import { Icon } from '../ui/Icon.tsx';
 import { Modal } from '../ui/Modal.tsx';
 import { checkSelection, estimateLineTotal } from './cart-pricing.ts';
 import type { CartMode } from './cart-store.ts';
@@ -91,94 +92,106 @@ export function ModifierSheet({
 
   return (
     <Modal labelledBy="options-title" onClose={onClose} variant="options">
-      <header className="osheet__head">
-        <div>
-          <div className="hint">
-            {tr(target.mode === 'add' ? 'pos.orderEntry.addToOrder' : 'pos.modifier.editTitle')}
-          </div>
-          <h2 id="options-title" className="sheet__title">
-            {name}{' '}
-            <span className="muted money">
-              {formatBaht(item.priceSatang, locale, { decimals: 'auto' })}
-            </span>
-          </h2>
-        </div>
-        <button
-          type="button"
-          className="btn btn-soft"
-          aria-label={tr('common.close')}
-          onClick={onClose}
-        >
-          <Icon name="x" />
-        </button>
-      </header>
-
-      <div className="osheet__body">
-        {item.groups.map((group) => (
-          <OptionGroup
-            key={group.id}
-            group={group}
-            selected={optionIds.filter((id) => group.options.some((o) => o.id === id))}
-            onChoose={(optionId) => choose(group, optionId)}
-          />
-        ))}
-        <div className="field-group">
-          <label className="label" htmlFor="line-note">
-            {tr('common.note')}
-          </label>
-          <input
-            id="line-note"
-            className="input"
-            type="text"
-            maxLength={200}
-            autoComplete="off"
-            placeholder={tr('pos.modifier.lineNotePlaceholder')}
-            value={note}
-            onChange={(event) => setNote(event.target.value)}
-          />
-        </div>
-      </div>
-
-      <footer className="osheet__foot">
-        {missing.length > 0 ? (
-          <p className="hint" role="status">
-            {tr('pos.modifier.missing', { group: missing.join(', ') })}
-          </p>
-        ) : null}
-        <div className="osheet__actions">
-          <div className="stepper">
-            <button
-              type="button"
-              className="btn"
-              aria-label={tr('pos.orderEntry.decrease', { name })}
-              disabled={qty <= 1}
-              onClick={() => setQty((q) => Math.max(1, q - 1))}
-            >
-              <Icon name="minus" />
-            </button>
-            <span className="qty" aria-live="polite">
-              {qty}
-            </span>
-            <button
-              type="button"
-              className="btn"
-              aria-label={tr('pos.orderEntry.increase', { name })}
-              disabled={qty >= MAX_QTY}
-              onClick={() => setQty((q) => Math.min(MAX_QTY, q + 1))}
-            >
-              <Icon name="plus" />
-            </button>
+      <div
+        style={s(
+          'display:flex;flex-direction:column;gap:16px;padding:24px 24px calc(22px + env(safe-area-inset-bottom, 0px));min-height:0',
+        )}
+      >
+        <header style={s('display:flex;align-items:flex-start;gap:12px;flex:none')}>
+          <div style={s('flex-grow:1;min-width:0')}>
+            <div className="g-t-c">
+              {tr(target.mode === 'add' ? 'pos.orderEntry.addToOrder' : 'pos.modifier.editTitle')}
+            </div>
+            <h2 id="options-title" className="g-t-1" style={s('margin:0')}>
+              {name}{' '}
+              <span className="g-num" style={s('color:var(--ink2)')}>
+                {formatBaht(item.priceSatang, locale, { decimals: 'auto' })}
+              </span>
+            </h2>
           </div>
           <button
             type="button"
-            className="btn btn-primary btn-lg osheet__confirm"
-            disabled={!check.ok}
-            onClick={confirm}
+            className="g-btn g-btn-icon"
+            aria-label={tr('common.close')}
+            onClick={onClose}
           >
-            {tr(target.mode === 'add' ? 'pos.modifier.add' : 'pos.modifier.save', { amount })}
+            <Gi n="x" />
           </button>
+        </header>
+
+        <div
+          className="g-scroll"
+          style={s('flex:1 1 auto;min-height:0;display:flex;flex-direction:column;gap:16px')}
+        >
+          {item.groups.map((group) => (
+            <OptionGroup
+              key={group.id}
+              group={group}
+              selected={optionIds.filter((id) => group.options.some((o) => o.id === id))}
+              onChoose={(optionId) => choose(group, optionId)}
+            />
+          ))}
+          <div style={s('display:flex;flex-direction:column;gap:6px')}>
+            <label className="g-t-3" htmlFor="line-note" style={s('font-size:15px')}>
+              {tr('common.note')}
+            </label>
+            <div className="g-field" style={s('height:46px;border-radius:14px;font-size:14px')}>
+              <Gi n="note" size="sm" />
+              <input
+                id="line-note"
+                type="text"
+                maxLength={200}
+                autoComplete="off"
+                placeholder={tr('pos.modifier.lineNotePlaceholder')}
+                value={note}
+                onChange={(event) => setNote(event.target.value)}
+              />
+            </div>
+          </div>
         </div>
-      </footer>
+
+        <footer
+          style={s(
+            'flex:none;display:flex;flex-direction:column;gap:10px;position:sticky;bottom:0',
+          )}
+        >
+          {missing.length > 0 ? (
+            <p className="g-t-c" role="status" style={s('margin:0')}>
+              {tr('pos.modifier.missing', { group: missing.join(', ') })}
+            </p>
+          ) : null}
+          <div style={s('display:flex;align-items:center;gap:12px')}>
+            <div className="g-step">
+              <button
+                type="button"
+                aria-label={tr('pos.orderEntry.decrease', { name })}
+                disabled={qty <= 1}
+                onClick={() => setQty((q) => Math.max(1, q - 1))}
+              >
+                <Gi n="minus" size="sm" />
+              </button>
+              <b aria-live="polite">{qty}</b>
+              <button
+                type="button"
+                aria-label={tr('pos.orderEntry.increase', { name })}
+                disabled={qty >= MAX_QTY}
+                onClick={() => setQty((q) => Math.min(MAX_QTY, q + 1))}
+              >
+                <Gi n="plus" size="sm" />
+              </button>
+            </div>
+            <button
+              type="button"
+              className="g-btn g-btn-p g-btn-lg"
+              style={s('flex:1')}
+              disabled={!check.ok}
+              onClick={confirm}
+            >
+              {tr(target.mode === 'add' ? 'pos.modifier.add' : 'pos.modifier.save', { amount })}
+            </button>
+          </div>
+        </footer>
+      </div>
     </Modal>
   );
 }
@@ -197,25 +210,39 @@ function OptionGroup({
   const rule = groupRule(group);
   const single = group.maxSelect === 1;
   return (
-    <fieldset className="group">
-      <legend className="group-title">
+    <fieldset
+      style={s(
+        'border:0;margin:0;padding:0;min-width:0;display:flex;flex-direction:column;gap:10px',
+      )}
+    >
+      <legend
+        className="g-t-3"
+        style={s(
+          'font-size:15px;padding:0;margin-bottom:10px;display:flex;align-items:center;gap:8px',
+        )}
+      >
         {localName(locale, group.nameTh, group.nameEn)}
-        <span className={rule.required ? 'tag tag--req' : 'tag'}>{tr(rule.key, rule.params)}</span>
+        <span
+          className={`g-badge ${rule.required ? 'g-b-bad' : 'g-b-mute'}`}
+          style={s('height:24px;padding:0 10px;font-size:12px')}
+        >
+          {tr(rule.key, rule.params)}
+        </span>
       </legend>
-      <div className="picks">
+      <div style={s('display:flex;flex-wrap:wrap;gap:8px')}>
         {group.options.map((option) => {
           const on = selected.includes(option.id);
           const locked = isOptionLocked(group, selected, option.id);
           return (
             <label
               key={option.id}
-              className={`pick${on ? ' pick--on' : ''}${locked ? ' pick--locked' : ''}`}
+              className={`g-chip${on ? ' g-on' : ''}`}
+              style={s(`gap:6px;${locked || !option.available ? 'opacity:.5;' : ''}`)}
             >
               {/* A native radio or checkbox: arrow keys, Space and the screen reader come for free.
                   The tap is read from onClick so that tapping a chosen radio again can clear an
                   optional choice (onChange does not fire for a radio that is already on). */}
               <input
-                className="visually-hidden"
                 type={single ? 'radio' : 'checkbox'}
                 name={group.id}
                 checked={on}
@@ -223,18 +250,23 @@ function OptionGroup({
                 onChange={() => undefined}
                 onClick={() => onChoose(option.id)}
               />
-              {on ? <Icon name="check" /> : null}
+              {on ? <Gi n="check" size="sm" /> : null}
               <span>{localName(locale, option.nameTh, option.nameEn)}</span>
               {!option.available ? (
-                <span className="pick__flag">{tr('pos.orderEntry.soldOut')}</span>
+                <span
+                  className="g-badge g-b-bad"
+                  style={s('height:22px;padding:0 8px;font-size:12px')}
+                >
+                  {tr('pos.orderEntry.soldOut')}
+                </span>
               ) : option.priceDeltaSatang > 0 ? (
-                <span className="money">
+                <span className="g-num g-t-c" style={s('color:inherit;opacity:.8')}>
                   {tr('pos.modifier.priceUp', {
                     amount: formatBaht(option.priceDeltaSatang, locale, { decimals: 'auto' }),
                   })}
                 </span>
               ) : option.priceDeltaSatang < 0 ? (
-                <span className="money">
+                <span className="g-num g-t-c" style={s('color:inherit;opacity:.8')}>
                   {formatBaht(option.priceDeltaSatang, locale, { decimals: 'auto' })}
                 </span>
               ) : null}

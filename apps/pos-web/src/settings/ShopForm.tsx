@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { FormCard } from '../ui/FormParts.tsx';
 import { useT } from '../ui/hooks.ts';
 import { TextField } from '../ui/TextField.tsx';
 import { buildShopPatch, shopFormFrom, validateShopForm } from './model.ts';
@@ -22,50 +23,56 @@ export function ShopForm({ loaded, editable, saving, busy, submit }: SectionBody
 
   return (
     <form
-      className="sset__form"
+      style={{ display: 'flex', flexDirection: 'column', gap: 18 }}
       noValidate
       onSubmit={(event) => {
         event.preventDefault();
         void onSubmit();
       }}
     >
-      <TextField
-        label={tr('settings.shop.nameTh')}
-        value={form.nameTh}
-        maxLength={80}
-        disabled={!editable}
-        error={fieldError('nameTh')}
-        onChange={(nameTh) => setForm({ ...form, nameTh })}
-      />
-      <TextField
-        label={tr('settings.shop.nameEn')}
-        value={form.nameEn}
-        maxLength={80}
-        hint={tr('settings.optional')}
-        disabled={!editable}
-        error={fieldError('nameEn')}
-        onChange={(nameEn) => setForm({ ...form, nameEn })}
-      />
-      <TextField
-        label={tr('settings.shop.phone')}
-        value={form.phone}
-        type="tel"
-        inputMode="numeric"
-        maxLength={30}
-        hint={tr('settings.optional')}
-        disabled={!editable}
-        error={fieldError('phone')}
-        onChange={(phone) => setForm({ ...form, phone })}
-      />
-      <TextField
-        label={tr('settings.shop.address')}
-        value={form.address}
-        maxLength={200}
-        hint={tr('settings.optional')}
-        disabled={!editable}
-        error={fieldError('address')}
-        onChange={(address) => setForm({ ...form, address })}
-      />
+      <FormCard>
+        <TextField
+          icon="shop"
+          label={tr('settings.shop.nameTh')}
+          value={form.nameTh}
+          maxLength={80}
+          disabled={!editable}
+          error={fieldError('nameTh')}
+          onChange={(nameTh) => setForm({ ...form, nameTh })}
+        />
+        <TextField
+          icon="shop"
+          label={tr('settings.shop.nameEn')}
+          value={form.nameEn}
+          maxLength={80}
+          hint={tr('settings.optional')}
+          disabled={!editable}
+          error={fieldError('nameEn')}
+          onChange={(nameEn) => setForm({ ...form, nameEn })}
+        />
+        <TextField
+          icon="phone"
+          label={tr('settings.shop.phone')}
+          value={form.phone}
+          type="tel"
+          inputMode="numeric"
+          maxLength={30}
+          hint={tr('settings.optional')}
+          disabled={!editable}
+          error={fieldError('phone')}
+          onChange={(phone) => setForm({ ...form, phone })}
+        />
+        <TextField
+          icon="building"
+          label={tr('settings.shop.address')}
+          value={form.address}
+          maxLength={200}
+          hint={tr('settings.optional')}
+          disabled={!editable}
+          error={fieldError('address')}
+          onChange={(address) => setForm({ ...form, address })}
+        />
+      </FormCard>
       <SaveBar editable={editable} busy={busy} saving={saving} />
     </form>
   );

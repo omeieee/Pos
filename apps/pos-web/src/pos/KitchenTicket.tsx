@@ -1,52 +1,59 @@
-import { ORDER_NO_PREFIX, type OrderDto, type StaffRole } from '@sds/shared';
+import type { OrderDto, StaffRole } from '@sds/shared';
 import { errorText } from '../api/errors.ts';
+import { clockTime } from '../design/format.ts';
+import { Gi } from '../design/icons.tsx';
+import { s } from '../design/style.ts';
 import { useLocale, useServices, useStoreState, useT } from '../ui/hooks.ts';
-import { Icon } from '../ui/Icon.tsx';
 import { deliveryLabel } from './delivery-model.ts';
 import { elapsedText } from './elapsed-text.ts';
-import { kitchenMoves, waitLevel, waitMinutes } from './kitchen-model.ts';
+import {
+  isFresh,
+  kitchenMoves,
+  timerText,
+  waitLevel,
+  waitMinutes,
+  waitProgress,
+  waitSeconds,
+} from './kitchen-model.ts';
 import { localName } from './names.ts';
-import { OrderStatusBadge, PaymentStatusBadge } from './StatusBadge.tsx';
 
-/** The channel as a letter in a square, with the words for a screen reader. */
-function Channel({ order }: { order: OrderDto }) {
-  const tr = useT();
-  return (
-    <>
-      <span className="ochannel kcard__channel" aria-hidden="true">
-        {ORDER_NO_PREFIX[order.channel]}
-      </span>
-      <span className="visually-hidden">{tr(`orders.channel.${order.channel}`)}</span>
-    </>
-  );
+/** The words for the payment, as plain information (never an action) on a ticket. */
+function payText(tr: ReturnType<typeof useT>, order: OrderDto): string {
+  return order.paymentStatus === 'awaiting_confirmation'
+    ? tr('kitchen.pay.awaiting')
+    : tr(`status.payment.${order.paymentStatus}`);
 }
 
-/** How the order is served, and where it goes (the room of a delivery), in large type. */
-function Serve({ order }: { order: OrderDto }) {
+/**
+ * How long the ticket has waited, as the design's timer badge: a clock and "mm:ss" while it is
+ * fine, and a red badge with a warning icon and the words "overdue" / "very late" once it is long
+ * (colour is never the only sign). A screen reader hears the minutes in words instead.
+ */
+function Timer({ order, now }: { order: OrderDto; now: number }) {
   const tr = useT();
-  const to = deliveryLabel(order);
+  const seconds = waitSeconds(order, now);
+  const level = waitLevel(waitMinutes(order, now));
+  const tone =
+    level === 'ok' ? (order.status === 'preparing' ? 'g-b-info' : 'g-b-mute') : 'g-b-bad';
   return (
-    <p className="kcard__serve">
-      <span className="kcard__serve-how">
-        {tr(`pos.orderEntry.fulfilment.${order.fulfillment}`)}
+    <span className={`g-badge ${tone} g-num`} data-level={level}>
+      <Gi n={level === 'ok' ? 'clock' : 'warn'} />
+      <span aria-hidden="true">
+        {timerText(seconds)}
+        {level === 'ok' ? '' : ` · ${tr(`kitchen.level.${level}`)}`}
       </span>
-      {to ? (
-        <>
-          <span className="kcard__serve-where">{to.headline}</span>
-          {to.note ? <span className="kcard__serve-note">{to.note}</span> : null}
-        </>
-      ) : null}
-      {order.roomNo ? (
-        <span className="kcard__serve-where">
-          {tr('order.detail.room', { room: order.roomNo })}
-        </span>
-      ) : null}
-    </p>
+      <span className="visually-hidden">
+        {tr(order.status === 'ready' ? 'kitchen.readyWait' : 'kitchen.waited', {
+          time: elapsedText(tr, Math.floor(seconds / 60)),
+        })}
+        {level === 'ok' ? '' : ` · ${tr(`kitchen.level.${level}`)}`}
+      </span>
+    </span>
   );
 }
 
 /**
- * The one-tap moves of the kitchen view: start preparing, mark ready. The buttons are the moves the
+ * The one-tap moves of the kitchen view: start preparing, mark done. The buttons are the moves the
  * shared order machine allows this role (`kitchenMoves`), so a role never sees one the server would
  * refuse; the server still checks. The card changes when the answer comes (the store), not on the
  * tap. A refusal is shown on this card, for as long as the order is still where it was.
@@ -61,113 +68,139 @@ function Moves({ order, role }: { order: OrderDto; role: StaffRole }) {
   const failure = flow.errors[order.id];
   const shown = failure && failure.from === order.status ? failure.error : null;
   return (
-    <div className="kcard__moves">
+    <>
       {moves.map((move) => (
         <button
           key={move.to}
           type="button"
-          className="btn btn-primary btn-lg btn-block kcard__move"
+          className={`g-btn g-btn-lg g-btn-block ${move.to === 'ready' ? 'g-btn-ok' : 'g-btn-p'}`}
           disabled={pending}
           aria-busy={pending}
           onClick={() => void orderMoves.transition(order, move.to)}
         >
-          {tr(`order.move.${move.to}`)}
+          {move.to === 'ready' ? <Gi n="check" /> : null}
+          {move.to === 'ready' ? tr('kitchen.move.ready') : tr(`order.move.${move.to}`)}
         </button>
       ))}
       {shown ? (
-        <p className="error" role="alert">
+        <p
+          role="alert"
+          className="g-badge g-b-bad"
+          style={s('height:auto;min-height:28px;padding:6px 12px;white-space:normal;margin:0')}
+        >
           {errorText(tr, shown)}
         </p>
       ) : null}
-    </div>
+    </>
   );
 }
 
 /**
- * One order to make, as a big-type ticket for a wall-mounted phone: channel letter and number, how
- * long it has waited (colour AND words once it is long), how it is served, every dish with its
- * quantity, choices and note, the order's note, the payment as plain information, and the moves.
- * No price, no total, no payment action: this view never reads them.
+ * One order to make, as a big-type ticket (design "Kitchen board"): the number and how it is served,
+ * the timer, where it goes, every dish with its quantity in a box, its choices and note, the order's
+ * note, the payment as plain words, and the moves. No price, no total, no payment action: this view
+ * never reads them.
  */
 export function KitchenTicket({
   order,
   role,
   now,
+  delay,
 }: {
   order: OrderDto;
   role: StaffRole;
   now: number;
+  delay: number;
 }) {
   const tr = useT();
   const locale = useLocale();
   const minutes = waitMinutes(order, now);
   const level = waitLevel(minutes);
+  const to = deliveryLabel(order);
+  const delivery =
+    order.fulfillment === 'room_delivery' || order.fulfillment === 'entrance_delivery';
+  const ready = order.status === 'ready';
+  const started =
+    order.status === 'preparing' && order.acceptedAt
+      ? tr('kitchen.startedAt', { time: clockTime(Date.parse(order.acceptedAt)) })
+      : null;
+  const info = [
+    tr(`orders.channel.${order.channel}`),
+    started,
+    ready ? null : payText(tr, order),
+  ].filter(Boolean);
   return (
     <li>
-      <article className={`kcard kcard--${level}`} aria-labelledby={`kt-${order.id}`}>
-        <header className="kcard__head">
-          <Channel order={order} />
-          <h3 id={`kt-${order.id}`} className="kcard__no">
+      <article
+        className={`g-glass g-rise kb-ticket${isFresh(order, now) ? ' kb-new' : ''}${level === 'late' ? ' kb-late' : ''}`}
+        data-level={level}
+        aria-labelledby={`kt-${order.id}`}
+        style={s(`--d:${delay}s`)}
+      >
+        <div style={s('display:flex;align-items:center;gap:10px')}>
+          <h3 id={`kt-${order.id}`} className="g-t-1 g-num kb-no" style={s('flex-grow:1;margin:0')}>
             {order.orderNo}
           </h3>
-          <span className={`kcard__wait kcard__wait--${level}`}>
-            <Icon name="clock" />
-            <span>{elapsedText(tr, minutes)}</span>
-            {level === 'ok' ? null : (
-              <span className="kcard__level">{tr(`kitchen.level.${level}`)}</span>
-            )}
+          <span className={`g-badge ${delivery ? 'g-b-info' : 'g-b-mute'}`}>
+            <Gi n={delivery ? 'building' : 'store'} />
+            {tr(`pos.orderEntry.fulfilment.${order.fulfillment}`)}
           </span>
-        </header>
-        <Serve order={order} />
-        <ul className="kcard__lines">
+        </div>
+        <div className="g-t-s" style={s('display:flex;align-items:center;gap:8px;flex-wrap:wrap')}>
+          <Timer order={order} now={now} />
+          {ready ? (
+            <span className={`g-badge ${order.paymentStatus === 'paid' ? 'g-b-ok' : 'g-b-warn'}`}>
+              <Gi n={order.paymentStatus === 'paid' ? 'check' : 'pending'} />
+              {payText(tr, order)}
+            </span>
+          ) : null}
+          <span>{info.join(' · ')}</span>
+        </div>
+        {to || order.roomNo ? (
+          <div style={s('display:flex;flex-direction:column;gap:2px')}>
+            <div className="kb-where">
+              {to ? <span>{to.headline}</span> : null}
+              {order.roomNo ? <span>{tr('order.detail.room', { room: order.roomNo })}</span> : null}
+            </div>
+            {to?.note ? <div className="kb-opt">{to.note}</div> : null}
+          </div>
+        ) : null}
+        <ul
+          style={s(
+            'list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px',
+          )}
+        >
           {order.items.map((item) => (
-            <li key={item.id} className="kline">
-              <span className="kline__qty">{tr('order.detail.qty', { count: item.qty })}</span>
-              <span className="kline__what">
-                <span className="kline__name">{localName(locale, item.nameTh, item.nameEn)}</span>
+            <li key={item.id} style={s('display:flex;gap:12px;align-items:flex-start')}>
+              <div className="kb-q g-num">
+                {item.qty}
+                <span className="visually-hidden">×</span>
+              </div>
+              <div style={s('min-width:0')}>
+                <div className="kb-nm">{localName(locale, item.nameTh, item.nameEn)}</div>
                 {item.modifiers.length > 0 ? (
-                  <span className="kline__mods">
+                  <div className="kb-opt">
                     {item.modifiers.map((m) => localName(locale, m.nameTh, m.nameEn)).join(' · ')}
-                  </span>
+                  </div>
                 ) : null}
-                {item.note ? <span className="kline__note">{item.note}</span> : null}
-              </span>
+                {item.note ? <div className="kb-opt kb-item-note">{item.note}</div> : null}
+              </div>
             </li>
           ))}
         </ul>
-        {order.note ? (
-          <p className="kcard__note">
-            <Icon name="note" />
-            <span>{order.note}</span>
-          </p>
+        {order.status === 'preparing' ? (
+          <div className="kb-bar" aria-hidden="true">
+            <div style={{ width: `${Math.round(waitProgress(waitSeconds(order, now)) * 100)}%` }} />
+          </div>
         ) : null}
-        <div className="kcard__badges">
-          <OrderStatusBadge status={order.status} />
-          <PaymentStatusBadge status={order.paymentStatus} />
-        </div>
+        {order.note ? (
+          <div className="kb-note">
+            <Gi n="note" size="sm" />
+            <span>{order.note}</span>
+          </div>
+        ) : null}
         <Moves order={order} role={role} />
       </article>
-    </li>
-  );
-}
-
-/** A compact row for an order that is ready and waiting to be handed over: information only. */
-export function ReadyRow({ order, now }: { order: OrderDto; now: number }) {
-  const tr = useT();
-  const to = deliveryLabel(order);
-  return (
-    <li className="kready__row">
-      <Channel order={order} />
-      <span className="kready__no">{order.orderNo}</span>
-      <span className="kready__serve small">
-        {tr(`pos.orderEntry.fulfilment.${order.fulfillment}`)}
-        {to ? ` · ${to.headline}` : ''}
-        {order.roomNo ? ` · ${tr('order.detail.room', { room: order.roomNo })}` : ''}
-      </span>
-      <span className="kready__wait small muted">
-        {tr('kitchen.readyWait', { time: elapsedText(tr, waitMinutes(order, now)) })}
-      </span>
-      <PaymentStatusBadge status={order.paymentStatus} />
     </li>
   );
 }

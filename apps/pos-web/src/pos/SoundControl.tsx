@@ -1,36 +1,22 @@
 import type { MessageKey } from '@sds/i18n';
-import type { IconName } from '../app/routes.ts';
-import type { SoundState } from '../platform/sound.ts';
+import { Gi } from '../design/icons.tsx';
+import { s } from '../design/style.ts';
 import { useServices, useStoreState, useT } from '../ui/hooks.ts';
-import { Icon } from '../ui/Icon.tsx';
-
-const STATE_ICON: Record<SoundState, IconName> = {
-  on: 'volume',
-  off: 'volume-off',
-  blocked: 'volume-off',
-  unsupported: 'volume-off',
-};
 
 /**
- * The new-order sound switch of the kitchen view. It always says what the sound is doing now (on,
- * off, blocked) in words and an icon, never by colour alone. iOS Safari plays audio only after a
- * tap, so the button is what unlocks it: `turnOn()` is called straight from the click, before
- * anything is awaited. "Blocked" means the sound is chosen but the browser has not let it start (or
- * stopped it again): one tap fixes it. The choice is remembered on this device.
+ * The new-order sound switch of the kitchen view (design: the switch "เสียงออเดอร์ใหม่"). It always
+ * says what the sound is doing now (on, off, blocked, not available) in words: a word beside the
+ * switch when something needs attention, and for a screen reader always, never by colour alone.
+ * iOS Safari plays audio only after a tap, so the switch is what unlocks it: `turnOn()` is called
+ * straight from the click, before anything is awaited. "Blocked" means the sound is chosen but the
+ * browser has not let it start (or stopped it again): one tap on the switch fixes it. The choice is
+ * remembered on this device.
  */
 export function SoundControl() {
   const { sound } = useServices();
   const { state } = useStoreState(sound);
   const tr = useT();
 
-  const action: { label: MessageKey; run: () => void } | null =
-    state === 'on'
-      ? { label: 'kitchen.sound.turnOff', run: () => void sound.turnOff() }
-      : state === 'off'
-        ? { label: 'kitchen.sound.turnOn', run: () => void sound.turnOn() }
-        : state === 'blocked'
-          ? { label: 'kitchen.sound.unblock', run: () => void sound.turnOn() }
-          : null;
   const hint: MessageKey | null =
     state === 'off'
       ? 'kitchen.sound.hint.off'
@@ -39,30 +25,54 @@ export function SoundControl() {
         : state === 'unsupported'
           ? 'kitchen.sound.hint.unsupported'
           : null;
+  // Off and on are told by the switch itself; the rest need a visible word and icon.
+  const attention = state === 'blocked' || state === 'unsupported';
 
   return (
-    <fieldset className="ksound">
+    <fieldset className="ksound" style={s('border:0;margin:0;padding:0;min-width:0')}>
       <legend className="visually-hidden">{tr('kitchen.sound.label')}</legend>
-      <div className="ksound__row">
+      <div style={s('display:flex;align-items:center;gap:12px;flex-wrap:wrap')}>
+        <label
+          className="g-t-s"
+          style={s('display:flex;align-items:center;gap:10px;min-height:48px;cursor:pointer')}
+        >
+          <input
+            type="checkbox"
+            role="switch"
+            aria-checked={state === 'on'}
+            className="g-sw"
+            checked={state === 'on'}
+            disabled={state === 'unsupported'}
+            aria-describedby={hint ? 'ksound-hint' : undefined}
+            onChange={() => {
+              if (state === 'on') void sound.turnOff();
+              else void sound.turnOn();
+            }}
+          />
+          {tr('kitchen.sound.short')}
+        </label>
         <span
-          className={`status ksound__state ksound__state--${state}`}
           role="status"
           aria-live="polite"
+          className={
+            attention
+              ? `g-badge ${state === 'blocked' ? 'g-b-warn' : 'g-b-bad'}`
+              : 'visually-hidden'
+          }
         >
-          <Icon name={STATE_ICON[state]} />
-          <span>{tr(`kitchen.sound.state.${state}`)}</span>
+          {attention ? <Gi n="warn" /> : null}
+          {tr(`kitchen.sound.state.${state}`)}
         </span>
-        {action ? (
-          <button
-            type="button"
-            className={`btn ksound__btn${state === 'on' ? ' btn-soft' : ' btn-primary'}`}
-            onClick={action.run}
-          >
-            {tr(action.label)}
-          </button>
-        ) : null}
       </div>
-      {hint ? <p className="muted small ksound__hint">{tr(hint)}</p> : null}
+      {hint ? (
+        <p
+          id="ksound-hint"
+          className={attention ? 'g-t-c' : 'visually-hidden'}
+          style={s('margin:0;max-width:260px')}
+        >
+          {tr(hint)}
+        </p>
+      ) : null}
     </fieldset>
   );
 }

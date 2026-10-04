@@ -1,3 +1,5 @@
+import '@fontsource-variable/anuphan/wght.css';
+import '@sds/ui/glass.css';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App.tsx';
@@ -13,6 +15,9 @@ import './kitchen.css';
 import './outbox.css';
 import './menu-editor.css';
 import './settings.css';
+import './glass-theme.css';
+// Last, so the redesign ("Hot bowl, calm glass") wins over older rules of the same weight.
+import '@sds/ui/design.css';
 
 const root = document.getElementById('root');
 if (!root) throw new Error('#root not found');

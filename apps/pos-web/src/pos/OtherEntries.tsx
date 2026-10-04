@@ -1,9 +1,9 @@
 import { useContext, useState } from 'react';
 import { errorText } from '../api/errors.ts';
 import type { AuthStore } from '../auth/auth-store.ts';
+import { s } from '../design/style.ts';
 import { AuthContext, useServices, useStoreState, useT } from '../ui/hooks.ts';
-import { Icon } from '../ui/Icon.tsx';
-import { Modal } from '../ui/Modal.tsx';
+import { Callout, PayModal, SheetBody, SheetTitle } from './PayParts.tsx';
 
 type Action = 'takeOver' | 'clear';
 
@@ -21,29 +21,25 @@ export function OtherEntries() {
   const state = useStoreState(useServices().outbox);
   const { othersCount: count, recovered } = state;
   return (
-    <div className="others">
+    <div style={s('display:flex;flex-direction:column;gap:10px')}>
       {count > 0 ? (
-        <p className="notice" role="status">
-          <Icon name="info" />
-          <span>{tr('outbox.others', { count })}</span>
-        </p>
+        <Callout tone="info" role="status">
+          {tr('outbox.others', { count })}
+        </Callout>
       ) : null}
       {auth ? <OwnerRecovery auth={auth} count={count} /> : null}
       {recovered ? (
-        <p className="notice" role="status">
-          <Icon name="check-circle" />
-          <span>
-            {tr(
-              recovered.action === 'takeOver'
-                ? 'outbox.others.done.takeOver'
-                : 'outbox.others.done.clear',
-              { count: recovered.count },
-            )}
-            {recovered.failed > 0
-              ? ` ${tr('outbox.others.failed', { count: recovered.failed })}`
-              : ''}
-          </span>
-        </p>
+        <Callout tone="ok" role="status">
+          {tr(
+            recovered.action === 'takeOver'
+              ? 'outbox.others.done.takeOver'
+              : 'outbox.others.done.clear',
+            { count: recovered.count },
+          )}
+          {recovered.failed > 0
+            ? ` ${tr('outbox.others.failed', { count: recovered.failed })}`
+            : ''}
+        </Callout>
       ) : null}
     </div>
   );
@@ -98,53 +94,60 @@ function OwnerRecovery({ auth, count }: { auth: AuthStore; count: number }) {
   return (
     <>
       {count > 0 ? (
-        <div className="qactions__row">
-          <button type="button" className="btn btn-primary" onClick={() => ask('takeOver')}>
+        <div style={s('display:flex;gap:10px;flex-wrap:wrap')}>
+          <button type="button" className="g-btn g-btn-p" onClick={() => ask('takeOver')}>
             {tr('outbox.others.takeOver')}
           </button>
-          <button type="button" className="btn btn-soft" onClick={() => ask('clear')}>
+          <button type="button" className="g-btn" onClick={() => ask('clear')}>
             {tr('outbox.others.clear')}
           </button>
         </div>
       ) : null}
       {problem ? (
-        <p className="error" role="alert">
+        <Callout tone="bad" role="alert">
           {problem}
-        </p>
+        </Callout>
       ) : null}
       {asking ? (
-        <Modal labelledBy="others-title" onClose={() => (busy ? undefined : setAsking(null))}>
-          <h2 id="others-title" className="sheet__title">
-            {tr(
-              asking === 'takeOver' ? 'outbox.others.takeOver.title' : 'outbox.others.clear.title',
-              { count },
-            )}
-          </h2>
-          <p>
-            {tr(asking === 'takeOver' ? 'outbox.others.takeOver.body' : 'outbox.others.clear.body')}
-          </p>
-          <button
-            type="button"
-            className="btn btn-primary btn-block"
-            disabled={busy}
-            onClick={() => setAsking(null)}
-          >
-            {tr('outbox.discard.keep')}
-          </button>
-          <button
-            type="button"
-            className={asking === 'clear' ? 'btn btn-danger btn-block' : 'btn btn-block'}
-            disabled={busy}
-            aria-busy={busy}
-            onClick={() => void run(asking)}
-          >
-            {tr(
-              asking === 'takeOver'
-                ? 'outbox.others.takeOver.confirm'
-                : 'outbox.others.clear.confirm',
-            )}
-          </button>
-        </Modal>
+        <PayModal labelledBy="others-title" onClose={() => (busy ? undefined : setAsking(null))}>
+          <SheetBody>
+            <SheetTitle id="others-title">
+              {tr(
+                asking === 'takeOver'
+                  ? 'outbox.others.takeOver.title'
+                  : 'outbox.others.clear.title',
+                { count },
+              )}
+            </SheetTitle>
+            <p className="g-t-s" style={s('margin:0')}>
+              {tr(
+                asking === 'takeOver' ? 'outbox.others.takeOver.body' : 'outbox.others.clear.body',
+              )}
+            </p>
+            <button
+              type="button"
+              className="g-btn g-btn-p g-btn-lg g-btn-block"
+              disabled={busy}
+              onClick={() => setAsking(null)}
+            >
+              {tr('outbox.discard.keep')}
+            </button>
+            <button
+              type="button"
+              className="g-btn g-btn-block"
+              style={s(asking === 'clear' ? 'color:var(--chili-ink)' : '')}
+              disabled={busy}
+              aria-busy={busy}
+              onClick={() => void run(asking)}
+            >
+              {tr(
+                asking === 'takeOver'
+                  ? 'outbox.others.takeOver.confirm'
+                  : 'outbox.others.clear.confirm',
+              )}
+            </button>
+          </SheetBody>
+        </PayModal>
       ) : null}
     </>
   );

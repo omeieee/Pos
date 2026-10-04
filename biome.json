@@ -6,7 +6,16 @@
     "useIgnoreFile": true
   },
   "files": {
-    "includes": ["**", "!**/migrations", "!design", "!docs", "!packages/ui/src/tokens.css"]
+    "includes": [
+      "**",
+      "!**/migrations",
+      "!design",
+      "!docs",
+      "!packages/ui/src/tokens.css",
+      "!apps/pos-web/public/dish-art",
+      "!apps/liff-web/public/dish-art",
+      "!apps/pos-web/public/mark.svg"
+    ]
   },
   "formatter": {
     "enabled": true,

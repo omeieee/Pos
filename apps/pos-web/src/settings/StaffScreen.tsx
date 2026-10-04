@@ -1,13 +1,17 @@
 import type { StaffDto } from '@sds/shared';
 import { useEffect, useState } from 'react';
+import { Gi } from '../design/icons.tsx';
+import { s } from '../design/style.ts';
 import { useServices, useStoreState, useT } from '../ui/hooks.ts';
-import { Icon } from '../ui/Icon.tsx';
 import { AdminFrame, type AdminMessage } from './AdminFrame.tsx';
 import { ADD_STAFF_KEY, staffKey } from './admin-store.ts';
 import { adminFailureText } from './admin-text.ts';
 import { ConfirmDialog } from './ConfirmDialog.tsx';
 import { AddStaffDialog, RenameStaffDialog, SetPinDialog } from './StaffDialogs.tsx';
 import { staffDisplayState } from './staff-model.ts';
+import './settings-glass.css';
+
+const initial = (name: string) => Array.from(name.trim())[0] ?? '';
 
 type Dialog =
   | { kind: 'add' }
@@ -62,55 +66,71 @@ export function StaffScreen() {
         message={message}
         onLoad={() => void adminEditor.loadStaff()}
       >
-        <div className="sset__actions">
+        <div className="gsave" style={s('justify-content:flex-start')}>
           <button
             type="button"
-            className="btn btn-primary"
+            className="g-btn g-btn-p"
             disabled={offline || state.pending.includes(ADD_STAFF_KEY)}
             onClick={() => {
               setMessage(null);
               setDialog({ kind: 'add' });
             }}
           >
-            <Icon name="plus" />
+            <Gi n="plus" size="sm" />
             {tr('settings.staff.add')}
           </button>
         </div>
         {state.staff.items.length === 0 ? (
-          <p className="muted">{tr('settings.staff.empty')}</p>
+          <p className="g-t-s" style={s('margin:0')}>
+            {tr('settings.staff.empty')}
+          </p>
         ) : (
-          <ul className="sset__list">
+          <ul className="g-glass gset-grp gset-list">
             {state.staff.items.map((person) => {
               const shown = staffDisplayState(person, nowMs);
               const busy = offline || state.pending.includes(staffKey(person.id));
               return (
                 <li
                   key={person.id}
-                  className={`sset__row${person.active ? '' : ' sset__row--off'}`}
+                  className={`g-row gset-rowbox${person.active ? '' : ' gset-rowbox--off'}`}
                 >
-                  <div className="sset__row-main">
-                    <span className="sset__row-name">{person.displayName}</span>
-                    <span className="sset__row-meta">
-                      <span className="tag">{tr(`role.${person.role}`)}</span>
+                  <span className="g-avatar" aria-hidden="true">
+                    {initial(person.displayName)}
+                  </span>
+                  <div className="gset-main">
+                    <span className="g-t-3" style={s('overflow-wrap:anywhere')}>
+                      {person.displayName}
+                    </span>
+                    <span className="gset-meta">
+                      <span className="g-badge g-b-mute">{tr(`role.${person.role}`)}</span>
                       {person.active ? null : (
-                        <span className="tag">{tr('settings.staff.inactive')}</span>
+                        <span className="g-badge g-b-bad">
+                          <Gi n="x" />
+                          {tr('settings.staff.inactive')}
+                        </span>
                       )}
                       {shown.locked ? (
-                        <span className="tag">{tr('settings.staff.locked')}</span>
+                        <span className="g-badge g-b-warn">
+                          <Gi n="lock" />
+                          {tr('settings.staff.locked')}
+                        </span>
                       ) : null}
                       {shown.noPin ? (
-                        <span className="tag">{tr('settings.staff.noPin')}</span>
+                        <span className="g-badge g-b-warn">
+                          <Gi n="warn" />
+                          {tr('settings.staff.noPin')}
+                        </span>
                       ) : null}
                     </span>
                     {shown.canEdit ? null : (
-                      <span className="hint">{tr('settings.staff.ownerNote')}</span>
+                      <span className="g-t-c">{tr('settings.staff.ownerNote')}</span>
                     )}
                   </div>
                   {shown.canEdit ? (
-                    <span className="sset__row-actions">
+                    <span className="gset-actions">
                       <button
                         type="button"
-                        className="btn btn-soft"
+                        className="g-btn gbtn-row"
                         aria-label={tr('settings.staff.rename', { name: person.displayName })}
                         disabled={busy}
                         onClick={() => {
@@ -122,7 +142,7 @@ export function StaffScreen() {
                       </button>
                       <button
                         type="button"
-                        className="btn btn-soft"
+                        className="g-btn gbtn-row"
                         aria-label={tr('settings.staff.setPin', { name: person.displayName })}
                         disabled={busy}
                         onClick={() => {
@@ -135,7 +155,7 @@ export function StaffScreen() {
                       {shown.canDeactivate ? (
                         <button
                           type="button"
-                          className="btn btn-soft"
+                          className="g-btn gbtn-row"
                           aria-label={tr('settings.staff.deactivate', { name: person.displayName })}
                           disabled={busy}
                           onClick={() => {
@@ -150,7 +170,7 @@ export function StaffScreen() {
                       {shown.canActivate ? (
                         <button
                           type="button"
-                          className="btn btn-soft"
+                          className="g-btn gbtn-row"
                           aria-label={tr('settings.staff.activate', { name: person.displayName })}
                           disabled={busy}
                           onClick={() => void run(person, { active: true }, false)}

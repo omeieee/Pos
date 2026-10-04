@@ -1,11 +1,15 @@
 import { formatDate } from '@sds/i18n';
 import type { DeviceDto } from '@sds/shared';
 import { useEffect, useState } from 'react';
+import { Gi } from '../design/icons.tsx';
+import { s } from '../design/style.ts';
 import { useAuthState, useLocale, useServices, useStoreState, useT } from '../ui/hooks.ts';
+import { Callout } from '../ui/Notice.tsx';
 import { AdminFrame, type AdminMessage } from './AdminFrame.tsx';
 import { deviceKey } from './admin-store.ts';
 import { adminFailureText } from './admin-text.ts';
 import { ConfirmDialog } from './ConfirmDialog.tsx';
+import './settings-glass.css';
 
 /**
  * The registered devices (owner only; the list needs a fresh step-up). A device is removed after a
@@ -50,47 +54,65 @@ export function DevicesScreen() {
         message={message}
         onLoad={() => void adminEditor.loadDevices()}
       >
-        <p className="hint">{tr('settings.devices.registerHint')}</p>
+        <p className="g-t-s" style={s('margin:0')}>
+          {tr('settings.devices.registerHint')}
+        </p>
         {currentId === null ? (
-          <p className="notice" role="note">
-            <span>{tr('settings.devices.unknownSelf')}</span>
-          </p>
+          <Callout tone="warn" role="note">
+            {tr('settings.devices.unknownSelf')}
+          </Callout>
         ) : null}
         {state.devices.items.length === 0 ? (
-          <p className="muted">{tr('settings.devices.empty')}</p>
+          <p className="g-t-s" style={s('margin:0')}>
+            {tr('settings.devices.empty')}
+          </p>
         ) : (
-          <ul className="sset__list">
+          <ul className="g-glass gset-grp gset-list">
             {state.devices.items.map((device) => {
               const here = device.id === currentId;
               const revoked = device.revokedAt !== null;
               return (
-                <li key={device.id} className={`sset__row${revoked ? ' sset__row--off' : ''}`}>
-                  <div className="sset__row-main">
-                    <span className="sset__row-name">{device.name}</span>
-                    <span className="sset__row-meta">
-                      <span className="tag">{tr(`settings.devices.kind.${device.kind}`)}</span>
+                <li
+                  key={device.id}
+                  className={`g-row gset-rowbox${revoked ? ' gset-rowbox--off' : ''}`}
+                >
+                  <div className="g-ico" style={s('background:#3a3330')}>
+                    <Gi n={device.kind === 'iphone' ? 'phone' : 'monitor'} size="sm" />
+                  </div>
+                  <div className="gset-main">
+                    <span className="g-t-3" style={s('overflow-wrap:anywhere')}>
+                      {device.name}
+                    </span>
+                    <span className="gset-meta">
+                      <span className="g-badge g-b-mute">
+                        {tr(`settings.devices.kind.${device.kind}`)}
+                      </span>
                       {here ? (
-                        <span className="tag tag--req">{tr('settings.devices.thisDevice')}</span>
+                        <span className="g-badge g-b-ok">
+                          <Gi n="check" />
+                          {tr('settings.devices.thisDevice')}
+                        </span>
                       ) : null}
-                      <span className="muted">
+                      <span className="g-t-c">
                         {device.lastSeenAt
                           ? tr('settings.devices.lastSeen', { time: time(device.lastSeenAt) })
                           : tr('settings.devices.neverSeen')}
                       </span>
                       {device.revokedAt ? (
-                        <span className="muted">
+                        <span className="g-badge g-b-bad">
+                          <Gi n="x" />
                           {tr('settings.devices.revokedAt', { time: time(device.revokedAt) })}
                         </span>
                       ) : null}
                     </span>
                     {here ? (
-                      <span className="hint">{tr('settings.devices.revokeCurrent')}</span>
+                      <span className="g-t-c">{tr('settings.devices.revokeCurrent')}</span>
                     ) : null}
                   </div>
                   {!revoked && !here && currentId !== null ? (
                     <button
                       type="button"
-                      className="btn btn-soft"
+                      className="g-btn gbtn-row"
                       aria-label={tr('settings.devices.revoke', { name: device.name })}
                       disabled={offline || state.pending.includes(deviceKey(device.id))}
                       onClick={() => {

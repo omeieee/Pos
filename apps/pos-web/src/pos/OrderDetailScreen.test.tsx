@@ -95,11 +95,12 @@ describe('the order page', () => {
     expect(screen.getByText(th['status.payment.unpaid'])).toBeTruthy();
     expect(screen.getByText(/ก๋วยเตี๋ยวต้มยำ/)).toBeTruthy();
     // The quantity sign comes from the catalog, not from the component.
-    expect(screen.getAllByText(tr('order.detail.qty', { count: 1 })).length).toBe(2);
+    expect(screen.getAllByText(tr('order.detail.qtyTimes', { count: 1 })).length).toBe(2);
     expect(screen.getByText(/ไข่ต้ม/)).toBeTruthy();
     expect(screen.getByText(/แยกน้ำ/)).toBeTruthy();
     expect(screen.getByText(/ห้อง 1204/)).toBeTruthy();
-    expect(screen.getByText(th['order.detail.serverTotal'])).toBeTruthy();
+    // The label of the big figure; the payment panel names the amount due for a screen reader too.
+    expect(screen.getAllByText(th['order.detail.serverTotal']).length).toBeGreaterThan(0);
     expect(screen.getAllByText('฿65.00').length).toBeGreaterThan(0);
   });
 

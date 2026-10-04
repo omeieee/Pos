@@ -158,6 +158,12 @@ export interface GradientTokens {
   backdrop: string;
   orbA: string;
   orbB: string;
+  /** Dish tile and order-line backgrounds behind the drawings (soft, one per family). */
+  tintPeach: string;
+  tintGold: string;
+  tintRose: string;
+  tintSky: string;
+  tintSand: string;
 }
 
 export interface MotionTokens {
@@ -232,8 +238,9 @@ export const baseTokens: Tokens = {
     overlay: 'rgba(31, 26, 23, 0.48)',
   },
   font: {
-    sans: '"Anuphan", "IBM Plex Sans Thai", "Noto Sans Thai", "Sukhumvit Set", "Leelawadee UI", Tahoma, system-ui, sans-serif',
-    display: '"Anuphan", "Kanit", "IBM Plex Sans Thai", "Noto Sans Thai", system-ui, sans-serif',
+    sans: '"Anuphan Variable", "Anuphan", "IBM Plex Sans Thai", "Noto Sans Thai", "Sukhumvit Set", "Leelawadee UI", Tahoma, system-ui, sans-serif',
+    display:
+      '"Anuphan Variable", "Anuphan", "Kanit", "IBM Plex Sans Thai", "Noto Sans Thai", system-ui, sans-serif',
     weightRegular: '400',
     weightMedium: '500',
     weightBold: '700',
@@ -310,6 +317,11 @@ export const baseTokens: Tokens = {
       'radial-gradient(60% 50% at 8% 4%, rgba(255, 138, 101, 0.42), transparent 70%), radial-gradient(50% 45% at 96% 8%, rgba(255, 196, 107, 0.5), transparent 70%), radial-gradient(55% 50% at 86% 100%, rgba(214, 140, 200, 0.3), transparent 70%), #FBF4EC',
     orbA: 'radial-gradient(circle, rgba(255, 112, 80, 0.38), transparent 68%)',
     orbB: 'radial-gradient(circle, rgba(255, 190, 90, 0.4), transparent 66%)',
+    tintPeach: 'linear-gradient(160deg, #FFE9D6, #FFD0B4)',
+    tintGold: 'linear-gradient(160deg, #FFF1CF, #FFD98A)',
+    tintRose: 'linear-gradient(160deg, #FFE3E0, #FFBDB4)',
+    tintSky: 'linear-gradient(160deg, #E8F1FB, #C9DEF5)',
+    tintSand: 'linear-gradient(160deg, #F6ECDC, #E8D3B0)',
   },
   motion: {
     fast: '120ms',
@@ -376,7 +388,7 @@ export const darkOverrides: TokenOverrides = {
 
 /**
  * Default per-device overrides (A4). Each device only states where it differs from the base.
- * - iPad (counter, landscape): big targets, 4-column menu with category chips (a sidebar would
+ * - iPad (counter, landscape): big targets, 3-column menu with category chips (a sidebar would
  *   squeeze tiles below ~150 px next to the cart), cart panel always visible.
  * - iPhone (one hand): 2-column menu, cart as a bottom sheet, touch ≥ 44 px.
  * - Laptop (back office, mouse): denser, smaller text, still ≥ 24 px targets (WCAG 2.5.8).
@@ -386,7 +398,7 @@ export const deviceDefaults: Readonly<Record<Device, TokenOverrides>> = {
     fontSize: { md: '17px', lg: '19px', amount: '56px', orderNo: '36px' },
     touch: { min: '48px', comfortable: '60px', primary: '64px' },
     layout: {
-      menuColumns: 4,
+      menuColumns: 3,
       cartPanelWidth: '380px',
       cartMode: 'panel',
       categoryRail: 'chips',

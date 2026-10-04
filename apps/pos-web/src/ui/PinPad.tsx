@@ -9,8 +9,9 @@ import {
   pinSlots,
   shouldAutoSubmit,
 } from '../auth/pin-pad.ts';
+import { Gi } from '../design/icons.tsx';
 import { useT } from './hooks.ts';
-import { Icon } from './Icon.tsx';
+import './glass-forms.css';
 
 const DIGIT_ROWS = [
   ['1', '2', '3'],
@@ -78,10 +79,15 @@ export function PinPad({
           />
         ))}
       </div>
-      <div className="error-slot">
+      <div className="gauth__pin-msg">
         {error ? (
-          <p className="error" role="alert">
-            {error}
+          <p
+            className="gfield__msg gfield__msg--bad"
+            role="alert"
+            style={{ justifyContent: 'center', textAlign: 'center', paddingLeft: 0, fontSize: 14 }}
+          >
+            <Gi n="warn" />
+            <span>{error}</span>
           </p>
         ) : null}
       </div>
@@ -120,12 +126,13 @@ export function PinPad({
           aria-label={tr('auth.pin.delete')}
           onClick={() => press({ type: 'delete' })}
         >
-          <Icon name="backspace" />
+          <Gi n="backspace" />
         </button>
       </div>
       <button
         type="button"
-        className="btn btn-primary btn-lg btn-block"
+        className="g-btn g-btn-p g-btn-lg g-btn-block"
+        style={{ marginTop: 4 }}
         disabled={disabled || !canSubmitPin(state)}
         onClick={submit}
       >

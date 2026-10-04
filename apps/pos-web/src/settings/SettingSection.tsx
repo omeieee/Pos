@@ -1,6 +1,7 @@
 import { type ReactNode, useCallback, useEffect, useState } from 'react';
+import { s } from '../design/style.ts';
 import { useEntities, useServices, useStoreState, useT } from '../ui/hooks.ts';
-import { Icon } from '../ui/Icon.tsx';
+import { Callout } from '../ui/Notice.tsx';
 import { failureText } from './outcome-text.ts';
 import type { InputOf, Loaded, ResourceName, SaveOutcome, ValueOf } from './settings-store.ts';
 
@@ -96,63 +97,73 @@ export function SettingSection<K extends ResourceName>({
   const busy = offline || saving;
 
   return (
-    <div className="sset__body">
+    <div style={s('display:flex;flex-direction:column;gap:14px')}>
       {offline ? (
-        <p className="notice" role="status">
-          <Icon name="wifi-off" />
-          <span>{tr('settings.offline')}</span>
-        </p>
+        <Callout tone="warn" role="status">
+          {tr('settings.offline')}
+        </Callout>
       ) : null}
       {editable ? null : (
-        <p className="notice" role="status">
-          <Icon name="info" />
-          <span>{tr('settings.viewOnly')}</span>
-        </p>
+        <Callout tone="info" role="status">
+          {tr('settings.viewOnly')}
+        </Callout>
       )}
       {changedElsewhere && !state.pending.includes(name) ? (
-        <div className="notice" role="status">
-          <Icon name="info" />
-          <span>{tr('settings.changedElsewhere')}</span>
-          <button
-            type="button"
-            className="btn btn-soft"
-            disabled={offline}
-            onClick={() => void settingsEditor.load(name)}
-          >
-            {tr('settings.reload')}
-          </button>
-        </div>
+        <Callout
+          tone="info"
+          role="status"
+          action={
+            <button
+              type="button"
+              className="g-btn gbtn-row"
+              disabled={offline}
+              onClick={() => void settingsEditor.load(name)}
+            >
+              {tr('settings.reload')}
+            </button>
+          }
+        >
+          {tr('settings.changedElsewhere')}
+        </Callout>
       ) : null}
       {message ? (
-        <p
-          className={message.kind === 'error' ? 'error' : 'sset__message'}
+        <Callout
+          tone={message.kind === 'error' ? 'bad' : message.kind === 'ok' ? 'ok' : 'info'}
           role={message.kind === 'error' ? 'alert' : 'status'}
         >
           {message.text}
-        </p>
+        </Callout>
       ) : null}
       {slot.status === 'loading' ? (
-        <p className="muted" role="status">
+        <p className="g-t-s" style={s('margin:0')} role="status">
           {tr('settings.loading')}
         </p>
       ) : null}
       {slot.status === 'error' ? (
-        <div className="notice" role="alert">
-          <Icon name="alert" />
-          <span>{tr('settings.loadFailed')}</span>
-          <button
-            type="button"
-            className="btn btn-soft"
-            disabled={offline}
-            onClick={() => void settingsEditor.load(name)}
-          >
-            {tr('common.retry')}
-          </button>
-        </div>
+        <Callout
+          tone="bad"
+          role="alert"
+          action={
+            <button
+              type="button"
+              className="g-btn gbtn-row"
+              disabled={offline}
+              onClick={() => void settingsEditor.load(name)}
+            >
+              {tr('common.retry')}
+            </button>
+          }
+        >
+          {tr('settings.loadFailed')}
+        </Callout>
       ) : null}
       {slot.loaded ? (
         <>
-          {slot.loaded.version === 0 ? <p className="hint">{tr('settings.neverSaved')}</p> : null}
+          {slot.loaded.version === 0 ? (
+            <p className="g-t-c" style={s('margin:0')}>
+              {tr('settings.neverSaved')}
+            </p>
+          ) : null}
           <div key={slot.loaded.version}>
             {children({ loaded: slot.loaded, editable, saving, busy, submit })}
           </div>

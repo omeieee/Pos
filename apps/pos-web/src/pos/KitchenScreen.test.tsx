@@ -87,13 +87,16 @@ async function setup(
   return { ...env, orders };
 }
 
-const ticketOf = (orderNo: string) => {
-  const el = screen.getByText(orderNo, { selector: '.kcard__no' }).closest('.kcard');
-  if (!el) throw new Error(`no ticket ${orderNo}`);
-  return el as HTMLElement;
-};
-const orderNos = () =>
-  [...document.querySelectorAll('.ktickets .kcard__no')].map((el) => el.textContent);
+/** A ticket is an article named by its order number. */
+const ticketOf = (orderNo: string) => screen.getByRole('article', { name: orderNo });
+const column = (id: 'new' | 'cooking' | 'ready') =>
+  screen.getByRole('region', { name: th[`kitchen.col.${id}`] });
+const numbersIn = (id: 'new' | 'cooking' | 'ready') =>
+  within(column(id))
+    .queryAllByRole('article')
+    .map((article) => within(article).getByRole('heading', { level: 3 }).textContent);
+/** The orders to make, the new column and then the cooking one. */
+const orderNos = () => [...numbersIn('new'), ...numbersIn('cooking')];
 
 async function mount(options: Parameters<typeof setup>[0] = {}) {
   const env = await setup(options);
@@ -103,7 +106,7 @@ async function mount(options: Parameters<typeof setup>[0] = {}) {
 }
 
 describe('the tickets', () => {
-  test('are the new and preparing orders, oldest first, with the channel letter and the number', async () => {
+  test('are the new orders, the ones being made and the ones ready, in three columns, oldest first, with the number and the channel', async () => {
     await mount({
       orders: [
         ticket(1, {
@@ -118,17 +121,36 @@ describe('the tickets', () => {
         ticket(5, { status: 'cancelled', orderNo: 'S-005' }),
       ],
     });
-    await waitFor(() => expect(orderNos()).toEqual(['L-002', 'S-001', 'G-003']));
-    const letters = [...document.querySelectorAll('.ktickets .ochannel')].map((e) => e.textContent);
-    expect(letters).toEqual(['L', 'S', 'G']);
-    // The channel is also in words, for a screen reader.
-    expect(within(ticketOf('L-002')).getByText(th['orders.channel.line'])).toBeTruthy();
+    await waitFor(() => expect(numbersIn('new')).toEqual(['L-002', 'G-003']));
+    expect(numbersIn('cooking')).toEqual(['S-001']);
+    expect(numbersIn('ready')).toEqual([]);
+    // The channel is said in words on the ticket.
+    expect(ticketOf('L-002').textContent).toContain(th['orders.channel.line']);
+    expect(ticketOf('G-003').textContent).toContain(th['orders.channel.grab']);
+  });
+
+  test('each column says how many tickets it has', async () => {
+    await mount({
+      orders: [
+        ticket(1),
+        ticket(2, { placedAt: ago(5) }),
+        ticket(3, { status: 'preparing' }),
+        ticket(4, { status: 'ready', readyAt: ago(1) }),
+      ],
+    });
+    await waitFor(() => ticketOf('L-001'));
+    expect(within(column('new')).getByText(tr('kitchen.ticketCount', { count: 2 }))).toBeTruthy();
+    expect(
+      within(column('cooking')).getByText(tr('kitchen.ticketCount', { count: 1 })),
+    ).toBeTruthy();
+    expect(within(column('ready')).getByText(tr('kitchen.ticketCount', { count: 1 }))).toBeTruthy();
   });
 
   test('show every dish with its quantity, its choices and its note, and the note of the order', async () => {
     await mount({ orders: [ticket(1, { note: 'ห่อกลับ ใส่ถุงสองใบ' })] });
     const card = await waitFor(() => ticketOf('L-001'));
-    expect(within(card).getByText(tr('order.detail.qty', { count: 2 }))).toBeTruthy();
+    // The quantity sits in its own box.
+    expect(within(card).getByText('2')).toBeTruthy();
     expect(within(card).getByText('ก๋วยเตี๋ยวต้มยำ')).toBeTruthy();
     expect(within(card).getByText(/เส้นเล็ก/)).toBeTruthy();
     expect(within(card).getByText(/เผ็ดมาก/)).toBeTruthy();
@@ -149,10 +171,11 @@ describe('the tickets', () => {
       ],
     });
     const card = await waitFor(() => ticketOf('L-001'));
-    const where = card.querySelector('.kcard__serve-where') as HTMLElement;
+    const where = card.querySelector('.kb-where') as HTMLElement;
     expect(where.textContent).toBe('B1 · Fah ตัวอย่าง');
     expect(within(card).getByText('ชั้น 3 เสื้อแดง')).toBeTruthy();
     expect(within(card).getByText(th['pos.orderEntry.fulfilment.entrance_delivery'])).toBeTruthy();
+    expect(card.textContent).toContain(th['orders.channel.line']);
     // The kitchen note is still its own thing.
     expect(within(card).getByText(/ไม่เผ็ด/)).toBeTruthy();
     expect(card.textContent).not.toMatch(/฿|\d+\.\d\d/);
@@ -182,11 +205,9 @@ describe('the tickets', () => {
       ],
     });
     await waitFor(() => ticketOf('L-001'));
-    expect(within(ticketOf('L-001')).getByText(th['status.payment.unpaid'])).toBeTruthy();
-    expect(
-      within(ticketOf('L-002')).getByText(th['status.payment.awaiting_confirmation']),
-    ).toBeTruthy();
-    expect(within(ticketOf('L-003')).getByText(th['status.payment.paid'])).toBeTruthy();
+    expect(ticketOf('L-001').textContent).toContain(th['status.payment.unpaid']);
+    expect(ticketOf('L-002').textContent).toContain(th['kitchen.pay.awaiting']);
+    expect(ticketOf('L-003').textContent).toContain(th['status.payment.paid']);
     // No payment action anywhere on the screen.
     for (const label of [
       th['payment.confirm'],
@@ -203,29 +224,64 @@ describe('the tickets', () => {
       orders: [ticket(1), ticket(2, { status: 'ready', readyAt: ago(1) })],
     });
     await waitFor(() => ticketOf('L-001'));
-    fireEvent.click(screen.getByRole('button', { name: /พร้อมรับ รอส่งมอบ/ }));
+    expect(ticketOf('L-002')).toBeTruthy();
     const text = view.container.textContent ?? '';
     expect(text).not.toContain('฿');
     expect(text).not.toContain('123.45');
     expect(text).not.toContain('50.00');
   });
 
-  test('show how long each has waited, with a word as well as a colour when it is long', async () => {
+  test('show how long each has waited as mm:ss, with a word as well as a colour once it is past 8 minutes', async () => {
     await mount({
       orders: [
         ticket(1, { placedAt: ago(4) }),
-        ticket(2, { placedAt: ago(12) }),
+        ticket(2, { placedAt: ago(8) }),
         ticket(3, { placedAt: ago(25) }),
       ],
     });
     await waitFor(() => ticketOf('L-001'));
-    expect(ticketOf('L-001').className).toContain('kcard--ok');
-    expect(ticketOf('L-002').className).toContain('kcard--warn');
-    expect(ticketOf('L-003').className).toContain('kcard--late');
-    expect(within(ticketOf('L-001')).queryByText(th['kitchen.level.warn'])).toBeNull();
-    expect(within(ticketOf('L-002')).getByText(th['kitchen.level.warn'])).toBeTruthy();
-    expect(within(ticketOf('L-003')).getByText(th['kitchen.level.late'])).toBeTruthy();
-    expect(within(ticketOf('L-003')).getByText(/25 นาที/)).toBeTruthy();
+    expect(ticketOf('L-001').dataset.level).toBe('ok');
+    expect(ticketOf('L-002').dataset.level).toBe('warn');
+    expect(ticketOf('L-003').dataset.level).toBe('late');
+    expect(within(ticketOf('L-001')).getByText('04:00')).toBeTruthy();
+    expect(within(ticketOf('L-001')).queryByText(new RegExp(th['kitchen.level.warn']))).toBeNull();
+    expect(within(ticketOf('L-002')).getByText(`08:00 · ${th['kitchen.level.warn']}`)).toBeTruthy();
+    expect(within(ticketOf('L-003')).getByText(`25:00 · ${th['kitchen.level.late']}`)).toBeTruthy();
+    // A screen reader hears the minutes in words.
+    expect(within(ticketOf('L-003')).getByText(/รอมาแล้ว 25 นาที/)).toBeTruthy();
+  });
+
+  test('a new ticket glows during its first minute; a late one has a ring', async () => {
+    await mount({
+      orders: [
+        ticket(1, { placedAt: ago(0) }),
+        ticket(2, { placedAt: ago(3) }),
+        ticket(3, { placedAt: ago(30) }),
+      ],
+    });
+    await waitFor(() => ticketOf('L-001'));
+    expect(ticketOf('L-001').className).toContain('kb-new');
+    expect(ticketOf('L-002').className).not.toContain('kb-new');
+    expect(ticketOf('L-003').className).toContain('kb-late');
+  });
+
+  test('the board names the 8-minute rule and shows the clock', async () => {
+    await mount({ orders: [] });
+    expect(screen.getByRole('heading', { level: 1, name: th['kitchen.title'] })).toBeTruthy();
+    expect(screen.getByText(tr('kitchen.subtitle', { minutes: 8 }))).toBeTruthy();
+    expect(document.querySelector('time')).toBeTruthy();
+  });
+
+  test('says how many were handed over today and how long they took', async () => {
+    const done = (n: number, took: number) =>
+      ticket(n, {
+        status: 'completed',
+        businessDate: '2030-01-01',
+        placedAt: ago(60),
+        completedAt: ago(60 - took),
+      });
+    await mount({ orders: [done(1, 6), done(2, 8)] });
+    await screen.findByText(tr('kitchen.handedOverAvg', { count: 2, minutes: 7 }));
   });
 
   test('English shows the English names', async () => {
@@ -277,8 +333,11 @@ describe('live updates', () => {
       );
     });
     expect(
-      within(ticketOf('L-001')).getByRole('button', { name: th['order.move.ready'] }),
+      within(ticketOf('L-001')).getByRole('button', { name: th['kitchen.move.ready'] }),
     ).toBeTruthy();
+    // It moved to the cooking column by itself.
+    expect(numbersIn('new')).toEqual([]);
+    expect(numbersIn('cooking')).toEqual(['L-001']);
   });
 
   test('the list is fetched when the screen opens, and a failure says so with a retry', async () => {
@@ -329,7 +388,7 @@ describe('the moves', () => {
     expect(env.entities.getState().orders.get(uuid(1))?.status).toBe('new');
     await act(async () => answer({ ...ticket(1, { status: 'preparing' }), rev: 50, version: 2 }));
     expect(
-      within(ticketOf('L-001')).getByRole('button', { name: th['order.move.ready'] }),
+      within(ticketOf('L-001')).getByRole('button', { name: th['kitchen.move.ready'] }),
     ).toBeTruthy();
   });
 
@@ -348,13 +407,11 @@ describe('the moves', () => {
     });
     await waitFor(() => ticketOf('L-001'));
     fireEvent.click(
-      within(ticketOf('L-001')).getByRole('button', { name: th['order.move.ready'] }),
+      within(ticketOf('L-001')).getByRole('button', { name: th['kitchen.move.ready'] }),
     );
     await waitFor(() => expect(env.entities.getState().orders.get(uuid(1))?.status).toBe('ready'));
     expect(orderNos()).toEqual([]);
-    expect(
-      screen.getByRole('button', { name: new RegExp(tr('kitchen.ready.toggle', { count: 1 })) }),
-    ).toBeTruthy();
+    expect(numbersIn('ready')).toEqual(['L-001']);
   });
 
   test('a double tap sends one request', async () => {
@@ -406,17 +463,19 @@ describe('the moves', () => {
     expect(buttons).not.toContain(th['order.move.completed']);
     expect(within(ticketOf('L-001')).getAllByRole('button')).toHaveLength(1);
     expect(within(ticketOf('L-002')).getAllByRole('button')).toHaveLength(1);
+    // Ready, waiting for hand-over: information only.
+    expect(within(ticketOf('L-003')).queryAllByRole('button')).toHaveLength(0);
   });
 });
 
 describe('ready, waiting for hand-over', () => {
-  test('is a collapsed list with a count; opening it shows the orders, with no moves', async () => {
+  test('is the third column: the order that has waited longest first, with where it goes and no moves', async () => {
     await mount({
       orders: [
         ticket(1),
         ticket(2, {
           status: 'ready',
-          readyAt: ago(9),
+          readyAt: ago(2),
           orderNo: 'L-002',
           fulfillment: 'entrance_delivery',
           deliveryBuilding: 'A2',
@@ -424,7 +483,7 @@ describe('ready, waiting for hand-over', () => {
         }),
         ticket(3, {
           status: 'ready',
-          readyAt: ago(2),
+          readyAt: ago(9),
           orderNo: 'L-003',
           fulfillment: 'entrance_delivery',
           deliveryBuilding: 'B1',
@@ -433,25 +492,32 @@ describe('ready, waiting for hand-over', () => {
       ],
     });
     await waitFor(() => ticketOf('L-001'));
-    const toggle = screen.getByRole('button', {
-      name: new RegExp(tr('kitchen.ready.toggle', { count: 2 })),
-    });
-    expect(toggle.getAttribute('aria-expanded')).toBe('false');
-    expect(screen.queryByText('L-002')).toBeNull();
-    fireEvent.click(toggle);
-    expect(toggle.getAttribute('aria-expanded')).toBe('true');
-    const rows = [...document.querySelectorAll('.kready .kready__no')].map((e) => e.textContent);
     // The longest waiting first.
-    expect(rows).toEqual(['L-002', 'L-003']);
-    const serve = [...document.querySelectorAll('.kready .kready__serve')].map(
-      (e) => e.textContent,
+    expect(numbersIn('ready')).toEqual(['L-003', 'L-002']);
+    expect(within(ticketOf('L-003')).getByText('B1 · Fah')).toBeTruthy();
+    expect(within(column('ready')).queryAllByRole('button')).toHaveLength(0);
+    // How long it has waited since it became ready, in words for a screen reader.
+    expect(within(ticketOf('L-003')).getByText(/พร้อมมาแล้ว 9 นาที/)).toBeTruthy();
+  });
+
+  test('says so when nothing waits for hand-over', async () => {
+    await mount({ orders: [ticket(1)] });
+    await waitFor(() => ticketOf('L-001'));
+    expect(within(column('ready')).getByText(th['kitchen.ready.empty'])).toBeTruthy();
+  });
+});
+
+describe('the way back', () => {
+  test('goes to the first page the role may open besides the kitchen', async () => {
+    await mount({ role: 'kitchen' });
+    expect(screen.getByRole('link', { name: th['common.back'] }).getAttribute('href')).toBe(
+      '#/orders',
     );
-    const how = th['pos.orderEntry.fulfilment.entrance_delivery'];
-    expect(serve).toEqual([`${how} · A2 · Nok`, `${how} · B1 · Fah`]);
-    const list = document.querySelector('.kready__list') as HTMLElement;
-    expect(within(list).queryAllByRole('button')).toHaveLength(0);
-    fireEvent.click(toggle);
-    expect(screen.queryByText('L-002')).toBeNull();
+    cleanup();
+    await mount({ role: 'cashier' });
+    expect(screen.getByRole('link', { name: th['common.back'] }).getAttribute('href')).toBe(
+      '#/new',
+    );
   });
 });
 
@@ -513,27 +579,28 @@ describe('the keepalive and the owner password session', () => {
 
 describe('the sound control', () => {
   const control = () => screen.getByRole('group', { name: th['kitchen.sound.label'] });
+  const switchOf = () => within(control()).getByRole('switch', { name: th['kitchen.sound.short'] });
 
-  test('starts off, says so, and offers to turn it on', async () => {
+  test('starts off, says so, and offers to turn it on with the switch', async () => {
     await mount();
     const group = control();
     expect(within(group).getByText(th['kitchen.sound.state.off'])).toBeTruthy();
-    expect(within(group).getByRole('button', { name: th['kitchen.sound.turnOn'] })).toBeTruthy();
+    expect((switchOf() as HTMLInputElement).checked).toBe(false);
     expect(within(group).getByText(th['kitchen.sound.hint.off'])).toBeTruthy();
   });
 
   test('a tap unlocks the audio at once, then says it is on, and a second tap turns it off', async () => {
     const env = await mount();
-    const on = within(control()).getByRole('button', { name: th['kitchen.sound.turnOn'] });
-    fireEvent.click(on);
+    fireEvent.click(switchOf());
     // Inside the same tick as the tap, before anything is awaited.
     expect(env.audio.engine.unlock).toHaveBeenCalledTimes(1);
     await waitFor(() =>
       expect(within(control()).getByText(th['kitchen.sound.state.on'])).toBeTruthy(),
     );
+    expect((switchOf() as HTMLInputElement).checked).toBe(true);
     expect(env.audio.played).toEqual(['newOrder']);
     expect(await env.soundPrefs.prefs.load()).toBe(true);
-    fireEvent.click(within(control()).getByRole('button', { name: th['kitchen.sound.turnOff'] }));
+    fireEvent.click(switchOf());
     await waitFor(() =>
       expect(within(control()).getByText(th['kitchen.sound.state.off'])).toBeTruthy(),
     );
@@ -548,13 +615,14 @@ describe('the sound control', () => {
     const group = control();
     expect(within(group).getByText(th['kitchen.sound.state.blocked'])).toBeTruthy();
     expect(within(group).getByText(th['kitchen.sound.hint.blocked'])).toBeTruthy();
-    fireEvent.click(within(group).getByRole('button', { name: th['kitchen.sound.unblock'] }));
+    expect((switchOf() as HTMLInputElement).checked).toBe(false);
+    fireEvent.click(switchOf());
     await waitFor(() =>
       expect(within(control()).getByText(th['kitchen.sound.state.on'])).toBeTruthy(),
     );
   });
 
-  test('where the browser cannot play sound it says so and offers no button', async () => {
+  test('where the browser cannot play sound it says so and the switch is disabled', async () => {
     const env = await setup();
     env.audio.engine.supported = false;
     renderScreen(<KitchenScreen />, env.services);
@@ -564,7 +632,7 @@ describe('the sound control', () => {
     });
     const group = control();
     expect(within(group).getByText(th['kitchen.sound.state.unsupported'])).toBeTruthy();
-    expect(within(group).queryByRole('button')).toBeNull();
+    expect((switchOf() as HTMLInputElement).disabled).toBe(true);
     expect(within(group).getByText(th['kitchen.sound.hint.unsupported'])).toBeTruthy();
   });
 });

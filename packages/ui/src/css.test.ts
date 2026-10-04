@@ -11,7 +11,7 @@ describe('toCssVariables', () => {
     expect(css).toContain(`  --sds-color-brand: ${tokens.color.brand};`);
     expect(css).toContain('  --sds-color-brand-hover: #A61E1E;');
     expect(css).toContain('  --sds-font-size-amount: 56px;');
-    expect(css).toContain('  --sds-layout-menu-columns: 4;');
+    expect(css).toContain('  --sds-layout-menu-columns: 3;');
     expect(css).toContain('  --sds-touch-min: 48px;');
   });
 

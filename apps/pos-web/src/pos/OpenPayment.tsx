@@ -1,4 +1,5 @@
 import type { OrderDto, PaymentDto } from '@sds/shared';
+import { s } from '../design/style.ts';
 import { useAuthState, useT } from '../ui/hooks.ts';
 import { ChangeMethod } from './ChangeMethod.tsx';
 import { GovCopayPanel } from './GovCopayPanel.tsx';
@@ -24,7 +25,7 @@ export function OpenPayment({
   if (!payment) {
     // The order says a payment is waiting but its row has not arrived yet.
     return (
-      <p className="muted" role="status">
+      <p className="g-t-s" role="status" style={s('margin:0')}>
         {tr('payment.loading')}
       </p>
     );
@@ -36,7 +37,9 @@ export function OpenPayment({
   // A claimed payment cannot change method until the claim is cancelled.
   const claimedHint =
     payment.status === 'claimed' ? (
-      <p className="hint">{tr('payment.change.claimedFirst')}</p>
+      <p className="g-t-c" style={s('margin:0')}>
+        {tr('payment.change.claimedFirst')}
+      </p>
     ) : null;
   return (
     <>

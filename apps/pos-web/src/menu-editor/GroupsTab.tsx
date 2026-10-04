@@ -1,13 +1,15 @@
 import { formatBaht } from '@sds/i18n';
 import type { OptionDto } from '@sds/shared';
+import { Gi } from '../design/icons.tsx';
+import { s } from '../design/style.ts';
 import { localName } from '../pos/names.ts';
 import type { GroupWithOptions } from '../realtime/selectors.ts';
 import { useEntities, useLocale, useServices, useT } from '../ui/hooks.ts';
-import { Icon } from '../ui/Icon.tsx';
 import { useEditorContext } from './editor-context.ts';
 import { groupRows, optionRowsOf } from './lists.ts';
 import { reorderKey, rowKey } from './menu-editor-store.ts';
-import { MoveButtons, RowButtons, SoldOutSwitch } from './RowParts.tsx';
+import { MoveButtons, RowBadge, RowButtons, SoldOutSwitch } from './RowParts.tsx';
+import './menu-glass.css';
 
 /** A price change as text: "+฿10", "-฿5", or "no price change". */
 function useDeltaText() {
@@ -43,24 +45,35 @@ function OptionRow({
   const cost = ctx.costs?.options[option.id];
 
   return (
-    <li className={`mrow mrow--option${archived ? ' mrow--archived' : ''}`}>
-      <span className="mrow__main">
-        <span className="mrow__name">{name}</span>
-        <span className="mrow__meta">
-          <span className="money">{delta(option.priceDeltaSatang)}</span>
+    <li className={`g-row merow merow--option${archived ? ' merow--archived' : ''}`}>
+      <span className="merow__main">
+        <span className="merow__name">{name}</span>
+        <span className="merow__meta">
+          <span className="merow__price g-num">{delta(option.priceDeltaSatang)}</span>
           {cost === undefined ? null : (
-            <span className="muted">
+            <span>
               {tr('menuEditor.option.costDelta', {
                 amount: `${cost > 0 ? '+' : ''}${formatBaht(cost, locale, { decimals: 'auto' })}`,
               })}
             </span>
           )}
         </span>
+        {archived || !option.isAvailable ? (
+          <span className="merow__badges">
+            {archived ? (
+              <RowBadge tone="mute" icon="x">
+                {tr('menuEditor.archived')}
+              </RowBadge>
+            ) : (
+              <RowBadge tone="warn" icon="warn">
+                {tr('menuEditor.soldOut')}
+              </RowBadge>
+            )}
+          </span>
+        ) : null}
       </span>
-      <span className="mrow__actions">
-        {archived ? (
-          <span className="tag">{tr('menuEditor.archived')}</span>
-        ) : (
+      <span className="merow__actions">
+        {archived ? null : (
           <>
             <SoldOutSwitch
               name={name}
@@ -112,20 +125,27 @@ function GroupCard({
   const listBusy = ctx.pending.includes(reorderKey('groups', undefined));
 
   return (
-    <li className={`mgroup${archived ? ' mgroup--archived' : ''}`}>
-      <div className="mrow">
-        <span className="mrow__main">
-          <span className="mrow__name">{name}</span>
-          <span className="mrow__meta">
-            <span className="muted">
+    <li className={`g-glass gset-grp megroup${archived ? ' megroup--archived' : ''}`}>
+      <div className={`g-row merow${archived ? ' merow--archived' : ''}`}>
+        <span className="merow__main">
+          <span className="merow__name">{name}</span>
+          <span className="merow__meta">
+            <span>
               {tr('menuEditor.group.range', { min: group.minSelect, max: group.maxSelect })}
             </span>
             {group.minSelect > 0 ? (
-              <span className="tag tag--req">{tr('menuEditor.group.required')}</span>
+              <RowBadge tone="info" icon="info">
+                {tr('menuEditor.group.required')}
+              </RowBadge>
+            ) : null}
+            {archived ? (
+              <RowBadge tone="mute" icon="x">
+                {tr('menuEditor.archived')}
+              </RowBadge>
             ) : null}
           </span>
         </span>
-        <span className="mrow__actions">
+        <span className="merow__actions">
           {archived ? null : (
             <MoveButtons
               ids={liveIds}
@@ -149,9 +169,14 @@ function GroupCard({
       {archived ? null : (
         <>
           {live.length === 0 ? (
-            <p className="muted mgroup__empty">{tr('menuEditor.empty.options')}</p>
+            <p
+              className="g-t-s"
+              style={s('margin:0;padding:12px 18px;border-top:1px solid var(--hair)')}
+            >
+              {tr('menuEditor.empty.options')}
+            </p>
           ) : (
-            <ul className="mlist mlist--nested">
+            <ul className="gset-list">
               {live.map((option) => (
                 <OptionRow
                   key={option.id}
@@ -163,19 +188,19 @@ function GroupCard({
               ))}
             </ul>
           )}
-          <div className="mgroup__add">
+          <div className="megroup__foot">
             <button
               type="button"
-              className="btn btn-soft"
+              className="g-btn gbtn-row"
               disabled={ctx.offline}
               onClick={() => ctx.open({ kind: 'option', groupId: group.id })}
             >
-              <Icon name="plus" />
+              <Gi n="plus" size="sm" />
               <span>{tr('menuEditor.add.option')}</span>
             </button>
           </div>
           {ctx.showArchived && gone.length > 0 ? (
-            <ul className="mlist mlist--nested">
+            <ul className="gset-list" style={s('border-top:1px solid var(--hair)')}>
               {gone.map((option) => (
                 <OptionRow
                   key={option.id}
@@ -201,22 +226,24 @@ export function GroupsTab() {
   const liveIds = live.map((g) => g.id);
 
   return (
-    <div className="medit__panel">
-      <div className="medit__bar">
+    <div style={s('display:flex;flex-direction:column;gap:16px;min-width:0')}>
+      <div>
         <button
           type="button"
-          className="btn btn-primary"
+          className="g-btn g-btn-p"
           disabled={ctx.offline}
           onClick={() => ctx.open({ kind: 'group' })}
         >
-          <Icon name="plus" />
+          <Gi n="plus" size="sm" />
           <span>{tr('menuEditor.add.group')}</span>
         </button>
       </div>
       {live.length === 0 ? (
-        <p className="muted medit__empty">{tr('menuEditor.empty.groups')}</p>
+        <p className="g-t-s" style={s('margin:0')}>
+          {tr('menuEditor.empty.groups')}
+        </p>
       ) : (
-        <ul className="mlist">
+        <ul className="gset-list" style={s('display:flex;flex-direction:column;gap:16px')}>
           {live.map((group) => (
             <GroupCard key={group.id} group={group} liveIds={liveIds} archived={false} />
           ))}
@@ -224,8 +251,13 @@ export function GroupsTab() {
       )}
       {ctx.showArchived && archived.length > 0 ? (
         <>
-          <h2 className="medit__sub">{tr('menuEditor.archivedHeading')}</h2>
-          <ul className="mlist">
+          <h2 className="gset-lbl" style={s('margin:0;padding-bottom:0')}>
+            {tr('menuEditor.archivedHeading')}
+          </h2>
+          <ul
+            className="gset-list"
+            style={s('display:flex;flex-direction:column;gap:16px;margin-top:-8px')}
+          >
             {archived.map((group) => (
               <GroupCard key={group.id} group={group} liveIds={liveIds} archived />
             ))}

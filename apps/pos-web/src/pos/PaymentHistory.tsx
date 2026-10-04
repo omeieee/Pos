@@ -1,16 +1,19 @@
 import { formatBaht, formatDate } from '@sds/i18n';
 import type { PaymentDto, PaymentStatus } from '@sds/shared';
-import type { IconName } from '../app/routes.ts';
+import { Gi, type GiName } from '../design/icons.tsx';
+import { s } from '../design/style.ts';
 import { useLocale, useT } from '../ui/hooks.ts';
-import { Icon } from '../ui/Icon.tsx';
 
-const STATUS: Record<PaymentStatus, { tone: string; icon: IconName }> = {
-  pending: { tone: 'warning', icon: 'circle' },
+const STATUS: Record<
+  PaymentStatus,
+  { tone: 'warn' | 'info' | 'ok' | 'bad' | 'mute'; icon: GiName }
+> = {
+  pending: { tone: 'warn', icon: 'pending' },
   claimed: { tone: 'info', icon: 'clock' },
-  confirmed: { tone: 'success', icon: 'check-circle' },
-  cancelled: { tone: 'neutral', icon: 'x' },
-  voided: { tone: 'danger', icon: 'x' },
-  refunded: { tone: 'neutral', icon: 'sync' },
+  confirmed: { tone: 'ok', icon: 'check' },
+  cancelled: { tone: 'mute', icon: 'x' },
+  voided: { tone: 'bad', icon: 'x' },
+  refunded: { tone: 'mute', icon: 'clock' },
 };
 
 /** Colour + icon + words, always together (brand §3). */
@@ -18,8 +21,8 @@ export function PaymentStatusChip({ status }: { status: PaymentStatus }) {
   const tr = useT();
   const { tone, icon } = STATUS[status];
   return (
-    <span className={`status status--${tone}`}>
-      <Icon name={icon} />
+    <span className={`g-badge g-b-${tone}`}>
+      <Gi n={icon} />
       {tr(`payment.status.${status}`)}
     </span>
   );
@@ -38,22 +41,32 @@ export function PaymentHistory({ payments }: { payments: readonly PaymentDto[] }
   const newestFirst = [...payments].reverse();
   const money = (value: number) => formatBaht(value, locale);
   return (
-    <section className="phistory" aria-labelledby="phistory-title">
-      <h3 id="phistory-title" className="phistory__title">
+    <section
+      className="g-sunk"
+      aria-labelledby="phistory-title"
+      style={s('padding:16px 18px;display:flex;flex-direction:column;gap:10px;flex:none')}
+    >
+      <h3 id="phistory-title" className="g-t-3" style={s('margin:0;font-size:15px')}>
         {tr('payment.history.title')}
       </h3>
-      <ul className="phistory__list">
+      <ul
+        style={s('list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:12px')}
+      >
         {newestFirst.map((p) => {
           const at = p.confirmedAt ?? p.claimedAt;
           return (
-            <li key={p.id} className="phistory__row">
-              <div className="phistory__main">
-                <span className="strong">{tr(`payment.method.${p.method}`)}</span>
+            <li key={p.id} style={s('display:flex;flex-direction:column;gap:2px;min-width:0')}>
+              <div style={s('display:flex;align-items:center;gap:10px;flex-wrap:wrap')}>
+                <span className="g-t-3" style={s('font-size:15px')}>
+                  {tr(`payment.method.${p.method}`)}
+                </span>
                 <PaymentStatusChip status={p.status} />
-                <span className="money phistory__amount">{money(p.amountSatang)}</span>
+                <span className="g-num g-t-3" style={s('margin-left:auto;font-size:15px')}>
+                  {money(p.amountSatang)}
+                </span>
               </div>
               {p.method === 'cash' && p.tenderedSatang !== null && p.changeSatang !== null ? (
-                <span className="muted small">
+                <span className="g-t-c">
                   {tr('payment.history.cash', {
                     tendered: money(p.tenderedSatang),
                     change: money(p.changeSatang),
@@ -63,7 +76,7 @@ export function PaymentHistory({ payments }: { payments: readonly PaymentDto[] }
               {p.method === 'gov_copay' &&
               p.estGovShareSatang !== null &&
               p.estCustomerShareSatang !== null ? (
-                <span className="muted small">
+                <span className="g-t-c">
                   {tr('payment.history.estimate', {
                     gov: money(p.estGovShareSatang),
                     customer: money(p.estCustomerShareSatang),
@@ -71,18 +84,14 @@ export function PaymentHistory({ payments }: { payments: readonly PaymentDto[] }
                 </span>
               ) : null}
               {p.referenceNote ? (
-                <span className="muted small">
+                <span className="g-t-c">
                   {tr('payment.history.reference', { reference: p.referenceNote })}
                 </span>
               ) : null}
               {p.reason ? (
-                <span className="muted small">
-                  {tr('payment.history.reason', { reason: p.reason })}
-                </span>
+                <span className="g-t-c">{tr('payment.history.reason', { reason: p.reason })}</span>
               ) : null}
-              {at ? (
-                <span className="muted small">{formatDate(at, locale, 'dateTime')}</span>
-              ) : null}
+              {at ? <span className="g-t-c">{formatDate(at, locale, 'dateTime')}</span> : null}
             </li>
           );
         })}

@@ -1,0 +1,216 @@
+/*
+ * Settings in the design language: the hub (iphone-settings), a section's page and its lists.
+ * Colours come from design.css (the `--ink`, `--glass` ... variables); nothing here depends on hover
+ * for meaning, and every control is at least 44 px tall.
+ */
+.gset-page {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  padding: 8px 8px 32px;
+}
+.gset-page::-webkit-scrollbar {
+  display: none;
+}
+.gset-page--phone {
+  padding: calc(env(safe-area-inset-top, 0px) + 16px) 20px 124px;
+  margin-bottom: -104px;
+}
+.gset-col {
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.gset-lbl {
+  padding: 0 12px 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink3);
+}
+.gset-grp {
+  border-radius: 26px;
+  overflow: hidden;
+  padding: 0;
+}
+a.g-row,
+button.g-row {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+a.g-row:hover,
+button.g-row:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.5);
+}
+a.g-row:active,
+button.g-row:active:not(:disabled) {
+  background: rgba(255, 255, 255, 0.72);
+}
+a.g-row:focus-visible,
+button.g-row:focus-visible {
+  outline: 3px solid #1d5fd6;
+  outline-offset: -3px;
+}
+.g-row--off {
+  opacity: 0.62;
+  cursor: not-allowed;
+}
+.gset-chev {
+  color: var(--ink3);
+  width: 18px;
+  height: 18px;
+  flex: none;
+}
+.gset-search {
+  height: 48px;
+  border-radius: 999px;
+  background: var(--glass);
+  border-color: var(--line);
+}
+.gset-search input::-webkit-search-cancel-button {
+  display: none;
+}
+.gset-head {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.gset-back {
+  align-self: flex-start;
+  margin-left: -4px;
+}
+
+/* A form's save button: full width on a phone, at the end of the form on a wide screen. */
+.gsave {
+  display: flex;
+  justify-content: flex-end;
+}
+.gsave > .g-btn {
+  min-width: 220px;
+}
+@media (max-width: 719px) {
+  .gsave > .g-btn {
+    width: 100%;
+  }
+}
+
+/* Lists of devices, staff and closures. */
+.gset-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.gset-rowbox {
+  flex-wrap: wrap;
+  align-items: center;
+}
+.gset-rowbox > .gset-main {
+  flex: 1 1 220px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.gset-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.gset-rowbox--off {
+  background: rgba(70, 35, 20, 0.04);
+  box-shadow: inset 3px 0 0 var(--hair);
+}
+.gset-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+}
+.gbtn-row {
+  height: 44px;
+  padding: 0 16px;
+  font-size: 14px;
+}
+
+/* Delivery buildings. */
+.gset-chipx {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 44px;
+  padding: 0 4px 0 16px;
+  border-radius: 999px;
+  background: var(--glass2);
+  border: 1px solid var(--line);
+  box-shadow: var(--sh1);
+  font-weight: 500;
+}
+.gset-chipx > button {
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(70, 35, 20, 0.07);
+  color: var(--ink2);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  padding: 0;
+}
+.gset-chipx > button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.gset-addrow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 10px;
+}
+.gset-addrow > .gfield {
+  flex: 1 1 200px;
+}
+.gset-addrow > .g-btn {
+  margin-top: 25px;
+}
+@media (max-width: 520px) {
+  .gset-addrow > .g-btn {
+    margin-top: 0;
+    width: 100%;
+  }
+}
+@media (max-width: 719px) {
+  .gset-actions {
+    flex: 1 0 100%;
+  }
+}
+.gset-account {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.gset-oneline {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gset-closure {
+  padding: 14px;
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}

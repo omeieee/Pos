@@ -1,0 +1,134 @@
+/* The payment screen of the redesign ("ipad-payment"): the few classes the design draws in its own
+   <style> block (the cash keypad key and the numbered steps). Everything else on the screen is a
+   `g-` class from design.css plus inline styles, so this file stays small. Values are the design's. */
+
+.pay-key {
+  height: 68px;
+  border-radius: 22px;
+  border: 0;
+  font: 600 26px / 1 inherit;
+  font-family: inherit;
+  color: var(--ink);
+  background: var(--glass2);
+  cursor: pointer;
+  box-shadow:
+    var(--sh1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  transition:
+    transform 0.25s var(--spring),
+    background 0.2s;
+  display: grid;
+  place-items: center;
+  font-variant-numeric: tabular-nums;
+}
+.pay-key:hover {
+  background: #fff;
+}
+.pay-key:active {
+  transform: scale(0.93);
+}
+.pay-key:focus-visible {
+  outline: 3px solid #1d5fd6;
+  outline-offset: 2px;
+}
+.pay-key:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+.pay-key svg {
+  display: block;
+}
+
+.pay-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.pay-stp {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+}
+.pay-stp .pay-n {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  font-size: 15px;
+  flex: none;
+  background: rgba(70, 35, 20, 0.08);
+  color: var(--ink2);
+}
+.pay-stp.pay-done .pay-n {
+  background: var(--jade);
+  color: #fff;
+}
+.pay-stp.pay-now .pay-n {
+  background: var(--chili);
+  color: #fff;
+  box-shadow: 0 0 0 6px rgba(198, 40, 40, 0.14);
+}
+
+/* The method switch is a radio group; a chip whose radio is off the table is dimmed, not hidden. */
+.pay-seg .g-chip:has(input:disabled) {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.pay-seg .g-chip input:disabled {
+  cursor: not-allowed;
+}
+
+/* The picture of a QR never opens the iOS image menu on a long press. */
+.pay-qr {
+  -webkit-touch-callout: none;
+  user-select: none;
+}
+
+/* The design draws a button that cannot be used as `opacity:.6; cursor:not-allowed`. */
+.pay-page .g-btn:disabled,
+.pay-page .g-chip:has(input:disabled) {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.pay-page .g-btn:disabled:hover,
+.pay-page .g-btn:disabled:active {
+  transform: none;
+}
+.pay-page .g-btn[aria-busy="true"]:disabled {
+  cursor: progress;
+}
+
+/* The body of the glass panel: its one panel fills the height, so a panel can pin its confirm
+   button to the foot (the design's spacer). */
+.pay-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.pay-grow {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* A secondary action beside the big confirm: 44px, quiet type. */
+.g-btn.pay-sub {
+  flex: none;
+  height: 44px;
+  padding: 0 14px;
+  font-size: 15px;
+  gap: 6px;
+}
+
+/* The row of the waiting-entries pill takes no room when the pill is not there. */
+.pay-pillrow:empty {
+  display: none;
+}

@@ -18,6 +18,7 @@ interface LiffSdk {
   getContext(): { type?: string } | null;
   isInClient(): boolean;
   sendMessages(messages: { type: 'text'; text: string }[]): Promise<void>;
+  closeWindow(): void;
 }
 
 declare global {
@@ -33,6 +34,8 @@ export interface Platform {
   canSendMessages(): boolean;
   /** Says something in the shop's chat as the customer. Failures are swallowed: it is a courtesy. */
   sendText(text: string): Promise<void>;
+  /** The ✕ of the header: closes the LIFF window inside LINE; in a plain browser tab it does nothing. */
+  close(): void;
 }
 
 const SDK_URL = 'https://static.line-scdn.net/liff/edge/2/sdk.js';
@@ -74,6 +77,9 @@ export async function startPlatform(liffId: string | undefined): Promise<Platfor
     // `sendMessages` posts into the chat the app was opened from: only a 1:1 chat is the shop's.
     // From a group, a room or anywhere else the confirmation would land in the wrong place.
     canSendMessages: () => liff.isInClient() && liff.getContext()?.type === 'utou',
+    close() {
+      if (liff.isInClient()) liff.closeWindow();
+    },
     async sendText(text) {
       try {
         await liff.sendMessages([{ type: 'text', text }]);

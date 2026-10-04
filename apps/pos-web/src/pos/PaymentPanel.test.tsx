@@ -433,8 +433,10 @@ describe('the payment history', () => {
     expect(screen.queryByRole('region', { name: th['payment.history.title'] })).toBeNull();
     act(() => {
       env.entities.apply(
+        // A payment that is no longer waiting: the waiting one has its own screen, the history
+        // is for the ones before it.
         paymentFrame(PAYMENT, ORDER, 150, {
-          status: 'pending',
+          status: 'cancelled',
           method: 'promptpay',
           amountSatang: TOTAL,
         }),

@@ -13,10 +13,13 @@ import { qrPath } from './local-qr.ts';
 export default function QrSvg({
   payload,
   label,
+  size = 250,
   onFailed,
 }: {
   payload: string;
   label: string;
+  /** The width of the picture; it never grows past the room it has. */
+  size?: number;
   onFailed: () => void;
 }) {
   const drawn = useMemo(() => {
@@ -32,7 +35,13 @@ export default function QrSvg({
   if (drawn === null) return null;
   return (
     <svg
-      className="qr qr--local"
+      className="pay-qr"
+      style={{
+        display: 'block',
+        width: `min(100%, ${size}px)`,
+        aspectRatio: '1',
+        margin: '0 auto',
+      }}
       role="img"
       aria-label={label}
       viewBox={`0 0 ${drawn.size} ${drawn.size}`}

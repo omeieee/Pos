@@ -1,0 +1,971 @@
+/* Saap Don Sen POS · "Hot bowl, calm glass" (design v2) · verbatim port of the canvas glass.css.
+   Every class is prefixed g- so it can live beside the older screens; values are the canvas values. */
+:root {
+  --ink: #1c1411;
+  --menu-bg: rgba(255, 252, 248, 0.97);
+  --ink2: #5e504a;
+  --ink3: #6f615a;
+  --on-ink: #ffffff;
+  --paper: #fbf4ec;
+  --chili: #c62828;
+  --chili2: #d63a2e;
+  --chili-soft: #fce6e1;
+  --chili-ink: #9c1c1c;
+  --amber: #f5a524;
+  --amber-soft: #ffefd0;
+  --amber-ink: #8a4b00;
+  --jade: #1b7a43;
+  --jade-soft: #dff3e7;
+  --jade-ink: #17663a;
+  --sky: #2457b8;
+  --sky-soft: #e4ecfa;
+  --sky-ink: #1d4e9e;
+  --glass: rgba(255, 255, 255, 0.56);
+  --glass2: rgba(255, 255, 255, 0.78);
+  --line: rgba(255, 255, 255, 0.82);
+  --hair: rgba(70, 35, 20, 0.09);
+  --ease: cubic-bezier(0.32, 0.72, 0, 1);
+  --spring: cubic-bezier(0.34, 1.5, 0.64, 1);
+  --sh1: 0 1px 2px rgba(80, 40, 20, 0.06), 0 6px 20px rgba(120, 60, 30, 0.08);
+  --sh2: 0 2px 4px rgba(80, 40, 20, 0.06), 0 18px 48px rgba(120, 60, 30, 0.14);
+}
+.g-root {
+  box-sizing: border-box;
+  font-family:
+    "Anuphan Variable", "Anuphan", "Noto Sans Thai", "Sukhumvit Set", system-ui, sans-serif;
+  color: var(--ink);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+.g-root *,
+.g-root *::before,
+.g-root *::after {
+  box-sizing: border-box;
+}
+.g-root svg {
+  display: block;
+}
+
+/* backdrop: warm gradient + two slow-drifting orbs that give the glass something to blur */
+.g-bg {
+  background:
+    radial-gradient(60% 50% at 8% 4%, rgba(255, 138, 101, 0.42), transparent 70%),
+    radial-gradient(50% 45% at 96% 8%, rgba(255, 196, 107, 0.5), transparent 70%),
+    radial-gradient(55% 50% at 86% 100%, rgba(214, 140, 200, 0.3), transparent 70%), #fbf4ec;
+}
+.g-bg::before,
+.g-bg::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  border-radius: 50%;
+  pointer-events: none;
+  animation: g-drift 26s ease-in-out infinite alternate;
+}
+.g-bg::before {
+  width: 46%;
+  aspect-ratio: 1;
+  left: -10%;
+  bottom: -18%;
+  background: radial-gradient(circle, rgba(255, 112, 80, 0.38), transparent 68%);
+}
+.g-bg::after {
+  width: 40%;
+  aspect-ratio: 1;
+  right: -8%;
+  top: 22%;
+  background: radial-gradient(circle, rgba(255, 190, 90, 0.4), transparent 66%);
+  animation-duration: 32s;
+  animation-direction: alternate-reverse;
+}
+@keyframes g-drift {
+  from {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  to {
+    transform: translate3d(36px, -28px, 0) scale(1.1);
+  }
+}
+
+/* dark scope (kitchen): same classes, variables swapped */
+.g-dk {
+  --ink: #fbf2ea;
+  --ink2: #d3c3b9;
+  --ink3: #a99b91;
+  --on-ink: #1c1411;
+  --glass: rgba(255, 255, 255, 0.07);
+  --glass2: rgba(255, 255, 255, 0.13);
+  --line: rgba(255, 255, 255, 0.14);
+  --hair: rgba(255, 255, 255, 0.1);
+  --chili-soft: rgba(230, 80, 66, 0.24);
+  --chili-ink: #ffb4a8;
+  --chili: #ff8a78;
+  --amber-soft: rgba(245, 165, 36, 0.2);
+  --amber-ink: #ffc873;
+  --jade-soft: rgba(60, 190, 120, 0.2);
+  --jade-ink: #7fe0a8;
+  --sky-soft: rgba(110, 160, 255, 0.2);
+  --sky-ink: #a9c6ff;
+  --menu-bg: rgba(44, 31, 26, 0.97);
+  --sh1: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.28);
+  --sh2: 0 2px 4px rgba(0, 0, 0, 0.3), 0 20px 50px rgba(0, 0, 0, 0.4);
+}
+.g-bgd {
+  background:
+    radial-gradient(50% 45% at 10% 0%, rgba(214, 58, 46, 0.5), transparent 70%),
+    radial-gradient(45% 40% at 100% 20%, rgba(245, 165, 36, 0.28), transparent 70%),
+    radial-gradient(55% 50% at 70% 110%, rgba(150, 90, 200, 0.3), transparent 70%), #150e0c;
+}
+.g-bgd::before {
+  background: radial-gradient(circle, rgba(214, 58, 46, 0.3), transparent 68%);
+}
+.g-bgd::after {
+  background: radial-gradient(circle, rgba(245, 165, 36, 0.22), transparent 66%);
+}
+
+/* glass surfaces */
+.g-glass,
+.g-glass2 {
+  background: var(--glass);
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  -webkit-backdrop-filter: blur(26px) saturate(170%);
+  backdrop-filter: blur(26px) saturate(170%);
+  box-shadow:
+    var(--sh1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.55);
+}
+.g-dk .g-glass,
+.g-dk .g-glass2 {
+  box-shadow:
+    var(--sh1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+/* biome-ignore lint/style/noDescendingSpecificity: the dark override is written before the base rule it refines, as in the design */
+.g-glass2 {
+  background: var(--glass2);
+  box-shadow:
+    var(--sh2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  -webkit-backdrop-filter: blur(34px) saturate(180%);
+  backdrop-filter: blur(34px) saturate(180%);
+}
+.g-dk .g-glass2 {
+  box-shadow:
+    var(--sh2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.16);
+}
+.g-sunk {
+  background: rgba(70, 35, 20, 0.05);
+  border-radius: 18px;
+}
+.g-dk .g-sunk {
+  background: rgba(0, 0, 0, 0.22);
+}
+.g-hair {
+  height: 1px;
+  background: var(--hair);
+  border: 0;
+  margin: 0;
+}
+
+/* type: one family (Anuphan) so Thai and Latin share a rhythm; hierarchy by size and weight only */
+.g-t-d {
+  font-size: 44px;
+  line-height: 1.2;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.g-t-1 {
+  font-size: 28px;
+  line-height: 1.3;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+}
+.g-t-2 {
+  font-size: 20px;
+  line-height: 1.4;
+  font-weight: 600;
+}
+.g-t-3 {
+  font-size: 16px;
+  line-height: 1.5;
+  font-weight: 600;
+}
+.g-t-b {
+  font-size: 16px;
+  line-height: 1.6;
+  font-weight: 400;
+}
+.g-t-s {
+  font-size: 14px;
+  line-height: 1.5;
+  font-weight: 400;
+  color: var(--ink2);
+}
+.g-t-c {
+  font-size: 13px;
+  line-height: 1.4;
+  font-weight: 500;
+  color: var(--ink3);
+}
+.g-t-m {
+  color: var(--ink2);
+}
+.g-num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+.g-clamp2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.g-i {
+  width: 22px;
+  height: 22px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  flex: none;
+}
+.g-i.g-sm {
+  width: 18px;
+  height: 18px;
+}
+.g-i.g-lg {
+  width: 26px;
+  height: 26px;
+}
+
+/* buttons */
+.g-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 48px;
+  padding: 0 22px;
+  border-radius: 999px;
+  border: 0;
+  font-family: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--ink);
+  background: var(--glass2);
+  cursor: pointer;
+  text-decoration: none;
+  white-space: nowrap;
+  box-shadow:
+    var(--sh1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  transition:
+    transform 0.3s var(--spring),
+    box-shadow 0.3s var(--ease),
+    background 0.2s;
+}
+.g-btn:hover {
+  transform: translateY(-1px);
+  box-shadow:
+    var(--sh2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+.g-btn:active {
+  transform: scale(0.97);
+  transition-duration: 0.12s;
+}
+.g-btn:focus-visible,
+.g-chip:focus-within,
+.g-tile:focus-visible,
+.g-nav:focus-visible {
+  outline: 3px solid #1d5fd6;
+  outline-offset: 2px;
+}
+.g-btn-p {
+  background: linear-gradient(180deg, #d63a2e, #bd2424);
+  color: #fff;
+  box-shadow:
+    0 10px 24px rgba(198, 40, 40, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.32);
+}
+.g-btn-p:hover {
+  box-shadow:
+    0 14px 30px rgba(198, 40, 40, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.32);
+}
+.g-btn-ok {
+  background: linear-gradient(180deg, #1f8049, #176b3b);
+  color: #fff;
+  box-shadow:
+    0 10px 24px rgba(27, 122, 67, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.28);
+}
+.g-btn-ink {
+  background: var(--ink);
+  color: var(--on-ink);
+  box-shadow: 0 10px 24px rgba(28, 20, 17, 0.25);
+}
+.g-btn-lg {
+  height: 58px;
+  font-size: 18px;
+  padding: 0 28px;
+}
+.g-btn-sm {
+  height: 36px;
+  padding: 0 14px;
+  font-size: 14px;
+}
+.g-btn-block {
+  display: flex;
+  width: 100%;
+}
+.g-btn-icon {
+  width: 48px;
+  padding: 0;
+}
+
+/* chips / segmented control (CSS-only radio group: label > input + span) */
+.g-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 18px;
+  border-radius: 999px;
+  font-size: 15px;
+  font-weight: 500;
+  white-space: nowrap;
+  color: var(--ink2);
+  background: var(--glass);
+  border: 1px solid var(--line);
+  cursor: pointer;
+  position: relative;
+  transition:
+    background 0.3s var(--ease),
+    color 0.3s var(--ease),
+    transform 0.3s var(--spring),
+    box-shadow 0.3s var(--ease);
+}
+.g-chip:hover {
+  transform: translateY(-1px);
+}
+.g-chip:active {
+  transform: scale(0.96);
+}
+.g-chip input {
+  position: absolute;
+  opacity: 0;
+  inset: 0;
+  margin: 0;
+  cursor: pointer;
+}
+.g-chip.g-on,
+.g-chip:has(input:checked) {
+  background: var(--ink);
+  color: var(--on-ink);
+  border-color: transparent;
+  box-shadow: 0 6px 16px rgba(28, 20, 17, 0.22);
+}
+.g-seg {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 999px;
+  background: rgba(70, 35, 20, 0.07);
+}
+.g-dk .g-seg {
+  background: rgba(0, 0, 0, 0.28);
+}
+.g-seg .g-chip {
+  background: transparent;
+  border-color: transparent;
+  height: 40px;
+}
+.g-seg .g-chip.g-on,
+.g-seg .g-chip:has(input:checked) {
+  background: var(--glass2);
+  color: var(--ink);
+  box-shadow: var(--sh1);
+  border-color: var(--line);
+}
+.g-dk .g-seg .g-chip.g-on,
+.g-dk .g-seg .g-chip:has(input:checked) {
+  background: rgba(255, 255, 255, 0.18);
+  color: var(--ink);
+}
+
+/* badges: colour + icon + word, never colour alone */
+.g-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 11px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.g-badge .g-i {
+  width: 15px;
+  height: 15px;
+  stroke-width: 2.2;
+}
+.g-b-warn {
+  background: var(--amber-soft);
+  color: var(--amber-ink);
+}
+.g-b-info {
+  background: var(--sky-soft);
+  color: var(--sky-ink);
+}
+.g-b-ok {
+  background: var(--jade-soft);
+  color: var(--jade-ink);
+}
+.g-b-bad {
+  background: var(--chili-soft);
+  color: var(--chili-ink);
+}
+.g-b-mute {
+  background: rgba(70, 35, 20, 0.07);
+  color: var(--ink2);
+}
+.g-dk .g-b-mute {
+  background: rgba(255, 255, 255, 0.1);
+}
+.g-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--jade);
+  flex: none;
+  animation: g-ping 2.2s ease-out infinite;
+}
+@keyframes g-ping {
+  0% {
+    box-shadow: 0 0 0 0 rgba(40, 170, 100, 0.5);
+  }
+  70%,
+  100% {
+    box-shadow: 0 0 0 9px rgba(40, 170, 100, 0);
+  }
+}
+
+/* inputs, switch, stepper */
+.g-field {
+  height: 50px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid var(--hair);
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--ink2);
+  font-size: 16px;
+  transition:
+    box-shadow 0.3s var(--ease),
+    border-color 0.3s;
+}
+.g-dk .g-field {
+  background: rgba(0, 0, 0, 0.25);
+}
+.g-field:focus-within {
+  border-color: rgba(198, 40, 40, 0.45);
+  box-shadow: 0 0 0 4px rgba(198, 40, 40, 0.12);
+}
+.g-field input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  font: inherit;
+  color: var(--ink);
+}
+.g-sw {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 52px;
+  height: 32px;
+  border-radius: 999px;
+  background: rgba(70, 35, 20, 0.2);
+  position: relative;
+  cursor: pointer;
+  flex: none;
+  margin: 0;
+  transition: background 0.3s var(--ease);
+}
+.g-sw::after {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 2px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+  transition: transform 0.4s var(--spring);
+}
+.g-sw:checked {
+  background: var(--jade);
+}
+.g-sw:checked::after {
+  transform: translateX(20px);
+}
+.g-sw:focus-visible {
+  outline: 3px solid #1d5fd6;
+  outline-offset: 2px;
+}
+.g-step {
+  display: inline-flex;
+  align-items: center;
+  height: 40px;
+  border-radius: 999px;
+  background: rgba(70, 35, 20, 0.07);
+  padding: 3px;
+}
+.g-dk .g-step {
+  background: rgba(0, 0, 0, 0.28);
+}
+.g-step button {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 0;
+  background: var(--glass2);
+  color: var(--ink);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  padding: 0;
+  box-shadow: var(--sh1);
+  transition: transform 0.3s var(--spring);
+}
+.g-step button:active {
+  transform: scale(0.88);
+}
+.g-step b {
+  min-width: 30px;
+  text-align: center;
+  font-weight: 600;
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* rows and tiles */
+.g-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 13px 18px;
+  min-height: 56px;
+}
+.g-row + .g-row {
+  border-top: 1px solid var(--hair);
+}
+.g-ico {
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
+  display: grid;
+  place-items: center;
+  flex: none;
+  color: #fff;
+}
+.g-tile {
+  border-radius: 26px;
+  padding: 10px 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  cursor: pointer;
+  position: relative;
+  border: 0;
+  text-align: left;
+  font-family: inherit;
+  color: inherit;
+  transition:
+    transform 0.4s var(--spring),
+    box-shadow 0.4s var(--ease),
+    background 0.3s;
+}
+.g-tile:hover {
+  transform: translateY(-4px);
+  box-shadow:
+    var(--sh2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+.g-tile:active {
+  transform: scale(0.97);
+  transition-duration: 0.12s;
+}
+.g-tile .g-ph {
+  border-radius: 19px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(160deg, var(--g1, #ffe9d6), var(--g2, #ffd2b8));
+  overflow: hidden;
+  position: relative;
+}
+.g-tile .g-ph img {
+  width: 78%;
+  height: auto;
+  transition: transform 0.6s var(--ease);
+  filter: drop-shadow(0 8px 10px rgba(110, 50, 20, 0.18));
+}
+.g-tile:hover .g-ph img {
+  transform: scale(1.07) rotate(-2deg);
+}
+.g-tile.g-out {
+  opacity: 0.62;
+  cursor: not-allowed;
+}
+.g-tile.g-out .g-ph img {
+  filter: grayscale(0.9);
+}
+.g-add {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: var(--chili);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  flex: none;
+  box-shadow: 0 6px 14px rgba(198, 40, 40, 0.35);
+  transition: transform 0.35s var(--spring);
+}
+.g-tile:hover .g-add {
+  transform: scale(1.1) rotate(90deg);
+}
+.g-nav {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  width: 72px;
+  padding: 11px 0 9px;
+  border-radius: 22px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink2);
+  cursor: pointer;
+  border: 0;
+  background: transparent;
+  font-family: inherit;
+  text-decoration: none;
+  position: relative;
+  transition:
+    background 0.35s var(--ease),
+    color 0.35s var(--ease),
+    transform 0.3s var(--spring);
+}
+.g-nav:hover {
+  background: rgba(255, 255, 255, 0.5);
+}
+.g-nav:active {
+  transform: scale(0.94);
+}
+.g-nav.g-on {
+  background: var(--glass2);
+  color: var(--chili);
+  box-shadow:
+    var(--sh1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  font-weight: 600;
+}
+.g-dk .g-nav.g-on {
+  color: var(--chili);
+}
+.g-tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  flex: 1;
+  padding: 8px 0 6px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--ink2);
+}
+.g-tab.g-on {
+  color: var(--chili);
+  font-weight: 600;
+}
+.g-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-weight: 600;
+  color: #fff;
+  background: linear-gradient(135deg, #f59e0b, #d63a2e);
+  flex: none;
+}
+.g-scroll {
+  overflow: auto;
+  scrollbar-width: none;
+}
+.g-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+/* motion */
+.g-rise {
+  animation: g-rise 0.7s var(--ease) both;
+  animation-delay: var(--d, 0s);
+}
+@keyframes g-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.g-pop {
+  animation: g-pop 0.6s var(--spring) both;
+  animation-delay: var(--d, 0s);
+}
+@keyframes g-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.88);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.g-slide-up {
+  animation: g-slideUp 0.8s var(--ease) both;
+  animation-delay: var(--d, 0s);
+}
+@keyframes g-slideUp {
+  from {
+    transform: translateY(40px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+.g-shimmer {
+  background: linear-gradient(
+    100deg,
+    rgba(255, 255, 255, 0) 30%,
+    rgba(255, 255, 255, 0.55) 50%,
+    rgba(255, 255, 255, 0) 70%
+  );
+  background-size: 220% 100%;
+  animation: g-shim 2.4s linear infinite;
+}
+@keyframes g-shim {
+  from {
+    background-position: 120% 0;
+  }
+  to {
+    background-position: -120% 0;
+  }
+}
+.g-breathe {
+  animation: g-breathe 3.2s ease-in-out infinite;
+}
+@keyframes g-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.035);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .g-root *,
+  .g-root *::before,
+  .g-root *::after {
+    /* biome-ignore lint/complexity/noImportantStyles: reduced motion must beat every inline or class duration */
+    animation-duration: 0.01ms !important;
+    /* biome-ignore lint/complexity/noImportantStyles: a stagger delay would hold the "from" frame */
+    animation-delay: 0s !important;
+    /* biome-ignore lint/complexity/noImportantStyles: same */
+    animation-iteration-count: 1 !important;
+    /* biome-ignore lint/complexity/noImportantStyles: same */
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* dish tile tints */
+.g-tg-peach {
+  --g1: #ffe9d6;
+  --g2: #ffd0b4;
+}
+.g-tg-gold {
+  --g1: #fff1cf;
+  --g2: #ffd98a;
+}
+.g-tg-rose {
+  --g1: #ffe3e0;
+  --g2: #ffbdb4;
+}
+.g-tg-sky {
+  --g1: #e8f1fb;
+  --g2: #c9def5;
+}
+.g-tg-sand {
+  --g1: #f6ecdc;
+  --g2: #e8d3b0;
+}
+.g-tg-mint {
+  --g1: #e3f4ea;
+  --g2: #c4e6d2;
+}
+
+/* floating tab bar items (iPhone / LINE) */
+.g-tab {
+  border-radius: 28px;
+  justify-content: center;
+  height: 56px;
+  text-decoration: none;
+  transition:
+    background 0.35s var(--ease),
+    color 0.35s var(--ease),
+    transform 0.3s var(--spring);
+}
+.g-tab:active {
+  transform: scale(0.93);
+}
+.g-tab.g-on {
+  background: rgba(198, 40, 40, 0.1);
+}
+.g-fade-b {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(251, 244, 236, 0), rgba(251, 244, 236, 0.92) 70%);
+}
+
+/* laptop sidebar rows */
+.g-side {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 46px;
+  padding: 0 14px;
+  border-radius: 15px;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--ink2);
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    background 0.3s var(--ease),
+    color 0.3s var(--ease),
+    transform 0.25s var(--spring);
+}
+.g-side:hover {
+  background: rgba(255, 255, 255, 0.55);
+}
+.g-side:active {
+  transform: scale(0.98);
+}
+.g-side.g-on {
+  background: var(--glass2);
+  color: var(--chili);
+  font-weight: 600;
+  box-shadow:
+    var(--sh1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+.g-pt {
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: transform 0.3s var(--spring);
+}
+.g-pt:hover {
+  transform: scale(1.5);
+}
+.g-th {
+  text-align: left;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink3);
+  padding: 0 14px;
+  height: 40px;
+  white-space: nowrap;
+}
+.g-td {
+  padding: 0 14px;
+  height: 60px;
+  font-size: 15px;
+  vertical-align: middle;
+  border-top: 1px solid var(--hair);
+}
+tr.g-hv {
+  transition: background 0.25s;
+}
+tr.g-hv:hover {
+  background: rgba(255, 255, 255, 0.5);
+}
+
+/* ---------- Dialogs and sheets (shared Modal) ---------- */
+.g-root .overlay {
+  background: rgba(28, 20, 17, 0.4);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+}
+.g-root .sheet {
+  background: rgba(255, 252, 248, 0.94);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 32px;
+  box-shadow:
+    var(--sh2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  animation: g-slideUp 0.5s var(--ease) both;
+}
+.g-dk .sheet {
+  background: rgba(40, 30, 26, 0.94);
+}
+@media (max-width: 719px) {
+  .g-root .sheet--options,
+  .g-root .sheet--cart {
+    border-radius: 32px 32px 0 0;
+  }
+}
+
+/* a dish photo instead of the drawing fills its tile */
+.g-tile .g-ph img.g-photo {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: none;
+}
+
+/* the design's 34px stepper buttons keep a 44px touch area */
+.g-step button {
+  position: relative;
+}
+.g-step button::after {
+  content: "";
+  position: absolute;
+  inset: -5px;
+}

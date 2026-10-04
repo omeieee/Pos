@@ -1,29 +1,32 @@
 import { formatBaht } from '@sds/i18n';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { weekdayDate } from '../design/format.ts';
+import { Gi } from '../design/icons.tsx';
+import { useLayout } from '../design/layout.ts';
+import { PageHeader } from '../design/PageHeader.tsx';
+import { s } from '../design/style.ts';
 import {
   useConnection,
   useEntities,
   useLocale,
+  useNow,
   useServices,
   useStoreState,
   useT,
-  useViewport,
 } from '../ui/hooks.ts';
-import { Icon } from '../ui/Icon.tsx';
 import { Modal } from '../ui/Modal.tsx';
+import { OutboxPill, SyncPill } from '../ui/SyncPill.tsx';
 import { CartPanel } from './CartPanel.tsx';
 import { CatalogueNotice } from './CatalogueNotice.tsx';
 import { checkSelection, priceCart } from './cart-pricing.ts';
 import type { CartMode } from './cart-store.ts';
+import { dishArt, dishArtUrl } from './dish-art.ts';
 import { ModifierSheet, type SheetTarget } from './ModifierSheet.tsx';
 import { buildMenu, findItem, type MenuItemView, matchesSearch } from './menu-model.ts';
 import { localName } from './names.ts';
-import { PLATFORM_CHANNELS, type PlatformChannel } from './platform-model.ts';
 import { pruneSelection } from './selection.ts';
 import { useCart } from './use-cart.ts';
-
-/** Same breakpoint as the shell: below it the navigation moves to the bottom and the order is a sheet. */
-const PHONE_MAX_WIDTH = 719;
+import { useStorefrontHours } from './use-storefront-hours.ts';
 
 /**
  * Order entry (S1): the menu by category, tap a dish to add it, the order beside it (iPad,
@@ -40,12 +43,15 @@ export function OrderEntryScreen({ mode = 'storefront' }: { mode?: CartMode }) {
   const cartState = useStoreState(cart);
   const tr = useT();
   const locale = useLocale();
-  const phone = useViewport().width <= PHONE_MAX_WIDTH;
+  const phone = useLayout() === 'phone';
+  const now = useNow(60_000);
+  const hours = useStorefrontHours();
 
   const [category, setCategory] = useState<string>('all');
   const [query, setQuery] = useState('');
   const [sheet, setSheet] = useState<SheetTarget | null>(null);
   const [cartOpen, setCartOpen] = useState(false);
+  const [searching, setSearching] = useState(false);
 
   // The remembered recipients and the buildings are read when the screen opens.
   useEffect(() => {
@@ -118,148 +124,285 @@ export function OrderEntryScreen({ mode = 'storefront' }: { mode?: CartMode }) {
           ? 'pos.orderEntry.menuNotLoaded'
           : 'pos.orderEntry.menuLoading';
 
+  const title = tr(platform ? 'platform.title' : 'pos.orderEntry.title');
+  const searchField = (
+    <label
+      className="g-field g-glass"
+      style={s('width:230px;height:48px;border-radius:999px;background:var(--glass)')}
+    >
+      <Gi n="search" />
+      <input
+        type="search"
+        enterKeyHint="search"
+        autoComplete="off"
+        aria-label={tr('common.search')}
+        placeholder={tr('pos.orderEntry.searchPlaceholder')}
+        value={query}
+        onChange={(event) => setQuery(event.target.value)}
+      />
+    </label>
+  );
+  const phoneSearchField = (
+    <label
+      className="g-field g-glass"
+      style={s('height:48px;border-radius:999px;background:var(--glass)')}
+    >
+      <Gi n="search" />
+      <input
+        type="search"
+        enterKeyHint="search"
+        autoComplete="off"
+        // biome-ignore lint/a11y/noAutofocus: the person just tapped the search button
+        autoFocus
+        aria-label={tr('common.search')}
+        placeholder={tr('pos.orderEntry.searchPlaceholder')}
+        value={query}
+        onChange={(event) => setQuery(event.target.value)}
+      />
+    </label>
+  );
+  const subtitle = [
+    weekdayDate(now, locale),
+    hours ? tr('pos.orderEntry.hoursLine', { hours }) : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+
   return (
-    <div className="oe">
+    <div
+      style={s(
+        `flex:1;min-height:0;display:flex;gap:18px;position:relative;${phone ? 'flex-direction:column;gap:0;' : ''}`,
+      )}
+    >
       <section
-        className="oe__menu"
-        aria-label={tr(platform ? 'platform.title' : 'pos.orderEntry.title')}
+        aria-label={title}
+        style={s(
+          `flex:1 1 0;min-width:0;min-height:0;display:flex;flex-direction:column;gap:${phone ? 14 : 16}px;${
+            phone ? 'padding:calc(env(safe-area-inset-top, 0px) + 16px) 20px 0;' : ''
+          }`,
+        )}
       >
         <CatalogueNotice />
-        {platform ? (
-          <fieldset className="seg oe__platform">
-            <legend className="visually-hidden">{tr('platform.channel')}</legend>
-            {PLATFORM_CHANNELS.map((channel: PlatformChannel) => (
-              <label
-                key={channel}
-                className={`seg__item${cartState.channel === channel ? ' seg__item--on' : ''}${locked ? ' seg__item--locked' : ''}`}
-              >
-                <input
-                  className="visually-hidden"
-                  type="radio"
-                  name="platform-channel"
-                  checked={cartState.channel === channel}
-                  disabled={locked}
-                  onChange={() => cart.setChannel(channel)}
-                />
-                {tr(`orders.channel.${channel}`)}
-              </label>
-            ))}
-          </fieldset>
-        ) : null}
-        <div className="oe__tools">
-          <label className="oe__search">
-            <Icon name="search" />
-            <input
-              className="input"
-              type="search"
-              enterKeyHint="search"
-              autoComplete="off"
-              aria-label={tr('common.search')}
-              placeholder={tr('pos.orderEntry.searchPlaceholder')}
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-            />
-          </label>
-        </div>
-
-        {totalDishes > 0 ? (
-          <nav className="chips" aria-label={tr('pos.orderEntry.categories')}>
+        {phone ? (
+          <div style={s('display:flex;align-items:center;gap:12px')}>
+            <div style={s('flex-grow:1;min-width:0')}>
+              <h1 className="g-t-1" style={s('margin:0')}>
+                {tr(platform ? 'platform.title' : 'nav.new')}
+              </h1>
+              <div className="g-t-c">
+                {tr('pos.orderEntry.phoneSub', {
+                  channel: tr(`orders.channel.${platform ? cartState.channel : 'storefront'}`),
+                })}
+              </div>
+            </div>
             <button
               type="button"
-              className={activeCategory === 'all' ? 'cat cat--on' : 'cat'}
+              className="g-btn g-btn-icon g-glass"
+              aria-label={tr('common.search')}
+              aria-expanded={searching}
+              style={s('background:var(--glass)')}
+              onClick={() => setSearching((v) => !v)}
+            >
+              <Gi n="search" />
+            </button>
+            <SyncPill compact />
+          </div>
+        ) : (
+          <PageHeader title={title} subtitle={subtitle}>
+            {searchField}
+            <SyncPill />
+            <OutboxPill />
+          </PageHeader>
+        )}
+        {phone && searching ? phoneSearchField : null}
+        {phone ? <OutboxPill /> : null}
+
+        {totalDishes > 0 ? (
+          <nav
+            aria-label={tr('pos.orderEntry.categories')}
+            className="g-scroll"
+            style={s(
+              phone
+                ? 'display:flex;gap:8px;margin:0 -20px;padding:0 20px;flex:none'
+                : 'display:flex;gap:10px;flex:none;flex-wrap:wrap',
+            )}
+          >
+            <button
+              type="button"
+              className={`g-chip${activeCategory === 'all' ? ' g-on' : ''}`}
               aria-pressed={activeCategory === 'all'}
               onClick={() => setCategory('all')}
             >
-              {`${tr('pos.orderEntry.all')} ${totalDishes}`}
+              {tr('pos.orderEntry.all')}
             </button>
             {menu.map((c) => (
               <button
                 key={c.id}
                 type="button"
-                className={activeCategory === c.id ? 'cat cat--on' : 'cat'}
+                className={`g-chip${activeCategory === c.id ? ' g-on' : ''}`}
                 aria-pressed={activeCategory === c.id}
                 onClick={() => setCategory(c.id)}
               >
-                {`${localName(locale, c.nameTh, c.nameEn)} ${c.items.length}`}
+                {localName(locale, c.nameTh, c.nameEn)}
               </button>
             ))}
           </nav>
         ) : null}
 
-        {emptyMenuKey ? (
-          <p className="oe__note muted" role="status">
-            {tr(emptyMenuKey)}
-          </p>
-        ) : shown.length === 0 ? (
-          <p className="oe__note muted" role="status">
-            {tr('pos.orderEntry.noMatch')}
-          </p>
-        ) : (
-          <ul className="dishes">
-            {shown.map((item) => {
-              const count = inCart.get(item.id);
-              return (
-                <li key={item.id}>
-                  <button
-                    type="button"
-                    className={item.soldOut ? 'dish dish--sold' : 'dish'}
-                    disabled={item.soldOut || locked}
-                    onClick={() => pick(item)}
-                  >
-                    <span className="dish__art" aria-hidden="true">
-                      <Icon name="bowl" />
-                    </span>
-                    <span className="dish__name">
-                      {localName(locale, item.nameTh, item.nameEn)}
-                    </span>
-                    <span className="dish__price money">
-                      {formatBaht(item.priceSatang, locale, { decimals: 'auto' })}
-                    </span>
-                    {count ? (
-                      <span className="dish__qty">
-                        <span aria-hidden="true">{count}</span>
-                        <span className="visually-hidden">
-                          {tr('pos.orderEntry.inCart', { count })}
+        <div
+          className="g-scroll"
+          style={s(
+            phone
+              ? 'flex-grow:1;min-height:0;margin:0 -20px;padding:2px 20px 190px'
+              : 'flex-grow:1;min-height:0;margin:-4px -6px;padding:4px 6px 40px',
+          )}
+        >
+          {emptyMenuKey ? (
+            <p className="g-t-s" role="status">
+              {tr(emptyMenuKey)}
+            </p>
+          ) : shown.length === 0 ? (
+            <p className="g-t-s" role="status">
+              {tr('pos.orderEntry.noMatch')}
+            </p>
+          ) : (
+            <ul
+              style={s(
+                `list-style:none;margin:0;padding:0;display:grid;gap:14px;grid-template-columns:${
+                  phone ? 'repeat(2,minmax(0,1fr))' : 'repeat(auto-fill,minmax(190px,1fr))'
+                }`,
+              )}
+            >
+              {shown.map((item) => {
+                const count = inCart.get(item.id);
+                const art = dishArt(item.nameTh, item.nameEn);
+                return (
+                  <li key={item.id} style={s('display:flex')}>
+                    <button
+                      type="button"
+                      className={`g-tile g-glass g-rise${item.soldOut ? ' g-out' : ''}`}
+                      style={s('width:100%')}
+                      disabled={item.soldOut || locked}
+                      onClick={() => pick(item)}
+                    >
+                      <span
+                        className={`g-ph g-tg-${art.tint}`}
+                        aria-hidden="true"
+                        style={s(`height:${phone ? 96 : 108}px`)}
+                      >
+                        <img
+                          className={item.imageUrl ? 'g-photo' : undefined}
+                          src={item.imageUrl ?? dishArtUrl(art)}
+                          alt=""
+                          loading="lazy"
+                          draggable={false}
+                        />
+                      </span>
+                      <span
+                        className="g-t-3 g-clamp2"
+                        style={s(
+                          'font-size:15px;line-height:1.5;min-height:45px;padding:0 4px;display:-webkit-box',
+                        )}
+                      >
+                        {localName(locale, item.nameTh, item.nameEn)}
+                      </span>
+                      <span
+                        style={s(
+                          'display:flex;align-items:center;justify-content:space-between;padding:0 4px',
+                        )}
+                      >
+                        <span className="g-num g-t-2">
+                          {formatBaht(item.priceSatang, locale, { decimals: 'auto' })}
                         </span>
+                        {item.soldOut ? (
+                          <span className="g-badge g-b-bad">
+                            <Gi n="x" />
+                            {tr('pos.orderEntry.soldOut')}
+                          </span>
+                        ) : (
+                          <span className="g-add" aria-hidden="true">
+                            <Gi n="plus" size="sm" />
+                          </span>
+                        )}
                       </span>
-                    ) : null}
-                    {item.soldOut ? (
-                      <span className="status status--danger dish__flag">
-                        <Icon name="x" />
-                        {tr('pos.orderEntry.soldOut')}
-                      </span>
-                    ) : null}
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        )}
+                      {count ? (
+                        <span
+                          className="g-badge g-pop"
+                          style={s(
+                            `position:absolute;top:${phone ? 16 : 18}px;right:${phone ? 16 : 18}px;background:var(--ink);color:#fff;height:${phone ? 28 : 30}px;padding:0 12px;font-size:14px`,
+                          )}
+                        >
+                          <span aria-hidden="true">×{count}</span>
+                          <span className="visually-hidden">
+                            {tr('pos.orderEntry.inCart', { count })}
+                          </span>
+                        </span>
+                      ) : null}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+        {phone ? (
+          <div
+            className="g-fade-b"
+            aria-hidden="true"
+            style={s('position:absolute;left:0;right:0;bottom:0;height:150px;pointer-events:none')}
+          />
+        ) : null}
       </section>
 
       {phone ? null : (
-        <aside className="oe__cart">
+        <aside
+          className="g-glass2"
+          data-testid="cart"
+          style={s(
+            'width:372px;flex:none;display:flex;flex-direction:column;border-radius:32px;padding:22px 20px 20px;min-height:0',
+          )}
+        >
           <CartPanel onEditLine={editLine} mode={mode} />
         </aside>
       )}
 
       {phone && cartState.lines.length > 0 ? (
-        <div className="oe__bar">
-          <button
-            type="button"
-            className="btn btn-primary btn-lg btn-block"
-            onClick={() => setCartOpen(true)}
+        <button
+          type="button"
+          data-testid="cart-bar"
+          className="g-glass2 g-slide-up"
+          onClick={() => setCartOpen(true)}
+          style={s(
+            'position:fixed;left:16px;right:16px;bottom:108px;height:68px;border-radius:34px;display:flex;align-items:center;gap:12px;padding:0 10px 0 18px;text-align:left;font:inherit;color:inherit;cursor:pointer;z-index:4;--d:.2s',
+          )}
+        >
+          <span
+            style={s(
+              'position:relative;width:40px;height:40px;border-radius:50%;background:rgba(198,40,40,.12);color:var(--chili);display:grid;place-items:center;flex:none',
+            )}
           >
-            <Icon name="cart" />
-            <span>{tr('pos.orderEntry.viewOrder', { count: pricing.itemCount })}</span>
-            <span className="oe__bar-total money">{formatBaht(pricing.totalSatang, locale)}</span>
-          </button>
-        </div>
+            <Gi n="bag" />
+          </span>
+          <span style={s('flex-grow:1;line-height:1.3;display:block')}>
+            <span className="g-t-c" style={s('display:block')}>
+              {tr('pos.orderEntry.viewOrder', { count: pricing.itemCount })}
+            </span>
+            <span className="g-num g-t-2" style={s('display:block')}>
+              {formatBaht(pricing.totalSatang, locale)}
+            </span>
+          </span>
+          <span className="g-btn g-btn-p" style={s('height:48px')}>
+            {tr('pos.orderEntry.chargeShort')}
+            <Gi n="chevronRight" size="sm" />
+          </span>
+        </button>
       ) : null}
 
       {phone && cartOpen ? (
         <Modal labelledBy="cart-title" onClose={() => setCartOpen(false)} variant="cart">
-          <CartPanel onClose={() => setCartOpen(false)} onEditLine={editLine} mode={mode} />
+          <div style={s('padding:22px 20px 24px;display:flex;flex-direction:column;min-height:0')}>
+            <CartPanel onClose={() => setCartOpen(false)} onEditLine={editLine} mode={mode} />
+          </div>
         </Modal>
       ) : null}
 

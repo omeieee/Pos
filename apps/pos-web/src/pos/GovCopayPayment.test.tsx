@@ -53,6 +53,8 @@ describe('ไทยช่วยไทย: the option', () => {
     await panel();
     const tile = methodTile(th['payment.method.gov_copay']) as HTMLInputElement;
     expect(tile.disabled).toBe(false);
+    // The scheme's last day is told while ไทยช่วยไทย is the method on screen.
+    fireEvent.click(tile);
     const sub = th['payment.method.govCopaySub'].replace(
       '{date}',
       formatDate('2030-11-30', 'th', 'date'),
@@ -134,7 +136,7 @@ describe('ไทยช่วยไทย: the guided steps', () => {
   test('shows the FULL server amount to type into ถุงเงิน, in big type', async () => {
     await chosen();
     expect(screen.getByText(th['payment.govCopay.typeAmount'])).toBeTruthy();
-    const big = screen.getByText('฿75.00', { selector: '.amount-hero--typed' });
+    const big = screen.getByText('฿75.00', { selector: '[data-amount="typed"]' });
     expect(big).toBeTruthy();
   });
 
@@ -150,7 +152,7 @@ describe('ไทยช่วยไทย: the guided steps', () => {
   test('says when the estimate was cut back to the daily cap', async () => {
     await chosen({ order: orderOf({ totalSatang: satang(50000) }) });
     // 60% of ฿500 is ฿300, cut to the ฿200 daily cap.
-    expect(screen.getByText('฿200.00', { selector: '.copay__figure' })).toBeTruthy();
+    expect(screen.getByText('฿200.00', { selector: '[data-amount="figure"]' })).toBeTruthy();
     expect(screen.getByText(th['payment.govCopay.capped'])).toBeTruthy();
   });
 
@@ -166,7 +168,9 @@ describe('ไทยช่วยไทย: the guided steps', () => {
       ],
     });
     const section = screen.getByRole('region', { name: th['payment.govCopay.title'] });
-    expect(within(section).getByText('฿200.00', { selector: '.copay__figure' })).toBeTruthy();
+    expect(
+      within(section).getByText('฿200.00', { selector: '[data-amount="figure"]' }),
+    ).toBeTruthy();
     expect(within(section).getByText(th['payment.govCopay.capped'])).toBeTruthy();
   });
 

@@ -6,6 +6,7 @@
  * The moves are read from the shared order machine (the table the API enforces), so a role never
  * sees a button the server would refuse for its role. The server still checks every call.
  */
+import { DISPLAY_TIME_ZONE } from '@sds/i18n';
 import {
   businessDate,
   DEFAULT_CUTOFF_MINUTES,
@@ -98,4 +99,104 @@ export function orderMoves(status: OrderStatus, role: StaffRole): OrderMove[] {
     });
   }
   return moves;
+}
+
+// ---------- The orders table and the phone list (design "Orders") ----------
+
+/** The laptop / iPad filter: payment groups. Cancelled orders owe nothing, so only "all" has them. */
+export type PaymentFilter = 'all' | 'awaiting_confirmation' | 'unpaid' | 'paid';
+/** The phone filter: still to pay, in the kitchen, done. */
+export type PhoneFilter = 'all' | 'pay' | 'cooking' | 'done';
+
+export const PAYMENT_FILTERS: readonly PaymentFilter[] = [
+  'all',
+  'awaiting_confirmation',
+  'unpaid',
+  'paid',
+];
+export const PHONE_FILTERS: readonly PhoneFilter[] = ['all', 'pay', 'cooking', 'done'];
+
+export function matchesPaymentFilter(order: OrderDto, filter: PaymentFilter): boolean {
+  if (filter === 'all') return true;
+  if (order.status === 'cancelled') return false;
+  if (filter === 'unpaid') {
+    return order.paymentStatus === 'unpaid' || order.paymentStatus === 'partially_paid';
+  }
+  return order.paymentStatus === filter;
+}
+
+export function matchesPhoneFilter(order: OrderDto, filter: PhoneFilter): boolean {
+  switch (filter) {
+    case 'all':
+      return true;
+    case 'pay':
+      return (
+        order.status !== 'cancelled' &&
+        (order.paymentStatus === 'unpaid' ||
+          order.paymentStatus === 'partially_paid' ||
+          order.paymentStatus === 'awaiting_confirmation')
+      );
+    case 'cooking':
+      return order.status === 'new' || order.status === 'preparing';
+    case 'done':
+      return order.status === 'ready' || order.status === 'completed';
+  }
+}
+
+/** Newest first, the order number breaks a tie so rows never jump. */
+export const byNewest = (a: OrderDto, b: OrderDto) =>
+  b.placedAt.localeCompare(a.placedAt) || b.orderNo.localeCompare(a.orderNo);
+
+/**
+ * The search box: order number, recipient name, room or building, case-insensitive, any part of
+ * them. Done on the orders already loaded; nothing is sent anywhere or kept.
+ */
+export function matchesQuery(order: OrderDto, query: string): boolean {
+  const needle = query.trim().toLowerCase();
+  if (needle === '') return true;
+  return [order.orderNo, order.recipientName, order.roomNo, order.deliveryBuilding].some((field) =>
+    field?.toLowerCase().includes(needle),
+  );
+}
+
+/** What has been received today: paid orders that were not cancelled, and their sum. */
+export function paidToday(orders: readonly OrderDto[]): { count: number; totalSatang: number } {
+  let count = 0;
+  let totalSatang = 0;
+  for (const order of orders) {
+    if (order.paymentStatus !== 'paid' || order.status === 'cancelled') continue;
+    count += 1;
+    totalSatang += order.totalSatang;
+  }
+  return { count, totalSatang };
+}
+
+const hourFormat = new Intl.DateTimeFormat('en-GB', {
+  hour: '2-digit',
+  hourCycle: 'h23',
+  timeZone: DISPLAY_TIME_ZONE,
+});
+
+/**
+ * The running total of paid orders hour by hour, from the first hour with a paid order to the last
+ * (an hour with none repeats the total). Fewer than two hours is no line, so it returns [].
+ */
+export function paidByHour(orders: readonly OrderDto[]): number[] {
+  const perHour = new Map<number, number>();
+  for (const order of orders) {
+    if (order.paymentStatus !== 'paid' || order.status === 'cancelled') continue;
+    const hour = Number(hourFormat.format(new Date(order.placedAt)));
+    perHour.set(hour, (perHour.get(hour) ?? 0) + order.totalSatang);
+  }
+  const hours = [...perHour.keys()];
+  if (hours.length < 2) return [];
+  const first = Math.min(...hours);
+  const last = Math.max(...hours);
+  const series: number[] = [];
+  let running = 0;
+  for (let hour = first; hour <= last; hour += 1) {
+    running += perHour.get(hour) ?? 0;
+    series.push(running);
+  }
+  return series;
 }

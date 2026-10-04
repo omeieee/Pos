@@ -1,10 +1,13 @@
 import { useState } from 'react';
+import { Gi } from '../design/icons.tsx';
+import { s } from '../design/style.ts';
+import { FormCard } from '../ui/FormParts.tsx';
 import { useT } from '../ui/hooks.ts';
-import { Icon } from '../ui/Icon.tsx';
 import { TextField } from '../ui/TextField.tsx';
 import { addBuilding, type BuildingError, buildDeliveryInput, removeBuilding } from './model.ts';
 import { SaveBar } from './SaveBar.tsx';
 import type { SectionBodyProps } from './SettingSection.tsx';
+import './settings-glass.css';
 
 /** The buildings the shop delivers to: add, remove, then save the whole list. */
 export function DeliveryForm({
@@ -32,48 +35,58 @@ export function DeliveryForm({
   // Two forms side by side: Enter in the name box adds the building, and only the Save button
   // saves the list.
   return (
-    <div className="sset__form">
-      <p className="hint">{tr('settings.delivery.hint')}</p>
-      <ul className="sset__chips" aria-label={tr('settings.delivery.list')}>
-        {list.map((name) => (
-          <li key={name} className="sset__chip">
-            <span>{name}</span>
-            {editable ? (
-              <button
-                type="button"
-                className="btn btn-soft"
-                aria-label={tr('settings.delivery.remove', { name })}
-                disabled={list.length <= 1}
-                onClick={() => change(removeBuilding(list, name), false)}
-              >
-                <Icon name="x" />
-              </button>
-            ) : null}
-          </li>
-        ))}
-      </ul>
-      {editable ? (
-        <form
-          className="sset__add-row"
-          noValidate
-          onSubmit={(event) => {
-            event.preventDefault();
-            change(addBuilding(list, draft), true);
-          }}
+    <div style={s('display:flex;flex-direction:column;gap:18px')}>
+      <FormCard>
+        <p className="g-t-s" style={s('margin:0')}>
+          {tr('settings.delivery.hint')}
+        </p>
+        <ul
+          className="gset-list"
+          style={s('display:flex;flex-wrap:wrap;gap:8px')}
+          aria-label={tr('settings.delivery.list')}
         >
-          <TextField
-            label={tr('settings.delivery.name')}
-            value={draft}
-            maxLength={20}
-            error={error ? tr(`settings.delivery.error.${error}`) : undefined}
-            onChange={setDraft}
-          />
-          <button type="submit" className="btn btn-soft">
-            <Icon name="plus" />
-            {tr('settings.delivery.add')}
-          </button>
-        </form>
-      ) : null}
+          {list.map((name) => (
+            <li key={name} className="gset-chipx">
+              <span>{name}</span>
+              {editable ? (
+                <button
+                  type="button"
+                  aria-label={tr('settings.delivery.remove', { name })}
+                  disabled={list.length <= 1}
+                  onClick={() => change(removeBuilding(list, name), false)}
+                >
+                  <Gi n="x" size="sm" />
+                </button>
+              ) : (
+                <span style={s('width:12px')} />
+              )}
+            </li>
+          ))}
+        </ul>
+        {editable ? (
+          <form
+            className="gset-addrow"
+            noValidate
+            onSubmit={(event) => {
+              event.preventDefault();
+              change(addBuilding(list, draft), true);
+            }}
+          >
+            <TextField
+              icon="building"
+              label={tr('settings.delivery.name')}
+              value={draft}
+              maxLength={20}
+              error={error ? tr(`settings.delivery.error.${error}`) : undefined}
+              onChange={setDraft}
+            />
+            <button type="submit" className="g-btn">
+              <Gi n="plus" size="sm" />
+              {tr('settings.delivery.add')}
+            </button>
+          </form>
+        ) : null}
+      </FormCard>
       <form
         noValidate
         onSubmit={(event) => {

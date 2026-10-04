@@ -1,31 +1,32 @@
 import type { OrderPaymentStatus, OrderStatus } from '@sds/shared';
-import type { IconName } from '../app/routes.ts';
+import { Gi, type GiName } from '../design/icons.tsx';
 import { useT } from '../ui/hooks.ts';
-import { Icon } from '../ui/Icon.tsx';
 
 /** Colour + icon + words, always together (brand §3): a status is never colour alone. */
-const PAYMENT: Record<OrderPaymentStatus, { tone: string; icon: IconName }> = {
-  unpaid: { tone: 'warning', icon: 'circle' },
+type Tone = 'warn' | 'info' | 'ok' | 'bad' | 'mute';
+
+const PAYMENT: Record<OrderPaymentStatus, { tone: Tone; icon: GiName }> = {
+  unpaid: { tone: 'warn', icon: 'pending' },
   awaiting_confirmation: { tone: 'info', icon: 'clock' },
   partially_paid: { tone: 'info', icon: 'clock' },
-  paid: { tone: 'success', icon: 'check-circle' },
-  refunded: { tone: 'neutral', icon: 'sync' },
+  paid: { tone: 'ok', icon: 'check' },
+  refunded: { tone: 'mute', icon: 'clock' },
 };
 
-const ORDER: Record<OrderStatus, { tone: string; icon: IconName }> = {
-  new: { tone: 'brand', icon: 'circle' },
-  preparing: { tone: 'warning', icon: 'clock' },
-  ready: { tone: 'success', icon: 'check-circle' },
-  completed: { tone: 'neutral', icon: 'check' },
-  cancelled: { tone: 'danger', icon: 'x' },
+const ORDER: Record<OrderStatus, { tone: Tone; icon: GiName }> = {
+  new: { tone: 'bad', icon: 'dot' },
+  preparing: { tone: 'warn', icon: 'flame' },
+  ready: { tone: 'ok', icon: 'check' },
+  completed: { tone: 'mute', icon: 'check' },
+  cancelled: { tone: 'bad', icon: 'x' },
 };
 
 export function PaymentStatusBadge({ status }: { status: OrderPaymentStatus }) {
   const tr = useT();
   const { tone, icon } = PAYMENT[status];
   return (
-    <span className={`status status--${tone}`}>
-      <Icon name={icon} />
+    <span className={`g-badge g-b-${tone} status`}>
+      <Gi n={icon} />
       {tr(`status.payment.${status}`)}
     </span>
   );
@@ -35,8 +36,8 @@ export function OrderStatusBadge({ status }: { status: OrderStatus }) {
   const tr = useT();
   const { tone, icon } = ORDER[status];
   return (
-    <span className={`status status--${tone}`}>
-      <Icon name={icon} />
+    <span className={`g-badge g-b-${tone} status`}>
+      <Gi n={icon} />
       {tr(`status.order.${status}`)}
     </span>
   );

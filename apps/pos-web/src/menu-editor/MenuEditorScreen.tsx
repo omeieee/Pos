@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { s } from '../design/style.ts';
+import { SettingsPage } from '../settings/SettingsPage.tsx';
+import { CheckChip, SegRadio } from '../ui/FormParts.tsx';
 import { useServices, useStoreState, useT } from '../ui/hooks.ts';
-import { Icon } from '../ui/Icon.tsx';
+import { Callout } from '../ui/Notice.tsx';
 import { CategoriesTab } from './CategoriesTab.tsx';
 import { CategoryDialog } from './CategoryDialog.tsx';
 import { type DialogTarget, EditorContext, type EditorContextValue } from './editor-context.ts';
@@ -9,6 +12,7 @@ import { GroupsTab } from './GroupsTab.tsx';
 import { ItemDialog } from './ItemDialog.tsx';
 import { ItemsTab } from './ItemsTab.tsx';
 import { OptionDialog } from './OptionDialog.tsx';
+import './menu-glass.css';
 import { failureText } from './outcome-text.ts';
 
 const TABS = ['items', 'categories', 'groups'] as const;
@@ -62,84 +66,83 @@ export function MenuEditorScreen() {
 
   return (
     <EditorContext.Provider value={value}>
-      <section className="medit" aria-labelledby="medit-page-title">
-        <header className="medit__head">
-          <h1 id="medit-page-title" className="medit__title">
+      <SettingsPage labelledBy="medit-page-title" maxWidth={860}>
+        <header
+          style={s(
+            'display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px',
+          )}
+        >
+          <h1 id="medit-page-title" className="g-t-1" style={s('margin:0')}>
             {tr('menuEditor.title')}
           </h1>
-          <label className="pick medit__archived">
-            <input
-              className="visually-hidden"
-              type="checkbox"
-              checked={showArchived}
-              onChange={(event) => setShowArchived(event.target.checked)}
-            />
-            {tr('menuEditor.showArchived')}
-          </label>
+          <CheckChip
+            label={tr('menuEditor.showArchived')}
+            checked={showArchived}
+            onChange={setShowArchived}
+          />
         </header>
 
         {offline ? (
-          <p className="notice" role="status">
-            <Icon name="wifi-off" />
-            <span>{tr('menuEditor.offline')}</span>
-          </p>
+          <Callout tone="warn" role="status">
+            {tr('menuEditor.offline')}
+          </Callout>
         ) : null}
 
         {message ? (
-          <p className="error medit__message" role="alert">
+          <Callout tone="bad" role="alert">
             {message}
-          </p>
+          </Callout>
         ) : null}
 
-        <fieldset className="seg medit__tabs">
-          <legend className="visually-hidden">{tr('menuEditor.tabs')}</legend>
-          {TABS.map((id) => (
-            <label key={id} className={`seg__item${tab === id ? ' seg__item--on' : ''}`}>
-              <input
-                className="visually-hidden"
-                type="radio"
-                name="menu-editor-tab"
-                checked={tab === id}
-                onChange={() => setTab(id)}
-              />
-              {tr(`menuEditor.tab.${id}`)}
-            </label>
-          ))}
-        </fieldset>
+        <SegRadio
+          legend={tr('menuEditor.tabs')}
+          name="menu-editor-tab"
+          value={tab}
+          options={TABS.map((id) => ({ value: id, label: tr(`menuEditor.tab.${id}`) }))}
+          onChange={setTab}
+        />
 
         {editor.status === 'loading' ? (
-          <p className="muted medit__empty" role="status">
+          <p className="g-t-s" style={s('margin:0')} role="status">
             {tr('menuEditor.loading')}
           </p>
         ) : null}
         {editor.status === 'error' ? (
-          <div className="notice" role="alert">
-            <Icon name="alert" />
-            <span>{tr('menuEditor.loadFailed')}</span>
-            <button
-              type="button"
-              className="btn btn-soft"
-              disabled={offline}
-              onClick={() => void menuEditor.load()}
-            >
-              {tr('common.retry')}
-            </button>
-          </div>
+          <Callout
+            tone="bad"
+            role="alert"
+            action={
+              <button
+                type="button"
+                className="g-btn gbtn-row"
+                disabled={offline}
+                onClick={() => void menuEditor.load()}
+              >
+                {tr('common.retry')}
+              </button>
+            }
+          >
+            {tr('menuEditor.loadFailed')}
+          </Callout>
         ) : null}
 
         {editor.costsFailed ? (
-          <div className="notice" role="alert">
-            <Icon name="alert" />
-            <span>{tr('menuEditor.costsFailed')}</span>
-            <button
-              type="button"
-              className="btn btn-soft"
-              disabled={offline}
-              onClick={() => void menuEditor.load()}
-            >
-              {tr('common.retry')}
-            </button>
-          </div>
+          <Callout
+            tone="bad"
+            role="alert"
+            action={
+              <button
+                type="button"
+                className="g-btn gbtn-row"
+                disabled={offline}
+                onClick={() => void menuEditor.load()}
+              >
+                {tr('common.retry')}
+              </button>
+            }
+          >
+            {tr('menuEditor.costsFailed')}
+          </Callout>
         ) : null}
 
         {tab === 'items' ? <ItemsTab /> : null}
@@ -156,7 +159,7 @@ export function MenuEditorScreen() {
         {dialog?.kind === 'option' ? (
           <OptionDialog groupId={dialog.groupId} id={dialog.id} onClose={closeDialog} />
         ) : null}
-      </section>
+      </SettingsPage>
     </EditorContext.Provider>
   );
 }

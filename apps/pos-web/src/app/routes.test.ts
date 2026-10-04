@@ -10,8 +10,9 @@ const ids = (role: Parameters<typeof hasPermission>[0]) =>
 
 describe('who may open what (from the shared role permissions)', () => {
   test('owner and manager see everything', () => {
-    expect(ids('owner')).toEqual(['new', 'platform', 'kitchen', 'orders', 'menu', 'settings']);
-    expect(ids('manager')).toEqual(['new', 'platform', 'kitchen', 'orders', 'menu', 'settings']);
+    const all = ['new', 'platform', 'kitchen', 'orders', 'menu', 'settings', 'dashboard'];
+    expect(ids('owner')).toEqual(all);
+    expect(ids('manager')).toEqual(all);
   });
 
   test('the cashier takes orders, sees the queue and may look at settings; the kitchen sees the kitchen view and the queue only', () => {

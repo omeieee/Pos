@@ -2,6 +2,8 @@ import { formatBaht, formatDate } from '@sds/i18n';
 import type { satang } from '@sds/shared';
 import { useEffect, useRef, useState } from 'react';
 import { can } from '../auth/auth-store.ts';
+import { Gi } from '../design/icons.tsx';
+import { s } from '../design/style.ts';
 import {
   useActivityHold,
   useAuthState,
@@ -12,14 +14,15 @@ import {
   useStoreState,
   useT,
 } from '../ui/hooks.ts';
-import { Icon } from '../ui/Icon.tsx';
 import { CashPanel } from './CashPanel.tsx';
 import { GovCopaySteps } from './GovCopayPanel.tsx';
-import { MethodTiles } from './MethodTiles.tsx';
+import { MethodNotes, MethodTiles } from './MethodTiles.tsx';
 import { OfflinePromptPay } from './OfflinePromptPay.tsx';
 import { OpenPayment } from './OpenPayment.tsx';
 import type { QueuedPayment } from './outbox-model.ts';
 import { PaymentHistory } from './PaymentHistory.tsx';
+import { Callout, PayFrame, usePayDims } from './PayParts.tsx';
+import { PromptPayStart } from './PromptPayPanel.tsx';
 import {
   COPAY_TICK_MS,
   confirmedPayment,
@@ -34,6 +37,7 @@ import { flowFor } from './payment-store.ts';
 import { QueuedPaymentView } from './QueuedPaymentView.tsx';
 import { StartPanel } from './StartPanel.tsx';
 import { VoidRefundDialog } from './VoidRefundDialog.tsx';
+import './pay-glass.css';
 
 /**
  * The payment part of the order page. Whatever it shows comes from the store, which holds only what
@@ -62,6 +66,8 @@ function PaymentPanelBody({ orderId }: { orderId: string }) {
   const flowState = useStoreState(flow);
   const tr = useT();
   const locale = useLocale();
+  const dims = usePayDims();
+  const phone = dims.layout === 'phone';
   const order = entities.orders.get(orderId);
   const [loaded, setLoaded] = useState(false);
   const [voiding, setVoiding] = useState(false);
@@ -143,152 +149,171 @@ function PaymentPanelBody({ orderId }: { orderId: string }) {
     attempted.current = method;
   };
 
+  // The payment that is waiting has its own screen: the list below is for the ones before it.
+  const pastPayments = list.filter((p) => p !== waiting);
+  const choosing = phase === 'choose' && !queuedPayment;
+  const showSwitch = loaded && (choosing || phase === 'open');
+  const waitingMethod = waiting && waiting.method !== 'other' ? waiting.method : null;
+  const switchChoice = phase === 'open' ? waitingMethod : choice;
+  const title =
+    phase === 'choose' || phase === 'open' ? tr('payment.title') : tr('payment.titleDone');
+  const body = 'pay-body';
+
   return (
-    <section className="ppanel" aria-labelledby="pay-title">
-      <header className="ppanel__head">
-        <h2 id="pay-title" className="ppanel__title">
-          {tr('payment.title')}
-        </h2>
-        <div className="due">
-          <span className="lbl">{tr('payment.amountDue')}</span>
-          <span className="amount-hero money">{money(order.totalSatang)}</span>
-        </div>
-      </header>
-
-      {lost.busyElsewhere ? (
-        <p className="notice" role="status">
-          <Icon name="clock" />
-          <span>{tr('payment.busyElsewhere')}</span>
+    <PayFrame
+      title={title}
+      notes={showSwitch ? <MethodNotes options={options} choice={switchChoice} /> : null}
+      amountLabel={tr('payment.amountDue')}
+      amountText={money(order.totalSatang)}
+      switcher={
+        showSwitch ? (
+          <MethodTiles
+            options={options}
+            choice={switchChoice}
+            name="pay-method"
+            onChoose={setSelected}
+            locked={phase === 'open'}
+            disabled={lost.busyElsewhere}
+            fill={phone}
+          />
+        ) : null
+      }
+      notice={
+        lost.busyElsewhere ? (
+          <Callout tone="warn" icon="clock" role="status">
+            {tr('payment.busyElsewhere')}
+          </Callout>
+        ) : null
+      }
+      disabled={lost.busyElsewhere}
+      after={<PaymentHistory payments={pastPayments} />}
+    >
+      {!loaded ? (
+        <p className="g-t-s" role="status" style={s('margin:0')}>
+          {tr('payment.loading')}
         </p>
-      ) : null}
-
-      {/* A call for another order is still running: the server calls here would be refused, so
-          the controls are off (a disabled fieldset disables every button inside it). */}
-      <fieldset className="ppanel__body" disabled={lost.busyElsewhere}>
-        {!loaded ? (
-          <p className="muted" role="status">
-            {tr('payment.loading')}
-          </p>
-        ) : phase === 'closed' ? (
-          <p className="notice">{tr('payment.closed')}</p>
-        ) : phase === 'nothingToPay' ? (
-          <p className="notice">{tr('payment.nothingToPay')}</p>
-        ) : phase === 'paid' ? (
-          <div className="paid">
-            <span className="status status--success paid__badge">
-              <Icon name="check-circle" />
-              {tr('payment.paid.title')}
-            </span>
-            {received ? (
-              <p className="muted">
-                {tr('payment.paid.detail', {
-                  method: tr(`payment.method.${received.method}`),
-                  time: received.confirmedAt
-                    ? formatDate(received.confirmedAt, locale, 'time')
-                    : '',
-                })}
-              </p>
-            ) : null}
-            <p className="hint">{tr('payment.change.confirmedLocked')}</p>
-            {received && role && paymentActions(role, received).voidRefund ? (
-              <button type="button" className="btn btn-danger" onClick={() => setVoiding(true)}>
-                {tr('payment.void.button')}
-              </button>
-            ) : null}
-            {voiding && received ? (
-              <VoidRefundDialog
-                order={order}
-                payment={received}
-                onClose={() => setVoiding(false)}
-              />
-            ) : null}
+      ) : phase === 'closed' ? (
+        <Callout tone="warn" icon="warn">
+          {tr('payment.closed')}
+        </Callout>
+      ) : phase === 'nothingToPay' ? (
+        <Callout tone="info">{tr('payment.nothingToPay')}</Callout>
+      ) : phase === 'paid' ? (
+        <div
+          className="g-rise"
+          data-testid="paid-card"
+          style={s(
+            'flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;text-align:center;padding:24px 0',
+          )}
+        >
+          <div
+            style={s(
+              'width:84px;height:84px;border-radius:50%;display:grid;place-items:center;background:var(--jade);color:#fff;box-shadow:0 12px 28px rgba(27,122,67,.3)',
+            )}
+          >
+            <Gi n="check" size="lg" style={s('width:40px;height:40px')} />
           </div>
-        ) : phase === 'open' ? (
-          <>
-            {/* The PromptPay payment was made on the server and its confirm (or the reason it was
+          <div className="g-t-1">{tr('payment.paid.title')}</div>
+          {received ? (
+            <div className="g-t-s">
+              {tr('payment.paid.detail', {
+                method: tr(`payment.method.${received.method}`),
+                time: received.confirmedAt ? formatDate(received.confirmedAt, locale, 'time') : '',
+              })}
+            </div>
+          ) : null}
+          <div className="g-t-c" style={s('max-width:420px')}>
+            {tr('payment.change.confirmedLocked')}
+          </div>
+          {received && role && paymentActions(role, received).voidRefund ? (
+            <button type="button" className="g-btn" onClick={() => setVoiding(true)}>
+              {tr('payment.void.button')}
+            </button>
+          ) : null}
+          {voiding && received ? (
+            <VoidRefundDialog order={order} payment={received} onClose={() => setVoiding(false)} />
+          ) : null}
+        </div>
+      ) : phase === 'open' ? (
+        <div className={body}>
+          {/* The PromptPay payment was made on the server and its confirm (or the reason it was
                 held back) is still on this device. */}
-            {queuedPayment?.method === 'promptpay' ? (
-              <QueuedPaymentView item={queuedPayment} />
-            ) : null}
-            <OpenPayment order={order} payment={waiting} hidden={hidden} onAttempt={remember} />
-          </>
-        ) : queuedPayment ? (
-          // A payment is already waiting to be sent: another method now would collide with it.
+          {queuedPayment?.method === 'promptpay' ? (
+            <QueuedPaymentView item={queuedPayment} />
+          ) : null}
+          <OpenPayment order={order} payment={waiting} hidden={hidden} onAttempt={remember} />
+        </div>
+      ) : queuedPayment ? (
+        // A payment is already waiting to be sent: another method now would collide with it.
+        <div className={body}>
           <QueuedPaymentView item={queuedPayment} />
-        ) : (
-          <div className="choose">
-            {offline ? (
-              <p className="notice" role="status">
-                <Icon name="wifi-off" />
-                <span>
-                  {tr(
-                    options.some((o) => o.method === 'promptpay' && o.enabled)
-                      ? 'outbox.onlineOnlyCopay'
-                      : 'outbox.onlineOnly',
-                  )}
-                </span>
-              </p>
-            ) : null}
-            <MethodTiles
-              options={options}
-              choice={choice}
-              name="pay-method"
-              onChoose={setSelected}
-            />
-            {choice === 'cash' ? (
-              <CashPanel
-                order={order}
-                onAttempt={remember}
-                {...(offline && !isUnsure
-                  ? {
-                      queue: {
-                        submit: (tender: ReturnType<typeof satang>) =>
-                          outbox.enqueueCash({
-                            target: { orderId: order.id },
-                            tenderedSatang: tender,
-                            totalSatang: order.totalSatang,
-                            label: order.orderNo,
-                          }),
-                      },
-                    }
-                  : {})}
-              />
-            ) : null}
-            {choice === 'promptpay' ? (
-              offline && !isUnsure ? (
-                // No server: the QR is drawn here from the saved ID, for the server's last known total.
-                <OfflinePromptPay
-                  amountSatang={order.totalSatang}
-                  amountKind="server"
-                  submit={(qr) =>
-                    outbox.enqueuePromptpay({
-                      target: { orderId: order.id },
-                      qrAmountSatang: qr.qrAmountSatang,
-                      amountKind: 'server',
-                      qrTargetMasked: qr.qrTargetMasked,
-                      label: order.orderNo,
-                    })
+        </div>
+      ) : (
+        <div className={body}>
+          {offline ? (
+            <Callout tone="info" icon="info" role="status">
+              {tr(
+                options.some((o) => o.method === 'promptpay' && o.enabled)
+                  ? 'outbox.onlineOnlyCopay'
+                  : 'outbox.onlineOnly',
+              )}
+            </Callout>
+          ) : null}
+          {choice === 'cash' ? (
+            <CashPanel
+              order={order}
+              onAttempt={remember}
+              {...(offline && !isUnsure
+                ? {
+                    queue: {
+                      submit: (tender: ReturnType<typeof satang>) =>
+                        outbox.enqueueCash({
+                          target: { orderId: order.id },
+                          tenderedSatang: tender,
+                          totalSatang: order.totalSatang,
+                          label: order.orderNo,
+                        }),
+                    },
                   }
-                />
-              ) : (
-                <StartPanel order={order} method="promptpay" onAttempt={remember} />
-              )
-            ) : null}
-            {choice === 'platform' ? (
-              <StartPanel order={order} method="platform" onAttempt={remember}>
-                <p className="hint">{tr('platform.payment.hint')}</p>
+                : {})}
+            />
+          ) : null}
+          {choice === 'promptpay' ? (
+            offline && !isUnsure ? (
+              // No server: the QR is drawn here from the saved ID, for the server's last known total.
+              <OfflinePromptPay
+                amountSatang={order.totalSatang}
+                amountKind="server"
+                submit={(qr) =>
+                  outbox.enqueuePromptpay({
+                    target: { orderId: order.id },
+                    qrAmountSatang: qr.qrAmountSatang,
+                    amountKind: 'server',
+                    qrTargetMasked: qr.qrTargetMasked,
+                    label: order.orderNo,
+                  })
+                }
+              />
+            ) : (
+              <StartPanel order={order} method="promptpay" onAttempt={remember}>
+                <PromptPayStart order={order} />
               </StartPanel>
-            ) : null}
-            {choice === 'gov_copay' ? (
-              <StartPanel order={order} method="gov_copay" onAttempt={remember}>
-                <GovCopaySteps order={order} payment={undefined} />
-              </StartPanel>
-            ) : null}
-          </div>
-        )}
-      </fieldset>
-
-      <PaymentHistory payments={list} />
-    </section>
+            )
+          ) : null}
+          {choice === 'platform' ? (
+            <StartPanel order={order} method="platform" onAttempt={remember}>
+              <Callout tone="info" icon="store">
+                {tr('platform.payment.hint')}
+              </Callout>
+            </StartPanel>
+          ) : null}
+          {choice === 'gov_copay' ? (
+            <StartPanel order={order} method="gov_copay" onAttempt={remember}>
+              <GovCopaySteps order={order} payment={undefined} />
+            </StartPanel>
+          ) : null}
+        </div>
+      )}
+    </PayFrame>
   );
 }

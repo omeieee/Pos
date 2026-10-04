@@ -5,6 +5,8 @@ import {
   netBadge,
   openCart,
   openPage,
+  paymentPanel,
+  realOrders,
   setMockNetwork,
   signInWithPin,
   test,
@@ -19,7 +21,7 @@ type Page = import('@playwright/test').Page;
 async function ringOfflineOrder(page: Page, dishName: string, recipient: string) {
   await addDish(page, { dish: dishName });
   const cart = await openCart(page);
-  await cart.locator('label.bld__item', { hasText: 'A2' }).click();
+  await cart.locator('label.g-chip', { hasText: 'A2' }).click();
   await cart.getByLabel(tr('pos.delivery.name')).fill(recipient);
   await cart.getByRole('button', { name: tr('pos.orderEntry.placeOffline'), exact: true }).click();
   const heading = page.getByRole('heading', { level: 1, name: /^ออเดอร์ / });
@@ -36,7 +38,7 @@ test.describe('offline outbox (exit criterion 5)', () => {
     await signInWithPin(page, 'manager');
     await expect(netBadge(page, 'online')).toBeVisible();
     // The menu has to have been loaded once before the line goes.
-    await expect(page.locator('.dishes')).toBeVisible();
+    await expect(page.locator('button.g-tile').first()).toBeVisible();
 
     // The internet goes. (The mock answers inside the page, so its own switch is the one that
     // behaves like a lost connection; the browser's offline mode would not reach it.)
@@ -46,8 +48,8 @@ test.describe('offline outbox (exit criterion 5)', () => {
     // Order 1, saved here, paid in cash. The cash is the ESTIMATE's, waiting for the server.
     const first = await ringOfflineOrder(page, 'ชาเย็น', 'คุณออฟไลน์หนึ่ง');
     await expect(waitingBadge(page)).toContainText(tr('outbox.badge.waiting', { count: 1 }));
-    await expect(page.locator('.odetail__total')).toContainText(baht(2500));
-    const panel = page.getByRole('region', { name: tr('payment.title'), exact: true });
+    await expect(page.getByTestId('order-total')).toContainText(baht(2500));
+    const panel = paymentPanel(page);
     await panel.getByRole('button', { name: tr('payment.cash.exact'), exact: true }).click();
     await panel.getByRole('button', { name: tr('outbox.cash.confirm') }).click();
     await expect(panel).toContainText(tr('outbox.cash.waiting'));
@@ -59,8 +61,8 @@ test.describe('offline outbox (exit criterion 5)', () => {
     await openPage(page, '/new');
     const second = await ringOfflineOrder(page, 'น้ำเก๊กฮวย', 'คุณออฟไลน์สอง');
     expect(second).not.toBe(first);
-    const panel2 = page.getByRole('region', { name: tr('payment.title'), exact: true });
-    await panel2.locator('label.method', { hasText: tr('payment.method.promptpay') }).click();
+    const panel2 = paymentPanel(page);
+    await panel2.locator('label.g-chip', { hasText: tr('payment.method.promptpay') }).click();
     await expect(
       panel2.getByRole('img', { name: tr('payment.offlineQr.alt', { amount: baht(2000) }) }),
     ).toBeVisible();
@@ -78,8 +80,7 @@ test.describe('offline outbox (exit criterion 5)', () => {
 
     // Exactly one real order per saved order, each paid.
     await page.getByRole('radio', { name: tr('orders.filter.all') }).check({ force: true });
-    const board = page.locator('main');
-    const links = board.getByRole('link', { name: /^หน้าร้าน S-\d+/ });
+    const links = realOrders(page);
     await expect(links).toHaveCount(2);
     await expect(links.filter({ hasText: baht(2500) })).toHaveCount(1);
     await expect(links.filter({ hasText: baht(2000) })).toHaveCount(1);
@@ -97,7 +98,7 @@ test.describe('offline outbox (exit criterion 5)', () => {
   test('offline shows a clear connection state, and the menu stays usable', async ({ page }) => {
     await signInWithPin(page, 'cashier');
     // The menu has to have been loaded once before the line goes (a never-loaded menu says so).
-    await expect(page.locator('.dishes')).toBeVisible();
+    await expect(page.locator('button.g-tile').first()).toBeVisible();
     await setMockNetwork(page, false);
     await expect(netBadge(page, 'offline')).toBeVisible();
     // The saved menu is still there to order from, and the cart says where the order goes.

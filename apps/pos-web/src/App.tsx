@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import type { Services } from './services.ts';
 import { pickDevice, tokensCss } from './theme/device.ts';
-import { Brand } from './ui/Brand.tsx';
+import { AuthCard, AuthFrame } from './ui/AuthFrame.tsx';
 import { AuthContext, ServicesContext, useAuthState, useT, useViewport } from './ui/hooks.ts';
 import { PinScreen } from './ui/PinScreen.tsx';
 import { RegisterDeviceScreen } from './ui/RegisterDeviceScreen.tsx';
@@ -32,14 +32,13 @@ function Screen() {
   switch (phase) {
     case 'booting':
       return (
-        <main className="auth">
-          <div className="card card--splash">
-            <Brand />
-            <p className="muted" role="status">
+        <AuthFrame compactHero>
+          <AuthCard>
+            <p className="g-t-s" style={{ margin: 0, textAlign: 'center' }} role="status">
               {tr('common.loading')}
             </p>
-          </div>
-        </main>
+          </AuthCard>
+        </AuthFrame>
       );
     case 'unregistered':
       return <RegisterDeviceScreen />;
@@ -54,8 +53,12 @@ export function App({ services }: { services: Services }) {
   return (
     <ServicesContext.Provider value={services}>
       <AuthContext.Provider value={services.auth}>
-        <Screen />
-        <StepUpDialog />
+        {/* The design's dialog styles are scoped to `.g-root`; the step-up dialog is mounted next
+            to the screens, so it gets the scope from this wrapper (which has no box of its own). */}
+        <div className="g-root" style={{ display: 'contents' }}>
+          <Screen />
+          <StepUpDialog />
+        </div>
       </AuthContext.Provider>
     </ServicesContext.Provider>
   );

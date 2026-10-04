@@ -17,7 +17,9 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 
-const ALL_CHIP = /^ทั้งหมด \d+$/;
+const ALL_CHIP = /^ทั้งหมด$/;
+/** The create button reads "คิดเงิน ฿…" (design) and "บันทึกออเดอร์ (ออฟไลน์)" without a connection. */
+const PLACE_BUTTON = /^(คิดเงิน|กำลังสร้างออเดอร์)/;
 const tile = (name: string) => screen.getByRole('button', { name: new RegExp(`^${name}`) });
 const click = (element: HTMLElement) => fireEvent.click(element);
 
@@ -51,11 +53,11 @@ async function pickNoodleChoices(noodle = 'เส้นเล็ก', spice = '�
 }
 
 describe('the menu', () => {
-  test('shows the categories with their counts and the dishes with prices', () => {
+  test('shows the categories and the dishes with prices', () => {
     renderScreen(<OrderEntryScreen />, createTestServices().services);
     expect(screen.getByRole('button', { name: ALL_CHIP })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /^ก๋วยเตี๋ยว \d+$/ })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /^เครื่องดื่ม \d+$/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /^ก๋วยเตี๋ยว$/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /^เครื่องดื่ม$/ })).toBeTruthy();
     expect(tile('ก๋วยเตี๋ยวต้มยำ').textContent).toContain('฿50');
     expect(tile('ชาเย็น').textContent).toContain('฿25');
   });
@@ -80,7 +82,7 @@ describe('the menu', () => {
 
   test('a category chip narrows the grid, "all" brings everything back', () => {
     renderScreen(<OrderEntryScreen />, createTestServices().services);
-    click(screen.getByRole('button', { name: /^เครื่องดื่ม \d+$/ }));
+    click(screen.getByRole('button', { name: /^เครื่องดื่ม$/ }));
     expect(screen.queryByText('ก๋วยเตี๋ยวต้มยำ')).toBeNull();
     expect(screen.getByText('ชาเย็น')).toBeTruthy();
     click(screen.getByRole('button', { name: ALL_CHIP }));
@@ -347,7 +349,7 @@ describe('the order panel', () => {
     renderScreen(<OrderEntryScreen />, createTestServices().services);
     expect(screen.getAllByText(th['pos.orderEntry.emptyCart']).length).toBeGreaterThan(0);
     const place = screen.getByRole('button', {
-      name: new RegExp(th['pos.orderEntry.place']),
+      name: PLACE_BUTTON,
     }) as HTMLButtonElement;
     expect(place.disabled).toBe(true);
   });
@@ -367,7 +369,7 @@ describe('the order panel', () => {
     expect(panel.textContent).toContain('เผ็ดมาก');
     expect(panel.textContent).toContain('ไข่ต้ม');
     expect(panel.textContent).toContain('แยกน้ำ');
-    expect(panel.textContent).toContain('฿60.00');
+    expect(panel.textContent).toContain('฿60');
     expect(panel.textContent).toContain(th['pos.orderEntry.estimate']);
     expect(panel.textContent).toContain('฿85.00');
   });
@@ -413,7 +415,7 @@ describe('the order panel', () => {
     });
     expect(screen.getAllByText(th['pos.orderEntry.lineProblem']).length).toBeGreaterThan(0);
     const place = screen.getByRole('button', {
-      name: new RegExp(th['pos.orderEntry.place']),
+      name: PLACE_BUTTON,
     }) as HTMLButtonElement;
     expect(place.disabled).toBe(true);
     expect(create).not.toHaveBeenCalled();
@@ -438,7 +440,7 @@ describe('the order panel', () => {
 describe('where the order goes', () => {
   const place = () =>
     screen.getByRole('button', {
-      name: new RegExp(th['pos.orderEntry.place']),
+      name: PLACE_BUTTON,
     }) as HTMLButtonElement;
   const nameField = () => screen.getByLabelText(th['pos.delivery.name']) as HTMLInputElement;
   const noteField = () => screen.getByLabelText(th['pos.delivery.note']) as HTMLInputElement;
@@ -563,7 +565,7 @@ describe('remembered recipients', () => {
     expect(nameField().value).toBe('Fah ตัวอย่าง');
     expect(noteField().value).toBe('ชั้น 3');
     fireEvent.change(noteField(), { target: { value: 'ชั้น 4' } });
-    click(screen.getByRole('button', { name: new RegExp(th['pos.orderEntry.place']) }));
+    click(screen.getByRole('button', { name: PLACE_BUTTON }));
     await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
     expect(create.mock.calls[0]?.[0]).toMatchObject({
       deliveryBuilding: 'B1',
@@ -580,7 +582,7 @@ describe('remembered recipients', () => {
     click(await chip('B1 · Fah ตัวอย่าง'));
     fireEvent.change(nameField(), { target: { value: 'Fah Other' } });
     click(screen.getByRole('radio', { name: 'C1' }));
-    click(screen.getByRole('button', { name: new RegExp(th['pos.orderEntry.place']) }));
+    click(screen.getByRole('button', { name: PLACE_BUTTON }));
     await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
     expect(create.mock.calls[0]?.[0]).toMatchObject({
       deliveryBuilding: 'C1',
@@ -621,7 +623,7 @@ describe('remembered recipients', () => {
     click(tile('ชาเย็น'));
     click(await chip('B1 · Fah ตัวอย่าง'));
     expect(api.recipients.list).toHaveBeenCalledTimes(1);
-    click(screen.getByRole('button', { name: new RegExp(th['pos.orderEntry.place']) }));
+    click(screen.getByRole('button', { name: PLACE_BUTTON }));
     await waitFor(() => expect(window.location.hash).toBe(`#/orders/${uuid(900)}`));
     await waitFor(() => expect(api.recipients.list).toHaveBeenCalledTimes(2));
     expect(cart.getState().recipientName).toBe('');
@@ -636,7 +638,7 @@ describe('remembered recipients', () => {
     renderScreen(<OrderEntryScreen />, services);
     click(tile('ชาเย็น'));
     click(await chip('B1 · Fah ตัวอย่าง'));
-    click(screen.getByRole('button', { name: new RegExp(th['pos.orderEntry.place']) }));
+    click(screen.getByRole('button', { name: PLACE_BUTTON }));
     const alert = await screen.findByRole('alert');
     expect(alert.textContent).toContain(th['error.unknownBuilding']);
     expect(cart.getState().recipientName).toBe('Fah ตัวอย่าง');
@@ -658,7 +660,7 @@ describe('creating the order', () => {
     const { services, create } = readyServices({ create: async () => created() });
     renderScreen(<OrderEntryScreen />, services);
     click(tile('ชาเย็น'));
-    click(screen.getByRole('button', { name: new RegExp(th['pos.orderEntry.place']) }));
+    click(screen.getByRole('button', { name: PLACE_BUTTON }));
     await waitFor(() => expect(window.location.hash).toBe(`#/orders/${uuid(900)}`));
     expect(create).toHaveBeenCalledTimes(1);
     expect(create.mock.calls[0]?.[0]).toMatchObject({
@@ -682,7 +684,7 @@ describe('creating the order', () => {
     click(tile('ชาเย็น'));
     const place = () =>
       screen.getByRole('button', {
-        name: new RegExp(th['pos.orderEntry.place']),
+        name: PLACE_BUTTON,
       }) as HTMLButtonElement;
     fireEvent.click(place());
     fireEvent.click(place());
@@ -704,7 +706,7 @@ describe('creating the order', () => {
     });
     renderScreen(<OrderEntryScreen />, services);
     click(tile('ชาเย็น'));
-    click(screen.getByRole('button', { name: new RegExp(th['pos.orderEntry.place']) }));
+    click(screen.getByRole('button', { name: PLACE_BUTTON }));
     const alert = await screen.findByRole('alert');
     expect(alert.textContent).toContain(th['error.itemUnavailable']);
     expect(cart.getState().lines).toHaveLength(1);
@@ -719,7 +721,7 @@ describe('creating the order', () => {
     });
     renderScreen(<OrderEntryScreen />, services);
     click(tile('ชาเย็น'));
-    click(screen.getByRole('button', { name: new RegExp(th['pos.orderEntry.place']) }));
+    click(screen.getByRole('button', { name: PLACE_BUTTON }));
     await screen.findByText(th['pos.orderEntry.unsure']);
     expect(cart.getState().phase).toBe('unsure');
     expect(
@@ -739,7 +741,7 @@ describe('creating the order', () => {
     });
     renderScreen(<OrderEntryScreen />, services);
     click(tile('ชาเย็น'));
-    click(screen.getByRole('button', { name: new RegExp(th['pos.orderEntry.place']) }));
+    click(screen.getByRole('button', { name: PLACE_BUTTON }));
     await screen.findByText(th['pos.orderEntry.unsure']);
     // The tea sold out meanwhile: the cart is no longer valid, but this order may exist.
     act(() => {
@@ -747,9 +749,7 @@ describe('creating the order', () => {
     });
     const retry = screen.getByRole('button', { name: th['common.retry'] }) as HTMLButtonElement;
     expect(retry.disabled).toBe(false);
-    expect(
-      screen.queryByRole('button', { name: new RegExp(th['pos.orderEntry.place']) }),
-    ).toBeNull();
+    expect(screen.queryByRole('button', { name: PLACE_BUTTON })).toBeNull();
     click(retry);
     await waitFor(() => expect(create).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(cart.getState().lines).toHaveLength(0));
@@ -763,7 +763,7 @@ describe('creating the order', () => {
     });
     renderScreen(<OrderEntryScreen />, services);
     click(tile('ชาเย็น'));
-    click(screen.getByRole('button', { name: new RegExp(th['pos.orderEntry.place']) }));
+    click(screen.getByRole('button', { name: PLACE_BUTTON }));
     await screen.findByText(th['pos.orderEntry.unsure']);
 
     click(screen.getByRole('button', { name: th['pos.orderEntry.clear'] }));

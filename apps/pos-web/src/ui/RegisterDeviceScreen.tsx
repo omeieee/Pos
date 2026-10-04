@@ -1,10 +1,11 @@
 import type { DeviceKind } from '@sds/shared';
 import { type FormEvent, useState } from 'react';
 import { errorText } from '../api/errors.ts';
+import { s } from '../design/style.ts';
 import { suggestedKind } from '../theme/device.ts';
-import { Brand } from './Brand.tsx';
+import { AuthCard, AuthFrame } from './AuthFrame.tsx';
 import { useAuthState, useAuthStore, useT, useViewport } from './hooks.ts';
-import { Notice } from './Notice.tsx';
+import { Callout, Notice } from './Notice.tsx';
 import { OwnerSignInForm } from './OwnerFields.tsx';
 import { TextField } from './TextField.tsx';
 
@@ -22,15 +23,26 @@ export function RegisterDeviceScreen() {
   const signedIn = state.session !== null;
 
   return (
-    <main className="auth">
-      <div className="card">
-        <header className="card__head">
-          <Brand />
-        </header>
+    <AuthFrame compactHero>
+      <AuthCard>
         <Notice notice={state.notice} />
-        <h1 className="card__title">{tr('auth.register.title')}</h1>
-        <p className="muted">{tr('auth.register.intro')}</p>
-        <h2 className="step">{signedIn ? tr('auth.register.step2') : tr('auth.register.step1')}</h2>
+        <h1 className="g-t-1" style={s('margin:0')}>
+          {tr('auth.register.title')}
+        </h1>
+        <div className="g-t-s" style={s('margin-top:-8px')}>
+          {tr('auth.register.intro')}
+        </div>
+        <div
+          className="g-sunk"
+          style={s('padding:10px 14px;display:flex;align-items:center;gap:10px')}
+        >
+          <span className="g-badge g-b-info" aria-hidden="true">
+            {signedIn ? '2' : '1'}
+          </span>
+          <h2 className="g-t-3" style={s('margin:0')}>
+            {signedIn ? tr('auth.register.step2') : tr('auth.register.step1')}
+          </h2>
+        </div>
         {state.session ? (
           <NameDevice signedInName={state.session.staff.displayName} />
         ) : (
@@ -39,8 +51,8 @@ export function RegisterDeviceScreen() {
             onSubmit={(request) => auth.signInOwner(request)}
           />
         )}
-      </div>
-    </main>
+      </AuthCard>
+    </AuthFrame>
   );
 }
 
@@ -67,9 +79,12 @@ function NameDevice({ signedInName }: { signedInName: string }) {
   }
 
   return (
-    <form className="stack" onSubmit={submit} noValidate>
-      <p className="muted">{tr('auth.register.signedInAs', { name: signedInName })}</p>
+    <form onSubmit={submit} noValidate style={s('display:flex;flex-direction:column;gap:14px')}>
+      <p className="g-t-s" style={s('margin:0')}>
+        {tr('auth.register.signedInAs', { name: signedInName })}
+      </p>
       <TextField
+        icon="monitor"
         label={tr('auth.register.nameLabel')}
         value={name}
         maxLength={60}
@@ -78,11 +93,16 @@ function NameDevice({ signedInName }: { signedInName: string }) {
         disabled={busy}
         onChange={setName}
       />
-      <div className="field-group">
-        <span className="label" id="kind-label">
+      <div style={s('display:flex;flex-direction:column;gap:6px')}>
+        <span className="gfield__label" id="kind-label">
           {tr('auth.register.kindLabel')}
         </span>
-        <div className="choices" role="radiogroup" aria-labelledby="kind-label">
+        <div
+          className="g-seg"
+          role="radiogroup"
+          aria-labelledby="kind-label"
+          style={s('display:flex;width:100%')}
+        >
           {KINDS.map((option) => (
             // biome-ignore lint/a11y/useSemanticElements: a segmented button group, not a native radio
             <button
@@ -90,7 +110,8 @@ function NameDevice({ signedInName }: { signedInName: string }) {
               type="button"
               role="radio"
               aria-checked={kind === option}
-              className={kind === option ? 'choice choice--on' : 'choice'}
+              className={kind === option ? 'g-chip g-on' : 'g-chip'}
+              style={s('flex:1 1 0;padding:0 8px')}
               disabled={busy}
               onClick={() => setKind(option)}
             >
@@ -99,21 +120,24 @@ function NameDevice({ signedInName }: { signedInName: string }) {
           ))}
         </div>
       </div>
-      <div className="error-slot">
-        {error ? (
-          <p className="error" role="alert">
-            {error}
-          </p>
-        ) : null}
-      </div>
+      {error ? (
+        <Callout tone="bad" role="alert">
+          {error}
+        </Callout>
+      ) : null}
       <button
         type="submit"
-        className="btn btn-primary btn-lg btn-block"
+        className="g-btn g-btn-p g-btn-lg g-btn-block"
         disabled={busy || trimmed === ''}
       >
         {tr('auth.register.submit')}
       </button>
-      <button type="button" className="link" disabled={busy} onClick={() => void auth.signOut()}>
+      <button
+        type="button"
+        className="gauth__link"
+        disabled={busy}
+        onClick={() => void auth.signOut()}
+      >
         {tr('auth.register.startOver')}
       </button>
     </form>

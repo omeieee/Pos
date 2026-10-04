@@ -1,11 +1,12 @@
 import type { MessageKey } from '@sds/i18n';
 import { formatBaht, formatDate } from '@sds/i18n';
 import type { OrderDto, PaymentDto } from '@sds/shared';
-import { useRef, useState } from 'react';
+import { type ReactNode, useRef, useState } from 'react';
 import { errorText } from '../api/errors.ts';
+import { Gi } from '../design/icons.tsx';
+import { s } from '../design/style.ts';
 import { useActivityHold, useLocale, useServices, useStoreState, useT } from '../ui/hooks.ts';
-import { Icon } from '../ui/Icon.tsx';
-import { Modal } from '../ui/Modal.tsx';
+import { Callout, PayModal, SheetBody, SheetTitle, TextRow } from './PayParts.tsx';
 import type { PaymentActions } from './payment-model.ts';
 import { flowFor } from './payment-store.ts';
 
@@ -29,6 +30,7 @@ export function PaymentMoves({
   referenceLabel,
   showClaim,
   notFoundLabel,
+  lead,
   children,
 }: {
   order: OrderDto;
@@ -37,6 +39,8 @@ export function PaymentMoves({
   referenceLabel: MessageKey;
   showClaim: boolean;
   notFoundLabel: MessageKey;
+  /** A first secondary control (the customer view of PromptPay). */
+  lead?: ReactNode;
   /** Extra controls (change method) shown with the secondary buttons. */
   children?: React.ReactNode;
 }) {
@@ -62,69 +66,51 @@ export function PaymentMoves({
   }
 
   return (
-    <div className="pmoves">
+    <div style={s('display:flex;flex-direction:column;gap:12px;margin-top:auto;min-width:0')}>
       {payment.status === 'claimed' ? (
-        <p className="notice" role="status">
-          <Icon name="clock" />
-          <span>{tr('payment.claimed')}</span>
+        <Callout tone="info" icon="clock" role="status">
+          {tr('payment.claimed')}
           {payment.claimedAt ? (
-            <span className="muted">{formatDate(payment.claimedAt, locale, 'time')}</span>
+            <span className="g-num" style={s('margin-left:8px;font-weight:500')}>
+              {formatDate(payment.claimedAt, locale, 'time')}
+            </span>
           ) : null}
-        </p>
+        </Callout>
       ) : null}
 
       {actions.confirm ? (
         <>
-          <div className="field-group pmoves__ref">
-            <label className="label" htmlFor="pay-reference">
-              {tr(referenceLabel)}
-            </label>
-            <input
-              id="pay-reference"
-              className="input"
-              type="text"
-              maxLength={200}
-              autoComplete="off"
-              placeholder={tr('payment.referencePlaceholder')}
-              value={reference}
-              disabled={sending}
-              onChange={(event) => setReference(event.target.value)}
-            />
-          </div>
-          <p className="hint">{tr('payment.confirmHint')}</p>
+          <TextRow
+            compact
+            id="pay-reference"
+            label={tr(referenceLabel)}
+            placeholder={tr('payment.referencePlaceholder')}
+            value={reference}
+            disabled={sending}
+            onChange={setReference}
+          />
+          <p className="g-t-c" style={s('margin:0')}>
+            {tr('payment.confirmHint')}
+          </p>
         </>
       ) : null}
 
       {unsure ? (
-        <p className="error" role="alert">
+        <Callout tone="bad" role="alert">
           {tr('payment.unsureMove')}
-        </p>
+        </Callout>
       ) : failure ? (
-        <p className="error" role="alert">
+        <Callout tone="bad" role="alert">
           {errorText(tr, failure, 'payment')}
-        </p>
+        </Callout>
       ) : null}
 
-      {actions.confirm ? (
-        <button
-          type="button"
-          className="btn btn-success btn-lg btn-block"
-          disabled={sending}
-          aria-busy={sending}
-          onClick={confirm}
-        >
-          <Icon name="check-circle" />
-          {sending
-            ? tr('payment.sending')
-            : tr('payment.confirmAmount', { amount: formatBaht(order.totalSatang, locale) })}
-        </button>
-      ) : null}
-
-      <div className="pmoves__row">
+      <div style={s('display:flex;gap:10px;flex-wrap:wrap')}>
+        {lead}
         {showClaim && actions.claim ? (
           <button
             type="button"
-            className="btn"
+            className="g-btn pay-sub"
             disabled={sending}
             onClick={() => void payments.claim(order.id, payment.id)}
           >
@@ -134,7 +120,7 @@ export function PaymentMoves({
         {actions.cancelClaimed ? (
           <button
             type="button"
-            className="btn"
+            className="g-btn pay-sub"
             disabled={sending}
             onClick={() => setNotFound(true)}
           >
@@ -143,6 +129,21 @@ export function PaymentMoves({
         ) : null}
         {children}
       </div>
+
+      {actions.confirm ? (
+        <button
+          type="button"
+          className="g-btn g-btn-ok g-btn-lg g-btn-block"
+          disabled={sending}
+          aria-busy={sending}
+          onClick={confirm}
+        >
+          <Gi n="check" />
+          {sending
+            ? tr('payment.sending')
+            : tr('payment.confirmAmount', { amount: formatBaht(order.totalSatang, locale) })}
+        </button>
+      ) : null}
 
       {notFound ? (
         <NotFoundDialog order={order} payment={payment} onClose={() => setNotFound(false)} />
@@ -184,43 +185,37 @@ function NotFoundDialog({
   }
 
   return (
-    <Modal labelledBy="notfound-title" onClose={onClose}>
-      <h2 id="notfound-title" className="sheet__title">
-        {tr('payment.notFound.title')}
-      </h2>
-      <p>{tr('payment.notFound.body')}</p>
-      <div className="field-group">
-        <label className="label" htmlFor="notfound-reason">
-          {tr('payment.notFound.reason')}
-        </label>
-        <input
+    <PayModal labelledBy="notfound-title" onClose={onClose}>
+      <SheetBody>
+        <SheetTitle id="notfound-title">{tr('payment.notFound.title')}</SheetTitle>
+        <p className="g-t-s" style={s('margin:0')}>
+          {tr('payment.notFound.body')}
+        </p>
+        <TextRow
           id="notfound-reason"
-          className="input"
-          type="text"
-          maxLength={200}
-          autoComplete="off"
+          label={tr('payment.notFound.reason')}
           placeholder={tr('payment.notFound.reasonPlaceholder')}
           value={reason}
           disabled={sending}
-          onChange={(event) => setReason(event.target.value)}
+          onChange={setReason}
         />
-      </div>
-      {failure ? (
-        <p className="error" role="alert">
-          {errorText(tr, failure, 'payment')}
-        </p>
-      ) : null}
-      <button
-        type="button"
-        className="btn btn-primary btn-lg btn-block"
-        disabled={sending || reason.trim() === ''}
-        onClick={() => void submit()}
-      >
-        {tr('payment.notFound.confirm')}
-      </button>
-      <button type="button" className="btn btn-soft btn-block" onClick={onClose}>
-        {tr('common.cancel')}
-      </button>
-    </Modal>
+        {failure ? (
+          <Callout tone="bad" role="alert">
+            {errorText(tr, failure, 'payment')}
+          </Callout>
+        ) : null}
+        <button
+          type="button"
+          className="g-btn g-btn-p g-btn-lg g-btn-block"
+          disabled={sending || reason.trim() === ''}
+          onClick={() => void submit()}
+        >
+          {tr('payment.notFound.confirm')}
+        </button>
+        <button type="button" className="g-btn g-btn-block" onClick={onClose}>
+          {tr('common.cancel')}
+        </button>
+      </SheetBody>
+    </PayModal>
   );
 }

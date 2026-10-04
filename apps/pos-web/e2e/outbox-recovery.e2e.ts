@@ -4,8 +4,11 @@ import {
   expect,
   netBadge,
   OWNER_LOGIN,
+  openAccount,
   openCart,
   openPage,
+  paymentPanel,
+  realOrders,
   STAFF,
   setMockNetwork,
   signInWithPin,
@@ -41,24 +44,25 @@ const counted = (page: Page) =>
 async function strandedByCashier(page: Page) {
   await signInWithPin(page, 'cashier');
   await expect(netBadge(page, 'online')).toBeVisible();
-  await expect(page.locator('.dishes')).toBeVisible();
+  await expect(page.locator('button.g-tile').first()).toBeVisible();
   await setMockNetwork(page, false);
   await expect(netBadge(page, 'offline')).toBeVisible();
 
   await addDish(page, { dish: 'ชาเย็น' });
   const cart = await openCart(page);
-  await cart.locator('label.bld__item', { hasText: 'A2' }).click();
+  await cart.locator('label.g-chip', { hasText: 'A2' }).click();
   await cart.getByLabel(tr('pos.delivery.name')).fill('คุณออฟไลน์');
   await cart.getByRole('button', { name: tr('pos.orderEntry.placeOffline'), exact: true }).click();
   await expect(page.getByText(tr('outbox.order.notYet'))).toBeVisible();
-  const panel = page.getByRole('region', { name: tr('payment.title'), exact: true });
+  const panel = paymentPanel(page);
   await panel.getByRole('button', { name: tr('payment.cash.exact'), exact: true }).click();
   await panel.getByRole('button', { name: tr('outbox.cash.confirm') }).click();
   await expect(panel).toContainText(tr('outbox.cash.waiting'));
   await expect(page.locator('a.qbadge')).toContainText(tr('outbox.badge.waiting', { count: 2 }));
 
   // Signing out with entries waiting asks first; they stay on the device, the cashier's.
-  await page.getByRole('button', { name: tr('shell.signOut'), exact: true }).click();
+  const account = await openAccount(page);
+  await account.getByRole('button', { name: tr('shell.signOut'), exact: true }).click();
   await page
     .getByRole('dialog')
     .getByRole('button', { name: tr('shell.signOut.confirm'), exact: true })
@@ -104,7 +108,7 @@ test.describe('the owner and the entries a cashier left on the device', () => {
 
     // Exactly one real order, paid in cash, and nothing waiting on the device any more.
     await page.getByRole('radio', { name: tr('orders.filter.all') }).check({ force: true });
-    const links = page.locator('main').getByRole('link', { name: /^หน้าร้าน S-\d+/ });
+    const links = realOrders(page);
     await expect(links).toHaveCount(1);
     await expect(links).toContainText(baht(2500));
     await expect(links).toContainText(tr('status.payment.paid'));
@@ -129,7 +133,7 @@ test.describe('the owner and the entries a cashier left on the device', () => {
     await expect(page.getByText(tr('outbox.others.done.clear', { count: 2 }))).toBeVisible();
     expect(await counted(page)).toEqual([{ action: 'clear', orders: 1, payments: 1 }]);
     await page.getByRole('radio', { name: tr('orders.filter.all') }).check({ force: true });
-    await expect(page.locator('main').getByRole('link', { name: /^หน้าร้าน S-\d+/ })).toHaveCount(0);
+    await expect(realOrders(page)).toHaveCount(0);
     expect(await mock(page, (hooks) => hooks.attributions())).toEqual([]);
   });
 
@@ -146,5 +150,38 @@ test.describe('the owner and the entries a cashier left on the device', () => {
     await expect(page.getByText(tr('error.ownerSignInNeeded'))).toBeVisible();
     await expect(page.getByText(tr('outbox.others', { count: 2 }))).toBeVisible();
     expect(await counted(page)).toEqual([]);
+  });
+
+  test('the sign-out question opens over the whole page, also from the rail', async ({ page }) => {
+    await signInWithPin(page, 'cashier');
+    await expect(netBadge(page, 'online')).toBeVisible();
+    await expect(page.locator('button.g-tile').first()).toBeVisible();
+    await setMockNetwork(page, false);
+    await expect(netBadge(page, 'offline')).toBeVisible();
+    await addDish(page, { dish: 'ชาเย็น' });
+    const cart = await openCart(page);
+    await cart.locator('label.g-chip', { hasText: 'A2' }).click();
+    await cart.getByLabel(tr('pos.delivery.name')).fill('คุณออฟไลน์');
+    await cart
+      .getByRole('button', { name: tr('pos.orderEntry.placeOffline'), exact: true })
+      .click();
+    await expect(page.getByText(tr('outbox.order.notYet'))).toBeVisible();
+    // The waiting order is in view on any page, not only on the order pages.
+    await openPage(page, '/orders');
+    // From the account menu of the page frame (the rail on an iPad), not from the Settings row.
+    const account = page.locator(
+      'nav button[aria-haspopup="true"], aside button[aria-haspopup="true"]',
+    );
+    if ((await account.count()) > 0) {
+      await account.first().click();
+      await page.getByRole('button', { name: tr('shell.signOut'), exact: true }).click();
+      const dialog = page.getByRole('dialog');
+      await expect(dialog).toContainText(tr('shell.signOut.queueTitle'));
+      const box = await dialog.boundingBox();
+      // A real dialog, not a sliver squeezed into the 96px rail.
+      expect(box?.width ?? 0).toBeGreaterThan(300);
+      await dialog.getByRole('button', { name: tr('shell.signOut.stay') }).click();
+      await expect(dialog).toHaveCount(0);
+    }
   });
 });

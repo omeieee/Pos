@@ -1,9 +1,10 @@
 import type { OrderDto, StaffRole } from '@sds/shared';
 import { useEffect, useState } from 'react';
 import { errorText } from '../api/errors.ts';
+import { s } from '../design/style.ts';
 import { useActivityHold, useServices, useStoreState, useT } from '../ui/hooks.ts';
-import { Modal } from '../ui/Modal.tsx';
 import { type OrderMove, orderMoves } from './order-board.ts';
+import { Callout, PayModal, SheetBody, SheetTitle, TextRow } from './PayParts.tsx';
 
 /**
  * The status moves this role may make on the order (read from the shared order machine). A move
@@ -31,16 +32,17 @@ export function OrderMoves({ order, role }: { order: OrderDto; role: StaffRole }
   }
 
   return (
-    <div className="omoves">
-      <fieldset className="omoves__row">
+    <div style={s('display:flex;flex-direction:column;gap:10px;flex:none')}>
+      <fieldset
+        style={s('border:0;margin:0;padding:0;min-width:0;display:flex;gap:10px;flex-wrap:wrap')}
+      >
         <legend className="visually-hidden">{tr('order.moves.label')}</legend>
         {moves.map((move) => (
           <button
             key={move.to}
             type="button"
-            className={
-              move.kind === 'cancel' ? 'btn btn-soft omoves__cancel' : 'btn btn-primary btn-lg'
-            }
+            className={move.kind === 'cancel' ? 'g-btn' : 'g-btn g-btn-p g-btn-lg'}
+            style={s(move.kind === 'cancel' ? 'flex:none' : 'flex:1 1 auto')}
             disabled={pending}
             aria-busy={pending}
             onClick={() => choose(move)}
@@ -50,9 +52,9 @@ export function OrderMoves({ order, role }: { order: OrderDto; role: StaffRole }
         ))}
       </fieldset>
       {shown ? (
-        <p className="error" role="alert">
+        <Callout tone="bad" role="alert">
           {errorText(tr, shown)}
-        </p>
+        </Callout>
       ) : null}
       {cancelling ? <CancelOrderDialog order={order} onClose={() => setCancelling(false)} /> : null}
     </div>
@@ -82,43 +84,37 @@ function CancelOrderDialog({ order, onClose }: { order: OrderDto; onClose: () =>
   const blockedByPayment = error?.code === 'ORDER_HAS_PAYMENT';
 
   return (
-    <Modal labelledBy="cancel-order-title" onClose={onClose}>
-      <h2 id="cancel-order-title" className="sheet__title">
-        {tr('order.cancel.title', { orderNo: order.orderNo })}
-      </h2>
-      <div className="field-group">
-        <label className="label" htmlFor="cancel-reason">
-          {tr('order.cancel.reason')}
-        </label>
-        <input
+    <PayModal labelledBy="cancel-order-title" onClose={onClose}>
+      <SheetBody>
+        <SheetTitle id="cancel-order-title">
+          {tr('order.cancel.title', { orderNo: order.orderNo })}
+        </SheetTitle>
+        <TextRow
           id="cancel-reason"
-          className="input"
-          type="text"
-          maxLength={200}
-          autoComplete="off"
+          label={tr('order.cancel.reason')}
           placeholder={tr('order.cancel.reasonPlaceholder')}
           value={reason}
           disabled={pending}
-          onChange={(event) => setReason(event.target.value)}
+          onChange={setReason}
         />
-      </div>
-      {error ? (
-        <p className="error" role="alert">
-          {blockedByPayment ? tr('order.cancel.hasPayment') : errorText(tr, error)}
-        </p>
-      ) : null}
-      <button
-        type="button"
-        className="btn btn-primary btn-lg btn-block"
-        disabled={pending || reason.trim() === ''}
-        aria-busy={pending}
-        onClick={() => void submit()}
-      >
-        {tr('order.cancel.confirm')}
-      </button>
-      <button type="button" className="btn btn-soft btn-block" onClick={onClose}>
-        {tr('order.cancel.keep')}
-      </button>
-    </Modal>
+        {error ? (
+          <Callout tone="bad" role="alert">
+            {blockedByPayment ? tr('order.cancel.hasPayment') : errorText(tr, error)}
+          </Callout>
+        ) : null}
+        <button
+          type="button"
+          className="g-btn g-btn-p g-btn-lg g-btn-block"
+          disabled={pending || reason.trim() === ''}
+          aria-busy={pending}
+          onClick={() => void submit()}
+        >
+          {tr('order.cancel.confirm')}
+        </button>
+        <button type="button" className="g-btn g-btn-block" onClick={onClose}>
+          {tr('order.cancel.keep')}
+        </button>
+      </SheetBody>
+    </PayModal>
   );
 }

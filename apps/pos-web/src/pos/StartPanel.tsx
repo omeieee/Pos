@@ -1,8 +1,10 @@
 import type { OrderDto } from '@sds/shared';
 import type { ReactNode } from 'react';
 import { errorText } from '../api/errors.ts';
+import { Gi } from '../design/icons.tsx';
+import { s } from '../design/style.ts';
 import { useServices, useStoreState, useT } from '../ui/hooks.ts';
-import { Icon } from '../ui/Icon.tsx';
+import { Callout } from './PayParts.tsx';
 import type { PayMethod } from './payment-model.ts';
 import { flowFor } from './payment-store.ts';
 
@@ -52,25 +54,28 @@ export function StartPanel({
   }
 
   return (
-    <div className="start">
+    <div
+      className="pay-grow"
+      style={s('display:flex;flex-direction:column;gap:14px;width:100%;min-width:0')}
+    >
       {children}
       {unsure ? (
-        <p className="error" role="alert">
+        <Callout tone="bad" role="alert">
           {tr(unsure.input?.method === method ? 'payment.unsure' : 'payment.unsureOtherMethod')}
-        </p>
+        </Callout>
       ) : failure ? (
-        <p className="error" role="alert">
+        <Callout tone="bad" role="alert">
           {errorText(tr, failure, 'payment')}
-        </p>
+        </Callout>
       ) : null}
       <button
         type="button"
-        className="btn btn-primary btn-lg btn-block"
+        className="g-btn g-btn-p g-btn-lg g-btn-block"
         disabled={sending}
         aria-busy={sending}
         onClick={() => void start()}
       >
-        <Icon name={method === 'promptpay' ? 'qr' : 'hands'} />
+        <Gi n={method === 'promptpay' ? 'qrBig' : 'bank'} />
         {sending ? tr('payment.sending') : (label ?? tr(`payment.start.${method}`))}
       </button>
     </div>

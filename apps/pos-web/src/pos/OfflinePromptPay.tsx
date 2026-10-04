@@ -1,5 +1,7 @@
 import { formatBaht, formatDate } from '@sds/i18n';
 import { useState } from 'react';
+import { Gi } from '../design/icons.tsx';
+import { s } from '../design/style.ts';
 import {
   useActivityHold,
   useLocale,
@@ -8,11 +10,12 @@ import {
   useStoreState,
   useT,
 } from '../ui/hooks.ts';
-import { Icon } from '../ui/Icon.tsx';
 import { LocalQr } from './LocalQr.tsx';
 import { amountKindKey, refusalKey } from './offline-promptpay-model.ts';
 import type { EnqueueResult } from './outbox-store.ts';
 import { saveErrorText } from './outbox-text.ts';
+import { Callout, usePayDims } from './PayParts.tsx';
+import { QrCard } from './PromptPayPanel.tsx';
 
 /**
  * PromptPay while the device cannot reach the server (D-20): the QR is drawn here from the PromptPay
@@ -43,6 +46,8 @@ export function OfflinePromptPay({
   useActivityHold(true);
   const tr = useT();
   const locale = useLocale();
+  const dims = usePayDims();
+  const phone = dims.layout === 'phone';
   const [saving, setSaving] = useState(false);
   const [notSaved, setNotSaved] = useState<Extract<EnqueueResult, { ok: false }>['reason'] | null>(
     null,
@@ -52,14 +57,16 @@ export function OfflinePromptPay({
   if (!qr.ok || amountSatang === null) {
     const reason = qr.ok ? 'badAmount' : qr.reason;
     return (
-      <section className="oqr" aria-labelledby="oqr-title">
-        <h3 id="oqr-title" className="pp__title">
+      <section
+        aria-labelledby="oqr-title"
+        style={s('width:100%;display:flex;flex-direction:column;gap:12px')}
+      >
+        <h3 id="oqr-title" className="visually-hidden">
           {tr('payment.offlineQr.title')}
         </h3>
-        <p className="notice oqr__refused" role="alert">
-          <Icon name="wifi-off" />
-          <span>{tr(refusalKey(reason))}</span>
-        </p>
+        <Callout tone="warn" role="alert">
+          {tr(refusalKey(reason))}
+        </Callout>
       </section>
     );
   }
@@ -81,45 +88,72 @@ export function OfflinePromptPay({
   }
 
   return (
-    <section className="oqr" aria-labelledby="oqr-title">
-      <h3 id="oqr-title" className="pp__title">
+    <section
+      aria-labelledby="oqr-title"
+      className="g-rise pay-grow"
+      style={s(
+        `display:flex;gap:${dims.gap}px;width:100%;min-width:0;${phone ? 'flex-direction:column;' : ''}`,
+      )}
+    >
+      <h3 id="oqr-title" className="visually-hidden">
         {tr('payment.offlineQr.title')}
       </h3>
-      <p className="notice oqr__banner" role="status">
-        <Icon name="alert" />
-        <span>
+      <div style={s(phone ? 'display:grid;place-items:center' : 'display:flex')}>
+        <QrCard width={phone ? 340 : dims.qr} amount={amount}>
+          <LocalQr
+            payload={qr.payload}
+            alt={tr('payment.offlineQr.alt', { amount })}
+            size={phone || dims.layout === 'side' ? 250 : 220}
+          />
+        </QrCard>
+      </div>
+      <div style={s('flex-grow:1;display:flex;flex-direction:column;gap:14px;min-width:0')}>
+        <Callout tone="warn" icon="warn" role="status">
           {tr('payment.offlineQr.banner', {
             last4: qr.last4,
             time: formatDate(qr.savedAt, locale, 'time'),
           })}
-        </span>
-      </p>
-      <div className="oqr__amount">
-        <span className="lbl">{tr(amountKindKey(amountKind))}</span>
-        <span className="amount-hero money">{amount}</span>
-      </div>
-      {amountKind === 'estimate' ? (
-        <p className="hint">{tr('payment.offlineQr.estimateWarning')}</p>
-      ) : null}
-      <div className="qrbox">
-        <LocalQr payload={qr.payload} alt={tr('payment.offlineQr.alt', { amount })} />
-      </div>
-      <p className="hint">{tr('payment.offlineQr.confirmHint')}</p>
-      {notSaved ? (
-        <p className="error" role="alert">
-          {saveErrorText(tr, notSaved)}
+        </Callout>
+        <div
+          className="g-sunk"
+          style={s('padding:16px 18px;display:flex;flex-direction:column;gap:6px')}
+        >
+          <span className="g-t-c">{tr(amountKindKey(amountKind))}</span>
+          <span
+            className="g-num"
+            style={s('font-size:44px;line-height:1.2;font-weight:600;letter-spacing:-.015em')}
+          >
+            {amount}
+          </span>
+          {amountKind === 'estimate' ? (
+            <span className="g-t-c" style={s('color:var(--amber-ink)')}>
+              {tr('payment.offlineQr.estimateWarning')}
+            </span>
+          ) : null}
+        </div>
+        <p className="g-t-c" style={s('margin:0')}>
+          {tr('payment.offlineQr.confirmHint')}
         </p>
-      ) : null}
-      <button
-        type="button"
-        className="btn btn-success btn-lg btn-block"
-        disabled={saving}
-        aria-busy={saving}
-        onClick={() => void paid()}
-      >
-        <Icon name="check-circle" />
-        {tr('payment.offlineQr.confirm')}
-      </button>
+        <div style={s('flex-grow:1')} />
+        {notSaved ? (
+          <Callout tone="bad" role="alert">
+            {saveErrorText(tr, notSaved)}
+          </Callout>
+        ) : null}
+        <button
+          type="button"
+          className="g-btn g-btn-ok g-btn-lg g-btn-block"
+          style={s(
+            'height:auto;min-height:58px;padding-top:10px;padding-bottom:10px;white-space:normal;text-align:center;line-height:1.35',
+          )}
+          disabled={saving}
+          aria-busy={saving}
+          onClick={() => void paid()}
+        >
+          <Gi n="check" />
+          {tr('payment.offlineQr.confirm')}
+        </button>
+      </div>
     </section>
   );
 }

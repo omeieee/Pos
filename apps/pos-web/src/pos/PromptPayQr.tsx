@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { errorText } from '../api/errors.ts';
+import { s } from '../design/style.ts';
 import { useEntities, useServices, useT } from '../ui/hooks.ts';
+import { Callout } from './PayParts.tsx';
 
 /**
  * How long a signed QR link is used before asking for a new one. A link lives five minutes (the
@@ -30,18 +32,22 @@ type QrState =
  * `<img>` cannot read): one new link is asked for, and if that picture fails too it stops and
  * offers a reload button, so a payment that is no longer waiting (another device confirmed it) can
  * never cause a loop.
+ *
+ * Only the picture is drawn here (inside the white card of the design). The masked account the link
+ * was made for is handed to `onTarget`, so the caller can write it where it belongs.
  */
 export function PromptPayQr({
   paymentId,
   alt,
-  paymentTarget,
-  showTarget,
+  size = 250,
+  onTarget,
 }: {
   paymentId: string;
   alt: string;
-  /** The masked ID the payment recorded when it was made, to notice a changed ID. */
-  paymentTarget?: string | null;
-  showTarget: boolean;
+  /** The width of the picture; it never grows past the room it has. */
+  size?: number;
+  /** Told the masked PromptPay ID the current picture pays to (null while there is none). */
+  onTarget?: (target: string | null) => void;
 }) {
   const { api, lifecycle } = useServices();
   const promptpayRev = useEntities().promptpayRev;
@@ -79,18 +85,26 @@ export function PromptPayQr({
     };
   }, [api, paymentId, promptpayRev, reloads]);
 
+  const target = state.phase === 'ready' ? state.target : null;
+  useEffect(() => {
+    onTarget?.(target);
+  }, [target, onTarget]);
+
   // The iPad was in the background for a while: the link may have expired meanwhile.
   useEffect(() => lifecycle.subscribe({ visible: () => setReloads((n) => n + 1) }), [lifecycle]);
 
+  const frame = s(
+    `width:min(100%,${size}px);aspect-ratio:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-align:center;margin:0 auto`,
+  );
   if (state.phase === 'failed') {
     return (
-      <div className="qr qr--failed" role="alert">
-        <p>
+      <div style={frame}>
+        <Callout tone="bad" role="alert">
           {state.error ? errorText(tr, state.error, 'payment') : tr('payment.promptpay.qrFailed')}
-        </p>
+        </Callout>
         <button
           type="button"
-          className="btn"
+          className="g-btn"
           onClick={() => {
             retriedOnError.current = false;
             hasLink.current = false;
@@ -105,45 +119,32 @@ export function PromptPayQr({
   }
   if (state.phase === 'loading') {
     return (
-      <div className="qr qr--loading" role="status">
-        <span className="muted">{tr('payment.promptpay.loadingQr')}</span>
+      <div style={frame} role="status">
+        <span className="g-t-s">{tr('payment.promptpay.loadingQr')}</span>
       </div>
     );
   }
 
-  const changed = paymentTarget != null && paymentTarget !== state.target;
   return (
-    <div className="qrbox">
-      <img
-        className="qr"
-        src={state.url}
-        alt={alt}
-        referrerPolicy="no-referrer"
-        draggable={false}
-        onLoad={() => {
-          retriedOnError.current = false;
-        }}
-        onError={() => {
-          if (retriedOnError.current) {
-            hasLink.current = false;
-            setState({ phase: 'failed', error: null });
-          } else {
-            retriedOnError.current = true;
-            setReloads((n) => n + 1);
-          }
-        }}
-      />
-      {showTarget ? (
-        <div className="qrbox__target">
-          <p className="strong">{tr('payment.promptpay.target', { target: state.target })}</p>
-          <p className="muted small">{tr('payment.promptpay.targetHint')}</p>
-          {changed ? (
-            <p className="notice" role="status">
-              {tr('payment.promptpay.targetChanged', { target: state.target })}
-            </p>
-          ) : null}
-        </div>
-      ) : null}
-    </div>
+    <img
+      className="pay-qr"
+      style={s(`display:block;width:min(100%,${size}px);aspect-ratio:1;margin:0 auto`)}
+      src={state.url}
+      alt={alt}
+      referrerPolicy="no-referrer"
+      draggable={false}
+      onLoad={() => {
+        retriedOnError.current = false;
+      }}
+      onError={() => {
+        if (retriedOnError.current) {
+          hasLink.current = false;
+          setState({ phase: 'failed', error: null });
+        } else {
+          retriedOnError.current = true;
+          setReloads((n) => n + 1);
+        }
+      }}
+    />
   );
 }

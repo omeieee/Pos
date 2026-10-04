@@ -115,7 +115,7 @@ describe('PromptPay: starting', () => {
   test('shows the masked target from the QR link, so staff can compare it with the bank app', async () => {
     await startPromptPay();
     await qrImage();
-    expect(screen.getByText(/\*{6}1234/)).toBeTruthy();
+    expect(await screen.findByText(/\*{6}1234/)).toBeTruthy();
     expect(screen.getByText(th['payment.promptpay.targetHint'])).toBeTruthy();
   });
 
@@ -126,7 +126,7 @@ describe('PromptPay: starting', () => {
     });
     renderScreen(<PaymentPanel orderId={ORDER} />, env.services);
     await qrImage();
-    expect(screen.getByText(/ถูกเปลี่ยนหลังสร้างรายการนี้/)).toBeTruthy();
+    expect(await screen.findByText(/ถูกเปลี่ยนหลังสร้างรายการนี้/)).toBeTruthy();
   });
 
   test('"not configured" tells staff to ask the owner', async () => {

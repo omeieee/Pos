@@ -1,5 +1,6 @@
+import { Gi } from '../design/icons.tsx';
+import { s } from '../design/style.ts';
 import { useServices, useStoreState, useT } from './hooks.ts';
-import { Icon } from './Icon.tsx';
 
 export function UpdateBannerView({
   needRefresh,
@@ -11,10 +12,16 @@ export function UpdateBannerView({
   const tr = useT();
   if (!needRefresh) return null;
   return (
-    <div className="banner banner--info" role="status">
-      <Icon name="sync" />
-      <span className="banner__text">{tr('app.update.ready')}</span>
-      <button type="button" className="btn btn-soft" onClick={onApply}>
+    <div
+      className="g-glass2 g-pop banner banner--info"
+      role="status"
+      style={s('display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:999px')}
+    >
+      <Gi n="info" size="sm" />
+      <span className="banner__text g-t-s" style={s('flex-grow:1;color:var(--ink)')}>
+        {tr('app.update.ready')}
+      </span>
+      <button type="button" className="g-btn g-btn-sm" onClick={onApply}>
         {tr('app.update.apply')}
       </button>
     </div>

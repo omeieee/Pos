@@ -1,7 +1,9 @@
 import { useState } from 'react';
+import { DialogLayout } from '../ui/DialogParts.tsx';
+import { SegRadio } from '../ui/FormParts.tsx';
 import { useActivityHold, useEntities, useT } from '../ui/hooks.ts';
-import { Icon } from '../ui/Icon.tsx';
-import { Modal } from '../ui/Modal.tsx';
+import { Callout } from '../ui/Notice.tsx';
+import { PortalModal } from '../ui/PortalModal.tsx';
 import { TextField } from '../ui/TextField.tsx';
 import { failureText } from './outcome-text.ts';
 import {
@@ -12,6 +14,7 @@ import {
   readPromptpayDraft,
 } from './promptpay-model.ts';
 import type { SectionBodyProps } from './SettingSection.tsx';
+import './settings-glass.css';
 
 const KINDS = ['phone', 'national_id', 'ewallet'] as const;
 
@@ -65,128 +68,102 @@ export function PromptpayDialog({
     }
   }
 
-  return (
-    <Modal labelledBy="pp-title" onClose={onClose} variant="options">
-      <div className="mdialog">
-        <header className="osheet__head">
-          <h2 id="pp-title" className="sheet__title">
-            {tr(
-              step === 'edit'
-                ? 'settings.promptpay.dialog.title'
-                : 'settings.promptpay.dialog.confirmTitle',
-            )}
-          </h2>
-          <button
-            type="button"
-            className="btn btn-soft"
-            aria-label={tr('common.close')}
-            onClick={onClose}
-          >
-            <Icon name="x" />
-          </button>
-        </header>
+  const title = tr(
+    step === 'edit' ? 'settings.promptpay.dialog.title' : 'settings.promptpay.dialog.confirmTitle',
+  );
 
-        {step === 'edit' ? (
-          <form
-            className="mdialog"
-            noValidate
-            onSubmit={(event) => {
-              event.preventDefault();
-              review();
-            }}
-          >
-            <div className="osheet__body">
-              <fieldset className="seg">
-                <legend className="visually-hidden">{tr('settings.promptpay.dialog.kind')}</legend>
-                {KINDS.map((kind) => (
-                  <label
-                    key={kind}
-                    className={`seg__item${draft.idType === kind ? ' seg__item--on' : ''}`}
-                  >
-                    <input
-                      className="visually-hidden"
-                      type="radio"
-                      name="promptpay-kind"
-                      checked={draft.idType === kind}
-                      onChange={() => setDraft({ ...draft, idType: kind })}
-                    />
-                    {tr(`settings.promptpay.type.${kind}`)}
-                  </label>
-                ))}
-              </fieldset>
-              <TextField
-                label={tr('settings.promptpay.dialog.value')}
-                value={draft.idValue}
-                inputMode="numeric"
-                autoComplete="off"
-                maxLength={24}
-                hint={tr('settings.promptpay.dialog.valueHint')}
-                error={tried && !read.ok ? tr('settings.promptpay.dialog.error') : undefined}
-                onChange={(idValue) => setDraft({ ...draft, idValue })}
-              />
-            </div>
-            <footer className="osheet__foot">
-              <div className="osheet__actions">
-                <button type="button" className="btn btn-soft btn-lg" onClick={onClose}>
-                  {tr('common.cancel')}
-                </button>
-                <button type="submit" className="btn btn-primary btn-lg osheet__confirm">
-                  {tr('settings.promptpay.dialog.review')}
-                </button>
-              </div>
-            </footer>
-          </form>
-        ) : (
-          <>
-            <div className="osheet__body">
-              <p className="sset__account">
-                {read.ok
-                  ? tr('settings.promptpay.dialog.newAccount', { masked: previewMasked(read.id) })
-                  : null}
-              </p>
-              <p className="muted">
-                {currentMasked
-                  ? tr('settings.promptpay.dialog.oldAccount', { masked: currentMasked })
-                  : tr('settings.promptpay.dialog.noOld')}
-              </p>
-              <p className="notice" role="alert">
-                <Icon name="alert" />
-                <span>
-                  {waiting > 0
-                    ? tr('settings.promptpay.dialog.warnOpen', { count: waiting })
-                    : tr('settings.promptpay.dialog.warnNone')}
-                </span>
-              </p>
-              <p className="hint">{tr('settings.promptpay.dialog.alert')}</p>
-            </div>
-            <footer className="osheet__foot">
-              <div className="error-slot" role="alert">
-                {error ? <p className="error">{error}</p> : null}
-              </div>
-              <div className="osheet__actions">
-                <button
-                  type="button"
-                  className="btn btn-soft btn-lg"
-                  disabled={saving}
-                  onClick={() => setStep('edit')}
-                >
-                  {tr('settings.promptpay.dialog.edit')}
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-primary btn-lg osheet__confirm"
-                  disabled={saving}
-                  onClick={() => void confirm()}
-                >
-                  {saving
-                    ? tr('settings.promptpay.dialog.changing')
-                    : tr('settings.promptpay.dialog.confirm')}
-                </button>
-              </div>
-            </footer>
-          </>
-        )}
-      </div>
-    </Modal>
+  return (
+    <PortalModal labelledBy="pp-title" onClose={onClose}>
+      {step === 'edit' ? (
+        <DialogLayout
+          titleId="pp-title"
+          title={title}
+          onClose={onClose}
+          onSubmit={review}
+          actions={
+            <>
+              <button type="button" className="g-btn g-btn-lg" onClick={onClose}>
+                {tr('common.cancel')}
+              </button>
+              <button type="submit" className="g-btn g-btn-p g-btn-lg">
+                {tr('settings.promptpay.dialog.review')}
+              </button>
+            </>
+          }
+        >
+          <SegRadio
+            legend={tr('settings.promptpay.dialog.kind')}
+            name="promptpay-kind"
+            value={draft.idType}
+            options={KINDS.map((kind) => ({
+              value: kind,
+              label: tr(`settings.promptpay.type.${kind}`),
+            }))}
+            onChange={(idType) => setDraft({ ...draft, idType })}
+          />
+          <TextField
+            icon="qr"
+            label={tr('settings.promptpay.dialog.value')}
+            value={draft.idValue}
+            inputMode="numeric"
+            autoComplete="off"
+            maxLength={24}
+            hint={tr('settings.promptpay.dialog.valueHint')}
+            error={tried && !read.ok ? tr('settings.promptpay.dialog.error') : undefined}
+            onChange={(idValue) => setDraft({ ...draft, idValue })}
+          />
+        </DialogLayout>
+      ) : (
+        <DialogLayout
+          titleId="pp-title"
+          title={title}
+          onClose={onClose}
+          error={error}
+          actions={
+            <>
+              <button
+                type="button"
+                className="g-btn g-btn-lg"
+                disabled={saving}
+                onClick={() => setStep('edit')}
+              >
+                {tr('settings.promptpay.dialog.edit')}
+              </button>
+              <button
+                type="button"
+                className="g-btn g-btn-p g-btn-lg"
+                disabled={saving}
+                onClick={() => void confirm()}
+              >
+                {saving
+                  ? tr('settings.promptpay.dialog.changing')
+                  : tr('settings.promptpay.dialog.confirm')}
+              </button>
+            </>
+          }
+        >
+          <div className="g-sunk" style={{ padding: 16 }}>
+            <p className="gset-account">
+              {read.ok
+                ? tr('settings.promptpay.dialog.newAccount', { masked: previewMasked(read.id) })
+                : null}
+            </p>
+            <p className="g-t-s" style={{ margin: '4px 0 0' }}>
+              {currentMasked
+                ? tr('settings.promptpay.dialog.oldAccount', { masked: currentMasked })
+                : tr('settings.promptpay.dialog.noOld')}
+            </p>
+          </div>
+          <Callout tone="warn" role="alert">
+            {waiting > 0
+              ? tr('settings.promptpay.dialog.warnOpen', { count: waiting })
+              : tr('settings.promptpay.dialog.warnNone')}
+          </Callout>
+          <p className="g-t-c" style={{ margin: 0 }}>
+            {tr('settings.promptpay.dialog.alert')}
+          </p>
+        </DialogLayout>
+      )}
+    </PortalModal>
   );
 }

@@ -6,7 +6,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./glass.css": "./src/glass.css",
-    "./tokens.css": "./src/tokens.css"
+    "./tokens.css": "./src/tokens.css",
+    "./design.css": "./src/design.css"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",

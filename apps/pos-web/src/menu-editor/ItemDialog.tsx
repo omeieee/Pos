@@ -1,8 +1,10 @@
 import { MENU_CHANNELS, type MenuChannel } from '@sds/shared';
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { s } from '../design/style.ts';
 import { localName } from '../pos/names.ts';
+import { CheckChip, FieldGroup, FieldPair } from '../ui/FormParts.tsx';
 import { useEntities, useLocale, useServices, useT } from '../ui/hooks.ts';
-import { TextField } from '../ui/TextField.tsx';
+import { SelectField, TextField } from '../ui/TextField.tsx';
 import { DialogFrame } from './DialogFrame.tsx';
 import { useEditorContext } from './editor-context.ts';
 import { categoryRows, groupRows, itemRowsOf, nextSort } from './lists.ts';
@@ -44,7 +46,6 @@ export function ItemDialog({
   const [form, setForm] = useState(() => itemFormFrom(base, categoryId, originalCost));
   const [tried, setTried] = useState(false);
   const { saving, error, save } = useSaver(onClose);
-  const groupId = useId();
   const missing = itemId !== undefined && base === undefined;
   useEffect(() => {
     if (missing) onClose();
@@ -113,30 +114,20 @@ export function ItemDialog({
         onChange={(nameEn) => setForm({ ...form, nameEn })}
       />
 
-      <div className="field-group">
-        <label className="label" htmlFor={`${groupId}-category`}>
-          {tr('menuEditor.category.pick')}
-        </label>
-        <select
-          id={`${groupId}-category`}
-          className="input"
-          value={form.categoryId}
-          onChange={(event) => setForm({ ...form, categoryId: event.target.value })}
-        >
-          {categories.map((c) => (
-            <option key={c.id} value={c.id}>
-              {localName(locale, c.nameTh, c.nameEn)}
-            </option>
-          ))}
-        </select>
-        {problems.includes('categoryId') ? (
-          <p className="error" role="alert">
-            {tr('menuEditor.error.categoryId')}
-          </p>
-        ) : null}
-      </div>
+      <SelectField
+        label={tr('menuEditor.category.pick')}
+        value={form.categoryId}
+        error={fieldError('categoryId', 'menuEditor.error.categoryId')}
+        onChange={(categoryId) => setForm({ ...form, categoryId })}
+      >
+        {categories.map((c) => (
+          <option key={c.id} value={c.id}>
+            {localName(locale, c.nameTh, c.nameEn)}
+          </option>
+        ))}
+      </SelectField>
 
-      <div className="mdialog__pair">
+      <FieldPair>
         <TextField
           label={tr('menuEditor.field.price')}
           value={form.price}
@@ -154,34 +145,25 @@ export function ItemDialog({
             onChange={(cost) => setForm({ ...form, cost })}
           />
         ) : null}
-      </div>
+      </FieldPair>
 
-      <fieldset className="group">
-        <legend className="label">{tr('menuEditor.field.channels')}</legend>
-        <div className="picks">
-          {MENU_CHANNELS.map((channel) => {
-            const on = form.channels.includes(channel);
-            return (
-              <label key={channel} className={`pick${on ? ' pick--on' : ''}`}>
-                <input
-                  className="visually-hidden"
-                  type="checkbox"
-                  checked={on}
-                  onChange={() => toggleChannel(channel)}
-                />
-                {tr(`orders.channel.${channel}`)}
-              </label>
-            );
-          })}
+      <FieldGroup
+        legend={tr('menuEditor.field.channels')}
+        error={problems.includes('channels') ? tr('menuEditor.error.channels') : undefined}
+      >
+        <div className="gchips">
+          {MENU_CHANNELS.map((channel) => (
+            <CheckChip
+              key={channel}
+              label={tr(`orders.channel.${channel}`)}
+              checked={form.channels.includes(channel)}
+              onChange={() => toggleChannel(channel)}
+            />
+          ))}
         </div>
-        {problems.includes('channels') ? (
-          <p className="error" role="alert">
-            {tr('menuEditor.error.channels')}
-          </p>
-        ) : null}
-      </fieldset>
+      </FieldGroup>
 
-      <div className="mdialog__prices">
+      <FieldPair>
         {MENU_CHANNELS.map((channel) => (
           <TextField
             key={channel}
@@ -196,7 +178,7 @@ export function ItemDialog({
             }
           />
         ))}
-      </div>
+      </FieldPair>
 
       <TextField
         label={tr('menuEditor.field.descriptionTh')}
@@ -213,29 +195,24 @@ export function ItemDialog({
         onChange={(descriptionEn) => setForm({ ...form, descriptionEn })}
       />
 
-      <fieldset className="group">
-        <legend className="label">{tr('menuEditor.field.groups')}</legend>
+      <FieldGroup legend={tr('menuEditor.field.groups')}>
         {groups.length === 0 ? (
-          <p className="hint">{tr('menuEditor.field.groupsNone')}</p>
+          <p className="g-t-c" style={s('margin:0')}>
+            {tr('menuEditor.field.groupsNone')}
+          </p>
         ) : (
-          <div className="picks">
-            {groups.map((group) => {
-              const on = form.modifierGroupIds.includes(group.id);
-              return (
-                <label key={group.id} className={`pick${on ? ' pick--on' : ''}`}>
-                  <input
-                    className="visually-hidden"
-                    type="checkbox"
-                    checked={on}
-                    onChange={() => toggleGroup(group.id)}
-                  />
-                  {localName(locale, group.nameTh, group.nameEn)}
-                </label>
-              );
-            })}
+          <div className="gchips">
+            {groups.map((group) => (
+              <CheckChip
+                key={group.id}
+                label={localName(locale, group.nameTh, group.nameEn)}
+                checked={form.modifierGroupIds.includes(group.id)}
+                onChange={() => toggleGroup(group.id)}
+              />
+            ))}
           </div>
         )}
-      </fieldset>
+      </FieldGroup>
 
       {base ? (
         <PhotoField
@@ -245,7 +222,9 @@ export function ItemDialog({
           }
         />
       ) : (
-        <p className="hint">{tr('menuEditor.photo.saveFirst')}</p>
+        <p className="g-t-c" style={s('margin:0')}>
+          {tr('menuEditor.photo.saveFirst')}
+        </p>
       )}
     </DialogFrame>
   );

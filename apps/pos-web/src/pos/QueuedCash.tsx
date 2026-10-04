@@ -1,10 +1,11 @@
 import { formatBaht } from '@sds/i18n';
 import { satang } from '@sds/shared';
 import { useState } from 'react';
+import { s } from '../design/style.ts';
 import { useLocale, useServices, useT } from '../ui/hooks.ts';
-import { Modal } from '../ui/Modal.tsx';
 import { CashPanel } from './CashPanel.tsx';
 import type { QueuedCashPayment } from './outbox-model.ts';
+import { Callout, PayModal, SheetBody, SheetTitle } from './PayParts.tsx';
 import { cashView } from './payment-model.ts';
 import { QueueActions, QueueStateBadge } from './QueueActions.tsx';
 
@@ -27,51 +28,68 @@ export function QueuedCash({ item }: { item: QueuedCashPayment }) {
   const money = (value: number) => formatBaht(value, locale);
   const orderRef = item.dependsOn ?? item.orderId;
   return (
-    <section className="qcash" aria-labelledby={`qcash-${item.id}`}>
-      <h3 id={`qcash-${item.id}`} className="cash__title">
+    <section
+      aria-labelledby={`qcash-${item.id}`}
+      className="g-sunk"
+      style={s(
+        'padding:18px 20px;display:flex;flex-direction:column;gap:12px;width:100%;min-width:0',
+      )}
+    >
+      <h3 id={`qcash-${item.id}`} className="g-t-3" style={s('margin:0')}>
         {tr('outbox.cash.title')}
       </h3>
-      <p className="qcash__summary money">
+      <p className="g-num g-t-2" style={s('margin:0')}>
         {tr('outbox.cash.summary', {
           tendered: money(item.tenderedSatang),
           change: view === null || view.change === null ? '-' : money(view.change),
         })}
       </p>
-      <QueueStateBadge item={item} />
-      <p className="hint">{tr('outbox.cash.waiting')}</p>
+      <div style={s('display:flex;gap:8px;flex-wrap:wrap')}>
+        <QueueStateBadge item={item} />
+      </div>
+      <p className="g-t-c" style={s('margin:0')}>
+        {tr('outbox.cash.waiting')}
+      </p>
       {item.tenderChanged ? (
-        <p className="notice" role="status">
+        <Callout tone="warn" role="status">
           {tr('outbox.cash.changed')}
-        </p>
+        </Callout>
       ) : null}
       {item.canChangeTender && item.totalSatang !== null && orderRef !== null ? (
-        <button type="button" className="btn btn-soft" onClick={() => setCorrecting(true)}>
-          {tr('outbox.cash.change')}
-        </button>
+        <div>
+          <button type="button" className="g-btn" onClick={() => setCorrecting(true)}>
+            {tr('outbox.cash.change')}
+          </button>
+        </div>
       ) : null}
       {correcting && item.totalSatang !== null && orderRef !== null ? (
-        <Modal labelledBy={`qcash-change-${item.id}`} onClose={() => setCorrecting(false)}>
-          <h2 id={`qcash-change-${item.id}`} className="sheet__title">
-            {tr('outbox.cash.change.title')}
-          </h2>
-          <CashPanel
-            order={{ id: orderRef, totalSatang: satang(item.totalSatang) }}
-            queue={{
-              estimated: item.dependsOn !== null,
-              submit: (tender) =>
-                outbox.enqueueCash({
-                  target: item.dependsOn ? { entryId: item.dependsOn } : { orderId: orderRef },
-                  tenderedSatang: tender,
-                  totalSatang: item.totalSatang,
-                  label: item.label,
-                }),
-            }}
-            onDone={() => setCorrecting(false)}
-          />
-          <button type="button" className="btn btn-block" onClick={() => setCorrecting(false)}>
-            {tr('common.cancel')}
-          </button>
-        </Modal>
+        <PayModal labelledBy={`qcash-change-${item.id}`} onClose={() => setCorrecting(false)}>
+          <SheetBody>
+            <SheetTitle id={`qcash-change-${item.id}`}>{tr('outbox.cash.change.title')}</SheetTitle>
+            <CashPanel
+              order={{ id: orderRef, totalSatang: satang(item.totalSatang) }}
+              stacked
+              queue={{
+                estimated: item.dependsOn !== null,
+                submit: (tender) =>
+                  outbox.enqueueCash({
+                    target: item.dependsOn ? { entryId: item.dependsOn } : { orderId: orderRef },
+                    tenderedSatang: tender,
+                    totalSatang: item.totalSatang,
+                    label: item.label,
+                  }),
+              }}
+              onDone={() => setCorrecting(false)}
+            />
+            <button
+              type="button"
+              className="g-btn g-btn-block"
+              onClick={() => setCorrecting(false)}
+            >
+              {tr('common.cancel')}
+            </button>
+          </SheetBody>
+        </PayModal>
       ) : null}
       <QueueActions item={item} />
     </section>

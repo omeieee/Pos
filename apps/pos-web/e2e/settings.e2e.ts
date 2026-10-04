@@ -5,7 +5,9 @@ import {
   openPage,
   paymentPanel,
   ringOrder,
+  STAFF,
   signInWithPin,
+  tapPin,
   test,
   tr,
 } from './support.ts';
@@ -80,9 +82,19 @@ test.describe('settings hub and permissions (R, P3)', () => {
   });
 
   test('a kitchen role has no settings at all', async ({ page }) => {
-    await signInWithPin(page, 'kitchen');
-    const nav = page.getByRole('navigation', { name: tr('nav.label') });
-    await expect(nav.locator('a[href="#/settings"]')).toHaveCount(0);
+    // The kitchen role lands on the dark kitchen page, which has no navigation at all, so it is
+    // enough that the settings address shows nothing of settings to it.
+    await page.goto('/');
+    await page.getByRole('button', { name: new RegExp(STAFF.kitchen.name) }).click();
+    await tapPin(page, STAFF.kitchen.pin);
+    await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible();
+    await page.evaluate(() => {
+      window.location.hash = '#/settings';
+    });
+    await expect(page.getByRole('heading', { level: 1, name: tr('settings.title') })).toHaveCount(
+      0,
+    );
+    await expect(page.locator('main a[href="#/settings/shop"]')).toHaveCount(0);
   });
 });
 
@@ -137,7 +149,7 @@ test.describe('changing the PromptPay ID (rule 3)', () => {
     await openPage(page, '/new');
     await ringOrder(page, { dish: 'ชาเย็น' });
     const panel = paymentPanel(page);
-    await panel.locator('label.method', { hasText: tr('payment.method.promptpay') }).click();
+    await panel.locator('label.g-chip', { hasText: tr('payment.method.promptpay') }).click();
     await panel.getByRole('button', { name: tr('payment.start.promptpay') }).click();
     await expect(panel).toContainText(tr('payment.promptpay.target', { target: NEW_MASKED }));
     expect(await pageShows(page, NEW_PROMPTPAY)).toBe(false);

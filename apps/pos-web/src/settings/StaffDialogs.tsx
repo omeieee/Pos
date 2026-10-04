@@ -1,8 +1,9 @@
 import type { StaffDto } from '@sds/shared';
 import { type ReactNode, useState } from 'react';
+import { DialogLayout } from '../ui/DialogParts.tsx';
+import { SegRadio } from '../ui/FormParts.tsx';
 import { useActivityHold, useServices, useT } from '../ui/hooks.ts';
-import { Icon } from '../ui/Icon.tsx';
-import { Modal } from '../ui/Modal.tsx';
+import { PortalModal } from '../ui/PortalModal.tsx';
 import { TextField } from '../ui/TextField.tsx';
 import type { AdminOutcome } from './admin-store.ts';
 import { adminFailureText } from './admin-text.ts';
@@ -34,48 +35,27 @@ function Frame({
   const tr = useT();
   useActivityHold(true);
   return (
-    <Modal labelledBy="staff-title" onClose={onClose} variant="options">
-      <form
-        className="mdialog"
-        noValidate
-        onSubmit={(event) => {
-          event.preventDefault();
-          onSubmit();
-        }}
-      >
-        <header className="osheet__head">
-          <h2 id="staff-title" className="sheet__title">
-            {title}
-          </h2>
-          <button
-            type="button"
-            className="btn btn-soft"
-            aria-label={tr('common.close')}
-            onClick={onClose}
-          >
-            <Icon name="x" />
-          </button>
-        </header>
-        <div className="osheet__body">{children}</div>
-        <footer className="osheet__foot">
-          <div className="error-slot" role="alert">
-            {error ? <p className="error">{error}</p> : null}
-          </div>
-          <div className="osheet__actions">
-            <button type="button" className="btn btn-soft btn-lg" onClick={onClose}>
+    <PortalModal labelledBy="staff-title" onClose={onClose}>
+      <DialogLayout
+        titleId="staff-title"
+        title={title}
+        onClose={onClose}
+        onSubmit={onSubmit}
+        error={error}
+        actions={
+          <>
+            <button type="button" className="g-btn g-btn-lg" onClick={onClose}>
               {tr('common.cancel')}
             </button>
-            <button
-              type="submit"
-              className="btn btn-primary btn-lg osheet__confirm"
-              disabled={saving}
-            >
+            <button type="submit" className="g-btn g-btn-p g-btn-lg" disabled={saving}>
               {saving ? tr('settings.staff.working') : tr('common.save')}
             </button>
-          </div>
-        </footer>
-      </form>
-    </Modal>
+          </>
+        }
+      >
+        {children}
+      </DialogLayout>
+    </PortalModal>
   );
 }
 
@@ -155,28 +135,22 @@ export function AddStaffDialog({
       onSubmit={() => void submit()}
     >
       <TextField
+        icon="user"
         label={tr('settings.staff.name')}
         value={form.displayName}
         maxLength={60}
         error={fieldError('displayName')}
         onChange={(displayName) => setForm({ ...form, displayName })}
       />
-      <fieldset className="seg">
-        <legend className="visually-hidden">{tr('settings.staff.role')}</legend>
-        {CREATABLE_ROLES.map((role) => (
-          <label key={role} className={`seg__item${form.role === role ? ' seg__item--on' : ''}`}>
-            <input
-              className="visually-hidden"
-              type="radio"
-              name="staff-role"
-              checked={form.role === role}
-              onChange={() => setForm({ ...form, role })}
-            />
-            {tr(`role.${role}`)}
-          </label>
-        ))}
-      </fieldset>
+      <SegRadio
+        legend={tr('settings.staff.role')}
+        name="staff-role"
+        value={form.role}
+        options={CREATABLE_ROLES.map((role) => ({ value: role, label: tr(`role.${role}`) }))}
+        onChange={(role) => setForm({ ...form, role })}
+      />
       <TextField
+        icon="lock"
         label={tr('settings.staff.pin')}
         type="password"
         inputMode="numeric"
@@ -188,6 +162,7 @@ export function AddStaffDialog({
         onChange={(pin) => setForm({ ...form, pin })}
       />
       <TextField
+        icon="lock"
         label={tr('settings.staff.pin2')}
         type="password"
         inputMode="numeric"
@@ -197,7 +172,9 @@ export function AddStaffDialog({
         value={form.pin2}
         onChange={(pin2) => setForm({ ...form, pin2 })}
       />
-      <p className="hint">{tr('settings.staff.pinNote')}</p>
+      <p className="g-t-c" style={{ margin: 0 }}>
+        {tr('settings.staff.pinNote')}
+      </p>
     </Frame>
   );
 }
@@ -228,6 +205,7 @@ export function RenameStaffDialog({ person, onClose }: { person: StaffDto; onClo
       onSubmit={() => void submit()}
     >
       <TextField
+        icon="user"
         label={tr('settings.staff.name')}
         value={name}
         maxLength={60}
@@ -262,8 +240,11 @@ export function SetPinDialog({ person, onClose }: { person: StaffDto; onClose: (
       onClose={onClose}
       onSubmit={() => void submit()}
     >
-      <p>{tr('settings.staff.pinBody', { name: person.displayName })}</p>
+      <p className="g-t-b" style={{ margin: 0 }}>
+        {tr('settings.staff.pinBody', { name: person.displayName })}
+      </p>
       <TextField
+        icon="lock"
         label={tr('settings.staff.pin')}
         type="password"
         inputMode="numeric"
@@ -275,6 +256,7 @@ export function SetPinDialog({ person, onClose }: { person: StaffDto; onClose: (
         onChange={setPin}
       />
       <TextField
+        icon="lock"
         label={tr('settings.staff.pin2')}
         type="password"
         inputMode="numeric"

@@ -1,10 +1,14 @@
 import { formatBaht } from '@sds/i18n';
-import { ORDER_NO_PREFIX } from '@sds/shared';
+import { Gi } from '../design/icons.tsx';
+import { s } from '../design/style.ts';
 import { useLocale, useServices, useStoreState, useT } from '../ui/hooks.ts';
-import { Icon } from '../ui/Icon.tsx';
 import { OtherEntries } from './OtherEntries.tsx';
 import type { QueuedOrder, QueuedPayment } from './outbox-model.ts';
 import { QueueActions, QueueStateBadge } from './QueueActions.tsx';
+
+/** The glass card of a waiting entry (the design's order card): the same shape as an order of the board. */
+const CARD = 'display:flex;flex-direction:column;gap:8px;border-radius:22px;padding:14px 16px';
+const LINK = 'display:flex;flex-direction:column;gap:8px;text-decoration:none;color:inherit';
 
 function OrderEntryCard({
   item,
@@ -18,36 +22,37 @@ function OrderEntryCard({
   const locale = useLocale();
   const count = item.lines.reduce((n, line) => n + line.qty, 0);
   return (
-    <li className={`qcard${item.state === 'attention' ? ' qcard--attention' : ''}`}>
-      <a className="qcard__link" href={`#/orders/${item.id}`}>
-        <span className="ocard__top">
-          <span className="ochannel" aria-hidden="true">
-            {ORDER_NO_PREFIX[item.channel]}
+    <li
+      className="g-glass"
+      style={s(`${CARD};${item.state === 'attention' ? 'border-color:rgba(198,40,40,.45);' : ''}`)}
+    >
+      <a href={`#/orders/${item.id}`} style={s(LINK)}>
+        <span style={s('display:flex;align-items:center;gap:10px')}>
+          <span className="g-badge g-b-mute">
+            <Gi n="store" />
+            {tr(`orders.channel.${item.channel}`)}
           </span>
-          <span className="visually-hidden">{tr(`orders.channel.${item.channel}`)}</span>
-          <span className="ocard__no">{item.label}</span>
-          <span className="ocard__total money">
+          <span className="g-t-2 g-num" style={s('flex-grow:1')}>
+            {item.label}
+          </span>
+          <span className="g-num g-t-3">
             {item.estimateSatang === null ? '' : formatBaht(item.estimateSatang, locale)}
           </span>
         </span>
         {item.recipient ? (
-          <span className="ocard__to">
-            <span className="ocard__where">{`${item.recipient.building} · ${item.recipient.name}`}</span>
-          </span>
+          <span className="g-t-b">{`${item.recipient.building} · ${item.recipient.name}`}</span>
         ) : item.note ? (
-          <span className="ocard__to">
-            <span className="ocard__where">{item.note}</span>
-          </span>
+          <span className="g-t-b">{item.note}</span>
         ) : null}
-        <span className="ocard__meta muted small">
+        <span className="g-t-s">
           {tr('pos.orderEntry.itemsCount', { count })}
           {item.estimateSatang === null ? '' : ` · ${tr('pos.orderEntry.estimate')}`}
         </span>
-        <span className="ocard__badges">
+        <span style={s('display:flex;align-items:center;gap:8px;flex-wrap:wrap')}>
           <QueueStateBadge item={item} />
           {payment ? (
-            <span className="status status--info">
-              <Icon name={payment.method === 'cash' ? 'cash' : 'qr'} />
+            <span className="g-badge g-b-info">
+              <Gi n={payment.method === 'cash' ? 'cash' : 'qrBig'} />
               {tr(`payment.method.${payment.method}`)}
             </span>
           ) : null}
@@ -64,19 +69,24 @@ function PaymentCard({ item }: { item: QueuedPayment }) {
   const tr = useT();
   const locale = useLocale();
   return (
-    <li className={`qcard${item.state === 'attention' ? ' qcard--attention' : ''}`}>
-      <a className="qcard__link" href={item.orderId ? `#/orders/${item.orderId}` : '#/orders'}>
-        <span className="ocard__top">
-          <span className="ochannel" aria-hidden="true">
-            <Icon name={item.method === 'cash' ? 'cash' : 'qr'} />
+    <li
+      className="g-glass"
+      style={s(`${CARD};${item.state === 'attention' ? 'border-color:rgba(198,40,40,.45);' : ''}`)}
+    >
+      <a href={item.orderId ? `#/orders/${item.orderId}` : '#/orders'} style={s(LINK)}>
+        <span style={s('display:flex;align-items:center;gap:10px')}>
+          <span className="g-badge g-b-info">
+            <Gi n={item.method === 'cash' ? 'cash' : 'qrBig'} />
+            {tr(`payment.method.${item.method}`)}
           </span>
-          <span className="ocard__no">{item.label}</span>
-          <span className="ocard__total money">
+          <span className="g-t-2 g-num" style={s('flex-grow:1')}>
+            {item.label}
+          </span>
+          <span className="g-num g-t-3">
             {formatBaht(item.method === 'cash' ? item.tenderedSatang : item.qrAmountSatang, locale)}
           </span>
         </span>
-        <span className="ocard__meta muted small">{tr(`payment.method.${item.method}`)}</span>
-        <span className="ocard__badges">
+        <span style={s('display:flex;align-items:center;gap:8px;flex-wrap:wrap')}>
           <QueueStateBadge item={item} />
         </span>
       </a>
@@ -90,10 +100,14 @@ function OwnerStepUpNotice() {
   const tr = useT();
   const { outbox } = useServices();
   return (
-    <div className="notice notice--ask" role="status">
-      <Icon name="alert" />
-      <span>{tr('outbox.stepUp.waiting')}</span>
-      <button type="button" className="btn btn-soft" onClick={() => void outbox.confirmOwner()}>
+    <div
+      className="g-sunk"
+      role="status"
+      style={s('display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 16px')}
+    >
+      <Gi n="warn" />
+      <span style={s('flex:1 1 220px')}>{tr('outbox.stepUp.waiting')}</span>
+      <button type="button" className="g-btn" onClick={() => void outbox.confirmOwner()}>
         {tr('outbox.stepUp.ask')}
       </button>
     </div>
@@ -124,16 +138,30 @@ export function QueuedOrders() {
     return null;
   }
   return (
-    <section className="queued" aria-labelledby="queued-title">
+    <section
+      className="g-sunk"
+      aria-labelledby="queued-title"
+      style={s('display:flex;flex-direction:column;gap:12px;padding:14px 16px;flex:none')}
+    >
       {state.items.length > 0 ? (
         <>
-          <h2 id="queued-title" className="queued__title">
+          <h2
+            id="queued-title"
+            className="g-t-3"
+            style={s('margin:0;display:flex;align-items:center;gap:8px')}
+          >
             {tr('outbox.section.title')}
-            <span className="board__count">{state.items.length}</span>
+            <span className="g-badge g-b-warn">{state.items.length}</span>
           </h2>
-          <p className="hint">{tr('outbox.section.hint')}</p>
+          <p className="g-t-s" style={s('margin:0')}>
+            {tr('outbox.section.hint')}
+          </p>
           {state.stepUpNeeded ? <OwnerStepUpNotice /> : null}
-          <ul className="queued__list">
+          <ul
+            style={s(
+              'list-style:none;margin:0;padding:0;display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(260px,1fr))',
+            )}
+          >
             {orders.map((order) => (
               <OrderEntryCard key={order.id} item={order} payment={own(order)} />
             ))}
@@ -144,8 +172,12 @@ export function QueuedOrders() {
         </>
       ) : null}
       {state.purgedCount > 0 ? (
-        <p className="notice" role="status">
-          <Icon name="info" />
+        <p
+          className="g-t-s"
+          role="status"
+          style={s('margin:0;display:flex;gap:8px;align-items:flex-start')}
+        >
+          <Gi n="info" size="sm" />
           <span>{tr('outbox.purged', { count: state.purgedCount })}</span>
         </p>
       ) : null}

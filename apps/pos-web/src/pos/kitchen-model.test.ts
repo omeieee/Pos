@@ -1,11 +1,18 @@
 import { describe, expect, test } from 'vitest';
 import { orderDto, uuid } from '../test-support/frames.ts';
 import {
+  handedOverToday,
+  isFresh,
   kitchenMoves,
   kitchenQueue,
+  timerText,
+  WAIT_LATE_MINUTES,
+  WAIT_WARN_MINUTES,
   type WaitLevel,
   waitLevel,
   waitMinutes,
+  waitProgress,
+  waitSeconds,
 } from './kitchen-model.ts';
 
 const NOW = Date.parse('2030-01-01T05:30:00.000Z');
@@ -76,16 +83,87 @@ describe('minutes waiting', () => {
 });
 
 describe('the colour steps of a ticket', () => {
-  test('ok under 10 minutes, warn from 10, late from 20', () => {
+  test('the design says the timer changes after 8 minutes; very late is 12', () => {
+    expect(WAIT_WARN_MINUTES).toBe(8);
+    expect(WAIT_LATE_MINUTES).toBe(12);
+  });
+
+  test('ok under 8 minutes, warn from 8, late from 12', () => {
     const levels: [number, WaitLevel][] = [
       [0, 'ok'],
-      [9, 'ok'],
-      [10, 'warn'],
-      [19, 'warn'],
-      [20, 'late'],
+      [7, 'ok'],
+      [8, 'warn'],
+      [11, 'warn'],
+      [12, 'late'],
       [95, 'late'],
     ];
     for (const [minutes, level] of levels) expect(waitLevel(minutes), String(minutes)).toBe(level);
+  });
+});
+
+describe('seconds, the timer text and the progress line', () => {
+  test('seconds waiting follow the same start as minutes, never negative', () => {
+    expect(waitSeconds(at(1, { status: 'new', placedAt: minutesAgo(2) }), NOW)).toBe(120);
+    expect(
+      waitSeconds(
+        at(1, { status: 'ready', placedAt: minutesAgo(30), readyAt: minutesAgo(1) }),
+        NOW,
+      ),
+    ).toBe(60);
+    expect(waitSeconds(at(1, { placedAt: new Date(NOW + 5_000).toISOString() }), NOW)).toBe(0);
+  });
+
+  test('the timer reads mm:ss, and h:mm:ss from an hour on', () => {
+    expect(timerText(0)).toBe('00:00');
+    expect(timerText(22)).toBe('00:22');
+    expect(timerText(8 * 60 + 35)).toBe('08:35');
+    expect(timerText(3600 + 5 * 60 + 9)).toBe('1:05:09');
+  });
+
+  test('the progress line fills towards "very late" and stops at full', () => {
+    expect(waitProgress(0)).toBe(0);
+    expect(waitProgress(WAIT_LATE_MINUTES * 30)).toBeCloseTo(0.5);
+    expect(waitProgress(WAIT_LATE_MINUTES * 60 * 3)).toBe(1);
+  });
+
+  test('a new ticket glows for its first minute only', () => {
+    const placedAt = minutesAgo(0);
+    expect(isFresh({ status: 'new', placedAt }, NOW)).toBe(true);
+    expect(isFresh({ status: 'new', placedAt: new Date(NOW - 59_000).toISOString() }, NOW)).toBe(
+      true,
+    );
+    expect(isFresh({ status: 'new', placedAt: new Date(NOW - 60_000).toISOString() }, NOW)).toBe(
+      false,
+    );
+    expect(isFresh({ status: 'preparing', placedAt }, NOW)).toBe(false);
+  });
+});
+
+describe('handed over today', () => {
+  test('counts the completed orders of the day and averages placed to handed over', () => {
+    const day = '2030-01-01';
+    const done = (n: number, took: number, over: Parameters<typeof orderDto>[2] = {}) =>
+      at(n, {
+        status: 'completed',
+        businessDate: day,
+        placedAt: minutesAgo(60),
+        completedAt: minutesAgo(60 - took),
+        ...over,
+      });
+    const result = handedOverToday(
+      [
+        done(1, 6),
+        done(2, 8),
+        done(3, 10, { businessDate: '2029-12-31' }),
+        at(4, { status: 'ready', businessDate: day }),
+      ],
+      day,
+    );
+    expect(result).toEqual({ count: 2, averageMinutes: 7 });
+  });
+
+  test('says no average when none is timed', () => {
+    expect(handedOverToday([], '2030-01-01')).toEqual({ count: 0, averageMinutes: null });
   });
 });
 

@@ -1,9 +1,10 @@
 import type { OrderDto, PaymentDto } from '@sds/shared';
 import { useState } from 'react';
+import { s } from '../design/style.ts';
 import { useActivityHold, useEntities, useNow, useT } from '../ui/hooks.ts';
-import { Modal } from '../ui/Modal.tsx';
 import { CashPanel } from './CashPanel.tsx';
-import { MethodTiles } from './MethodTiles.tsx';
+import { MethodNotes, MethodTiles } from './MethodTiles.tsx';
+import { PayModal, SheetBody, SheetTitle } from './PayParts.tsx';
 import { COPAY_TICK_MS, methodOptions, type PayMethod } from './payment-model.ts';
 import { StartPanel } from './StartPanel.tsx';
 
@@ -28,7 +29,7 @@ export function ChangeMethod({
   const [open, setOpen] = useState(false);
   return (
     <>
-      <button type="button" className="btn" onClick={() => setOpen(true)}>
+      <button type="button" className="g-btn pay-sub" onClick={() => setOpen(true)}>
         {tr('payment.change.button')}
       </button>
       {open ? (
@@ -69,28 +70,43 @@ function ChangeSheet({
   const choice = options.some((o) => o.method === selected && o.enabled) ? selected : null;
 
   return (
-    <Modal labelledBy="change-title" onClose={onClose}>
-      <h2 id="change-title" className="sheet__title">
-        {tr('payment.change.title')}
-      </h2>
-      <p className="muted">{tr('payment.change.hint')}</p>
-      <MethodTiles options={options} choice={choice} name="change-method" onChoose={setSelected} />
-      {choice === 'cash' ? (
-        <CashPanel order={order} changeFrom={payment.id} onAttempt={onAttempt} onDone={onClose} />
-      ) : null}
-      {choice === 'promptpay' || choice === 'gov_copay' ? (
-        <StartPanel
-          order={order}
-          method={choice}
-          changeFrom={payment.id}
-          onAttempt={onAttempt}
-          onDone={onClose}
-          label={tr('payment.change.confirm', { method: tr(`payment.method.${choice}`) })}
+    <PayModal labelledBy="change-title" onClose={onClose}>
+      <SheetBody>
+        <SheetTitle id="change-title">{tr('payment.change.title')}</SheetTitle>
+        <p className="g-t-s" style={s('margin:0')}>
+          {tr('payment.change.hint')}
+        </p>
+        <MethodTiles
+          options={options}
+          choice={choice}
+          name="change-method"
+          onChoose={setSelected}
+          fill
         />
-      ) : null}
-      <button type="button" className="btn btn-soft btn-block" onClick={onClose}>
-        {tr('common.cancel')}
-      </button>
-    </Modal>
+        <MethodNotes options={options} choice={choice} />
+        {choice === 'cash' ? (
+          <CashPanel
+            order={order}
+            changeFrom={payment.id}
+            onAttempt={onAttempt}
+            onDone={onClose}
+            stacked
+          />
+        ) : null}
+        {choice === 'promptpay' || choice === 'gov_copay' ? (
+          <StartPanel
+            order={order}
+            method={choice}
+            changeFrom={payment.id}
+            onAttempt={onAttempt}
+            onDone={onClose}
+            label={tr('payment.change.confirm', { method: tr(`payment.method.${choice}`) })}
+          />
+        ) : null}
+        <button type="button" className="g-btn g-btn-block" onClick={onClose}>
+          {tr('common.cancel')}
+        </button>
+      </SheetBody>
+    </PayModal>
   );
 }

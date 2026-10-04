@@ -14,7 +14,6 @@ import { createTestAuth, createTestServices, renderScreen } from '../test-suppor
 import { OrderDetailScreen } from './OrderDetailScreen.tsx';
 import { OrderEntryScreen } from './OrderEntryScreen.tsx';
 import { OrdersScreen } from './OrdersScreen.tsx';
-import { OutboxBadge } from './OutboxBadge.tsx';
 import { PaymentPanel } from './PaymentPanel.tsx';
 
 const th = catalogs.th;
@@ -673,16 +672,20 @@ describe('entries that wait for days', () => {
   });
 });
 
-describe('the top bar badge', () => {
+describe('the outbox pill', () => {
   test('shows nothing when nothing waits, then how many wait and how many need attention', async () => {
     const made = await offlineCounter({
       create: async () => {
         throw new ApiClientError('ORDER_INVALID', { status: 422 });
       },
     });
-    renderScreen(<OutboxBadge />, made.services);
-    expect(screen.queryByRole('link')).toBeNull();
-    await placeTeaOffline(made);
+    renderScreen(<OrderEntryScreen />, made.services);
+    await settle();
+    expect(screen.queryByLabelText(th['outbox.badge.label'])).toBeNull();
+    click(tile('ชาเย็น'));
+    click(screen.getByRole('button', { name: th['pos.orderEntry.placeOffline'] }));
+    await waitFor(() => expect(made.outbox.getState().items).toHaveLength(1));
+    await settle();
     expect(screen.getByText(th['outbox.badge.waiting'].replace('{count}', '1'))).toBeTruthy();
     act(() => made.life.goOnline());
     await waitFor(() =>

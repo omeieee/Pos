@@ -3,7 +3,7 @@ import type { VitePWAOptions } from 'vite-plugin-pwa';
 /**
  * The service worker's rules (D-05 item 4), kept in one place so a test can pin them.
  *
- * App shell only. The worker precaches what the build emits (HTML, JS, CSS, icons, the manifest)
+ * App shell only. The worker precaches what the build emits (HTML, JS, CSS, fonts, icons, the manifest)
  * and answers navigations with index.html when offline. There is NO runtime caching: `/v1`
  * answers, `/v1/sync` and the PromptPay QR picture are never stored, and a WebSocket never goes
  * through a worker. The API lives on another origin anyway; the navigation deny-list covers a
@@ -19,7 +19,7 @@ export const pwaOptions: Partial<VitePWAOptions> = {
   // The manifest is public/manifest.webmanifest (Thai name, token colours, icons).
   manifest: false,
   workbox: {
-    globPatterns: ['**/*.{js,css,html,svg,png,webmanifest}'],
+    globPatterns: ['**/*.{js,css,html,svg,png,webmanifest,woff2}'],
     navigateFallback: 'index.html',
     navigateFallbackDenylist: [/^\/v1\//, /^\/healthz/, /^\/readyz/],
     cleanupOutdatedCaches: true,

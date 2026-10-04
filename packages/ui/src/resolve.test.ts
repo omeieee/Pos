@@ -76,7 +76,7 @@ describe('layer order', () => {
       shared: { layout: { menuColumns: 9 } },
       iphone: { layout: { menuColumns: 3 } },
     };
-    expect(resolveTokens('ipad', settings).layout.menuColumns).toBe(4);
+    expect(resolveTokens('ipad', settings).layout.menuColumns).toBe(3);
     expect(resolveTokens('iphone', settings).layout.menuColumns).toBe(3);
   });
 

@@ -96,7 +96,7 @@ describe('screens (server-rendered, Thai first)', () => {
     expect(page).toContain(th['auth.pin.ownerLink']);
   });
 
-  test('signed in as a cashier: shop, device, person, role, sign out, and only the order pages', async () => {
+  test('signed in as a cashier: shop, person, role (the account button holds the sign-out), and only the order pages', async () => {
     const { auth } = await lockedDevice();
     const cashier = MOCK_STAFF.find((s) => s.role === 'cashier');
     await auth.signInWithPin(cashier?.id ?? '', cashier?.pin ?? '');
@@ -104,7 +104,8 @@ describe('screens (server-rendered, Thai first)', () => {
     expect(page).toContain('แซ่บโดนเส้น');
     expect(page).toContain(cashier?.displayName);
     expect(page).toContain(th['role.cashier']);
-    expect(page).toContain(th['shell.signOut']);
+    // Sign-out and the device live behind the account button (they show when it is opened).
+    expect(page).toContain('aria-haspopup="true"');
     expect(page).toContain(th['nav.new']);
     expect(page).toContain(th['nav.orders']);
     expect(page).not.toContain('href="#/settings/menu"');
@@ -122,7 +123,7 @@ describe('screens (server-rendered, Thai first)', () => {
     await auth.signInWithPin(cook?.id ?? '', cook?.pin ?? '');
     const page = html(auth);
     expect(page).toContain(th['role.kitchen']);
-    expect(page).toContain('href="#/kitchen"');
+    // The kitchen board is a full-screen page with no navigation: a back button leads to the orders.
     expect(page).toContain('href="#/orders"');
     expect(page).not.toContain('href="#/new"');
     expect(page).not.toContain('href="#/settings/menu"');

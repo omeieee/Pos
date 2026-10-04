@@ -11,6 +11,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@fontsource-variable/anuphan": "^5.3.0",
     "@sds/i18n": "workspace:*",
     "@sds/line": "workspace:*",
     "@sds/shared": "workspace:*",

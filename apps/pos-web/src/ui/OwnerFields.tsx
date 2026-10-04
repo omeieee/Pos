@@ -9,8 +9,11 @@ import {
   ownerLoginRequest,
   sanitizeAppCode,
 } from '../auth/owner-form.ts';
+import { Gi } from '../design/icons.tsx';
 import { useT } from './hooks.ts';
+import { Callout } from './Notice.tsx';
 import { TextField } from './TextField.tsx';
+import './glass-forms.css';
 
 /**
  * Password plus one second factor (the app's 6-digit code or a recovery code). With `withEmail`
@@ -28,10 +31,12 @@ export function OwnerFields({
   disabled: boolean;
 }) {
   const tr = useT();
+  const [shown, setShown] = useState(false);
   return (
     <>
       {withEmail ? (
         <TextField
+          icon="user"
           label={tr('auth.owner.email')}
           type="email"
           inputMode="email"
@@ -42,8 +47,21 @@ export function OwnerFields({
         />
       ) : null}
       <TextField
+        icon="lock"
         label={tr('auth.owner.password')}
-        type="password"
+        type={shown ? 'text' : 'password'}
+        end={
+          <button
+            type="button"
+            className="gfield__end"
+            aria-label={shown ? tr('auth.owner.hidePassword') : tr('auth.owner.showPassword')}
+            aria-pressed={shown}
+            disabled={disabled}
+            onClick={() => setShown((v) => !v)}
+          >
+            <Gi n={shown ? 'eyeOff' : 'eye'} />
+          </button>
+        }
         // The step-up form can run on a shared iPad: never offer to fill (or save) the owner's
         // password there. Only the sign-in form, which has the e-mail field, may.
         autoComplete={withEmail ? 'current-password' : 'off'}
@@ -53,6 +71,7 @@ export function OwnerFields({
       />
       {draft.useRecovery ? (
         <TextField
+          icon="shieldCheck"
           label={tr('auth.owner.recoveryCode')}
           autoComplete="off"
           value={draft.recoveryCode}
@@ -61,6 +80,7 @@ export function OwnerFields({
         />
       ) : (
         <TextField
+          icon="shieldCheck"
           label={tr('auth.owner.code')}
           inputMode="numeric"
           autoComplete="one-time-code"
@@ -72,7 +92,7 @@ export function OwnerFields({
       )}
       <button
         type="button"
-        className="link"
+        className="gauth__link"
         disabled={disabled}
         onClick={() => onChange({ ...draft, useRecovery: !draft.useRecovery })}
       >
@@ -112,18 +132,20 @@ export function OwnerSignInForm({
   }
 
   return (
-    <form className="stack" onSubmit={submit} noValidate>
+    <form
+      onSubmit={submit}
+      noValidate
+      style={{ display: 'flex', flexDirection: 'column', gap: 14 }}
+    >
       <OwnerFields draft={draft} onChange={setDraft} withEmail disabled={busy} />
-      <div className="error-slot">
-        {error ? (
-          <p className="error" role="alert">
-            {error}
-          </p>
-        ) : null}
-      </div>
+      {error ? (
+        <Callout tone="bad" role="alert">
+          {error}
+        </Callout>
+      ) : null}
       <button
         type="submit"
-        className="btn btn-primary btn-lg btn-block"
+        className="g-btn g-btn-p g-btn-lg g-btn-block"
         disabled={busy || request === null}
       >
         {submitLabel}

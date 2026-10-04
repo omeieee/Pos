@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { s } from '../design/style.ts';
+import { FormCard } from '../ui/FormParts.tsx';
 import { useT } from '../ui/hooks.ts';
 import { TextField } from '../ui/TextField.tsx';
 import { buildNumberingPatch, numberingFormFrom, validateNumberingForm } from './model.ts';
@@ -26,24 +28,29 @@ export function NumberingForm({
 
   return (
     <form
-      className="sset__form"
+      style={{ display: 'flex', flexDirection: 'column', gap: 18 }}
       noValidate
       onSubmit={(event) => {
         event.preventDefault();
         void onSubmit();
       }}
     >
-      <TextField
-        label={tr('settings.numbering.cutoff')}
-        value={form.cutoff}
-        inputMode="numeric"
-        maxLength={5}
-        hint={tr('settings.numbering.hint')}
-        disabled={!editable}
-        error={invalid ? tr('settings.numbering.error') : undefined}
-        onChange={(cutoff) => setForm({ cutoff })}
-      />
-      <p className="muted">{tr('settings.numbering.zone', { zone: loaded.value.timeZone })}</p>
+      <FormCard>
+        <TextField
+          icon="clock"
+          label={tr('settings.numbering.cutoff')}
+          value={form.cutoff}
+          inputMode="numeric"
+          maxLength={5}
+          hint={tr('settings.numbering.hint')}
+          disabled={!editable}
+          error={invalid ? tr('settings.numbering.error') : undefined}
+          onChange={(cutoff) => setForm({ cutoff })}
+        />
+        <p className="g-t-s" style={s('margin:0')}>
+          {tr('settings.numbering.zone', { zone: loaded.value.timeZone })}
+        </p>
+      </FormCard>
       <SaveBar editable={editable} busy={busy} saving={saving} />
     </form>
   );

@@ -1,8 +1,11 @@
 import { formatDate } from '@sds/i18n';
 import { isoDateSchema } from '@sds/shared';
 import { useState } from 'react';
+import { s } from '../design/style.ts';
+import { FieldPair, FormCard, SwitchRow } from '../ui/FormParts.tsx';
 import { useLocale, useT } from '../ui/hooks.ts';
-import { TextField } from '../ui/TextField.tsx';
+import { Callout } from '../ui/Notice.tsx';
+import { FieldMessage, TextField } from '../ui/TextField.tsx';
 import {
   buildCopayInput,
   type CopayField,
@@ -47,140 +50,144 @@ export function CopayForm({ loaded, editable, saving, busy, submit }: SectionBod
 
   return (
     <form
-      className="sset__form"
+      style={s('display:flex;flex-direction:column;gap:18px')}
       noValidate
       onSubmit={(event) => {
         event.preventDefault();
         void onSubmit();
       }}
     >
-      <p className="hint">{tr('settings.copay.rules')}</p>
-      <p className="notice" role="note">
-        <span>{tr('settings.copay.risk')}</span>
+      <p className="g-t-s" style={s('margin:0')}>
+        {tr('settings.copay.rules')}
       </p>
+      <Callout tone="warn" role="note">
+        {tr('settings.copay.risk')}
+      </Callout>
       {scheme ? (
-        <>
-          <p className="muted">
+        <FormCard gap={10}>
+          <p className="g-t-3" style={s('margin:0')}>
             {tr('settings.copay.channels', {
               channels: scheme.channels.map((c) => tr(`orders.channel.${c}`)).join(' · '),
             })}
           </p>
-          <p className="hint">{tr('settings.copay.channelsNote')}</p>
+          <p className="g-t-c" style={s('margin:0')}>
+            {tr('settings.copay.channelsNote')}
+          </p>
           {storefrontOnly ? null : (
-            <p className="notice" role="alert">
-              <span>{tr('settings.copay.channelsWarn')}</span>
-            </p>
+            <Callout tone="bad" role="alert">
+              {tr('settings.copay.channelsWarn')}
+            </Callout>
           )}
-        </>
+        </FormCard>
       ) : (
-        <p className="muted">{tr('settings.copay.new')}</p>
+        <p className="g-t-s" style={s('margin:0')}>
+          {tr('settings.copay.new')}
+        </p>
       )}
 
-      <TextField
-        label={tr('settings.copay.nameTh')}
-        value={form.nameTh}
-        maxLength={80}
-        disabled={!editable}
-        error={fieldError('nameTh')}
-        onChange={(nameTh) => set({ nameTh })}
-      />
-      <TextField
-        label={tr('settings.copay.nameEn')}
-        value={form.nameEn}
-        maxLength={80}
-        hint={tr('settings.optional')}
-        disabled={!editable}
-        onChange={(nameEn) => set({ nameEn })}
-      />
-      <TextField
-        label={tr('settings.copay.share')}
-        value={form.share}
-        inputMode="decimal"
-        maxLength={6}
-        hint={tr('settings.copay.shareHint')}
-        disabled={!editable}
-        error={fieldError('share')}
-        onChange={(share) => set({ share })}
-      />
-      <div className="sset__pair">
+      <FormCard>
         <TextField
-          label={tr('settings.copay.dailyCap')}
-          value={form.dailyCap}
+          label={tr('settings.copay.nameTh')}
+          value={form.nameTh}
+          maxLength={80}
+          disabled={!editable}
+          error={fieldError('nameTh')}
+          onChange={(nameTh) => set({ nameTh })}
+        />
+        <TextField
+          label={tr('settings.copay.nameEn')}
+          value={form.nameEn}
+          maxLength={80}
+          hint={tr('settings.optional')}
+          disabled={!editable}
+          onChange={(nameEn) => set({ nameEn })}
+        />
+        <TextField
+          label={tr('settings.copay.share')}
+          value={form.share}
           inputMode="decimal"
-          hint={tr('settings.copay.capHint')}
+          maxLength={6}
+          hint={tr('settings.copay.shareHint')}
           disabled={!editable}
-          error={fieldError('dailyCap')}
-          onChange={(dailyCap) => set({ dailyCap })}
+          error={fieldError('share')}
+          onChange={(share) => set({ share })}
         />
-        <TextField
-          label={tr('settings.copay.totalCap')}
-          value={form.totalCap}
-          inputMode="decimal"
-          hint={tr('settings.copay.capHint')}
-          disabled={!editable}
-          error={fieldError('totalCap')}
-          onChange={(totalCap) => set({ totalCap })}
-        />
-      </div>
-      <div className="sset__pair">
-        <TextField
-          label={tr('settings.copay.from')}
-          type="date"
-          value={form.activeFrom}
-          disabled={!editable}
-          error={fieldError('activeFrom')}
-          {...preview(form.activeFrom)}
-          onChange={(activeFrom) => set({ activeFrom })}
-        />
-        <TextField
-          label={tr('settings.copay.to')}
-          type="date"
-          value={form.activeTo}
-          disabled={!editable}
-          error={fieldError('activeTo')}
-          {...preview(form.activeTo)}
-          onChange={(activeTo) => set({ activeTo })}
-        />
-      </div>
-      <div className="sset__pair">
-        <TextField
-          label={tr('settings.copay.fromTime')}
-          value={form.fromTime}
-          inputMode="numeric"
-          maxLength={5}
-          disabled={!editable}
-          error={fieldError('fromTime')}
-          onChange={(fromTime) => set({ fromTime })}
-        />
-        <TextField
-          label={tr('settings.copay.toTime')}
-          value={form.toTime}
-          inputMode="numeric"
-          maxLength={5}
-          disabled={!editable}
-          error={fieldError('toTime')}
-          onChange={(toTime) => set({ toTime })}
-        />
-      </div>
-
-      <div className="stack-sm">
-        <label className={`pick${form.enabled ? ' pick--on' : ''}`}>
-          <input
-            className="visually-hidden"
-            type="checkbox"
-            checked={form.enabled}
-            disabled={!editable || (!storefrontOnly && !form.enabled)}
-            onChange={(event) => set({ enabled: event.target.checked })}
+        <FieldPair>
+          <TextField
+            label={tr('settings.copay.dailyCap')}
+            value={form.dailyCap}
+            inputMode="decimal"
+            hint={tr('settings.copay.capHint')}
+            disabled={!editable}
+            error={fieldError('dailyCap')}
+            onChange={(dailyCap) => set({ dailyCap })}
           />
-          {tr('settings.copay.enabled')}
-        </label>
-        <p className="hint">{tr('settings.copay.enabledHint')}</p>
+          <TextField
+            label={tr('settings.copay.totalCap')}
+            value={form.totalCap}
+            inputMode="decimal"
+            hint={tr('settings.copay.capHint')}
+            disabled={!editable}
+            error={fieldError('totalCap')}
+            onChange={(totalCap) => set({ totalCap })}
+          />
+        </FieldPair>
+        <FieldPair>
+          <TextField
+            label={tr('settings.copay.from')}
+            type="date"
+            value={form.activeFrom}
+            disabled={!editable}
+            error={fieldError('activeFrom')}
+            {...preview(form.activeFrom)}
+            onChange={(activeFrom) => set({ activeFrom })}
+          />
+          <TextField
+            label={tr('settings.copay.to')}
+            type="date"
+            value={form.activeTo}
+            disabled={!editable}
+            error={fieldError('activeTo')}
+            {...preview(form.activeTo)}
+            onChange={(activeTo) => set({ activeTo })}
+          />
+        </FieldPair>
+        <FieldPair>
+          <TextField
+            icon="clock"
+            label={tr('settings.copay.fromTime')}
+            value={form.fromTime}
+            inputMode="numeric"
+            maxLength={5}
+            disabled={!editable}
+            error={fieldError('fromTime')}
+            onChange={(fromTime) => set({ fromTime })}
+          />
+          <TextField
+            icon="clock"
+            label={tr('settings.copay.toTime')}
+            value={form.toTime}
+            inputMode="numeric"
+            maxLength={5}
+            disabled={!editable}
+            error={fieldError('toTime')}
+            onChange={(toTime) => set({ toTime })}
+          />
+        </FieldPair>
+      </FormCard>
+
+      <FormCard gap={8}>
+        <SwitchRow
+          label={tr('settings.copay.enabled')}
+          hint={tr('settings.copay.enabledHint')}
+          checked={form.enabled}
+          disabled={!editable || (!storefrontOnly && !form.enabled)}
+          onChange={(enabled) => set({ enabled })}
+        />
         {fieldError('enabled') ? (
-          <p className="error" role="alert">
-            {fieldError('enabled')}
-          </p>
+          <FieldMessage tone="bad">{fieldError('enabled')}</FieldMessage>
         ) : null}
-      </div>
+      </FormCard>
       <SaveBar editable={editable} busy={busy} saving={saving} />
     </form>
   );

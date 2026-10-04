@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
+import { s } from '../design/style.ts';
 import { useT } from '../ui/hooks.ts';
-import { Icon } from '../ui/Icon.tsx';
+import { Callout } from '../ui/Notice.tsx';
 import type { ListSlot } from './admin-store.ts';
 
 export type AdminMessage = { kind: 'ok' | 'error'; text: string };
@@ -25,43 +26,51 @@ export function AdminFrame({
 }) {
   const tr = useT();
   return (
-    <div className="sset__body">
+    <div style={s('display:flex;flex-direction:column;gap:14px')}>
       {offline ? (
-        <p className="notice" role="status">
-          <Icon name="wifi-off" />
-          <span>{tr('settings.offline')}</span>
-        </p>
+        <Callout tone="warn" role="status">
+          {tr('settings.offline')}
+        </Callout>
       ) : null}
       {message ? (
-        <p
-          className={message.kind === 'error' ? 'error' : 'sset__message'}
+        <Callout
+          tone={message.kind === 'error' ? 'bad' : 'ok'}
           role={message.kind === 'error' ? 'alert' : 'status'}
         >
           {message.text}
-        </p>
+        </Callout>
       ) : null}
       {slot.status === 'loading' ? (
-        <p className="muted" role="status">
+        <p className="g-t-s" style={s('margin:0')} role="status">
           {tr('settings.admin.loading')}
         </p>
       ) : null}
       {slot.status === 'locked' ? (
-        <div className="notice" role="status">
-          <Icon name="info" />
-          <span>{tr('settings.admin.locked')}</span>
-          <button type="button" className="btn btn-soft" disabled={offline} onClick={onLoad}>
-            {tr('settings.admin.unlock')}
-          </button>
-        </div>
+        <Callout
+          tone="info"
+          role="status"
+          icon="lock"
+          action={
+            <button type="button" className="g-btn gbtn-row" disabled={offline} onClick={onLoad}>
+              {tr('settings.admin.unlock')}
+            </button>
+          }
+        >
+          {tr('settings.admin.locked')}
+        </Callout>
       ) : null}
       {slot.status === 'error' ? (
-        <div className="notice" role="alert">
-          <Icon name="alert" />
-          <span>{tr('settings.admin.loadFailed')}</span>
-          <button type="button" className="btn btn-soft" disabled={offline} onClick={onLoad}>
-            {tr('common.retry')}
-          </button>
-        </div>
+        <Callout
+          tone="bad"
+          role="alert"
+          action={
+            <button type="button" className="g-btn gbtn-row" disabled={offline} onClick={onLoad}>
+              {tr('common.retry')}
+            </button>
+          }
+        >
+          {tr('settings.admin.loadFailed')}
+        </Callout>
       ) : null}
       {slot.status === 'ready' ? children : null}
     </div>

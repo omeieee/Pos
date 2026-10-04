@@ -46,6 +46,8 @@ export const test = base.extend<{ registered: boolean }>({
   registered: [true, { option: true }],
   page: async ({ page, registered }, use, testInfo) => {
     const kind: DeviceKind = testInfo.project.name.startsWith('iphone') ? 'iphone' : 'ipad';
+    // The design moves a lot (rise, pop, springs); a test measures and taps a settled page.
+    await page.emulateMedia({ reducedMotion: 'reduce' });
     await page.addInitScript(() => {
       document.addEventListener('DOMContentLoaded', () => {
         const style = document.createElement('style');
@@ -92,12 +94,27 @@ export async function signInWithPin(page: Page, who: StaffKey) {
   await page.goto('/');
   await page.getByRole('button', { name: new RegExp(person.name) }).click();
   await tapPin(page, person.pin);
-  await expect(mainNav(page)).toBeVisible();
+  // The kitchen role lands on the full-screen kitchen board, which has no navigation.
+  await expect(
+    mainNav(page).or(page.getByRole('heading', { level: 1, name: tr('kitchen.title') })),
+  ).toBeVisible();
 }
 
 /** A page of the signed-in app, by its address (never a reload: the mock lives in the page). */
 export async function openPage(page: Page, hash: string) {
-  await mainNav(page).locator(`a[href="#${hash}"]`).click();
+  const link = mainNav(page).locator(`a[href="#${hash}"]`);
+  // The kitchen board and the payment page are full-screen and the phone's tab bar is short: those
+  // go by the address, still without a reload.
+  // A page that is still swapping (the kitchen board drops the navigation) may take the link
+  // away under the click: then the address is used as well.
+  if ((await link.count()) > 0) {
+    const clicked = await link.click({ timeout: 3_000 }).then(
+      () => true,
+      () => false,
+    );
+    if (clicked) return;
+  }
+  await page.evaluate((to) => window.location.assign(`#${to}`), hash);
 }
 
 export const isPhone = (page: Page) => (page.viewportSize()?.width ?? 1000) <= PHONE_MAX_WIDTH;
@@ -111,7 +128,7 @@ export async function setMockNetwork(page: Page, online: boolean) {
   }, !online);
 }
 
-/** The connection badge of the top bar in one state (colour, icon and words: see ConnectionBadge). */
+/** The sync pill in one state (colour, icon and words: see SyncPill). */
 export const netBadge = (page: Page, state: 'online' | 'offline') =>
   page.locator(`.net.net--${state}`).filter({ hasText: tr(`net.${state}`) });
 
@@ -122,8 +139,8 @@ export async function simulateIncomingOrder(page: Page) {
   });
 }
 
-const dish = (page: Page, name: string) =>
-  page.locator('.dishes').getByRole('button', { name: new RegExp(`^${name}`) });
+export const dish = (page: Page, name: string) =>
+  page.locator('button.g-tile', { has: page.getByText(name, { exact: true }) });
 
 export interface OrderSpec {
   /** Thai dish name as on the menu. */
@@ -143,7 +160,7 @@ export async function addDish(page: Page, spec: OrderSpec) {
   if (spec.options && spec.options.length > 0) {
     await expect(sheet).toBeVisible();
     for (const option of spec.options) {
-      await sheet.locator('label.pick', { hasText: option }).click();
+      await sheet.locator('label.g-chip', { hasText: option }).click();
     }
     for (let i = 1; i < (spec.qty ?? 1); i += 1) {
       await sheet
@@ -158,10 +175,10 @@ export async function addDish(page: Page, spec: OrderSpec) {
 /** The cart is beside the menu on iPad and behind the bottom bar on iPhone. */
 export async function openCart(page: Page): Promise<Locator> {
   if (isPhone(page)) {
-    await page.locator('.oe__bar button').click();
+    await page.getByTestId('cart-bar').click();
     return page.getByRole('dialog');
   }
-  return page.locator('.oe__cart');
+  return page.getByTestId('cart');
 }
 
 /**
@@ -171,14 +188,36 @@ export async function openCart(page: Page): Promise<Locator> {
 export async function ringOrder(page: Page, spec: OrderSpec): Promise<string> {
   await addDish(page, spec);
   const cart = await openCart(page);
-  await cart.locator('label.bld__item', { hasText: spec.building ?? 'A1' }).click();
+  await cart.locator('label.g-chip', { hasText: spec.building ?? 'A1' }).click();
   await cart.getByLabel(tr('pos.delivery.name')).fill(spec.recipient ?? 'คุณทดสอบ');
-  await cart.getByRole('button', { name: tr('pos.orderEntry.place'), exact: true }).click();
+  await cart.getByRole('button', { name: /^คิดเงิน/ }).click();
   const heading = page.getByRole('heading', { level: 1, name: /^ออเดอร์ [A-Z]+-\d+/ });
   await expect(heading).toBeVisible();
   return ((await heading.textContent()) ?? '').replace('ออเดอร์ ', '').trim();
 }
 
 /** The payment region of the order page. */
-export const paymentPanel = (page: Page) =>
-  page.getByRole('region', { name: tr('payment.title'), exact: true });
+export const paymentPanel = (page: Page) => page.locator('section[aria-labelledby="pay-title"]');
+
+/**
+ * The real orders of the orders list (not the waiting ones): rows of the table on an iPad or laptop,
+ * cards (links) on an iPhone. The waiting entries of the outbox are links of their own.
+ */
+export const realOrders = (page: Page) =>
+  isPhone(page)
+    ? page.locator('main').getByRole('link', { name: /S-\d+/ })
+    : page.locator('main').getByRole('row').filter({ hasText: /S-\d+/ });
+
+/**
+ * Who is signed in and the sign-out live behind the profile row of the Settings page (the account
+ * menu), which every layout has; the shell's own avatar menu exists on tablets and laptops only.
+ */
+export async function openAccount(page: Page) {
+  if (!page.url().endsWith('#/settings'))
+    await page.evaluate(() => {
+      window.location.hash = '#/settings';
+    });
+  const trigger = page.locator('main button[aria-haspopup="true"]');
+  if ((await trigger.getAttribute('aria-expanded')) !== 'true') await trigger.click();
+  return page.locator(`#${await trigger.getAttribute('aria-controls')}`);
+}

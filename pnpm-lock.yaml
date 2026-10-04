@@ -233,6 +233,9 @@ importers:
 
   apps/liff-web:
     dependencies:
+      '@fontsource-variable/anuphan':
+        specifier: ^5.3.0
+        version: 5.3.0
       '@sds/i18n':
         specifier: workspace:*
         version: link:../../packages/i18n
@@ -270,6 +273,9 @@ importers:
 
   apps/pos-web:
     dependencies:
+      '@fontsource-variable/anuphan':
+        specifier: ^5.3.0
+        version: 5.3.0
       '@sds/i18n':
         specifier: workspace:*
         version: link:../../packages/i18n
@@ -1532,6 +1538,9 @@ packages:
 
   '@fastify/websocket@11.3.0':
     resolution: {integrity: sha512-g89ag4BCcD9YP5wBZXixzoLnuf5j89p/sXFcfpCiv2pdEkYYukBEoK3heVzqsp0EAtszVDc2BBZG0KZqeAShIA==}
+
+  '@fontsource-variable/anuphan@5.3.0':
+    resolution: {integrity: sha512-4kR8VqHI5El8z3tvCeKB4EE23Xj/R41UpAlsez4spDCZTMHGrlp1CzE65SAu/hGVIhNcJHaTyHNdZ2yfPl/w/A==}
 
   '@isaacs/cliui@9.0.0':
     resolution: {integrity: sha512-AokJm4tuBHillT+FpMtxQ60n8ObyXBatq7jD2/JA9dxbDDokKQm8KMht5ibGzLVU9IJDIKK4TPKgMHEYMn3lMg==}
@@ -5025,6 +5034,8 @@ snapshots:
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
+
+  '@fontsource-variable/anuphan@5.3.0': {}
 
   '@isaacs/cliui@9.0.0': {}
 

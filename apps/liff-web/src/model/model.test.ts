@@ -12,6 +12,7 @@ import {
 } from './cart.ts';
 import { clock, createRequestIds, formProblems, prefilled } from './checkout.ts';
 import { nextPollDelayMs } from './poll.ts';
+import { orderSteps } from './steps.ts';
 
 const ids = (n: number) => `0191a8f0-0000-7000-8000-${String(n).padStart(12, '0')}`;
 const NOODLES = ids(1);
@@ -198,5 +199,48 @@ describe('polling', () => {
     ).toBeNull();
     // finished but not yet paid: still worth watching
     expect(nextPollDelayMs(order({ status: 'completed' }), false, 0)).toBe(4000);
+  });
+});
+
+describe('order tracker', () => {
+  const at = (
+    status: MyOrder['status'],
+    paymentStatus: MyOrder['paymentStatus'],
+    method: 'promptpay' | 'cash' | 'gov_copay' | null,
+  ) =>
+    orderSteps({
+      status,
+      paymentStatus,
+      payment: method ? ({ method } as MyOrder['payment']) : null,
+    });
+
+  test('a PromptPay order waits at payment until it is paid, and a claim does not move it', () => {
+    expect(at('new', 'unpaid', 'promptpay')).toEqual(['done', 'now', 'todo', 'todo']);
+    expect(at('new', 'awaiting_confirmation', 'promptpay')).toEqual([
+      'done',
+      'now',
+      'todo',
+      'todo',
+    ]);
+    expect(at('new', 'paid', 'promptpay')).toEqual(['done', 'done', 'now', 'todo']);
+    expect(at('preparing', 'paid', 'promptpay')).toEqual(['done', 'done', 'now', 'todo']);
+    expect(at('ready', 'paid', 'promptpay')).toEqual(['done', 'done', 'done', 'now']);
+    expect(at('completed', 'paid', 'promptpay')).toEqual(['done', 'done', 'done', 'done']);
+  });
+
+  test('cash and ไทยช่วยไทย are paid at the hand-over, so cooking is the current step', () => {
+    expect(at('new', 'unpaid', 'cash')).toEqual(['done', 'todo', 'now', 'todo']);
+    expect(at('new', 'unpaid', null)).toEqual(['done', 'todo', 'now', 'todo']);
+    expect(at('preparing', 'unpaid', 'gov_copay')).toEqual(['done', 'todo', 'now', 'todo']);
+    expect(at('ready', 'unpaid', 'cash')).toEqual(['done', 'todo', 'done', 'now']);
+    expect(at('completed', 'paid', 'cash')).toEqual(['done', 'done', 'done', 'done']);
+  });
+
+  test('food that is ready is the step to act on even if the transfer is not confirmed yet', () => {
+    expect(at('ready', 'unpaid', 'promptpay')).toEqual(['done', 'todo', 'done', 'now']);
+  });
+
+  test('a cancelled order has no tracker', () => {
+    expect(at('cancelled', 'unpaid', 'promptpay')).toBeNull();
   });
 });

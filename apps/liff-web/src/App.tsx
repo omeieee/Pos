@@ -1,3 +1,4 @@
+import { type MessageKey, t } from '@sds/i18n';
 import type { CheckoutInfo, PublicMenuResponse } from '@sds/shared';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { type Api, createApi } from './api/client.ts';
@@ -5,7 +6,8 @@ import type { Cart } from './model/cart.ts';
 import { apiBaseUrl } from './platform/config.ts';
 import { type Platform, startPlatform } from './platform/liff.ts';
 import { Ctx, errorKey, localeFromBrowser, useApp, useT } from './ui/app-context.tsx';
-import { CartScreen, CheckoutScreen, PrivacyGate } from './ui/CartScreen.tsx';
+import { CheckoutScreen, PrivacyGate } from './ui/CartScreen.tsx';
+import { Body, Frame, Header, Notice } from './ui/Chrome.tsx';
 import { MenuScreen } from './ui/MenuScreen.tsx';
 import { OrderScreen, OrdersScreen } from './ui/OrderScreen.tsx';
 
@@ -31,6 +33,8 @@ type Boot =
   | { state: 'ready'; platform: Platform; api: Api }
   | { state: 'error'; error: unknown };
 
+const tr = (locale: 'th' | 'en', key: MessageKey) => t(locale, key);
+
 export function App() {
   const [boot, setBoot] = useState<Boot>({ state: 'loading' });
   const [path, go] = usePath();
@@ -50,27 +54,32 @@ export function App() {
 
   if (boot.state !== 'ready') {
     return (
-      <main className="page">
-        <p className={boot.state === 'error' ? 'error' : 'muted'} role="status">
-          {boot.state === 'error' ? tr(locale, 'liff.error.signin') : tr(locale, 'liff.loading')}
-        </p>
-      </main>
+      <Frame>
+        <Header title={tr(locale, 'liff.app.name')} />
+        <Body>
+          {boot.state === 'error' ? (
+            <Notice tone="bad" icon="warn" alert>
+              {tr(locale, 'liff.error.signin')}
+            </Notice>
+          ) : (
+            <Notice icon="clock">{tr(locale, 'liff.loading')}</Notice>
+          )}
+        </Body>
+      </Frame>
     );
   }
   return (
     <Ctx.Provider value={{ api: boot.api, platform: boot.platform, locale, go }}>
-      <Shell path={path} />
+      <Frame>
+        <Screens path={path} />
+      </Frame>
     </Ctx.Provider>
   );
 }
 
-import { type MessageKey, t } from '@sds/i18n';
-
-const tr = (locale: 'th' | 'en', key: MessageKey) => t(locale, key);
-
-function Shell({ path }: { path: string }) {
+function Screens({ path }: { path: string }) {
   const tr = useT();
-  const { api, go } = useApp();
+  const { api } = useApp();
   const [menu, setMenu] = useState<PublicMenuResponse | null>(null);
   const [info, setInfo] = useState<CheckoutInfo | null>(null);
   const [cart, setCart] = useState<Cart>([]);
@@ -93,64 +102,54 @@ function Shell({ path }: { path: string }) {
     : new URLSearchParams(query ?? '').get('payment');
   const orderId = /^\/orders\/([0-9a-f-]{36})$/i.exec(pathname)?.[1];
 
-  let screen: React.ReactNode;
   if (failure !== null && (!menu || !info)) {
-    screen = (
-      <div>
-        <p className="error" role="alert">
-          {tr(errorKey(failure))}
-        </p>
-        <button type="button" className="btn" onClick={load}>
-          {tr('liff.retry')}
-        </button>
-      </div>
+    return (
+      <>
+        <Header title={tr('liff.app.name')} />
+        <Body>
+          <Notice tone="bad" icon="warn" alert>
+            {tr(errorKey(failure))}
+          </Notice>
+          <button
+            type="button"
+            className="g-btn g-btn-p g-btn-block"
+            style={{ marginTop: 14 }}
+            onClick={load}
+          >
+            {tr('liff.retry')}
+          </button>
+        </Body>
+      </>
     );
-  } else if (info && !info.privacyAcknowledged) {
+  }
+  if (info && !info.privacyAcknowledged) {
     // First use (or a new notice version): the notice comes before anything else.
-    screen = <PrivacyGate refreshInfo={refreshInfo} />;
-  } else if (orderId) {
-    screen = <OrderScreen id={orderId} flag={flag} />;
-  } else if (pathname === '/orders') {
-    screen = <OrdersScreen />;
-  } else if (!menu) {
-    screen = <p className="muted">{tr('liff.loading')}</p>;
-  } else if (pathname === '/cart') {
-    screen = <CartScreen menu={menu} cart={cart} setCart={setCart} />;
-  } else if (pathname === '/checkout' && info) {
-    screen = (
+    return <PrivacyGate refreshInfo={refreshInfo} />;
+  }
+  if (orderId) return <OrderScreen id={orderId} flag={flag} />;
+  if (pathname === '/orders') return <OrdersScreen />;
+  if (!menu) {
+    return (
+      <>
+        <Header title={tr('liff.app.name')} />
+        <Body>
+          <Notice icon="clock">{tr('liff.loading')}</Notice>
+        </Body>
+      </>
+    );
+  }
+  // The cart and the checkout are one screen (`/cart` is the old address of it).
+  if ((pathname === '/checkout' || pathname === '/cart') && info) {
+    return (
       <CheckoutScreen
         menu={menu}
         info={info}
         cart={cart}
+        setCart={setCart}
         clearCart={() => setCart([])}
         refreshInfo={refreshInfo}
       />
     );
-  } else {
-    screen = <MenuScreen menu={menu} info={info} cart={cart} setCart={setCart} />;
   }
-
-  return (
-    <>
-      <header className="bar">
-        <button
-          type="button"
-          className="tab"
-          onClick={() => go('/menu')}
-          aria-current={pathname === '/menu' || pathname === '/' ? 'page' : undefined}
-        >
-          {tr('liff.nav.menu')}
-        </button>
-        <button
-          type="button"
-          className="tab"
-          onClick={() => go('/orders')}
-          aria-current={pathname.startsWith('/orders') ? 'page' : undefined}
-        >
-          {tr('liff.nav.orders')}
-        </button>
-      </header>
-      <main className="page">{screen}</main>
-    </>
-  );
+  return <MenuScreen menu={menu} info={info} cart={cart} setCart={setCart} />;
 }

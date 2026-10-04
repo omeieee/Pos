@@ -39,7 +39,7 @@ export type IconName =
   | 'volume-off';
 
 /** The entries of the navigation: one per top-level page. */
-export type RouteId = 'new' | 'platform' | 'kitchen' | 'orders' | 'menu' | 'settings';
+export type RouteId = 'new' | 'platform' | 'kitchen' | 'orders' | 'menu' | 'settings' | 'dashboard';
 
 /** Everything the address bar can show; `order` is a page inside `orders`, `settingsSection` one inside `settings`. */
 export type PageId = RouteId | 'order' | 'settingsSection';
@@ -88,6 +88,14 @@ export const ROUTES: readonly RouteDef[] = [
     icon: 'gear',
     // Anyone who may read settings gets the hub; each section inside asks for its own permission.
     permission: 'settings.view',
+  },
+  // The laptop's back-office overview (design: ภาพรวม). Last, so it is never the first page.
+  {
+    id: 'dashboard',
+    path: '/dashboard',
+    labelKey: 'nav.dashboard',
+    icon: 'grid',
+    permission: 'report.view',
   },
 ];
 

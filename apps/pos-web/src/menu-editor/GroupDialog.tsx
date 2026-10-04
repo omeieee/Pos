@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { FieldPair } from '../ui/FormParts.tsx';
 import { useServices, useT } from '../ui/hooks.ts';
 import { TextField } from '../ui/TextField.tsx';
 import { DialogFrame } from './DialogFrame.tsx';
@@ -60,7 +61,7 @@ export function GroupDialog({ id, onClose }: { id?: string | undefined; onClose:
         hint={tr('menuEditor.field.optional')}
         onChange={(nameEn) => setForm({ ...form, nameEn })}
       />
-      <div className="mdialog__pair">
+      <FieldPair>
         <TextField
           label={tr('menuEditor.field.minSelect')}
           value={form.minSelect}
@@ -78,7 +79,7 @@ export function GroupDialog({ id, onClose }: { id?: string | undefined; onClose:
           error={problems.includes('maxSelect') ? tr('menuEditor.error.maxSelect') : undefined}
           onChange={(maxSelect) => setForm({ ...form, maxSelect })}
         />
-      </div>
+      </FieldPair>
     </DialogFrame>
   );
 }

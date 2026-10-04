@@ -1,0 +1,535 @@
+/*
+ * Glass theme for the staff app (design v2, D-22). It only changes how things look (surface,
+ * border, radius, shadow, motion), never layout, so it sits last in the cascade and the older
+ * stylesheets keep owning structure. Same rules as the others: every colour, size and radius
+ * is a --sds-* token, and nothing depends on hover (the counter is touch-first), only :active.
+ * Blur is used on floating layers only (bar, rail, order panel, sheets, payment panel); the dish
+ * tiles use a plain translucent fill so scrolling stays smooth on an older iPad.
+ */
+
+/* ---------- Backdrop: warm gradient and two slow orbs behind the glass ---------- */
+body {
+  background: var(--sds-gradient-backdrop);
+  background-attachment: fixed;
+  min-height: 100vh;
+}
+body::before,
+body::after {
+  content: "";
+  position: fixed;
+  z-index: -1;
+  border-radius: 50%;
+  pointer-events: none;
+  aspect-ratio: 1;
+  animation: sds-drift 26s ease-in-out infinite alternate;
+}
+body::before {
+  width: 46vmax;
+  left: -10vmax;
+  bottom: -18vmax;
+  background: var(--sds-gradient-orb-a);
+}
+body::after {
+  width: 40vmax;
+  right: -8vmax;
+  top: 22vh;
+  background: var(--sds-gradient-orb-b);
+  animation-duration: 32s;
+  animation-direction: alternate-reverse;
+}
+
+/* ---------- Type: numbers keep their width, display text uses the display weight ---------- */
+.amount-hero,
+.order-no,
+.sumrow.total,
+.change__value {
+  font-variant-numeric: tabular-nums;
+}
+.order-no {
+  font-weight: 600;
+}
+
+/* ---------- Floating layers: top bar and navigation ---------- */
+.topbar {
+  background: var(--sds-glass-surface);
+  border-bottom: 1px solid var(--sds-glass-edge);
+  -webkit-backdrop-filter: blur(var(--sds-glass-blur)) saturate(var(--sds-glass-saturate));
+  backdrop-filter: blur(var(--sds-glass-blur)) saturate(var(--sds-glass-saturate));
+}
+.nav {
+  margin: var(--sds-space-md) 0 var(--sds-space-md) var(--sds-space-md);
+  background: var(--sds-glass-surface);
+  border: 1px solid var(--sds-glass-edge);
+  border-radius: var(--sds-radius-xxl);
+  box-shadow: var(--sds-shadow-glass), var(--sds-glass-highlight);
+  -webkit-backdrop-filter: blur(var(--sds-glass-blur)) saturate(var(--sds-glass-saturate));
+  backdrop-filter: blur(var(--sds-glass-blur)) saturate(var(--sds-glass-saturate));
+}
+.nav__item {
+  border-radius: var(--sds-radius-xl);
+  transition:
+    background var(--sds-motion-base) var(--sds-motion-ease),
+    color var(--sds-motion-base) var(--sds-motion-ease),
+    transform var(--sds-motion-base) var(--sds-motion-spring);
+}
+.nav__item:active {
+  transform: scale(0.94);
+}
+.nav__item[aria-current="page"] {
+  background: var(--sds-glass-surface-strong);
+  box-shadow: var(--sds-shadow-glass), var(--sds-glass-highlight);
+}
+
+/* ---------- Buttons, chips and fields ---------- */
+.btn {
+  border: 1px solid var(--sds-glass-edge);
+  border-radius: var(--sds-radius-pill);
+  background: var(--sds-glass-surface-strong);
+  box-shadow: var(--sds-shadow-glass), var(--sds-glass-highlight);
+  transition:
+    transform var(--sds-motion-base) var(--sds-motion-spring),
+    box-shadow var(--sds-motion-base) var(--sds-motion-ease),
+    background var(--sds-motion-base) var(--sds-motion-ease);
+}
+.btn:active:not(:disabled) {
+  transform: scale(0.97);
+  transition-duration: var(--sds-motion-fast);
+  background: var(--sds-glass-surface-strong);
+}
+.btn-primary {
+  border-color: transparent;
+  background: var(--sds-gradient-brand);
+  color: var(--sds-color-on-brand);
+}
+.btn-primary:active:not(:disabled) {
+  background: var(--sds-gradient-brand);
+}
+.btn-success {
+  border-color: transparent;
+  background: var(--sds-gradient-success);
+  color: var(--sds-color-on-success);
+}
+.btn-success:active:not(:disabled) {
+  background: var(--sds-gradient-success);
+}
+.btn-soft {
+  background: var(--sds-glass-control);
+  border-color: transparent;
+  box-shadow: none;
+}
+.cat,
+.choice {
+  border-color: var(--sds-glass-edge);
+  background: var(--sds-glass-surface);
+  transition:
+    background var(--sds-motion-base) var(--sds-motion-ease),
+    color var(--sds-motion-base) var(--sds-motion-ease),
+    transform var(--sds-motion-base) var(--sds-motion-spring);
+}
+.cat:active,
+.choice:active {
+  transform: scale(0.96);
+}
+/* The selected states come after the glass fills above, or the fill would hide them. */
+.cat--on {
+  border-color: transparent;
+  background: var(--sds-color-text);
+  color: var(--sds-color-text-inverse);
+}
+.choice--on {
+  border-color: var(--sds-color-brand);
+  background: var(--sds-color-brand-subtle);
+  color: var(--sds-color-brand-text);
+}
+.input {
+  border-color: var(--sds-glass-hairline);
+  border-radius: var(--sds-radius-lg);
+  background: var(--sds-glass-field);
+  transition:
+    box-shadow var(--sds-motion-base) var(--sds-motion-ease),
+    border-color var(--sds-motion-base) var(--sds-motion-ease);
+}
+.input:focus {
+  border-color: var(--sds-color-brand);
+  box-shadow: 0 0 0 4px var(--sds-color-brand-subtle);
+}
+.seg {
+  background: var(--sds-glass-control);
+}
+.seg__item {
+  transition:
+    background var(--sds-motion-base) var(--sds-motion-ease),
+    box-shadow var(--sds-motion-base) var(--sds-motion-ease);
+}
+.seg__item--on {
+  background: var(--sds-glass-surface-strong);
+  box-shadow: var(--sds-shadow-glass), var(--sds-glass-highlight);
+}
+
+/* ---------- Order entry ---------- */
+.dish {
+  padding: var(--sds-space-xs);
+  border-color: var(--sds-glass-edge);
+  border-radius: var(--sds-radius-xl);
+  background: var(--sds-glass-surface-strong);
+  box-shadow: var(--sds-shadow-glass), var(--sds-glass-highlight);
+  transition:
+    transform var(--sds-motion-slow) var(--sds-motion-spring),
+    box-shadow var(--sds-motion-base) var(--sds-motion-ease);
+}
+.dish:active:not(:disabled) {
+  transform: scale(0.97);
+  transition-duration: var(--sds-motion-fast);
+  background: var(--sds-glass-surface-strong);
+}
+.dish__art {
+  border-radius: var(--sds-radius-lg);
+}
+.dish__qty {
+  background: var(--sds-gradient-brand);
+  box-shadow: var(--sds-shadow-glass);
+  animation: sds-pop 600ms var(--sds-motion-spring) both;
+}
+.oe__bar {
+  background: var(--sds-glass-surface-strong);
+  border-top-color: var(--sds-glass-edge);
+  -webkit-backdrop-filter: blur(var(--sds-glass-blur-strong)) saturate(var(--sds-glass-saturate));
+  backdrop-filter: blur(var(--sds-glass-blur-strong)) saturate(var(--sds-glass-saturate));
+}
+.cart__head,
+.deliv,
+.cart__foot {
+  border-color: var(--sds-glass-hairline);
+}
+.cart__foot {
+  background: var(--sds-glass-sunk);
+}
+.line {
+  border-color: var(--sds-glass-hairline);
+}
+.stepper {
+  background: var(--sds-glass-control);
+}
+
+@media (min-width: 720px) {
+  /* The order panel floats beside the menu as a raised glass panel. */
+  .oe__cart {
+    margin: var(--sds-space-md) var(--sds-space-md) var(--sds-space-md) 0;
+    border: 1px solid var(--sds-glass-edge);
+    border-radius: var(--sds-radius-xxl);
+    overflow: hidden;
+    background: var(--sds-glass-surface-strong);
+    box-shadow: var(--sds-shadow-glass-raised), var(--sds-glass-highlight);
+    -webkit-backdrop-filter: blur(var(--sds-glass-blur-strong)) saturate(var(--sds-glass-saturate));
+    backdrop-filter: blur(var(--sds-glass-blur-strong)) saturate(var(--sds-glass-saturate));
+  }
+  .sheet {
+    border-radius: var(--sds-radius-xxl);
+  }
+}
+@media (max-width: 719px) {
+  /* Phone: the navigation is a floating pill above the Home indicator. */
+  .nav {
+    margin: 0 var(--sds-space-md) calc(var(--sds-space-sm) + var(--safe-bottom));
+    padding: var(--sds-space-xs);
+    border-radius: var(--sds-radius-xxl);
+  }
+  .sheet--options,
+  .sheet--cart {
+    border-radius: var(--sds-radius-xxl) var(--sds-radius-xxl) 0 0;
+  }
+}
+
+/* ---------- Sheets, dialogs and sign-in cards ---------- */
+.overlay {
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+.card {
+  background: var(--sds-glass-surface-strong);
+  border: 1px solid var(--sds-glass-edge);
+  box-shadow: var(--sds-shadow-glass-raised), var(--sds-glass-highlight);
+  -webkit-backdrop-filter: blur(var(--sds-glass-blur-strong)) saturate(var(--sds-glass-saturate));
+  backdrop-filter: blur(var(--sds-glass-blur-strong)) saturate(var(--sds-glass-saturate));
+}
+.card {
+  border-radius: var(--sds-radius-xxl);
+}
+/* A sheet sits over the dimmed page, so it is solid enough to read; glass on glass turns grey. */
+.sheet {
+  background: var(--sds-color-surface);
+  border: 1px solid var(--sds-glass-edge);
+  box-shadow: var(--sds-shadow-glass-raised), var(--sds-glass-highlight);
+  animation: sds-slide-up 500ms var(--sds-motion-ease) both;
+}
+
+/* ---------- Payment ---------- */
+.ppanel {
+  border-color: var(--sds-glass-edge);
+  border-radius: var(--sds-radius-xxl);
+  background: var(--sds-glass-surface-strong);
+  box-shadow: var(--sds-shadow-glass-raised), var(--sds-glass-highlight);
+  -webkit-backdrop-filter: blur(var(--sds-glass-blur-strong)) saturate(var(--sds-glass-saturate));
+  backdrop-filter: blur(var(--sds-glass-blur-strong)) saturate(var(--sds-glass-saturate));
+}
+.method {
+  border-color: var(--sds-glass-edge);
+  border-radius: var(--sds-radius-xl);
+  background: var(--sds-glass-surface);
+  transition:
+    border-color var(--sds-motion-base) var(--sds-motion-ease),
+    box-shadow var(--sds-motion-base) var(--sds-motion-ease),
+    transform var(--sds-motion-base) var(--sds-motion-spring);
+}
+.method:active {
+  transform: scale(0.98);
+}
+.method--on {
+  border-color: var(--sds-color-brand);
+  background: var(--sds-glass-surface-strong);
+  box-shadow:
+    var(--sds-shadow-glass),
+    0 0 0 3px var(--sds-color-brand-subtle);
+}
+.keypad__key {
+  border-color: var(--sds-glass-edge);
+  border-radius: var(--sds-radius-xl);
+  background: var(--sds-glass-surface-strong);
+  box-shadow: var(--sds-shadow-glass), var(--sds-glass-highlight);
+  transition:
+    transform var(--sds-motion-base) var(--sds-motion-spring),
+    background var(--sds-motion-base) var(--sds-motion-ease);
+}
+.keypad__key:active {
+  transform: scale(0.93);
+  transition-duration: var(--sds-motion-fast);
+}
+.change {
+  border-radius: var(--sds-radius-xl);
+}
+.copay__card,
+.phistory__row,
+.pmoves__row {
+  border-radius: var(--sds-radius-lg);
+}
+
+/* ---------- Layout the way the design draws it (design v2) ---------- */
+.nav__logo,
+.nav__avatar {
+  display: none;
+}
+.dish__art--peach {
+  background: var(--sds-gradient-tint-peach);
+}
+.dish__art--gold {
+  background: var(--sds-gradient-tint-gold);
+}
+.dish__art--rose {
+  background: var(--sds-gradient-tint-rose);
+}
+.dish__art--sky {
+  background: var(--sds-gradient-tint-sky);
+}
+.dish__art--sand {
+  background: var(--sds-gradient-tint-sand);
+}
+.dish__art {
+  aspect-ratio: 16 / 10;
+  color: inherit;
+}
+.dish__drawing {
+  width: 74%;
+  height: auto;
+}
+.dish__photo {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.dish__art:has(.dish__photo) {
+  padding: 0;
+  overflow: hidden;
+}
+.dish__foot {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sds-space-sm);
+  padding: 0 var(--sds-space-sm) var(--sds-space-sm) var(--sds-space-md);
+}
+.dish__foot .dish__price {
+  margin: 0;
+  padding: 0;
+  font-size: var(--sds-font-size-lg);
+}
+.dish__add {
+  width: var(--tap);
+  height: var(--tap);
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--sds-gradient-brand);
+  color: var(--sds-color-on-brand);
+  box-shadow: var(--sds-shadow-glass);
+}
+.dish__name {
+  font-weight: 600;
+  min-height: calc(2 * 1.5em);
+}
+.oe__menu > * {
+  flex-shrink: 0;
+}
+/* payment.css styles .chips as a 3-column grid (quick cash amounts) and leaks here; the category row stays one scrolling line. */
+.oe__menu .chips {
+  display: flex;
+  flex-wrap: nowrap;
+}
+.oe__menu .chips > * {
+  flex: none;
+}
+.oe__head {
+  display: flex;
+  align-items: center;
+  gap: var(--sds-space-lg);
+}
+.oe__headtext {
+  flex: 1;
+  min-width: 0;
+}
+.oe__title {
+  font-size: var(--sds-font-size-xxl);
+  line-height: var(--sds-line-height-tight);
+  font-weight: 600;
+}
+.oe__date {
+  font-size: var(--sds-font-size-sm);
+}
+.oe__search {
+  flex: none;
+  width: min(280px, 100%);
+  max-width: none;
+  min-height: var(--tap);
+  padding: 0 var(--sds-space-md);
+  border: 1px solid var(--sds-glass-edge);
+  border-radius: var(--sds-radius-pill);
+  background: var(--sds-glass-surface);
+  box-shadow: var(--sds-shadow-glass), var(--sds-glass-highlight);
+}
+.oe__search .input {
+  min-height: var(--tap);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.line__main {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: var(--sds-space-md);
+  align-items: start;
+  align-content: start;
+}
+.line__main > :not(.line__thumb) {
+  grid-column: 2;
+}
+.line__thumb {
+  grid-column: 1;
+  grid-row: 1 / span 4;
+  width: 56px;
+  height: 56px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--sds-radius-lg);
+}
+.line__thumb img {
+  width: 44px;
+  height: auto;
+}
+.sumrow.total .money {
+  font-size: var(--sds-font-size-xxl);
+  line-height: var(--sds-line-height-tight);
+}
+
+@media (min-width: 720px) {
+  /* The navigation is a full-height rail with the logo on top, as drawn; the bar becomes light. */
+  .shell {
+    grid-template-areas:
+      "nav top"
+      "nav banner"
+      "nav page";
+  }
+  .topbar {
+    background: none;
+    border-bottom: 0;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    padding-bottom: 0;
+  }
+  .topbar__brand {
+    display: none;
+  }
+  .nav__logo {
+    display: grid;
+    place-items: center;
+    width: 52px;
+    height: 52px;
+    margin: var(--sds-space-xs) auto var(--sds-space-md);
+    border-radius: var(--sds-radius-lg);
+    background: var(--sds-gradient-brand);
+    color: var(--sds-color-on-brand);
+    font-size: var(--sds-font-size-xl);
+    box-shadow: var(--sds-shadow-glass-raised);
+  }
+  .nav__avatar {
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    margin: auto auto var(--sds-space-xs);
+    border-radius: 50%;
+    background: var(--sds-gradient-brand);
+    color: var(--sds-color-on-brand);
+    font-weight: 600;
+  }
+}
+@media (max-width: 719px) {
+  .oe__head {
+    flex-wrap: wrap;
+    gap: var(--sds-space-sm);
+  }
+  .oe__search {
+    width: 100%;
+  }
+}
+
+/* A person who turns animation off gets no drifting and no movement, only the static look. */
+@media (prefers-reduced-motion: reduce) {
+  body::before,
+  body::after {
+    animation: none;
+  }
+  .sheet,
+  .dish__qty {
+    animation: none;
+  }
+  .btn,
+  .dish,
+  .nav__item,
+  .cat,
+  .choice,
+  .method,
+  .keypad__key {
+    transition-duration: 1ms;
+  }
+  .btn:active:not(:disabled),
+  .dish:active:not(:disabled),
+  .nav__item:active,
+  .cat:active,
+  .choice:active,
+  .method:active,
+  .keypad__key:active {
+    transform: none;
+  }
+}
