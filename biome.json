@@ -6,7 +6,7 @@
     "useIgnoreFile": true
   },
   "files": {
-    "includes": ["**", "!**/migrations", "!design", "!docs"]
+    "includes": ["**", "!**/migrations", "!design", "!docs", "!packages/ui/src/tokens.css"]
   },
   "formatter": {
     "enabled": true,

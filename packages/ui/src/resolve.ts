@@ -2,6 +2,7 @@ import {
   baseTokens,
   type DeepPartial,
   type Device,
+  darkOverrides,
   deviceDefaults,
   type TokenOverrides,
   type Tokens,
@@ -43,13 +44,21 @@ function deepClone<T>(value: T): T {
   return out as T;
 }
 
+export type Theme = 'light' | 'dark';
+
 /**
  * Resolves the tokens for one device. Layer order (later wins):
- * 1. baseTokens → 2. settings.shared → 3. deviceDefaults[device] → 4. settings[device].
+ * 1. baseTokens → 2. the dark theme, when asked → 3. settings.shared → 4. deviceDefaults[device]
+ * → 5. settings[device]. The theme sits below `shared` so an owner's brand colours still win.
  * Pure: the inputs are never mutated and the result shares no nested objects with them.
  */
-export function resolveTokens(device: Device, settings: TokenSettings = {}): Tokens {
+export function resolveTokens(
+  device: Device,
+  settings: TokenSettings = {},
+  theme: Theme = 'light',
+): Tokens {
   let tokens = deepClone(baseTokens);
+  if (theme === 'dark') tokens = mergeDeep(tokens, darkOverrides);
   tokens = mergeDeep(tokens, settings.shared);
   tokens = mergeDeep(tokens, deviceDefaults[device]);
   tokens = mergeDeep(tokens, settings[device]);

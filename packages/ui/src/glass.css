@@ -1,0 +1,522 @@
+/*
+ * Glass primitives (design v2, "Hot bowl, calm glass"). Framework-free; every value is a token,
+ * so a setting or the dark theme changes them without touching this file.
+ * Load order: the generated token variables first, then this file. Class names are prefixed
+ * `sds-` and describe parts, never screens (screen layout stays in each app).
+ * Rationale and mockups: the owner-approved canvas of 2026-10-04 (D-22).
+ */
+
+/* backdrop: gives the glass something to blur. Put the class on the app root. */
+.sds-backdrop {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  background: var(--sds-gradient-backdrop);
+  color: var(--sds-color-text);
+  font-family: var(--sds-font-sans);
+  line-height: var(--sds-line-height-body);
+  -webkit-font-smoothing: antialiased;
+}
+.sds-backdrop::before,
+.sds-backdrop::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  border-radius: 50%;
+  pointer-events: none;
+  animation: sds-drift 26s ease-in-out infinite alternate;
+}
+.sds-backdrop::before {
+  width: 46%;
+  aspect-ratio: 1;
+  left: -10%;
+  bottom: -18%;
+  background: var(--sds-gradient-orb-a);
+}
+.sds-backdrop::after {
+  width: 40%;
+  aspect-ratio: 1;
+  right: -8%;
+  top: 22%;
+  background: var(--sds-gradient-orb-b);
+  animation-duration: 32s;
+  animation-direction: alternate-reverse;
+}
+@keyframes sds-drift {
+  from {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  to {
+    transform: translate3d(36px, -28px, 0) scale(1.1);
+  }
+}
+
+/* surfaces */
+.sds-glass,
+.sds-glass-strong {
+  background: var(--sds-glass-surface);
+  border: 1px solid var(--sds-glass-edge);
+  border-radius: var(--sds-radius-xl);
+  -webkit-backdrop-filter: blur(var(--sds-glass-blur)) saturate(var(--sds-glass-saturate));
+  backdrop-filter: blur(var(--sds-glass-blur)) saturate(var(--sds-glass-saturate));
+  box-shadow: var(--sds-shadow-glass), var(--sds-glass-highlight);
+}
+.sds-glass-strong {
+  background: var(--sds-glass-surface-strong);
+  -webkit-backdrop-filter: blur(var(--sds-glass-blur-strong)) saturate(var(--sds-glass-saturate));
+  backdrop-filter: blur(var(--sds-glass-blur-strong)) saturate(var(--sds-glass-saturate));
+  box-shadow: var(--sds-shadow-glass-raised), var(--sds-glass-highlight);
+}
+.sds-sunk {
+  background: var(--sds-glass-sunk);
+  border-radius: var(--sds-radius-lg);
+}
+.sds-hair {
+  height: 1px;
+  border: 0;
+  margin: 0;
+  background: var(--sds-glass-hairline);
+}
+/* Browsers without backdrop-filter get an opaque surface so text stays readable. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .sds-glass,
+  .sds-glass-strong {
+    background: var(--sds-color-surface);
+  }
+}
+
+/* type: one family; hierarchy by size and weight. Line heights keep Thai tone marks clear. */
+.sds-t-display {
+  font-size: var(--sds-font-size-display);
+  line-height: 1.2;
+  font-weight: var(--sds-font-weight-bold);
+  letter-spacing: -0.01em;
+}
+.sds-t-title {
+  font-size: var(--sds-font-size-xxl);
+  line-height: var(--sds-line-height-tight);
+  font-weight: 600;
+}
+.sds-t-heading {
+  font-size: var(--sds-font-size-xl);
+  line-height: 1.4;
+  font-weight: 600;
+}
+.sds-t-label {
+  font-size: var(--sds-font-size-md);
+  line-height: 1.5;
+  font-weight: 600;
+}
+.sds-t-body {
+  font-size: var(--sds-font-size-md);
+  line-height: var(--sds-line-height-body);
+}
+.sds-t-small {
+  font-size: var(--sds-font-size-sm);
+  line-height: 1.5;
+  color: var(--sds-color-text-muted);
+}
+.sds-t-caption {
+  font-size: var(--sds-font-size-xs);
+  line-height: 1.4;
+  font-weight: 500;
+  color: var(--sds-color-text-muted);
+}
+.sds-num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+/* buttons */
+.sds-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sds-space-sm);
+  min-height: var(--sds-touch-min);
+  padding: 0 22px;
+  border: 0;
+  border-radius: var(--sds-radius-pill);
+  font: inherit;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--sds-color-text);
+  background: var(--sds-glass-surface-strong);
+  cursor: pointer;
+  text-decoration: none;
+  white-space: nowrap;
+  box-shadow: var(--sds-shadow-glass), var(--sds-glass-highlight);
+  transition:
+    transform var(--sds-motion-base) var(--sds-motion-spring),
+    box-shadow var(--sds-motion-base) var(--sds-motion-ease);
+}
+.sds-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--sds-shadow-glass-raised), var(--sds-glass-highlight);
+}
+.sds-btn:active {
+  transform: scale(0.97);
+  transition-duration: var(--sds-motion-fast);
+}
+.sds-btn:focus-visible,
+.sds-chip:focus-within,
+.sds-switch:focus-visible {
+  outline: 3px solid var(--sds-color-focus);
+  outline-offset: 2px;
+}
+.sds-btn[disabled],
+.sds-btn[aria-disabled="true"] {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+.sds-btn-primary {
+  background: var(--sds-gradient-brand);
+  color: var(--sds-color-on-brand);
+  box-shadow:
+    0 10px 24px rgba(198, 40, 40, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.32);
+}
+.sds-btn-success {
+  background: var(--sds-gradient-success);
+  color: var(--sds-color-on-success);
+  box-shadow:
+    0 10px 24px rgba(27, 122, 67, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.28);
+}
+.sds-btn-ink {
+  background: var(--sds-color-text);
+  color: var(--sds-color-text-inverse);
+}
+.sds-btn-lg {
+  min-height: var(--sds-touch-primary);
+  font-size: var(--sds-font-size-lg);
+  padding: 0 28px;
+}
+.sds-btn-sm {
+  min-height: 36px;
+  padding: 0 14px;
+  font-size: var(--sds-font-size-sm);
+}
+.sds-btn-icon {
+  width: var(--sds-touch-min);
+  padding: 0;
+}
+.sds-btn-block {
+  display: flex;
+  width: 100%;
+}
+
+/* chips and segmented control: a label wrapping a radio input (works without JavaScript) */
+.sds-chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sds-space-sm);
+  min-height: var(--sds-touch-min);
+  padding: 0 18px;
+  border-radius: var(--sds-radius-pill);
+  font-size: var(--sds-font-size-md);
+  font-weight: 500;
+  white-space: nowrap;
+  color: var(--sds-color-text-muted);
+  background: var(--sds-glass-surface);
+  border: 1px solid var(--sds-glass-edge);
+  cursor: pointer;
+  transition:
+    background var(--sds-motion-base) var(--sds-motion-ease),
+    color var(--sds-motion-base) var(--sds-motion-ease),
+    transform var(--sds-motion-base) var(--sds-motion-spring);
+}
+.sds-chip:hover {
+  transform: translateY(-1px);
+}
+.sds-chip:active {
+  transform: scale(0.96);
+}
+.sds-chip input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.sds-chip[aria-pressed="true"],
+.sds-chip:has(input:checked) {
+  background: var(--sds-color-text);
+  color: var(--sds-color-text-inverse);
+  border-color: transparent;
+}
+.sds-seg {
+  display: inline-flex;
+  gap: var(--sds-space-xs);
+  padding: var(--sds-space-xs);
+  border-radius: var(--sds-radius-pill);
+  background: var(--sds-glass-control);
+}
+.sds-seg .sds-chip {
+  background: transparent;
+  border-color: transparent;
+}
+.sds-seg .sds-chip[aria-pressed="true"],
+.sds-seg .sds-chip:has(input:checked) {
+  background: var(--sds-glass-surface-strong);
+  color: var(--sds-color-text);
+  border-color: var(--sds-glass-edge);
+  box-shadow: var(--sds-shadow-glass);
+}
+
+/* status badges: always colour + icon + word, never colour alone */
+.sds-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 11px;
+  border-radius: var(--sds-radius-pill);
+  font-size: var(--sds-font-size-xs);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.sds-badge svg {
+  width: 15px;
+  height: 15px;
+}
+.sds-badge-warning {
+  background: var(--sds-color-warning-subtle);
+  color: var(--sds-color-warning-text);
+}
+.sds-badge-info {
+  background: var(--sds-color-info-subtle);
+  color: var(--sds-color-info-text);
+}
+.sds-badge-success {
+  background: var(--sds-color-success-subtle);
+  color: var(--sds-color-success-text);
+}
+.sds-badge-danger {
+  background: var(--sds-color-danger-subtle);
+  color: var(--sds-color-danger-text);
+}
+.sds-badge-muted {
+  background: var(--sds-glass-control);
+  color: var(--sds-color-text-muted);
+}
+
+/* inputs, switch, stepper, list row */
+.sds-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: var(--sds-touch-min);
+  padding: 0 16px;
+  border-radius: var(--sds-radius-lg);
+  background: var(--sds-glass-field);
+  border: 1px solid var(--sds-glass-hairline);
+  color: var(--sds-color-text-muted);
+  font-size: var(--sds-font-size-md);
+  transition:
+    box-shadow var(--sds-motion-base) var(--sds-motion-ease),
+    border-color var(--sds-motion-base);
+}
+.sds-field:focus-within {
+  border-color: var(--sds-color-brand);
+  box-shadow: 0 0 0 4px var(--sds-color-brand-subtle);
+}
+.sds-field input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  font: inherit;
+  color: var(--sds-color-text);
+}
+.sds-switch {
+  appearance: none;
+  -webkit-appearance: none;
+  position: relative;
+  flex: none;
+  width: 52px;
+  height: 32px;
+  margin: 0;
+  border-radius: var(--sds-radius-pill);
+  background: var(--sds-glass-control);
+  cursor: pointer;
+  transition: background var(--sds-motion-base) var(--sds-motion-ease);
+}
+.sds-switch::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+  transition: transform var(--sds-motion-slow) var(--sds-motion-spring);
+}
+.sds-switch:checked {
+  background: var(--sds-color-success);
+}
+.sds-switch:checked::after {
+  transform: translateX(20px);
+}
+.sds-stepper {
+  display: inline-flex;
+  align-items: center;
+  height: 40px;
+  padding: 3px;
+  border-radius: var(--sds-radius-pill);
+  background: var(--sds-glass-control);
+}
+.sds-stepper button {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--sds-glass-surface-strong);
+  color: var(--sds-color-text);
+  cursor: pointer;
+  box-shadow: var(--sds-shadow-glass);
+  transition: transform var(--sds-motion-base) var(--sds-motion-spring);
+}
+.sds-stepper button:active {
+  transform: scale(0.88);
+}
+.sds-stepper output {
+  min-width: 30px;
+  text-align: center;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.sds-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 56px;
+  padding: 13px 18px;
+}
+.sds-row + .sds-row {
+  border-top: 1px solid var(--sds-glass-hairline);
+}
+
+/* motion: movement uses the ease curve, taps and pops the spring. Delay a sibling with --sds-d. */
+.sds-rise {
+  animation: sds-rise var(--sds-motion-enter) var(--sds-motion-ease) both;
+  animation-delay: var(--sds-d, 0s);
+}
+.sds-pop {
+  animation: sds-pop 600ms var(--sds-motion-spring) both;
+  animation-delay: var(--sds-d, 0s);
+}
+.sds-slide-up {
+  animation: sds-slide-up 800ms var(--sds-motion-ease) both;
+  animation-delay: var(--sds-d, 0s);
+}
+.sds-shimmer {
+  background: linear-gradient(
+    100deg,
+    transparent 30%,
+    rgba(255, 255, 255, 0.55) 50%,
+    transparent 70%
+  );
+  background-size: 220% 100%;
+  animation: sds-shimmer 2.4s linear infinite;
+}
+.sds-dot {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--sds-color-success);
+  animation: sds-ping 2.2s ease-out infinite;
+}
+@keyframes sds-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes sds-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.88);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes sds-slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(40px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes sds-shimmer {
+  from {
+    background-position: 120% 0;
+  }
+  to {
+    background-position: -120% 0;
+  }
+}
+@keyframes sds-ping {
+  0% {
+    box-shadow: 0 0 0 0 rgba(40, 170, 100, 0.5);
+  }
+  70%,
+  100% {
+    box-shadow: 0 0 0 9px rgba(40, 170, 100, 0);
+  }
+}
+
+/* a person who turns animation off gets a short fade and no movement */
+@media (prefers-reduced-motion: reduce) {
+  .sds-backdrop::before,
+  .sds-backdrop::after,
+  .sds-dot,
+  .sds-shimmer {
+    animation: none;
+  }
+  .sds-rise,
+  .sds-pop,
+  .sds-slide-up {
+    animation: sds-fade 150ms linear both;
+  }
+  .sds-btn,
+  .sds-chip,
+  .sds-switch,
+  .sds-switch::after,
+  .sds-stepper button {
+    transition-duration: 1ms;
+  }
+  .sds-btn:hover,
+  .sds-btn:active,
+  .sds-chip:hover,
+  .sds-chip:active {
+    transform: none;
+  }
+}
+@keyframes sds-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}

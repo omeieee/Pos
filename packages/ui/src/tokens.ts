@@ -60,6 +60,8 @@ export interface FontSizeTokens {
   lg: string;
   xl: string;
   xxl: string;
+  /** Screen hero text (design v2 display size). */
+  display: string;
   /** The amount due on payment screens: the most prominent element. */
   amount: string;
   /** Order numbers on tickets and boards. */
@@ -87,6 +89,10 @@ export interface RadiusTokens {
   sm: string;
   md: string;
   lg: string;
+  /** Glass cards and tiles. */
+  xl: string;
+  /** Panels, sheets and the navigation rail. */
+  xxl: string;
   pill: string;
 }
 
@@ -116,6 +122,59 @@ export interface ShadowTokens {
   sm: string;
   md: string;
   lg: string;
+  /** Resting glass surface. */
+  glass: string;
+  /** Raised glass (cart panel, sheets, floating bars). */
+  glassRaised: string;
+}
+
+/** Frosted-glass surfaces (design v2). Only layers that float above content use them. */
+export interface GlassTokens {
+  surface: string;
+  surfaceStrong: string;
+  /** The bright 1 px edge of a glass surface. */
+  edge: string;
+  hairline: string;
+  /** Inner top highlight, used inside box-shadow. */
+  highlight: string;
+  blur: string;
+  blurStrong: string;
+  saturate: string;
+  /** Recessed wells inside a glass surface (totals, step lists). */
+  sunk: string;
+  /** Track behind segmented controls and steppers. */
+  control: string;
+  /** Text-field fill. */
+  field: string;
+}
+
+/** Gradients are full CSS values so a theme can swap them whole. */
+export interface GradientTokens {
+  /** Primary action fill (white text passes AA on both ends). */
+  brand: string;
+  /** Confirm-payment fill. */
+  success: string;
+  /** Page backdrop that gives the glass something to blur. */
+  backdrop: string;
+  orbA: string;
+  orbB: string;
+}
+
+export interface MotionTokens {
+  /** Press feedback. */
+  fast: string;
+  /** Hover, toggles, segment slide. */
+  base: string;
+  /** Sheets and panels. */
+  slow: string;
+  /** Entrance of a screen's content. */
+  enter: string;
+  /** Delay between siblings in a staggered entrance. */
+  stagger: string;
+  /** iOS-like deceleration for movement. */
+  ease: string;
+  /** Slight overshoot for taps and pops. */
+  spring: string;
 }
 
 export interface Tokens {
@@ -128,6 +187,9 @@ export interface Tokens {
   touch: TouchTokens;
   layout: LayoutTokens;
   shadow: ShadowTokens;
+  glass: GlassTokens;
+  gradient: GradientTokens;
+  motion: MotionTokens;
 }
 
 /** Recursive partial for override objects. Arrays are not used in tokens. */
@@ -170,8 +232,8 @@ export const baseTokens: Tokens = {
     overlay: 'rgba(31, 26, 23, 0.48)',
   },
   font: {
-    sans: '"IBM Plex Sans Thai", "Noto Sans Thai", "Sukhumvit Set", "Leelawadee UI", Tahoma, system-ui, sans-serif',
-    display: '"Kanit", "IBM Plex Sans Thai", "Noto Sans Thai", system-ui, sans-serif',
+    sans: '"Anuphan", "IBM Plex Sans Thai", "Noto Sans Thai", "Sukhumvit Set", "Leelawadee UI", Tahoma, system-ui, sans-serif',
+    display: '"Anuphan", "Kanit", "IBM Plex Sans Thai", "Noto Sans Thai", system-ui, sans-serif',
     weightRegular: '400',
     weightMedium: '500',
     weightBold: '700',
@@ -183,6 +245,7 @@ export const baseTokens: Tokens = {
     lg: '18px',
     xl: '22px',
     xxl: '28px',
+    display: '44px',
     amount: '48px',
     orderNo: '32px',
   },
@@ -203,6 +266,8 @@ export const baseTokens: Tokens = {
     sm: '6px',
     md: '10px',
     lg: '16px',
+    xl: '24px',
+    xxl: '32px',
     pill: '999px',
   },
   touch: {
@@ -222,6 +287,90 @@ export const baseTokens: Tokens = {
     sm: '0 1px 2px rgba(31, 26, 23, 0.08)',
     md: '0 4px 12px rgba(31, 26, 23, 0.10)',
     lg: '0 12px 32px rgba(31, 26, 23, 0.18)',
+    glass: '0 1px 2px rgba(80, 40, 20, 0.06), 0 6px 20px rgba(120, 60, 30, 0.08)',
+    glassRaised: '0 2px 4px rgba(80, 40, 20, 0.06), 0 18px 48px rgba(120, 60, 30, 0.14)',
+  },
+  glass: {
+    surface: 'rgba(255, 255, 255, 0.56)',
+    surfaceStrong: 'rgba(255, 255, 255, 0.78)',
+    edge: 'rgba(255, 255, 255, 0.82)',
+    hairline: 'rgba(70, 35, 20, 0.09)',
+    highlight: 'inset 0 1px 0 rgba(255, 255, 255, 0.55)',
+    blur: '26px',
+    blurStrong: '34px',
+    saturate: '170%',
+    sunk: 'rgba(70, 35, 20, 0.05)',
+    control: 'rgba(70, 35, 20, 0.07)',
+    field: 'rgba(255, 255, 255, 0.7)',
+  },
+  gradient: {
+    brand: 'linear-gradient(180deg, #D63A2E, #BD2424)',
+    success: 'linear-gradient(180deg, #1F8049, #176B3B)',
+    backdrop:
+      'radial-gradient(60% 50% at 8% 4%, rgba(255, 138, 101, 0.42), transparent 70%), radial-gradient(50% 45% at 96% 8%, rgba(255, 196, 107, 0.5), transparent 70%), radial-gradient(55% 50% at 86% 100%, rgba(214, 140, 200, 0.3), transparent 70%), #FBF4EC',
+    orbA: 'radial-gradient(circle, rgba(255, 112, 80, 0.38), transparent 68%)',
+    orbB: 'radial-gradient(circle, rgba(255, 190, 90, 0.4), transparent 66%)',
+  },
+  motion: {
+    fast: '120ms',
+    base: '300ms',
+    slow: '420ms',
+    enter: '700ms',
+    stagger: '40ms',
+    ease: 'cubic-bezier(0.32, 0.72, 0, 1)',
+    spring: 'cubic-bezier(0.34, 1.5, 0.64, 1)',
+  },
+};
+
+/**
+ * Dark theme for the kitchen display and any screen read from a distance (design v2).
+ * Only neutrals, status colours and glass change: brand red and the fills that carry white
+ * text stay as they are, so a button looks the same in both themes. Every text pair is checked
+ * in contrast.test.ts.
+ */
+export const darkOverrides: TokenOverrides = {
+  color: {
+    bg: '#150E0C',
+    surface: '#211815',
+    surfaceSunken: '#0F0A09',
+    border: '#3A2F2A',
+    text: '#FBF2EA',
+    textMuted: '#D3C3B9',
+    textInverse: '#1C1411',
+    focus: '#6EA0FF',
+    brandSubtle: '#3A1B17',
+    brandText: '#FFB4A8',
+    accentSubtle: '#3A2A0F',
+    accentText: '#FFC873',
+    warningSubtle: '#3A2A0F',
+    warningText: '#FFC873',
+    infoSubtle: '#1B2842',
+    infoText: '#A9C6FF',
+    successSubtle: '#12301F',
+    successText: '#7FE0A8',
+    dangerSubtle: '#3A1B17',
+    dangerText: '#FFB4A8',
+    overlay: 'rgba(0, 0, 0, 0.6)',
+  },
+  shadow: {
+    glass: '0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.28)',
+    glassRaised: '0 2px 4px rgba(0, 0, 0, 0.3), 0 20px 50px rgba(0, 0, 0, 0.4)',
+  },
+  glass: {
+    surface: 'rgba(255, 255, 255, 0.07)',
+    surfaceStrong: 'rgba(255, 255, 255, 0.13)',
+    edge: 'rgba(255, 255, 255, 0.14)',
+    hairline: 'rgba(255, 255, 255, 0.1)',
+    highlight: 'inset 0 1px 0 rgba(255, 255, 255, 0.12)',
+    sunk: 'rgba(0, 0, 0, 0.22)',
+    control: 'rgba(0, 0, 0, 0.28)',
+    field: 'rgba(0, 0, 0, 0.25)',
+  },
+  gradient: {
+    backdrop:
+      'radial-gradient(50% 45% at 10% 0%, rgba(214, 58, 46, 0.5), transparent 70%), radial-gradient(45% 40% at 100% 20%, rgba(245, 165, 36, 0.28), transparent 70%), radial-gradient(55% 50% at 70% 110%, rgba(150, 90, 200, 0.3), transparent 70%), #150E0C',
+    orbA: 'radial-gradient(circle, rgba(214, 58, 46, 0.3), transparent 68%)',
+    orbB: 'radial-gradient(circle, rgba(245, 165, 36, 0.22), transparent 66%)',
   },
 };
 
