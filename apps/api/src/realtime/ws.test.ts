@@ -114,7 +114,8 @@ async function everyone(): Promise<Record<Who, Authed>> {
   return Object.fromEntries(entries) as Record<Who, Authed>;
 }
 
-const typesOf = (c: WsClient) => c.frames.map((f) => f.type);
+// The heartbeat ping can land at any moment on a slow machine; it is not a business frame.
+const typesOf = (c: WsClient) => c.frames.map((f) => f.type).filter((type) => type !== 'ping');
 const business = (n: number) => new Date(Date.UTC(2028, 0, n, 3, 0, 0)).toISOString();
 
 let menu: Awaited<ReturnType<Harness['newMenu']>>;
