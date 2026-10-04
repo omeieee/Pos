@@ -1,11 +1,17 @@
 import type { StaffDto } from '@sds/shared';
 import { describe, expect, test } from 'vitest';
 import {
+  buildInvite,
   buildNewStaff,
+  canBecomeOwner,
   isPinLocked,
   pinProblems,
+  roleChangeNeedsPin,
+  roleChangePin,
   staffDisplayState,
+  validateInvite,
   validateNewStaff,
+  validateRoleChange,
 } from './staff-model.ts';
 
 const person = (over: Partial<StaffDto> = {}): StaffDto => ({
@@ -13,6 +19,7 @@ const person = (over: Partial<StaffDto> = {}): StaffDto => ({
   displayName: 'น้องเอ',
   role: 'cashier',
   active: true,
+  email: null,
   hasPin: true,
   pinLockedUntil: null,
   version: 1,
@@ -69,9 +76,20 @@ describe('what a row shows', () => {
     expect(isPinLocked(person(), now)).toBe(false);
   });
 
-  test('the owner has no actions here; a deactivated person may be switched back on', () => {
-    expect(staffDisplayState(person({ role: 'owner' }), now)).toMatchObject({
+  test('nobody changes their own row; another owner can be changed; a deactivated person may be switched back on', () => {
+    const me = person({ role: 'owner' });
+    expect(staffDisplayState(me, now, me.id)).toMatchObject({
+      isSelf: true,
       canEdit: false,
+      canChangeRole: false,
+      canDeactivate: false,
+      canActivate: false,
+    });
+    expect(staffDisplayState(me, now, 'someone-else')).toMatchObject({
+      isSelf: false,
+      canEdit: true,
+      canChangeRole: true,
+      canDeactivate: true,
     });
     expect(staffDisplayState(person(), now)).toMatchObject({
       canEdit: true,
@@ -86,5 +104,66 @@ describe('what a row shows', () => {
 
   test('a person with no PIN is flagged', () => {
     expect(staffDisplayState(person({ hasPin: false }), now).noPin).toBe(true);
+  });
+});
+
+describe('an invite', () => {
+  const form = { email: ' Nok@Example.test ', displayName: '', role: 'cashier' as const };
+
+  test('a good form builds exactly the shared body: e-mail trimmed and lower-cased, no empty name', () => {
+    expect(validateInvite(form)).toEqual([]);
+    expect(buildInvite(form)).toEqual({ email: 'nok@example.test', role: 'cashier' });
+    expect(buildInvite({ ...form, displayName: ' น้องนก ', role: 'owner' })).toEqual({
+      email: 'nok@example.test',
+      displayName: 'น้องนก',
+      role: 'owner',
+    });
+  });
+
+  test('a bad e-mail or a long name builds nothing', () => {
+    expect(validateInvite({ ...form, email: 'nope' })).toEqual(['email']);
+    expect(validateInvite({ ...form, email: '' })).toEqual(['email']);
+    expect(validateInvite({ ...form, displayName: 'ก'.repeat(61) })).toEqual(['displayName']);
+    expect(buildInvite({ ...form, email: 'nope' })).toBeNull();
+  });
+});
+
+describe('a role change', () => {
+  const p = (over: Partial<StaffDto> = {}) => person({ email: 'a@example.test', ...over });
+
+  test('needs a PIN when the new role needs more digits, or the person has none (owner excepted)', () => {
+    expect(roleChangeNeedsPin(p(), 'cashier')).toBe(false); // same role
+    expect(roleChangeNeedsPin(p(), 'kitchen')).toBe(false); // 4 -> 4
+    expect(roleChangeNeedsPin(p(), 'manager')).toBe(true); // 4 -> 6
+    expect(roleChangeNeedsPin(p(), 'owner')).toBe(true); // 4 -> 6
+    expect(roleChangeNeedsPin(p({ role: 'manager' }), 'cashier')).toBe(false); // 6 -> 4
+    expect(roleChangeNeedsPin(p({ role: 'manager' }), 'owner')).toBe(false); // 6 -> 6
+    expect(roleChangeNeedsPin(p({ hasPin: false }), 'kitchen')).toBe(true);
+    expect(roleChangeNeedsPin(p({ hasPin: false, role: 'manager' }), 'owner')).toBe(false);
+  });
+
+  test('only a person with an e-mail account can become an owner', () => {
+    expect(canBecomeOwner(person({ email: null }))).toBe(false);
+    expect(canBecomeOwner(person({ email: 'a@example.test' }))).toBe(true);
+    expect(
+      validateRoleChange(person({ email: null }), { role: 'owner', pin: '', pin2: '' }),
+    ).toEqual(['role']);
+  });
+
+  test('the same role is refused; a needed PIN follows the new role and is typed twice', () => {
+    expect(validateRoleChange(p(), { role: 'cashier', pin: '', pin2: '' })).toEqual(['role']);
+    expect(validateRoleChange(p(), { role: 'kitchen', pin: '', pin2: '' })).toEqual([]);
+    expect(validateRoleChange(p(), { role: 'manager', pin: '1234', pin2: '1234' })).toEqual([
+      'pin',
+    ]);
+    expect(validateRoleChange(p(), { role: 'manager', pin: '123456', pin2: '123457' })).toEqual([
+      'pin2',
+    ]);
+    expect(validateRoleChange(p(), { role: 'manager', pin: '123456', pin2: '123456' })).toEqual([]);
+  });
+
+  test('the PIN is sent only when it is needed', () => {
+    expect(roleChangePin(p(), { role: 'kitchen', pin: '9999' })).toBeUndefined();
+    expect(roleChangePin(p(), { role: 'manager', pin: '123456' })).toBe('123456');
   });
 });

@@ -1,8 +1,15 @@
-import { ownerLoginInputSchema, pinLoginInputSchema, registerDeviceInputSchema } from '@sds/shared';
+import {
+  acceptInviteInputSchema,
+  invitePreviewInputSchema,
+  ownerLoginInputSchema,
+  pinLoginInputSchema,
+  registerDeviceInputSchema,
+} from '@sds/shared';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { createGlobalLimiter, globalRateLimitHook } from '../rate-limit.ts';
 import { parse } from '../validate.ts';
 import { type GuardFactory, principalOf } from './guards.ts';
+import { acceptInvite, previewInvite } from './invite-accept.ts';
 import {
   type AuthContext,
   authenticateDevice,
@@ -48,6 +55,14 @@ export async function registerAuthRoutes(
     }),
   );
 
+  const inviteBucket = globalRateLimitHook(
+    createGlobalLimiter({
+      max: ctx.policy.inviteGlobalRatePerMinute,
+      windowMs: 60_000,
+      now: ctx.now,
+    }),
+  );
+
   // Tokens and session data must never be cached by a browser or proxy.
   app.addHook('onSend', async (_request, reply) => {
     reply.header('cache-control', 'no-store');
@@ -87,6 +102,16 @@ export async function registerAuthRoutes(
     const input = parse(ownerLoginInputSchema, request.body);
     return ownerLogin(ctx, device, input, meta(request));
   });
+
+  // An invite link (D-23): the unguessable token in the body is the credential. Rate limited per
+  // IP and globally, like the owner login, and one generic 404 for any token that does not work.
+  app.post('/invite/preview', { preHandler: inviteBucket, ...limit(10) }, async (request) =>
+    previewInvite(ctx, parse(invitePreviewInputSchema, request.body)),
+  );
+
+  app.post('/invite/accept', { preHandler: inviteBucket, ...limit(10) }, async (request) =>
+    acceptInvite(ctx, parse(acceptInviteInputSchema, request.body), meta(request)),
+  );
 
   app.post(
     '/step-up',

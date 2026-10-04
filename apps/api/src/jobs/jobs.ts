@@ -4,6 +4,7 @@ import {
   expireEmptyLineCustomers,
   expireRecipients,
   purgeLineEvents,
+  purgeStaffInvites,
 } from './retention.ts';
 
 /** What every job gets. Jobs are plain functions of this, so tests call them directly. */
@@ -30,4 +31,6 @@ export const JOBS: readonly JobDefinition[] = [
   { name: 'retention-recipients', cron: '50 3 * * *', run: expireRecipients },
   // Followers and app visitors who never ordered or acknowledged the notice.
   { name: 'retention-line-customers', cron: '55 3 * * *', run: expireEmptyLineCustomers },
+  // Invites of no use any more (they hold an e-mail).
+  { name: 'retention-staff-invites', cron: '58 3 * * *', run: purgeStaffInvites },
 ];

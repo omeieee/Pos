@@ -42,6 +42,7 @@ export function TextField({
   hint,
   error,
   disabled,
+  readOnly,
   icon,
   end,
 }: {
@@ -57,6 +58,8 @@ export function TextField({
   /** What is wrong with the value: shown under the field and read out with it. */
   error?: string | undefined;
   disabled?: boolean;
+  /** Shown and selectable but not editable (a link to copy by hand). */
+  readOnly?: boolean;
   /** A design icon at the start of the field. */
   icon?: GiName;
   /** A control at the end of the field (the show-password eye). */
@@ -81,6 +84,8 @@ export function TextField({
           maxLength={maxLength}
           placeholder={placeholder}
           disabled={disabled}
+          readOnly={readOnly}
+          onFocus={readOnly ? (event) => event.target.select() : undefined}
           aria-describedby={
             [hint ? hintId : null, error ? errorId : null].filter(Boolean).join(' ') || undefined
           }

@@ -24,7 +24,7 @@ import { and, asc, inArray, isNotNull, isNull, lt, or, sql } from 'drizzle-orm';
 import { insertAudit } from './audit.ts';
 import type { Db } from './client.ts';
 import { anonymizeCustomer } from './customers.ts';
-import { customers, lineEvents, orders } from './schema.ts';
+import { customers, lineEvents, orders, staffInvites } from './schema.ts';
 
 /** Deletes up to `limit` events that arrived before `before`. Returns how many. */
 export async function purgeLineEventsBatch(
@@ -48,6 +48,38 @@ export async function purgeLineEventsBatch(
         action: 'retention.line_events.purge',
         entity: 'line_events',
         after: { deleted: deleted.length, olderThanDays: RETENTION_DAYS.lineEvents },
+      });
+    }
+    return deleted.length;
+  });
+}
+
+/**
+ * Deletes up to `limit` invites that ended (accepted, revoked, or expired) before `before`. An
+ * invite holds an e-mail, so it is not kept once it is of no use. The audit row has counts only.
+ */
+export async function purgeStaffInvitesBatch(
+  db: Db,
+  args: { before: Date; limit: number; now: Date },
+): Promise<number> {
+  return db.transaction(async (tx) => {
+    const endedAt = sql`coalesce(${staffInvites.acceptedAt}, ${staffInvites.revokedAt}, ${staffInvites.expiresAt})`;
+    const old = tx
+      .select({ id: staffInvites.id })
+      .from(staffInvites)
+      .where(sql`${endedAt} < ${args.before.toISOString()}::timestamptz`)
+      .orderBy(asc(staffInvites.createdAt))
+      .limit(args.limit);
+    const deleted = await tx
+      .delete(staffInvites)
+      .where(inArray(staffInvites.id, old))
+      .returning({ id: staffInvites.id });
+    if (deleted.length > 0) {
+      await insertAudit(tx, {
+        actorType: 'system',
+        action: 'retention.staff_invites.purge',
+        entity: 'staff_invites',
+        after: { deleted: deleted.length, olderThanDays: RETENTION_DAYS.staffInvites },
       });
     }
     return deleted.length;

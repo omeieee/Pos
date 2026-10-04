@@ -19,6 +19,7 @@ const person = (n: number, over: Partial<StaffDto> = {}): StaffDto => ({
   displayName: `คนที่ ${n}`,
   role: 'cashier',
   active: true,
+  email: null,
   hasPin: true,
   pinLockedUntil: null,
   version: 1,

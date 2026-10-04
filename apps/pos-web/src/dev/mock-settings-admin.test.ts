@@ -222,7 +222,7 @@ describe('the mock devices and staff', () => {
     expect(result.ok).toBe(true);
   });
 
-  test('deactivating ends their sessions and they leave the PIN screen; reactivating brings them back; the owner is protected', async () => {
+  test('deactivating ends their sessions and they leave the PIN screen; reactivating brings them back; nobody deactivates themselves', async () => {
     const { server, services } = await signedIn('owner', true);
     const { staff } = await services.api.admin.staff();
     const cashier = staff.find((p) => p.role === 'cashier');
@@ -230,7 +230,7 @@ describe('the mock devices and staff', () => {
     if (!cashier || !boss) throw new Error('the dev staff were expected');
     await expect(
       services.api.admin.patchStaff(boss.id, { expectedVersion: boss.version, active: false }),
-    ).rejects.toMatchObject({ code: 'OWNER_PROTECTED' });
+    ).rejects.toMatchObject({ code: 'SELF_CHANGE' });
 
     const person = MOCK_STAFF.find((s) => s.role === 'cashier');
     const counter = await connect(server);

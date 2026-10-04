@@ -5,6 +5,7 @@
  */
 import { authRepo, findAuditByRequestId, insertAudit, peopleRepo } from '@sds/db';
 import {
+  type ChangeRoleInput,
   type CreateStaffInput,
   type DeviceDto,
   type ListDevicesResponse,
@@ -12,6 +13,7 @@ import {
   type OutboxRecoveryInput,
   type OutboxRecoveryResponse,
   type PatchStaffInput,
+  PIN_MIN_DIGITS,
   pinSchemaFor,
   type SetStaffPinInput,
   type StaffDto,
@@ -24,7 +26,7 @@ import {
   type RequestMeta,
   securityAlert,
 } from '../auth/service.ts';
-import { conflict, notFound, versionConflict } from '../errors.ts';
+import { conflict, forbidden, notFound, versionConflict } from '../errors.ts';
 import { withTransaction } from '../tx.ts';
 import { parse } from '../validate.ts';
 
@@ -47,6 +49,7 @@ function toStaffDto(row: peopleRepo.StaffListRow): StaffDto {
     displayName: row.displayName,
     role: row.role,
     active: row.active,
+    email: row.email,
     hasPin: row.hasPin,
     pinLockedUntil: iso(row.lockedUntil),
     version: row.version,
@@ -183,7 +186,16 @@ export async function createStaffMember(
   });
 }
 
-/** Name and active flag. Deactivating ends the person's open sessions at once. */
+const selfChange = () =>
+  conflict('SELF_CHANGE', 'You cannot change your own account here. Ask another owner');
+const lastOwner = () =>
+  conflict('LAST_OWNER', 'The last active owner cannot lose the owner role or be deactivated');
+
+/**
+ * Name and active flag. Deactivating ends the person's open sessions at once. Another owner may
+ * rename or deactivate an owner; nobody changes themselves, and the last active owner stays (D-23).
+ * Lock order is always the active owners first, then the person.
+ */
 export async function patchStaffMember(
   ctx: AuthContext,
   actor: Principal,
@@ -192,12 +204,14 @@ export async function patchStaffMember(
   meta: RequestMeta,
 ): Promise<StaffDto> {
   return withTransaction(ctx, async (tx, emit) => {
+    const owners = await peopleRepo.lockActiveOwners(tx);
     const row = await peopleRepo.lockStaff(tx, id);
     if (!row) throw notFound('Staff member');
-    if (row.role === 'owner') {
-      throw conflict('OWNER_PROTECTED', 'The owner account cannot be changed here');
-    }
+    if (id === actor.staffId) throw selfChange();
     if (row.version !== input.expectedVersion) throw versionConflict(row.version);
+    const isLastOwner = row.role === 'owner' && row.active && owners.length <= 1;
+    if (input.active === false && isLastOwner) throw lastOwner();
+    if (!owners.includes(actor.staffId)) throw forbidden(); // the actor lost the owner role meanwhile
 
     const patch: { displayName?: string; active?: boolean } = {};
     const before: Record<string, unknown> = {};
@@ -243,15 +257,17 @@ export async function setStaffPin(
   input: SetStaffPinInput,
   meta: RequestMeta,
 ): Promise<StaffDto> {
-  const known = await peopleRepo.findStaff(ctx.db, id);
-  if (!known) throw notFound('Staff member');
-  // The owner and managers need all 6 digits; the shared rule says so by role.
-  parse(z.object({ pin: pinSchemaFor(known.role) }), { pin: input.pin });
-  const pinHash = await hashPin(input.pin, ctx.keys);
+  const pinHash = await hashPin(input.pin, ctx.keys); // slow: not inside the transaction
 
   return withTransaction(ctx, async (tx, emit) => {
     const row = await peopleRepo.lockStaff(tx, id);
     if (!row) throw notFound('Staff member');
+    // An owner sets their own PIN only: setting another owner's would let the setter sign in as them.
+    if (row.role === 'owner' && id !== actor.staffId) {
+      throw conflict('OWNER_PROTECTED', "Another owner's PIN can only be set by that owner");
+    }
+    // The owner and managers need all 6 digits; judged against the row as locked, not as read earlier.
+    parse(z.object({ pin: pinSchemaFor(row.role) }), { pin: input.pin });
     await authRepo.setStaffPinHash(tx, id, pinHash);
     await authRepo.revokeSessionsForStaff(tx, id, ctx.now());
     await insertAudit(tx, {
@@ -265,5 +281,68 @@ export async function setStaffPin(
     emit({ type: 'session.ended', staffId: id, reason: 'pin_changed' });
     const updated = await peopleRepo.findStaff(tx, id);
     return toStaffDto(updated ?? row);
+  });
+}
+
+/**
+ * Changes a person's role (D-23). Not yourself; the last active owner keeps the owner role; a PIN
+ * of the new role's length is needed when that role's minimum is longer than the old one's (or the
+ * person has no PIN and the new role steps up with a PIN). Someone can become an owner only if they
+ * already sign in with an e-mail account. Ends the person's open sessions.
+ */
+export async function changeStaffRole(
+  ctx: AuthContext,
+  actor: Principal,
+  id: string,
+  input: ChangeRoleInput,
+  meta: RequestMeta,
+): Promise<StaffDto> {
+  if (id === actor.staffId) throw selfChange();
+  // Slow, so before the transaction; whether it is needed and whether it fits is judged inside.
+  const hashed = input.pin === undefined ? undefined : await hashPin(input.pin, ctx.keys);
+
+  return withTransaction(ctx, async (tx, emit) => {
+    const owners = await peopleRepo.lockActiveOwners(tx);
+    const row = await peopleRepo.lockStaff(tx, id);
+    if (!row) throw notFound('Staff member');
+    if (row.version !== input.expectedVersion) throw versionConflict(row.version);
+    if (row.role === input.role) return toStaffDto(row); // nothing to change
+    // Judged against the row as locked. Validated against the NEW role: a missing or too short PIN
+    // is a 400 on the field `pin`.
+    const needsPin =
+      PIN_MIN_DIGITS[input.role] > PIN_MIN_DIGITS[row.role] ||
+      (!row.hasPin && input.role !== 'owner');
+    if (needsPin || input.pin !== undefined) {
+      parse(z.object({ pin: pinSchemaFor(input.role) }), { pin: input.pin });
+    }
+    const pinHash = hashed;
+    if (row.role === 'owner' && row.active && owners.length <= 1) throw lastOwner();
+    if (!owners.includes(actor.staffId)) throw forbidden(); // the actor lost the owner role meanwhile
+    if (input.role === 'owner' && !(await peopleRepo.hasCredentials(tx, id))) {
+      throw conflict(
+        'OWNER_NEEDS_ACCOUNT',
+        'Only a person with an e-mail account can be an owner. Invite them by e-mail instead',
+      );
+    }
+
+    const updated = await peopleRepo.updateStaffIfVersion(tx, id, row.version, {
+      role: input.role,
+    });
+    if (!updated) throw versionConflict(row.version); // cannot happen under the row lock
+    if (pinHash !== undefined) await authRepo.setStaffPinHash(tx, id, pinHash);
+    await authRepo.revokeSessionsForStaff(tx, id, ctx.now());
+    await insertAudit(tx, {
+      ...audited(actor, meta),
+      action: 'staff.role_change',
+      entity: 'staff',
+      entityId: id,
+      before: { role: row.role },
+      after: { role: input.role, pinSet: pinHash !== undefined },
+    });
+    emit(
+      securityAlert(ctx, 'staff.role_changed', 'warn', { staffId: id, deviceId: actor.deviceId }),
+    );
+    emit({ type: 'session.ended', staffId: id, reason: 'role_changed' });
+    return toStaffDto((await peopleRepo.findStaff(tx, id)) ?? updated);
   });
 }

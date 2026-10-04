@@ -41,7 +41,7 @@ export async function devBackend(): Promise<
 > {
   if (import.meta.env.DEV && import.meta.env.VITE_MOCK_API === '1') {
     const { createMockServer } = await import('./mock-server.ts');
-    const server = createMockServer({ delayMs: 150 });
+    const server = createMockServer({ delayMs: 150, demoInvite: true });
     const setOffline = (on: boolean) => {
       server.setOffline(on);
       writeOffline(on);

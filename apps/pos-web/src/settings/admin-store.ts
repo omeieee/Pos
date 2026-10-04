@@ -10,11 +10,14 @@
  *   list is read again, and the person sees whether the person was added.
  * - A staff change names the version the row had (`expectedVersion`); on VERSION_CONFLICT the list
  *   is read again and the person is told.
+ * - An invite (D-23): the API answers the token once. It goes to the caller (the dialog that shows
+ *   the link) and is never put in the state; the list keeps the row without it. A lost answer to a
+ *   create is settled by reading the open invites again.
  * - One request per row at a time (the key is set in the same tick, so a double tap sends one).
  * - A PIN is passed through to the one call and kept nowhere. `reset()` (sign-out) bumps an epoch:
  *   an answer that belongs to an earlier epoch changes nothing.
  */
-import type { DeviceDto, StaffDto } from '@sds/shared';
+import type { CreateInviteResponse, DeviceDto, InviteDto, StaffDto, StaffRole } from '@sds/shared';
 import type { ApiClient } from '../api/client.ts';
 import type { ApiClientError } from '../api/errors.ts';
 import type { Result } from '../auth/auth-store.ts';
@@ -28,9 +31,19 @@ export interface ListSlot<T> {
   items: readonly T[];
 }
 
+/** The rows of each list the store reads. */
+interface Rows {
+  devices: DeviceDto;
+  staff: StaffDto;
+  invites: InviteDto;
+}
+type ListKind = keyof Rows;
+
 export interface AdminState {
   devices: ListSlot<DeviceDto>;
   staff: ListSlot<StaffDto>;
+  /** The open (and expired, not yet cleared) invites, without their tokens. */
+  invites: ListSlot<InviteDto>;
   /** Keys of the rows (or the "add" action) with a request on its way. */
   pending: readonly string[];
 }
@@ -57,6 +70,12 @@ export interface AdminDeps {
 export interface AdminStore extends ReadableStore<AdminState> {
   loadDevices(): Promise<void>;
   loadStaff(): Promise<void>;
+  loadInvites(): Promise<void>;
+  /**
+   * The staff screen's two lists, one after the other so the owner confirms once: the invites are
+   * only asked for after the staff list was read.
+   */
+  loadStaffScreen(): Promise<void>;
   revokeDevice(id: string): Promise<AdminOutcome<DeviceDto>>;
   createStaff(
     input: Parameters<ApiClient['admin']['createStaff']>[0],
@@ -67,6 +86,17 @@ export interface AdminStore extends ReadableStore<AdminState> {
     change: { displayName?: string; active?: boolean },
   ): Promise<AdminOutcome<StaffDto>>;
   setStaffPin(id: string, pin: string): Promise<AdminOutcome<StaffDto>>;
+  /** A role change; `pin` only when the new role needs one (`roleChangeNeedsPin`). */
+  changeRole(
+    person: Pick<StaffDto, 'id' | 'version'>,
+    role: StaffRole,
+    pin?: string,
+  ): Promise<AdminOutcome<StaffDto>>;
+  /** Makes an invite link. The `token` in the answer is shown once and not kept here. */
+  createInvite(
+    input: Parameters<ApiClient['admin']['createInvite']>[0],
+  ): Promise<AdminOutcome<CreateInviteResponse>>;
+  revokeInvite(id: string): Promise<AdminOutcome<void>>;
   reset(): void;
 }
 
@@ -74,9 +104,16 @@ export interface AdminStore extends ReadableStore<AdminState> {
 export const deviceKey = (id: string) => `device:${id}`;
 export const staffKey = (id: string) => `staff:${id}`;
 export const ADD_STAFF_KEY = 'staff:add';
+export const ADD_INVITE_KEY = 'invite:add';
+export const inviteKey = (id: string) => `invite:${id}`;
 
 const emptyList = <T>(): ListSlot<T> => ({ status: 'idle', error: null, items: [] });
-const initial = (): AdminState => ({ devices: emptyList(), staff: emptyList(), pending: [] });
+const initial = (): AdminState => ({
+  devices: emptyList(),
+  staff: emptyList(),
+  invites: emptyList(),
+  pending: [],
+});
 
 /** The answer to the request never came: it may have been processed. */
 const answerLost = (error: ApiClientError) => error.code === 'NETWORK' || error.code === 'TIMEOUT';
@@ -87,11 +124,11 @@ const replaceRow = <T extends { id: string }>(items: readonly T[], row: T): T[] 
 export function createAdminStore(deps: AdminDeps): AdminStore {
   const store = createStore<AdminState>(initial());
   let epoch = 0;
-  const reading = new Map<'devices' | 'staff', Promise<void>>();
+  const reading = new Map<ListKind, Promise<void>>();
 
-  async function readList<K extends 'devices' | 'staff'>(
+  async function readList<K extends ListKind>(
     kind: K,
-    fetchRows: () => Promise<readonly (K extends 'devices' ? DeviceDto : StaffDto)[]>,
+    fetchRows: () => Promise<readonly Rows[K][]>,
   ): Promise<void> {
     const startedIn = epoch;
     const put = (slot: AdminState[K]) => store.setState({ [kind]: slot } as Partial<AdminState>);
@@ -110,9 +147,9 @@ export function createAdminStore(deps: AdminDeps): AdminStore {
     }
   }
 
-  function load<K extends 'devices' | 'staff'>(
+  function load<K extends ListKind>(
     kind: K,
-    fetchRows: () => Promise<readonly (K extends 'devices' ? DeviceDto : StaffDto)[]>,
+    fetchRows: () => Promise<readonly Rows[K][]>,
   ): Promise<void> {
     if (!deps.lifecycle.isOnline()) return Promise.resolve();
     const running = reading.get(kind);
@@ -132,6 +169,11 @@ export function createAdminStore(deps: AdminDeps): AdminStore {
 
   const loadDevices = () => load('devices', async () => (await deps.api.admin.devices()).devices);
   const loadStaff = () => load('staff', async () => (await deps.api.admin.staff()).staff);
+  const loadInvites = () => load('invites', async () => (await deps.api.admin.invites()).invites);
+  async function loadStaffScreen(): Promise<void> {
+    await loadStaff();
+    if (store.getState().staff.status === 'ready') await loadInvites();
+  }
 
   const pendingNow = () => store.getState().pending;
 
@@ -140,7 +182,12 @@ export function createAdminStore(deps: AdminDeps): AdminStore {
     key: string,
     send: () => Promise<T>,
     done: (value: T) => void,
-    options: { rereadStaffOnConflict?: boolean; retryRead?: boolean } = {},
+    options: {
+      /** Read this list again when the answer is one of these codes (the row changed meanwhile). */
+      rereadOn?: { list: 'staff' | 'invites'; codes: readonly string[] };
+      /** Read this list again when the answer was lost. */
+      retryRead?: 'staff' | 'invites';
+    } = {},
   ): Promise<AdminOutcome<T>> {
     if (!deps.lifecycle.isOnline()) return { ok: false, reason: 'offline' };
     if (pendingNow().includes(key)) return { ok: false, reason: 'busy' };
@@ -155,9 +202,10 @@ export function createAdminStore(deps: AdminDeps): AdminStore {
       }
       if (result.error === null) return { ok: false, reason: 'cancelled' };
       const error = result.error;
-      const refreshed = options.rereadStaffOnConflict === true && error.code === 'VERSION_CONFLICT';
-      const uncertain = options.retryRead === true && answerLost(error);
-      if (refreshed || uncertain) await loadStaffAgain();
+      const refreshed = options.rereadOn?.codes.includes(error.code) === true;
+      const uncertain = options.retryRead !== undefined && answerLost(error);
+      if (refreshed && options.rereadOn) await loadAgain(options.rereadOn.list);
+      else if (uncertain && options.retryRead) await loadAgain(options.retryRead);
       if (epoch !== startedIn) return { ok: false, reason: 'stale' };
       return { ok: false, reason: 'error', error, refreshed, uncertain };
     } finally {
@@ -165,10 +213,10 @@ export function createAdminStore(deps: AdminDeps): AdminStore {
     }
   }
 
-  /** Reads the staff list again after a conflict or a lost answer (the step-up is fresh by now). */
-  async function loadStaffAgain(): Promise<void> {
-    reading.delete('staff');
-    await loadStaff();
+  /** Reads a list again after a conflict or a lost answer (the step-up is fresh by now). */
+  async function loadAgain(list: 'staff' | 'invites'): Promise<void> {
+    reading.delete(list);
+    await (list === 'staff' ? loadStaff() : loadInvites());
   }
 
   const putStaff = (row: StaffDto) =>
@@ -181,6 +229,8 @@ export function createAdminStore(deps: AdminDeps): AdminStore {
     subscribe: store.subscribe,
     loadDevices,
     loadStaff,
+    loadInvites,
+    loadStaffScreen,
 
     revokeDevice: (id) =>
       write(
@@ -203,7 +253,7 @@ export function createAdminStore(deps: AdminDeps): AdminStore {
           store.setState({
             staff: { ...store.getState().staff, items: [...store.getState().staff.items, row] },
           }),
-        { retryRead: true },
+        { retryRead: 'staff' },
       ),
 
     patchStaff: (person, change) =>
@@ -211,12 +261,51 @@ export function createAdminStore(deps: AdminDeps): AdminStore {
         staffKey(person.id),
         () => deps.api.admin.patchStaff(person.id, { expectedVersion: person.version, ...change }),
         putStaff,
-        { rereadStaffOnConflict: true },
+        { rereadOn: { list: 'staff', codes: ['VERSION_CONFLICT'] } },
       ),
 
     // Not retried and not "uncertain": setting the same PIN again is harmless, the screen says so.
     setStaffPin: (id, pin) =>
       write(staffKey(id), () => deps.api.admin.setStaffPin(id, { pin }), putStaff),
+
+    changeRole: (person, role, pin) =>
+      write(
+        staffKey(person.id),
+        () =>
+          deps.api.admin.changeStaffRole(person.id, {
+            expectedVersion: person.version,
+            role,
+            ...(pin === undefined ? {} : { pin }),
+          }),
+        putStaff,
+        { rereadOn: { list: 'staff', codes: ['VERSION_CONFLICT'] } },
+      ),
+
+    createInvite: (input) =>
+      write(
+        ADD_INVITE_KEY,
+        () => deps.api.admin.createInvite(input),
+        (answer) => {
+          // The token stays out of the state: only the row is listed.
+          const { token: _token, ...row } = answer;
+          const current = store.getState().invites;
+          store.setState({ invites: { ...current, items: [...current.items, row] } });
+        },
+        { retryRead: 'invites' },
+      ),
+
+    revokeInvite: (id) =>
+      write(
+        inviteKey(id),
+        () => deps.api.admin.revokeInvite(id),
+        () => {
+          const current = store.getState().invites;
+          store.setState({
+            invites: { ...current, items: current.items.filter((i) => i.id !== id) },
+          });
+        },
+        { rereadOn: { list: 'invites', codes: ['INVITE_ACCEPTED', 'NOT_FOUND'] } },
+      ),
 
     reset() {
       epoch += 1;

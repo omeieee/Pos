@@ -66,6 +66,7 @@ erDiagram
 | `customers` | `id, line_user_id (unique, nullable), display_name, picture_url, nickname, phone?, room_no?, note, first_seen_at, last_order_at, order_count, total_spent_satang, privacy_ack_at, marketing_consent_at?, unfollowed_at?, anonymized_at?, version, rev` |
 | `staff` | `id, display_name, role` (`owner, manager, cashier, kitchen`)`, pin_hash, active, failed_pin_count, locked_until` |
 | `owner_credentials` | `staff_id, email, password_hash, totp_secret_enc` (AES-256-GCM)`, failed_login_count, locked_until, totp_last_step` (a TOTP code works once)`, recovery_code_hashes` |
+| `staff_invites` | `id, email, role, display_name, token_hash` (unique, SHA-256)`, created_by, created_at, expires_at (72 h), accepted_at, revoked_at, pending_totp_secret_enc, failed_attempts` (5 wrong codes revoke it). One open invite per e-mail. Not synced. Purged 30 days after accepted/revoked/expired (D-23) |
 | `devices` | `id, name, kind` (`ipad, iphone, laptop, print_agent, display`)`, token_hash, last_seen_at, revoked_at` |
 | `sessions` (not synced) | `id, token_hash, staff_id, device_id?, kind` (`pin, owner`)`, created_at, expires_at, last_seen_at, step_up_until, revoked_at` |
 

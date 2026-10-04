@@ -392,6 +392,41 @@ export const sessions = pgTable(
   ],
 );
 
+/**
+ * Invites for new accounts (D-23): an owner invites an e-mail + role and sends the single-use link
+ * by hand. Only the token's hash is stored. Not synced to clients (no rev/version), like sessions.
+ * `pendingTotpSecretEnc` is the authenticator secret shown at preview, AES-GCM under the TOTP key
+ * with the invite id as associated data. One open (not accepted, not revoked) invite per e-mail.
+ */
+export const staffInvites = pgTable(
+  'staff_invites',
+  {
+    id: id(),
+    email: text('email').notNull(),
+    role: text('role').notNull(),
+    displayName: text('display_name'),
+    tokenHash: text('token_hash').notNull().unique(),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => staff.id),
+    createdAt: ts('created_at').notNull().defaultNow(),
+    expiresAt: ts('expires_at').notNull(),
+    acceptedAt: ts('accepted_at'),
+    revokedAt: ts('revoked_at'),
+    pendingTotpSecretEnc: text('pending_totp_secret_enc'),
+    /** Wrong authenticator codes at accept; the invite is revoked when the API's limit is reached. */
+    failedAttempts: integer('failed_attempts').notNull().default(0),
+  },
+  (t) => [
+    uniqueIndex('staff_invites_open_email_idx')
+      .on(t.email)
+      .where(sql`${t.acceptedAt} is null and ${t.revokedAt} is null`),
+    index('staff_invites_created_by_idx').on(t.createdBy),
+    check('staff_invites_role', oneOf('role', STAFF_ROLES)),
+    check('staff_invites_email_lower', sql`${t.email} = lower(${t.email})`),
+  ],
+);
+
 // ---------- Orders ----------
 
 export const dailyCounters = pgTable('daily_counters', {

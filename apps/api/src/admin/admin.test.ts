@@ -370,7 +370,7 @@ describe('staff: change', () => {
     ).toBe(404);
   });
 
-  test('the owner account cannot be changed here', async () => {
+  test('an owner cannot rename or deactivate themselves (another owner can; see roles.test.ts)', async () => {
     const token = await admin();
     const me = listStaffResponseSchema
       .parse((await call('GET', '/v1/staff', token)).json())
@@ -380,7 +380,12 @@ describe('staff: change', () => {
       active: false,
     });
     expect(res.statusCode).toBe(409);
-    expect(res.json()).toMatchObject({ code: 'OWNER_PROTECTED' });
+    expect(res.json()).toMatchObject({ code: 'SELF_CHANGE' });
+    const rename = await call('PATCH', `/v1/staff/${owner.staffId}`, token, {
+      expectedVersion: me.version,
+      displayName: 'Someone else',
+    });
+    expect(rename.json()).toMatchObject({ code: 'SELF_CHANGE' });
   });
 });
 

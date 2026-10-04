@@ -88,7 +88,7 @@ export interface MenuUpsertedEvent {
  */
 export interface SessionEndedEvent {
   type: 'session.ended';
-  reason: 'logout' | 'device_revoked' | 'staff_deactivated' | 'pin_changed';
+  reason: 'logout' | 'device_revoked' | 'staff_deactivated' | 'pin_changed' | 'role_changed';
   sessionId?: string;
   staffId?: string;
   deviceId?: string;

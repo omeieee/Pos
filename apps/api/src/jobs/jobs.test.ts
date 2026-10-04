@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 import { createLineRuntime } from '../line/runtime.ts';
 import { createHarness, type Harness } from '../test-support/harness.ts';
 import { JOBS, type JobDeps } from './jobs.ts';
-import { purgeLineEvents, RETENTION_BATCH } from './retention.ts';
+import { purgeLineEvents, purgeStaffInvites, RETENTION_BATCH } from './retention.ts';
 
 let h: Harness;
 let deps: JobDeps;
@@ -39,6 +39,7 @@ describe('the job list', () => {
         'retention-orders',
         'retention-recipients',
         'retention-line-customers',
+        'retention-staff-invites',
       ]),
     );
     for (const j of JOBS) expect(j.cron.trim().split(/\s+/)).toHaveLength(5);
@@ -46,6 +47,48 @@ describe('the job list', () => {
 });
 
 describe('retention jobs', () => {
+  test('delete invites that were accepted, revoked or expired more than 30 days ago, and no others', async () => {
+    const owner = await h.newOwner();
+    const insert = async (
+      tag: string,
+      o: { created: number; expires: number; accepted?: number; revoked?: number },
+    ) => {
+      await h.client.query(
+        `insert into staff_invites (email, role, token_hash, created_by, created_at, expires_at, accepted_at, revoked_at)
+         values ($1, 'cashier', $2, $3, $4, $5, $6, $7)`,
+        [
+          `${tag}@example.test`,
+          `hash-${tag}`,
+          owner.staffId,
+          daysAgo(o.created),
+          daysAgo(o.expires),
+          o.accepted === undefined ? null : daysAgo(o.accepted),
+          o.revoked === undefined ? null : daysAgo(o.revoked),
+        ],
+      );
+    };
+    await insert('old-accepted', { created: 50, expires: 47, accepted: 45 });
+    await insert('old-revoked', { created: 50, expires: 47, revoked: 40 });
+    await insert('old-expired', { created: 50, expires: 35 });
+    await insert('recent-accepted', { created: 10, expires: 7, accepted: 5 });
+    await insert('recent-revoked', { created: 10, expires: 7, revoked: 5 });
+    await insert('recent-expired', { created: 33, expires: 29 });
+    await insert('open', { created: 1, expires: -2 });
+
+    expect(await purgeStaffInvites(deps, { batchSize: 2, maxBatches: 5 })).toEqual({ deleted: 3 });
+    const left = (await h.client.query<{ email: string }>('select email from staff_invites')).rows
+      .map((r) => r.email.split('@')[0])
+      .sort();
+    expect(left).toEqual(['open', 'recent-accepted', 'recent-expired', 'recent-revoked']);
+    expect(await job('retention-staff-invites').run(deps)).toEqual({ deleted: 0 });
+    const audit = (
+      await h.client.query<{ after: unknown }>(
+        "select after from audit_log where action = 'retention.staff_invites.purge'",
+      )
+    ).rows;
+    expect(JSON.stringify(audit)).not.toContain('@');
+  });
+
   test('delete old line events in bounded runs: at most batch size times max batches a run', async () => {
     for (let i = 0; i < 5; i++) {
       await h.client.query(

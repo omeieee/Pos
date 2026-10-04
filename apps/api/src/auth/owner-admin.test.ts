@@ -2,6 +2,8 @@ import { describe, expect, test } from 'vitest';
 import { createHarness, type Harness, type OwnerFixture } from '../test-support/harness.ts';
 import { deriveAuthKeys, encryptSecret } from './crypto.ts';
 import {
+  findOwnerForCommand,
+  MultipleOwnersError,
   NoOwnerError,
   resetOwnerSecondFactor,
   unlockOwner,
@@ -179,6 +181,110 @@ describe('with no owner', () => {
       await expect(unlockOwner(ctx(empty))).rejects.toBeInstanceOf(NoOwnerError);
     } finally {
       await empty.close();
+    }
+  }, 30_000);
+});
+
+describe('with several owners (D-23)', () => {
+  async function withTwoOwners(
+    run: (h: Harness, a: OwnerFixture, b: OwnerFixture) => Promise<void>,
+  ) {
+    const h = await createHarness();
+    try {
+      await run(h, await h.newOwner(), await h.newOwner());
+    } finally {
+      await h.close();
+    }
+  }
+
+  test('without --email every command refuses and says only how many owners there are', async () => {
+    await withTwoOwners(async (h, a, b) => {
+      const refusals = [
+        verifyOwnerProof({ db: h.db }, a.password),
+        resetOwnerSecondFactor(ctx(h), { proof: a.password, newTotpSecret: generateTotpSecret() }),
+        unlockOwner(ctx(h)),
+        findOwnerForCommand({ db: h.db }),
+      ];
+      for (const refusal of refusals) {
+        const error = await refusal.catch((e: unknown) => e);
+        expect(error).toBeInstanceOf(MultipleOwnersError);
+        expect((error as MultipleOwnersError).count).toBe(2);
+        expect((error as Error).message).not.toContain(a.email);
+        expect((error as Error).message).not.toContain(b.email);
+      }
+      // Nothing was changed or audited by the refusals.
+      expect(await h.auditRows(a.staffId)).toHaveLength(0);
+      expect(await h.auditRows(b.staffId)).toHaveLength(0);
+    });
+  }, 60_000);
+
+  test('--email picks the owner (any case); the other owner is untouched', async () => {
+    await withTwoOwners(async (h, a, b) => {
+      for (let i = 0; i < 5; i++) {
+        await login(h, { email: a.email, password: 'wrong-wrong-wrong', totp: '000000' });
+        await login(h, { email: b.email, password: 'wrong-wrong-wrong', totp: '000000' });
+      }
+      await unlockOwner(ctx(h), ` ${b.email.toUpperCase()} `);
+      expect(
+        (await login(h, { email: b.email, password: b.password, totp: b.totp() })).statusCode,
+      ).toBe(200);
+      expect(
+        (await login(h, { email: a.email, password: a.password, totp: a.totp() })).statusCode,
+      ).not.toBe(200); // still locked
+      expect((await h.auditRows(b.staffId)).map((r) => r.action)).toContain('owner.unlocked');
+      expect((await h.auditRows(a.staffId)).map((r) => r.action)).not.toContain('owner.unlocked');
+    });
+  }, 60_000);
+
+  test('owner:reset with --email replaces only that owner second factor', async () => {
+    await withTwoOwners(async (h, a, b) => {
+      const found = await findOwnerForCommand({ db: h.db }, b.email);
+      expect(found.staffId).toBe(b.staffId);
+      expect(await verifyOwnerProof({ db: h.db }, b.password, b.email)).toBe(true);
+      // The password of the OTHER owner is not proof for this one.
+      expect(await verifyOwnerProof({ db: h.db }, a.password, b.email)).toBe(false);
+
+      const newSecret = generateTotpSecret();
+      const result = await resetOwnerSecondFactor(ctx(h), {
+        proof: b.password,
+        newTotpSecret: newSecret,
+        email: b.email,
+      });
+      expect(result.ok).toBe(true);
+      h.clock.advanceSeconds(60);
+      const step = stepNow(h);
+      expect(
+        (await login(h, { email: b.email, password: b.password, totp: hotp(newSecret, step) }))
+          .statusCode,
+      ).toBe(200);
+      expect(
+        (await login(h, { email: a.email, password: a.password, totp: hotp(a.totpSecret, step) }))
+          .statusCode,
+      ).toBe(200);
+    });
+  }, 60_000);
+
+  test('an e-mail that is not an owner, or does not exist, answers like no owner', async () => {
+    await withTwoOwners(async (h) => {
+      await expect(unlockOwner(ctx(h), 'nobody@example.test')).rejects.toBeInstanceOf(NoOwnerError);
+      // A manager with an e-mail account is not an owner.
+      const manager = await h.newOwner();
+      await h.client.query("update staff set role = 'manager' where id = $1", [manager.staffId]);
+      await expect(unlockOwner(ctx(h), manager.email)).rejects.toBeInstanceOf(NoOwnerError);
+    });
+  }, 60_000);
+
+  test('a second owner who is not signed up by e-mail does not count', async () => {
+    const h = await createHarness();
+    try {
+      const only = await h.newOwner();
+      await h.client.query(
+        "insert into staff (display_name, role) values ('owner without e-mail', 'owner')",
+      );
+      await expect(unlockOwner(ctx(h))).resolves.toBeUndefined(); // still exactly one owner account
+      expect((await h.auditRows(only.staffId)).map((r) => r.action)).toContain('owner.unlocked');
+    } finally {
+      await h.close();
     }
   }, 30_000);
 });

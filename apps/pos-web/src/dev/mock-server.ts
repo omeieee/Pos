@@ -87,6 +87,8 @@ export interface MockServerOptions {
   pinLockSeconds?: number;
   /** Artificial latency per call, for the dev server. */
   delayMs?: number;
+  /** Start with one open invite, `/invite#mock-invite-demo` (dev server only). */
+  demoInvite?: boolean;
   /** Answer before the routes do; return a Response to inject a fault. */
   intercept?: (call: { method: string; path: string; body: unknown }) => Response | undefined;
 }
@@ -134,7 +136,12 @@ export function createMockServer(options: MockServerOptions = {}) {
   const calls: { method: string; path: string }[] = [];
   // Staff and devices the owner manages from Settings (see mock-admin.ts). The staff start as
   // MOCK_STAFF; a person added, renamed, deactivated or given a new PIN there is what signs in here.
-  const people: MockPerson[] = MOCK_STAFF.map((s) => ({ ...s, active: true, version: 1 }));
+  const people: MockPerson[] = MOCK_STAFF.map((s) => ({
+    ...s,
+    email: s.role === 'owner' ? MOCK_OWNER.email : null,
+    active: true,
+    version: 1,
+  }));
   /** Sessions of this person issued at or before this counter value are treated as ended. */
   const sessionsEndedAt = new Map<string, number>();
   const deviceTokens = new Map<string, string>();
@@ -318,6 +325,12 @@ export function createMockServer(options: MockServerOptions = {}) {
       return reply(204);
     }
 
+    // The invite link's two calls work with no session: the token in the body is the credential.
+    if (path.startsWith('/v1/auth/invite/')) {
+      const answer = admin.handlePublic(method, path, body);
+      if (answer) return reply(answer.status, answer.body);
+    }
+
     // Everything below needs a live session.
     const session = sessionOf(auth, deviceHeader);
     if (session === 'mismatch') return fail(401, 'DEVICE_MISMATCH');
@@ -376,6 +389,7 @@ export function createMockServer(options: MockServerOptions = {}) {
     const managed = admin.handle(method, path, body, {
       role: session.staff.role,
       stepUpFresh: (stepUps.get(session.token) ?? 0) > now(),
+      staffId: session.staff.id,
     });
     if (managed) return reply(managed.status, managed.body);
 
@@ -409,6 +423,7 @@ export function createMockServer(options: MockServerOptions = {}) {
     newUuid: () => crypto.randomUUID(),
     people,
     devices,
+    ...(options.demoInvite ? { demoInvite: true } : {}),
     lockedUntil: (staffId) => pinFailures.get(staffId)?.lockedUntil ?? 0,
     endSessions(staffId) {
       sessionsEndedAt.set(staffId, counter);

@@ -72,7 +72,15 @@ describe('error code -> message', () => {
       // menu, staff and the socket route
       'UNKNOWN_CATEGORY',
       'UNKNOWN_GROUP',
-      'OWNER_PROTECTED',
+      // co-owners and invites (D-23)
+      'EMAIL_TAKEN',
+      'INVITE_EXISTS',
+      'SELF_CHANGE',
+      'LAST_OWNER',
+      'OWNER_NEEDS_ACCOUNT',
+      'INVITE_ACCEPTED',
+      'INVITE_INVALID',
+      'INVITE_CODE_INVALID',
       'UPGRADE_REQUIRED',
       'BAD_REQUEST',
       // the menu editor

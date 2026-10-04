@@ -27,6 +27,15 @@ export interface AuthPolicy {
    */
   ownerGlobalRatePerMinute: number;
   stepUpGlobalRatePerMinute: number;
+  /** An invite link works this long after the owner made it (D-23). */
+  inviteSeconds: number;
+  /**
+   * Wrong authenticator codes at accept: the invite is revoked at this many, so a leaked link
+   * cannot be used to guess a code (the owner then makes a new invite).
+   */
+  inviteMaxFailures: number;
+  /** Ceiling on /v1/auth/invite/* requests per minute across ALL callers. */
+  inviteGlobalRatePerMinute: number;
   /** `devices.last_seen_at` is synced to clients, so it is refreshed this rarely. */
   deviceSeenIntervalSeconds: number;
   /** `sessions.last_seen_at` (idle clock) is refreshed at most this often. */
@@ -45,6 +54,9 @@ export const DEFAULT_AUTH_POLICY: AuthPolicy = {
   ownerLockSeconds: 15 * 60,
   ownerGlobalRatePerMinute: 30,
   stepUpGlobalRatePerMinute: 30,
+  inviteSeconds: 72 * 60 * 60,
+  inviteMaxFailures: 5,
+  inviteGlobalRatePerMinute: 30,
   deviceSeenIntervalSeconds: 5 * 60,
   sessionTouchIntervalSeconds: 60,
 };

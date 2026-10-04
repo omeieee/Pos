@@ -1,4 +1,6 @@
 import {
+  changeRoleInputSchema,
+  createInviteInputSchema,
   createStaffInputSchema,
   idParamSchema,
   outboxRecoveryInputSchema,
@@ -9,7 +11,9 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { type GuardFactory, principalOf } from '../auth/guards.ts';
 import type { AuthContext } from '../auth/service.ts';
 import { parse } from '../validate.ts';
+import { createInvite, listInvites, revokeInvite } from './invites.ts';
 import {
+  changeStaffRole,
   createStaffMember,
   listDevices,
   listStaffMembers,
@@ -62,6 +66,26 @@ export async function registerAdminRoutes(
 
   app.get('/staff', { onRequest: guard('staff.manage') }, async () => listStaffMembers(ctx));
 
+  // Invites (D-23). Static paths, so they win over /staff/:id/...
+  app.get('/staff/invites', { onRequest: guard('staff.manage') }, async () => listInvites(ctx));
+
+  // The response carries the token once; the UI builds the link `<origin>/invite#<token>`.
+  app.post('/staff/invites', { onRequest: guard('staff.manage') }, async (request, reply) => {
+    const input = parse(createInviteInputSchema, request.body);
+    return reply
+      .status(201)
+      .send(await createInvite(ctx, principalOf(request), input, meta(request)));
+  });
+
+  app.post(
+    '/staff/invites/:id/revoke',
+    { onRequest: guard('staff.manage') },
+    async (request, reply) => {
+      await revokeInvite(ctx, principalOf(request), idOf(request), meta(request));
+      return reply.status(204).send();
+    },
+  );
+
   app.post('/staff', { onRequest: guard('staff.manage') }, async (request, reply) => {
     const input = parse(createStaffInputSchema, request.body);
     const created = await createStaffMember(ctx, principalOf(request), input, meta(request));
@@ -74,6 +98,16 @@ export async function registerAdminRoutes(
       principalOf(request),
       idOf(request),
       parse(patchStaffInputSchema, request.body),
+      meta(request),
+    ),
+  );
+
+  app.post('/staff/:id/role', { onRequest: guard('staff.manage') }, async (request) =>
+    changeStaffRole(
+      ctx,
+      principalOf(request),
+      idOf(request),
+      parse(changeRoleInputSchema, request.body),
       meta(request),
     ),
   );

@@ -87,8 +87,13 @@ const orderRow = async (id: string) =>
   )[0];
 
 describe('retention days', () => {
-  test('the owner decided 30 days for each of the three', () => {
-    expect(RETENTION_DAYS).toEqual({ lineEvents: 30, orderPersonalData: 30, recipientBook: 30 });
+  test('the owner decided 30 days for each of the three; ended invites are kept 30 days too', () => {
+    expect(RETENTION_DAYS).toEqual({
+      lineEvents: 30,
+      orderPersonalData: 30,
+      recipientBook: 30,
+      staffInvites: 30,
+    });
   });
 });
 

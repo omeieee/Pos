@@ -80,6 +80,7 @@ describe('staff', () => {
       displayName: 'น้อย',
       role: 'cashier',
       active: true,
+      email: null,
       hasPin: true,
       lockedUntil: null,
       version: 1,

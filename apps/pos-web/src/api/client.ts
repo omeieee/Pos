@@ -15,6 +15,8 @@
  *   empty JSON body (for example on POST /v1/auth/logout).
  */
 import {
+  acceptInviteInputSchema,
+  acceptInviteResponseSchema,
   authMeResponseSchema,
   authStaffListResponseSchema,
   availabilityInputSchema,
@@ -23,10 +25,13 @@ import {
   categoryDtoSchema,
   changePaymentMethodInputSchema,
   changePaymentMethodResultSchema,
+  changeRoleInputSchema,
   claimPaymentInputSchema,
   confirmPaymentInputSchema,
   createCategoryInputSchema,
   createGroupInputSchema,
+  createInviteInputSchema,
+  createInviteResponseSchema,
   createItemInputSchema,
   createOptionInputSchema,
   createOrderInputSchema,
@@ -39,8 +44,11 @@ import {
   govCopayResponseSchema,
   groupDtoSchema,
   idParamSchema,
+  invitePreviewInputSchema,
+  invitePreviewResponseSchema,
   itemDtoSchema,
   listDevicesResponseSchema,
+  listInvitesResponseSchema,
   listOrdersQuerySchema,
   listOrdersResponseSchema,
   listStaffResponseSchema,
@@ -384,6 +392,29 @@ export function createApiClient(options: ApiClientOptions) {
           schema: stepUpResponseSchema,
           session: true,
           device: 'optional',
+        })
+      ).data,
+
+    /**
+     * The invite link's two public calls (D-23): the token in the body is the only credential, so
+     * no session and no device token travel with them. The token is never put in a URL or an
+     * error. A preview replaces the authenticator secret stored for the invite: call it once.
+     */
+    invitePreview: async (input: z.input<typeof invitePreviewInputSchema>) =>
+      (
+        await post({
+          path: '/v1/auth/invite/preview',
+          body: checked(invitePreviewInputSchema, input),
+          schema: invitePreviewResponseSchema,
+        })
+      ).data,
+
+    inviteAccept: async (input: z.input<typeof acceptInviteInputSchema>) =>
+      (
+        await post({
+          path: '/v1/auth/invite/accept',
+          body: checked(acceptInviteInputSchema, input),
+          schema: acceptInviteResponseSchema,
         })
       ).data,
 
@@ -1012,6 +1043,44 @@ export function createApiClient(options: ApiClientOptions) {
           device: 'optional',
         })
       ).data,
+    /** A role change; a PIN of the new role only when it needs one (see `roleChangeNeedsPin`). */
+    changeStaffRole: async (id: string, input: z.input<typeof changeRoleInputSchema>) =>
+      (
+        await post({
+          path: `/v1/staff/${checked(idParamSchema, { id }).id}/role`,
+          body: checked(changeRoleInputSchema, input),
+          schema: staffDtoSchema,
+          session: true,
+          device: 'optional',
+        })
+      ).data,
+    invites: async () =>
+      (
+        await get({
+          path: '/v1/staff/invites',
+          schema: listInvitesResponseSchema,
+          session: true,
+          device: 'optional',
+        })
+      ).data,
+    /** The answer carries the invite token once: show the link, keep the token nowhere else. */
+    createInvite: async (input: z.input<typeof createInviteInputSchema>) =>
+      (
+        await post({
+          path: '/v1/staff/invites',
+          body: checked(createInviteInputSchema, input),
+          schema: createInviteResponseSchema,
+          session: true,
+          device: 'optional',
+        })
+      ).data,
+    revokeInvite: async (id: string) => {
+      await post<void>({
+        path: `/v1/staff/invites/${checked(idParamSchema, { id }).id}/revoke`,
+        session: true,
+        device: 'optional',
+      });
+    },
     setStaffPin: async (id: string, input: z.input<typeof setStaffPinInputSchema>) =>
       (
         await post({

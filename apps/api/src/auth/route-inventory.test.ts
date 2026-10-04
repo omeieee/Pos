@@ -55,6 +55,8 @@ describe('the real /v1 routes', () => {
       'GET /v1/auth/staff',
       'GET /v1/menu',
       'POST /v1/app/session',
+      'POST /v1/auth/invite/accept',
+      'POST /v1/auth/invite/preview',
       'POST /v1/auth/owner',
       'POST /v1/auth/pin',
     ]);
@@ -70,6 +72,22 @@ describe('the real /v1 routes', () => {
     // The fifth: LINE's servers call the webhook with no session; the X-Line-Signature HMAC over
     // the raw body is the authentication (line/routes.ts, markLineSignatureCheck in preHandler).
     expect(LINE_WEBHOOK.sort()).toEqual(['POST /v1/line/webhook']);
+  });
+
+  test('the invite routes: the owner-side ones are guarded, the two public ones are not', () => {
+    const key = (r: { method: string; url: string }) => `${r.method} ${r.url}`;
+    const guarded = new Set(h.routes.filter((r) => r.guarded).map(key));
+    for (const route of [
+      'GET /v1/staff/invites',
+      'POST /v1/staff/invites',
+      'POST /v1/staff/invites/:id/revoke',
+      'POST /v1/staff/:id/role',
+    ]) {
+      expect(guarded.has(route), route).toBe(true);
+    }
+    for (const route of ['POST /v1/auth/invite/preview', 'POST /v1/auth/invite/accept']) {
+      expect(guarded.has(route), route).toBe(false);
+    }
   });
 
   test('the customer app routes run the customer guard, which is not the staff guard', () => {
@@ -115,6 +133,12 @@ describe('the real /v1 routes', () => {
       'GET /v1/payments/:id/qr.png',
       'GET /v1/sync',
       'GET /v1/ws',
+      'GET /v1/staff/invites',
+      'POST /v1/staff/invites',
+      'POST /v1/staff/invites/:id/revoke',
+      'POST /v1/staff/:id/role',
+      'POST /v1/auth/invite/preview',
+      'POST /v1/auth/invite/accept',
     ]) {
       expect(all.has(route), route).toBe(true);
     }

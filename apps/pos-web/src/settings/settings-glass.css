@@ -214,3 +214,62 @@ button.g-row:focus-visible {
   gap: 10px;
   align-items: flex-start;
 }
+
+/* A role picker: one card per role with its plain explanation (invite, role change). */
+.gset-roles {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.gset-role {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 56px;
+  padding: 10px 16px;
+  border-radius: 18px;
+  background: var(--glass);
+  border: 1px solid var(--line);
+  cursor: pointer;
+}
+.gset-role input {
+  position: absolute;
+  opacity: 0;
+  inset: 0;
+  margin: 0;
+  cursor: pointer;
+}
+.gset-role:focus-within {
+  outline: 3px solid #1d5fd6;
+  outline-offset: 2px;
+}
+.gset-role:has(input:checked) {
+  background: var(--glass2);
+  border-color: var(--ink);
+  box-shadow: var(--sh1);
+}
+.gset-role--off {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.gset-role--off input {
+  cursor: not-allowed;
+}
+
+/* The invite link: shown whole (wrapped), selectable in one tap-hold. */
+.gset-link {
+  display: block;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: var(--glass2);
+  border: 1px solid var(--line);
+  font-size: 14px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  user-select: all;
+}

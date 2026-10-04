@@ -332,6 +332,63 @@ export async function insertOwner(db: Db, owner: NewOwner): Promise<{ staffId: s
   return { staffId: row.id };
 }
 
+/** True when an e-mail already signs somebody in (the invite flow refuses to reuse it). */
+export async function emailHasCredentials(db: Db, email: string): Promise<boolean> {
+  const rows = await db
+    .select({ staffId: ownerCredentials.staffId })
+    .from(ownerCredentials)
+    .where(eq(ownerCredentials.email, email))
+    .limit(1);
+  return rows.length > 0;
+}
+
+/** Owners who can sign in with an e-mail (the owner:* commands need to know whether there are several). */
+export async function countOwnerAccounts(db: Db): Promise<number> {
+  const [row] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(ownerCredentials)
+    .innerJoin(staff, eq(staff.id, ownerCredentials.staffId))
+    .where(eq(staff.role, 'owner'));
+  return row?.n ?? 0;
+}
+
+export interface NewCredentialedStaff {
+  email: string;
+  displayName: string;
+  role: StaffRole;
+  passwordHash: string;
+  pinHash: string;
+  /** Called with the new staff id (the AES-GCM associated data) to produce the stored secret. */
+  encryptTotpSecret: (staffId: string) => string;
+  recoveryCodeHashes: string[];
+  /** The TOTP step the person proved at enrolment: that code must not sign them in again. */
+  totpLastStep: number;
+}
+
+/**
+ * Creates a staff row of any role with e-mail credentials (an accepted invite). Call inside a
+ * transaction. `insertOwner` stays the first-owner path of `owner:create`.
+ */
+export async function insertCredentialedStaff(
+  db: Db,
+  input: NewCredentialedStaff,
+): Promise<{ staffId: string }> {
+  const [row] = await db
+    .insert(staff)
+    .values({ displayName: input.displayName, role: input.role, pinHash: input.pinHash })
+    .returning({ id: staff.id });
+  if (!row) throw new Error('staff insert returned no row');
+  await db.insert(ownerCredentials).values({
+    staffId: row.id,
+    email: input.email,
+    passwordHash: input.passwordHash,
+    totpSecretEnc: input.encryptTotpSecret(row.id),
+    recoveryCodeHashes: input.recoveryCodeHashes,
+    totpLastStep: input.totpLastStep,
+  });
+  return { staffId: row.id };
+}
+
 // ---------- Sessions ----------
 
 export interface SessionRow {

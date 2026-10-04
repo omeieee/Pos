@@ -35,7 +35,8 @@ export interface V1Deps {
 
 /**
  * The only /v1 routes that may run without `guard()`: the sign-ins (/auth/staff and /auth/pin
- * authenticate with the registered device's token; /auth/owner is the password + TOTP login), the
+ * authenticate with the registered device's token; /auth/owner is the password + TOTP login; the
+ * two /auth/invite routes take an invite token), the
  * customer app's token exchange, and the public menu. The other `/v1/app` routes are not here:
  * they run the customer guard (`markCustomerGuard`), which the start-up check accepts as its own
  * kind of guard.
@@ -44,6 +45,9 @@ export const OPEN_ROUTES: ReadonlySet<string> = new Set([
   'GET /v1/auth/staff',
   'POST /v1/auth/pin',
   'POST /v1/auth/owner',
+  // An invitee opens the owner's link before they have an account (D-23): the token is the credential.
+  'POST /v1/auth/invite/preview',
+  'POST /v1/auth/invite/accept',
   // The customer app trades a LIFF token that LINE confirms for a customer session. Rate limited.
   'POST /v1/app/session',
   // The menu a customer or a till reads before signing in: prices of what is on sale, no costs.

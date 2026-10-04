@@ -247,6 +247,7 @@ describe('devices and staff (owner only; the API asks for a step-up on every cal
     displayName: 'น้องเอ',
     role: 'cashier',
     active: true,
+    email: null,
     hasPin: true,
     pinLockedUntil: null,
     version: 2,
@@ -315,7 +316,7 @@ describe('devices and staff (owner only; the API asks for a step-up on every cal
     expect(bodyOf(calls[1])).toEqual({ pin: '654321' });
   });
 
-  test('a patch with no change is refused before the network; OWNER_PROTECTED keeps its code', async () => {
+  test('a patch with no change is refused before the network; LAST_OWNER keeps its code', async () => {
     const none = clientWith(() => ({ status: 200, json: person }));
     await expect(
       none.api.admin.patchStaff(person.id, { expectedVersion: 2 }),
@@ -323,10 +324,10 @@ describe('devices and staff (owner only; the API asks for a step-up on every cal
       code: 'REQUEST_INVALID',
     });
     expect(none.calls).toHaveLength(0);
-    const owner = clientWith(() => apiError(409, 'OWNER_PROTECTED'));
+    const owner = clientWith(() => apiError(409, 'LAST_OWNER'));
     await expect(
       owner.api.admin.patchStaff(person.id, { expectedVersion: 2, active: false }),
-    ).rejects.toMatchObject({ code: 'OWNER_PROTECTED' });
+    ).rejects.toMatchObject({ code: 'LAST_OWNER' });
   });
 
   test('a PIN is never in an error', async () => {

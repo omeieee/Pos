@@ -1,6 +1,7 @@
 /**
- * Operator commands on the one owner account, run from a terminal on the VM (owner:reset,
+ * Operator commands on an owner account, run from a terminal on the VM (owner:reset,
  * owner:unlock). There is no HTTP route for either: the way in is shell access to the server.
+ * With exactly one owner the commands act on it; with several (D-23) they need the owner's e-mail.
  */
 import { authRepo, type Db, insertAudit } from '@sds/db';
 import {
@@ -19,10 +20,42 @@ export class NoOwnerError extends Error {
   }
 }
 
+/** Several owners exist and no e-mail was given. Carries the count only, never an address. */
+export class MultipleOwnersError extends Error {
+  readonly count: number;
+  constructor(count: number) {
+    super(`${count} owners exist; give --email`);
+    this.name = 'MultipleOwnersError';
+    this.count = count;
+  }
+}
+
 interface AdminContext {
   db: Db;
   keys: AuthKeys;
   now: () => Date;
+}
+
+/**
+ * The owner a command acts on, with the credentials row locked: the one with this e-mail, or the
+ * only owner when no e-mail is given. An e-mail that is not an owner's answers like no owner.
+ */
+async function lockOwnerForCommand(tx: Db, email: string | undefined) {
+  if (email !== undefined) {
+    const owner = await authRepo.lockOwnerByEmail(tx, email.trim().toLowerCase());
+    if (owner?.role !== 'owner') throw new NoOwnerError();
+    return owner;
+  }
+  const count = await authRepo.countOwnerAccounts(tx);
+  if (count > 1) throw new MultipleOwnersError(count);
+  const owner = await authRepo.lockSoleOwner(tx);
+  if (!owner) throw new NoOwnerError();
+  return owner;
+}
+
+/** For the terminal commands: who they are about to act on (to show the e-mail before asking for proof). */
+export async function findOwnerForCommand(ctx: Pick<AdminContext, 'db'>, email?: string) {
+  return ctx.db.transaction((tx) => lockOwnerForCommand(tx, email));
 }
 
 /**
@@ -32,10 +65,10 @@ interface AdminContext {
 export async function verifyOwnerProof(
   ctx: Pick<AdminContext, 'db'>,
   proof: string,
+  email?: string,
 ): Promise<boolean> {
   return ctx.db.transaction(async (tx) => {
-    const owner = await authRepo.lockSoleOwner(tx);
-    if (!owner) throw new NoOwnerError();
+    const owner = await lockOwnerForCommand(tx, email);
     const proven =
       (await verifyPassword(owner.passwordHash, proof)) ||
       owner.recoveryCodeHashes.includes(hashRecoveryCode(proof));
@@ -59,12 +92,11 @@ export async function verifyOwnerProof(
  */
 export async function resetOwnerSecondFactor(
   ctx: AdminContext,
-  input: { proof: string; newTotpSecret: Buffer },
+  input: { proof: string; newTotpSecret: Buffer; email?: string },
 ): Promise<{ ok: true; recoveryCodes: string[] } | { ok: false }> {
   const recoveryCodes = newRecoveryCodes(RECOVERY_CODE_COUNT);
   return ctx.db.transaction(async (tx) => {
-    const owner = await authRepo.lockSoleOwner(tx);
-    if (!owner) throw new NoOwnerError();
+    const owner = await lockOwnerForCommand(tx, input.email);
 
     const proven =
       (await verifyPassword(owner.passwordHash, input.proof)) ||
@@ -96,10 +128,9 @@ export async function resetOwnerSecondFactor(
 }
 
 /** Clears the owner's sign-in lock and failure count. */
-export async function unlockOwner(ctx: Pick<AdminContext, 'db'>): Promise<void> {
+export async function unlockOwner(ctx: Pick<AdminContext, 'db'>, email?: string): Promise<void> {
   await ctx.db.transaction(async (tx) => {
-    const owner = await authRepo.lockSoleOwner(tx);
-    if (!owner) throw new NoOwnerError();
+    const owner = await lockOwnerForCommand(tx, email);
     await authRepo.clearOwnerLocks(tx, owner.staffId);
     await insertAudit(tx, {
       actorType: 'system',

@@ -17,8 +17,9 @@ import {
 } from './staff-model.ts';
 
 /** The frame of a staff dialog: title, fields, the failure of the last try, cancel and save. */
-function Frame({
+export function Frame({
   title,
+  submitLabel,
   saving,
   error,
   onClose,
@@ -26,6 +27,8 @@ function Frame({
   children,
 }: {
   title: string;
+  /** The save button's words (default: Save). */
+  submitLabel?: string;
   saving: boolean;
   error: string | null;
   onClose: () => void;
@@ -48,7 +51,7 @@ function Frame({
               {tr('common.cancel')}
             </button>
             <button type="submit" className="g-btn g-btn-p g-btn-lg" disabled={saving}>
-              {saving ? tr('settings.staff.working') : tr('common.save')}
+              {saving ? tr('settings.staff.working') : (submitLabel ?? tr('common.save'))}
             </button>
           </>
         }
@@ -64,14 +67,14 @@ function Frame({
  * `onUncertain`, a lost answer is handed to the caller instead (the dialog is closed there, so the
  * typed values cannot be sent again).
  */
-function useDialogRun(
-  onDone: (outcome: AdminOutcome<StaffDto>) => void,
+export function useDialogRun<T = StaffDto>(
+  onDone: (outcome: Extract<AdminOutcome<T>, { ok: true }>) => void,
   onUncertain?: (text: string) => void,
 ) {
   const tr = useT();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  async function run(call: Promise<AdminOutcome<StaffDto>>) {
+  async function run(call: Promise<AdminOutcome<T>>) {
     setSaving(true);
     setError(null);
     const outcome = await call;

@@ -1,8 +1,15 @@
 import { describe, expect, test } from 'vitest';
 import {
+  acceptInviteInputSchema,
+  changeRoleInputSchema,
+  createInviteInputSchema,
+  createInviteResponseSchema,
   createStaffInputSchema,
   deviceDtoSchema,
   idParamSchema,
+  inviteDtoSchema,
+  invitePreviewInputSchema,
+  invitePreviewResponseSchema,
   patchStaffInputSchema,
   setStaffPinInputSchema,
   staffDtoSchema,
@@ -114,15 +121,129 @@ describe('response shapes', () => {
         displayName: 'น้อย',
         role: 'cashier',
         active: true,
+        email: null,
         hasPin: true,
         pinLockedUntil: null,
         version: 3,
       }).success,
     ).toBe(true);
+    // The e-mail is required (null for PIN-only staff), so the UI never has to guess.
+    expect(
+      staffDtoSchema.safeParse({
+        id: uuid,
+        displayName: 'น้อย',
+        role: 'cashier',
+        active: true,
+        hasPin: true,
+        pinLockedUntil: null,
+        version: 3,
+      }).success,
+    ).toBe(false);
   });
 
   test('an id parameter must be a uuid', () => {
     expect(idParamSchema.safeParse({ id: uuid }).success).toBe(true);
     expect(idParamSchema.safeParse({ id: 'nope' }).success).toBe(false);
+  });
+});
+
+describe('invites (D-23)', () => {
+  test('an invite takes any role, lower-cases the e-mail and refuses extra fields', () => {
+    for (const role of ['owner', 'manager', 'cashier', 'kitchen']) {
+      expect(createInviteInputSchema.safeParse({ email: 'a@example.test', role }).success).toBe(
+        true,
+      );
+    }
+    expect(
+      createInviteInputSchema.parse({ email: '  Co.Owner@Example.TEST ', role: 'owner' }),
+    ).toEqual({ email: 'co.owner@example.test', role: 'owner' });
+    expect(createInviteInputSchema.safeParse({ email: 'nope', role: 'cashier' }).success).toBe(
+      false,
+    );
+    expect(
+      createInviteInputSchema.safeParse({ email: 'a@example.test', role: 'admin' }).success,
+    ).toBe(false);
+    expect(
+      createInviteInputSchema.safeParse({ email: 'a@example.test', role: 'cashier', extra: 1 })
+        .success,
+    ).toBe(false);
+    expect(
+      createInviteInputSchema.parse({
+        email: 'a@example.test',
+        role: 'cashier',
+        displayName: ' น้อย ',
+      }).displayName,
+    ).toBe('น้อย');
+  });
+
+  test('the DTO has no hash and only open or expired as status; the response adds the token', () => {
+    const dto = {
+      id: uuid,
+      email: 'a@example.test',
+      role: 'manager',
+      displayName: null,
+      createdAt: '2026-10-04T03:00:00.000Z',
+      expiresAt: '2026-10-07T03:00:00.000Z',
+      status: 'open',
+    };
+    expect(inviteDtoSchema.safeParse(dto).success).toBe(true);
+    expect(inviteDtoSchema.safeParse({ ...dto, status: 'accepted' }).success).toBe(false);
+    expect(Object.keys(inviteDtoSchema.shape).join()).not.toMatch(/hash|secret|token/i);
+    expect(createInviteResponseSchema.safeParse({ ...dto, token: 'sds_inv_x' }).success).toBe(true);
+    expect(createInviteResponseSchema.safeParse(dto).success).toBe(false);
+  });
+
+  test('preview takes only a token and answers with the e-mail, role and authenticator secret', () => {
+    expect(invitePreviewInputSchema.safeParse({ token: 'sds_inv_x' }).success).toBe(true);
+    expect(invitePreviewInputSchema.safeParse({ token: '' }).success).toBe(false);
+    expect(invitePreviewInputSchema.safeParse({ token: 'x', role: 'owner' }).success).toBe(false);
+    expect(
+      invitePreviewResponseSchema.safeParse({
+        email: 'a@example.test',
+        role: 'cashier',
+        displayName: null,
+        totp: { secretBase32: 'ABCDEFGH', otpauthUri: 'otpauth://totp/x' },
+      }).success,
+    ).toBe(true);
+  });
+
+  test('accept needs a 12+ character password, a 4-6 digit PIN and a 6-digit code; no role in the body', () => {
+    const body = {
+      token: 'sds_inv_x',
+      displayName: 'น้อย',
+      password: 'a-long-enough-password',
+      pin: '4821',
+      totpCode: '123456',
+    };
+    expect(acceptInviteInputSchema.safeParse(body).success).toBe(true);
+    expect(acceptInviteInputSchema.safeParse({ ...body, password: 'short' }).success).toBe(false);
+    expect(acceptInviteInputSchema.safeParse({ ...body, pin: '123' }).success).toBe(false);
+    expect(acceptInviteInputSchema.safeParse({ ...body, pin: '1234567' }).success).toBe(false);
+    expect(acceptInviteInputSchema.safeParse({ ...body, totpCode: '12345' }).success).toBe(false);
+    expect(acceptInviteInputSchema.safeParse({ ...body, role: 'owner' }).success).toBe(false);
+  });
+});
+
+describe('changeRoleInputSchema', () => {
+  test('takes expectedVersion and a role; a PIN, when given, must fit the new role', () => {
+    expect(changeRoleInputSchema.safeParse({ expectedVersion: 2, role: 'cashier' }).success).toBe(
+      true,
+    );
+    expect(
+      changeRoleInputSchema.safeParse({ expectedVersion: 2, role: 'cashier', pin: '1234' }).success,
+    ).toBe(true);
+    expect(
+      changeRoleInputSchema.safeParse({ expectedVersion: 2, role: 'manager', pin: '1234' }).success,
+    ).toBe(false);
+    expect(
+      changeRoleInputSchema.safeParse({ expectedVersion: 2, role: 'owner', pin: '123456' }).success,
+    ).toBe(true);
+    expect(changeRoleInputSchema.safeParse({ role: 'cashier' }).success).toBe(false);
+    expect(changeRoleInputSchema.safeParse({ expectedVersion: 0, role: 'cashier' }).success).toBe(
+      false,
+    );
+    expect(changeRoleInputSchema.safeParse({ expectedVersion: 1, role: 'boss' }).success).toBe(
+      false,
+    );
   });
 });

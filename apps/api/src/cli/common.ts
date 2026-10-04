@@ -37,6 +37,28 @@ export function loadCliEnv(options: { needsKey: boolean }) {
   return { databaseUrl: url.data, authKey };
 }
 
+/**
+ * `--email <address>` (or `--email=<address>`): which owner a command is about, needed once there
+ * is more than one owner. Undefined when absent; exits on a flag with no value.
+ */
+export function emailArg(argv: readonly string[] = process.argv.slice(2)): string | undefined {
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i] ?? '';
+    if (arg !== '--email' && !arg.startsWith('--email=')) continue;
+    const value = arg === '--email' ? argv[i + 1] : arg.slice('--email='.length);
+    if (!value || value.startsWith('--')) {
+      fail('--email needs an address, e.g. --email owner@example.com');
+    }
+    return value;
+  }
+  return undefined;
+}
+
+/** What to say when several owners exist and no --email was given: the count only, no addresses. */
+export function multipleOwnersMessage(count: number): string {
+  return `There are ${count} owners. Run the command again with --email <the owner's address>.`;
+}
+
 export function requireTerminal(): void {
   if (!process.stdin.isTTY) {
     fail('This command types secrets, so it needs a terminal (run it in an interactive shell).');

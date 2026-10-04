@@ -37,6 +37,15 @@ export async function purgeLineEvents(deps: JobDeps, bounds: Bounds = {}) {
   return { deleted };
 }
 
+/** Invites that were accepted, revoked or expired more than 30 days ago. */
+export async function purgeStaffInvites(deps: JobDeps, bounds: Bounds = {}) {
+  const before = cutoff(deps, RETENTION_DAYS.staffInvites);
+  const deleted = await drain(bounds, (limit) =>
+    retentionRepo.purgeStaffInvitesBatch(deps.db, { before, limit, now: deps.now() }),
+  );
+  return { deleted };
+}
+
 /** Name and building on orders completed (or cancelled) more than 30 days ago. Amounts stay. */
 export async function anonymizeOrders(deps: JobDeps, bounds: Bounds = {}) {
   const before = cutoff(deps, RETENTION_DAYS.orderPersonalData);

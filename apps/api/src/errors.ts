@@ -49,6 +49,10 @@ export const secondFactorUnavailable = () =>
     'The authenticator code cannot be checked right now. Sign in with a recovery code',
   );
 
+/** One answer for an unknown, expired, used or revoked invite link, so it reveals nothing about which. */
+export const inviteInvalid = () =>
+  new ApiError(404, 'INVITE_INVALID', 'This invite link is not valid');
+
 export const forbidden = () => new ApiError(403, 'FORBIDDEN', 'Your role may not do this');
 
 export const stepUpRequired = () =>

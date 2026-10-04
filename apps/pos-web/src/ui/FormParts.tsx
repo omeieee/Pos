@@ -85,6 +85,7 @@ export function SegRadio<T extends string>({
   value,
   options,
   disabled,
+  disabledValues,
   onChange,
 }: {
   legend: string;
@@ -92,26 +93,31 @@ export function SegRadio<T extends string>({
   value: T;
   options: readonly { value: T; label: string }[];
   disabled?: boolean | undefined;
+  /** Single choices that cannot be picked (the rest stay available). */
+  disabledValues?: readonly T[] | undefined;
   onChange: (value: T) => void;
 }) {
   return (
     <fieldset className="g-seg">
       <legend className="gvh">{legend}</legend>
-      {options.map((option) => (
-        <label
-          key={option.value}
-          className={`g-chip${value === option.value ? ' g-on' : ''}${disabled ? ' gchip--off' : ''}`}
-        >
-          <input
-            type="radio"
-            name={name}
-            checked={value === option.value}
-            disabled={disabled}
-            onChange={() => onChange(option.value)}
-          />
-          {option.label}
-        </label>
-      ))}
+      {options.map((option) => {
+        const off = disabled === true || disabledValues?.includes(option.value) === true;
+        return (
+          <label
+            key={option.value}
+            className={`g-chip${value === option.value ? ' g-on' : ''}${off ? ' gchip--off' : ''}`}
+          >
+            <input
+              type="radio"
+              name={name}
+              checked={value === option.value}
+              disabled={off}
+              onChange={() => onChange(option.value)}
+            />
+            {option.label}
+          </label>
+        );
+      })}
     </fieldset>
   );
 }

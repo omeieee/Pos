@@ -175,6 +175,7 @@ export async function createHarness(
     ...DEFAULT_AUTH_POLICY,
     ownerGlobalRatePerMinute: 100_000,
     stepUpGlobalRatePerMinute: 100_000,
+    inviteGlobalRatePerMinute: 100_000,
     ...options.policy,
   };
   await registerV1(app, {

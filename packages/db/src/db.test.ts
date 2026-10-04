@@ -86,6 +86,7 @@ describe('migrations on an empty Postgres', () => {
         'sessions',
         'settings',
         'staff',
+        'staff_invites',
         'tax_profiles',
       ].sort(),
     );

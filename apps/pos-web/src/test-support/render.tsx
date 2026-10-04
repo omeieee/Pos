@@ -333,6 +333,8 @@ export function createTestServices(
     lifecycle: life.lifecycle,
   });
   const wake = createFakeWakeLock();
+  // The clipboard double: copies succeed unless a test says the browser refused.
+  const clipboard = { copyText: vi.fn(async (_text: string) => true) };
   const catalogue = createStore<CatalogueState>({
     fromCache: false,
     savedAt: null,
@@ -355,6 +357,7 @@ export function createTestServices(
     adminEditor,
     sound,
     wakeLock: wake.wakeLock,
+    clipboard,
     lifecycle: life.lifecycle,
     ...(options.auth ? { auth: options.auth } : {}),
     connection: { ...connection, start: vi.fn(), stop: vi.fn() },
@@ -384,6 +387,7 @@ export function createTestServices(
     audio,
     soundPrefs,
     wake,
+    clipboard,
     life,
     activity,
     api,

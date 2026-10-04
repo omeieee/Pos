@@ -72,17 +72,25 @@ const ADMIN_NAMES = [
   'createStaff',
   'patchStaff',
   'setStaffPin',
+  'changeStaffRole',
+  'invites',
+  'createInvite',
+  'revokeInvite',
 ] as const;
 
 /** A fake devices-and-staff API: every call fails the test unless the test gave it an answer. */
 export function createFakeAdminApi(overrides: Partial<ApiClient['admin']> = {}) {
   const admin = {} as Record<string, unknown>;
   for (const name of ADMIN_NAMES) {
+    // The staff screen always reads the open invites: nobody is invited unless a test says so.
+    const fallback =
+      name === 'invites'
+        ? async () => ({ invites: [] })
+        : async () => {
+            throw new Error(`admin.${name} was not expected`);
+          };
     admin[name] = vi.fn(
-      (overrides[name] as ((...args: never[]) => unknown) | undefined) ??
-        (async () => {
-          throw new Error(`admin.${name} was not expected`);
-        }),
+      (overrides[name] as ((...args: never[]) => unknown) | undefined) ?? fallback,
     );
   }
   return admin as {

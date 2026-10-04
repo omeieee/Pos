@@ -605,7 +605,18 @@ export const en = {
   'error.groupTooFew': 'Some required options are not chosen yet',
   'error.groupTooMany': 'Too many options chosen',
   'error.unknownMenuRow': 'That category or option group was not found',
-  'error.ownerProtected': 'The owner account cannot be changed from here',
+  'error.emailTaken': 'This e-mail already has an account',
+  'error.inviteExists': 'This e-mail already has an open invite. Cancel it before inviting again.',
+  'error.selfChange': 'You cannot change your own account here. Ask another owner.',
+  'error.lastOwner':
+    'There must always be one active owner, so this person cannot lose the role or be deactivated.',
+  'error.ownerNeedsAccount':
+    'The owner role needs an e-mail account. This person uses a PIN only: invite them by e-mail instead.',
+  'error.inviteAccepted': 'This invite was already used',
+  'error.inviteInvalid':
+    'This invite link cannot be used. It may have expired, been used, or been cancelled. Ask the owner for a new one.',
+  'error.inviteCodeInvalid':
+    'That authenticator code is not right. Wait for the next code (it changes every 30 seconds) and try again.',
   'error.upgradeRequired': 'This address only speaks WebSocket',
   'outbox.badge.waiting': 'Waiting {count}',
   'outbox.badge.attention': 'Check {count}',
@@ -897,7 +908,8 @@ export const en = {
   'settings.devices.title': 'Devices',
   'settings.devices.desc': 'Registered devices and removing one (owner only)',
   'settings.staff.title': 'Staff',
-  'settings.staff.desc': 'Add staff, set a PIN, deactivate (owner only)',
+  'settings.staff.desc':
+    'Invite people by e-mail, add staff, set a PIN, change roles, deactivate (owner only)',
   'settings.offline':
     'You are offline, so settings cannot be changed (you can only look). Try again when the connection is back.',
   'settings.loading': 'Loading the settings…',
@@ -1071,17 +1083,18 @@ export const en = {
   'settings.staff.role': 'Role',
   'settings.staff.pin': 'PIN',
   'settings.staff.pin2': 'Enter the PIN again',
-  'settings.staff.pinHint': 'A manager needs 6 digits; counter and kitchen staff 4 to 6.',
+  'settings.staff.pinHint': 'Owners and managers need 6 digits; counter and kitchen staff 4 to 6.',
   'settings.staff.pinNote':
     'The PIN is stored scrambled and cannot be looked up later. If it is forgotten, set a new one.',
   'settings.staff.error.displayName': 'Enter a name (60 characters at most).',
   'settings.staff.error.pin':
-    'The PIN must be digits with enough of them (6 for a manager, 4 to 6 for others).',
+    'The PIN must be digits with enough of them (6 for an owner or manager, 4 to 6 for others).',
   'settings.staff.error.pin2': 'The two PINs do not match.',
   'settings.staff.inactive': 'Deactivated',
   'settings.staff.locked': 'PIN locked',
   'settings.staff.noPin': 'No PIN',
-  'settings.staff.ownerNote': 'Owner: not managed from this page.',
+  'settings.staff.selfNote':
+    'This is your own account. You cannot change your role or deactivate yourself: ask another owner.',
   'settings.staff.rename': 'Rename {name}',
   'settings.staff.setPin': 'Set a new PIN for {name}',
   'settings.staff.deactivate': 'Deactivate {name}',
@@ -1099,6 +1112,112 @@ export const en = {
   'settings.staff.working': 'Working…',
   'settings.admin.confirm': 'Confirm',
   'settings.staff.activateLabel': 'Reactivate',
+  // Invites and role changes (D-23)
+  'settings.staff.you': 'You',
+  'settings.staff.noEmail': 'No e-mail (signs in with a PIN)',
+  'settings.staff.invite': 'Invite a person',
+  'settings.staff.inviteTitle': 'Invite a person',
+  'settings.staff.inviteIntro':
+    'The invited person sets their own password, authenticator app and PIN through the invite link.',
+  'settings.staff.inviteEmail': 'E-mail of the person to invite',
+  'settings.staff.inviteName': 'Display name (optional)',
+  'settings.staff.inviteNameHint':
+    'The invited person can change the name when they set up the account.',
+  'settings.staff.inviteCreate': 'Create invite link',
+  'settings.staff.error.email': 'Enter a valid e-mail',
+  'settings.staff.roleDesc.owner':
+    'Everything, including the PromptPay ID, refunds and managing staff.',
+  'settings.staff.roleDesc.manager':
+    'Takes orders and payments, edits the menu, sees reports, can cancel and refund, edits general shop settings.',
+  'settings.staff.roleDesc.cashier':
+    'Takes orders and payments and moves orders along; can only view settings.',
+  'settings.staff.roleDesc.kitchen': 'Sees and moves orders along, and marks dishes sold out.',
+  'settings.staff.ownerWarn':
+    'An owner has full access, including the PromptPay ID, refunds and managing staff. Invite only people you trust.',
+  'settings.staff.inviteUncertain':
+    'No answer came back, so it is not known whether the invite was created. Look at the invites list: if this e-mail is there, cancel it and invite again to get a new link.',
+  'settings.staff.linkTitle': 'The invite link is ready',
+  'settings.staff.linkBody':
+    'Send this link to {email} yourself (for example in LINE). The system does not send any e-mail.',
+  'settings.staff.linkNote':
+    'The link works once and expires in 72 hours. It is shown only now: once you close this window you cannot see it again. If it is lost, cancel the invite and invite again.',
+  'settings.staff.linkLabel': 'Invite link',
+  'settings.staff.linkCopy': 'Copy link',
+  'settings.staff.linkCopied': 'Link copied',
+  'settings.staff.linkCopyFailed':
+    'Could not copy automatically. Press and hold the link field and choose Copy.',
+  'settings.staff.linkDone': 'Done',
+  'settings.staff.invites.title': 'Open invites',
+  'settings.staff.invites.none': 'No open invites.',
+  'settings.staff.invites.expires': 'Expires {when}',
+  'settings.staff.invites.expired': 'Expired {when}',
+  'settings.staff.invites.expiredBadge': 'Expired',
+  'settings.staff.invites.revoke': 'Cancel invite',
+  'settings.staff.invites.revokeLabel': 'Cancel the invite for {email}',
+  'settings.staff.invites.revokeTitle': 'Cancel the invite for {email}?',
+  'settings.staff.invites.revokeBody': 'The link that was sent stops working at once.',
+  'settings.staff.invites.revoked': 'The invite was cancelled.',
+  'settings.staff.invites.asRole': 'Role: {role}',
+  'settings.staff.changeRole': 'Change role',
+  'settings.staff.changeRoleLabel': 'Change the role of {name}',
+  'settings.staff.changeRoleTitle': 'Change the role of {name}',
+  'settings.staff.changeRoleBody':
+    'Current role: {role}. After the change this person is signed out of every device and all owners get an alert.',
+  'settings.staff.changeRoleSelf': 'You cannot change your own role. Ask another owner.',
+  'settings.staff.changeRoleSame': 'Choose a role different from the current one.',
+  'settings.staff.changeRoleNoAccount':
+    'The owner role needs an e-mail account. This person uses a PIN only, so it cannot be chosen: invite them by e-mail instead.',
+  'settings.staff.changeRolePin': 'New PIN for this role',
+  'settings.staff.changeRolePinHint': 'This role needs a PIN of {min} to 6 digits. Set it now.',
+  'settings.staff.changeRoleDone': 'The role was changed.',
+  // The public invite page (D-23)
+  'invite.title': 'Set up your account',
+  'invite.subtitle': 'Welcome to the Saap Don Sen POS. Finish the set-up to start using it.',
+  'invite.loading': 'Checking the invite link…',
+  'invite.invalidTitle': 'This invite link cannot be used',
+  'invite.invalidHelp':
+    'If you reopened or refreshed this page, tap the link you were sent again, or ask the owner for a new one.',
+  'invite.youAre': 'You are invited as {role}',
+  'invite.email': 'Sign-in e-mail',
+  'invite.name': 'Display name',
+  'invite.password': 'Choose a password',
+  'invite.passwordHint':
+    'At least 12 characters. A memorable sentence works well; longer is better.',
+  'invite.strength.short': 'Still too short',
+  'invite.strength.fair': 'Fair',
+  'invite.strength.strong': 'Strong',
+  'invite.pin': 'PIN for everyday use on a shop device',
+  'invite.pinHint.6': '6 digits',
+  'invite.pinHint.4': '4 to 6 digits',
+  'invite.pin2': 'Enter the PIN again',
+  'invite.totp.title': 'Set up the authenticator app',
+  'invite.totp.body':
+    'Scan the QR with an authenticator app such as Google Authenticator, Microsoft Authenticator or Authy.',
+  'invite.totp.qrLabel': 'QR for the authenticator app',
+  'invite.totp.secret': 'Or type this key into the app yourself',
+  'invite.totp.reopen':
+    'Opening this link again gives a new QR: delete the old entry in the app and scan the new one.',
+  'invite.code': '6-digit code from the app',
+  'invite.submit': 'Create account',
+  'invite.submitting': 'Creating the account…',
+  'invite.error.displayName': 'Enter a name (up to 60 characters)',
+  'invite.error.password': 'The password needs at least 12 characters',
+  'invite.error.pin': 'The PIN must be digits, with enough of them for the role',
+  'invite.error.pin2': 'The two PINs do not match',
+  'invite.error.code': 'Enter the 6-digit code from the app',
+  'invite.done.title': 'Your account is ready',
+  'invite.done.codesTitle': 'Recovery codes',
+  'invite.done.codesBody':
+    'Use them to sign in if the authenticator app or phone is lost. Each code works once, and they are shown only now.',
+  'invite.done.codesHint': 'Write them on paper, or keep them in a secure password manager.',
+  'invite.done.copy': 'Copy all codes',
+  'invite.done.copied': 'Codes copied',
+  'invite.done.copyFailed':
+    'Could not copy automatically. Write the codes down or press and hold to select them.',
+  'invite.done.saved': 'I have saved the recovery codes',
+  'invite.done.signIn': 'Go to sign-in',
+  'invite.done.firstSignIn':
+    'The first time you sign in, wait for the next code in the app (it changes every 30 seconds): the code used during set-up cannot be reused.',
   'lineBot.greeting': 'Welcome to Saap Don Sen',
   'lineBot.greetingHow':
     'Tap "Order" in the menu below to order. We deliver to the building entrance only.',
@@ -1170,6 +1289,9 @@ export const en = {
   'lineBot.contact.reply': 'Got it. Staff will reply in this chat.',
   'lineBot.hours.today': 'Today we deliver {from}–{to} (to the building entrance only).',
   'lineBot.hours.closed': 'The shop is closed today.',
+  'lineBot.hours.always':
+    'We are taking orders at any time (delivery to the building entrance only).',
+  'lineBot.hours.paused': 'We are not taking orders through LINE right now.',
   'lineBot.slip.reply':
     'We got your picture. Please tap "I have paid" on the payment card; staff will then check the money arrived.',
   'lineBot.receipt.altText': 'Receipt for order {orderNo}',
@@ -1210,6 +1332,7 @@ export const en = {
   'liff.menu.deliverOnly': 'Delivery to the building entrance only · no delivery fee',
   'liff.menu.closed': 'Not delivering now. Today {from}–{to}.',
   'liff.menu.closedToday': 'The shop is closed today.',
+  'liff.menu.paused': 'The shop is not taking orders through LINE right now.',
   'liff.menu.add': 'Add',
   'liff.menu.cart': 'Cart · {count} items · {amount}',
   'liff.option.required': 'Choose {min}',

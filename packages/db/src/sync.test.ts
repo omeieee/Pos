@@ -96,13 +96,14 @@ describe('column allow-lists (a new column cannot leak by default)', () => {
       expect(reason.length).toBeGreaterThan(20);
   });
 
-  test('staff, devices, sessions, owner credentials and the audit log are not in the feed', () => {
+  test('staff, devices, sessions, owner credentials, invites and the audit log are not in the feed', () => {
     const inFeed = new Set(policies.map(([name]) => name));
     for (const t of [
       'staff',
       'devices',
       'sessions',
       'owner_credentials',
+      'staff_invites',
       'audit_log',
       'expenses',
       'line_events',

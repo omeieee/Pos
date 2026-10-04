@@ -25,7 +25,7 @@ import {
 
 // ---------- Tokens ----------
 
-export type TokenPrefix = 'sds_dev' | 'sds_ses';
+export type TokenPrefix = 'sds_dev' | 'sds_ses' | 'sds_inv';
 
 /** A new opaque bearer token. The prefix only helps people and secret scanners recognise it. */
 export function newToken(prefix: TokenPrefix): string {

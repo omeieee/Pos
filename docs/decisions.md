@@ -31,6 +31,7 @@ This is the **single source of truth for technology and design choices**. Other 
 | D-19 | Clients: web first (Safari on iPad/iPhone, desktop browsers); native apps later (Capacitor for iOS, Electron for desktop) | Proposed — deferred (future) | 2026-09-29 |
 | D-20 | Offline PromptPay: staff devices cache the real PromptPay ID and render the QR locally (owner accepted the risk) | **Accepted** | 2026-10-02 |
 | D-21 | Menu photos are stored in Postgres and served by the API (no object storage, no new secret) | **Accepted** | 2026-10-02 |
+| D-23 | Co-owners and staff by e-mail invite: single-use invite link, any role, owners only | **Accepted** | 2026-10-04 |
 
 ---
 
@@ -196,3 +197,10 @@ This is the **single source of truth for technology and design choices**. Other 
 - **Not decided:** which screens adopt it first (proposal: pos-web order entry and payment, then the kitchen view, then liff-web).
 - **Alternatives:** keep the cream-paper/ink-rail design from the 2026-09-29 canvas (no glass, Chonburi + Anuphan); IBM Plex Sans Thai from the first proposal.
 - **Revisit if:** blur causes dropped frames on the shop's iPad, or Anuphan's Thai glyphs read poorly at kitchen distance (then use Noto Sans Thai).
+
+## D-23 · Co-owners and e-mail invites — Accepted (owner answers 2026-10-04)
+- **Decision:** an owner invites a person by e-mail and role (`owner`, `manager`, `cashier` or `kitchen`). The API returns a **single-use invite link** (expires in 72 h; only its hash is stored) that the owner copies and sends; there is no outgoing e-mail service. The invitee opens it, sets their own password, enrols their own authenticator (TOTP) and a PIN, and gets recovery codes once. A **co-owner has every owner permission** (same as the first owner). Only owners invite, change roles or deactivate people, always with step-up and an `audit_log` row (rule 9). Everyone invited has e-mail + password + TOTP sign-in **and** a PIN for daily use on a registered device.
+- **Guards:** nobody changes their own role or deactivates themselves, so at least one active owner always remains; a role change or deactivation ends the person's open sessions and alerts the owners; a role change to a role with a longer PIN needs a new PIN; the e-mail is unique across accounts and open invites. `owner:reset` and `owner:unlock` take `--email` once there is more than one owner. `owner:create` still makes only the first owner.
+- **Why:** D-17 assumed one owner. The data model already keys credentials by staff id, so the change is the invite flow, role changes and the sole-owner assumptions in the terminal commands.
+- **Alternatives:** owner sets a temporary password (the owner would see the secret; rejected); a limited "admin" role (owner chose full co-owner); sending the link by e-mail (needs a sender; later).
+- **Revisit if:** the shop wants invite e-mails sent automatically, or Google sign-in.

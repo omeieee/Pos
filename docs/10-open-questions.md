@@ -196,3 +196,11 @@ On 2026-10-01 the owner authorized Claude to proceed automatically; for each que
 - **Privacy notice:** manager name "omeie"; data-request contact `omeza25482548@gmail.com`.
 - **Receipt budget:** accepted (one push per LINE order carrying "ready" and the receipt; at the cap pushes stop, receipt by free reply only, staff get a warning).
 - **Standing instruction:** proceed automatically. P4 starts with the P3 real-device checks still open.
+
+### Co-owners and e-mail invites (owner, 2026-10-04)
+- **What a co-owner gets:** full co-owner, the same permissions as the first owner.
+- **How a person joins:** invite link (single use, expiring); the owner copies and sends it (no e-mail sender yet, default).
+- **Who may invite and assign roles:** owners only, with step-up and audit.
+- **Sign-in:** invited people use e-mail + password + authenticator, plus a PIN on devices.
+- **Safety rules accepted:** the last owner cannot be demoted or removed; a role change ends the person's sessions; the owners are alerted. Recorded as D-23.
+
