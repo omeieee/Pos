@@ -32,6 +32,15 @@ Newest entries first. Add entries with `/checkpoint`. Each entry covers what cha
 
 ---
 
+## 2026-10-05 · P4 · docs/04 aligned with the built LINE flow
+- **Summary:** fixed stale statements in `docs/04-integrations.md`: customer auth route is `POST /v1/app/session`; no QR picture is sent in chat (the Flex reply opens the order page, which makes a fresh QR); ไทยช่วยไทย in LINE is paid face to face at the storefront or entrance hand-over, with no QR, image or URL.
+- **Changed:** `docs/04-integrations.md` only (checked against `apps/api/src/customer-app/routes.ts` and `packages/line/src/flex.ts`).
+- **Verification:** docs only; no tests run.
+- **Decisions:** none.
+- **Open issues:** dead legacy CSS in pos-web (`payment.css`, parts of kitchen/orders/outbox/styles, `glass-theme.css`) not removed: needs a visual check first. Privacy notice draft is still stale.
+- **Next:** owner real-device LINE and P3 checks; slip storage decision; P5 kickoff questions.
+- **Commit:** uncommitted
+
 ## 2026-10-05 · Auth · Co-owners and e-mail invites (D-23)
 - **Built:** owners invite a person by e-mail and role (owner, manager, cashier, kitchen) and get a single-use link (72 h, hash only, shown once). The invitee sets password, authenticator and PIN, and sees 8 recovery codes once. Owners change roles and deactivate others; nobody changes themselves; the last owner is protected; role change ends sessions and alerts. Owner PINs can only be set by that owner. `owner:reset` / `owner:unlock` take `--email` with several owners. Invites older than 30 days after use/revoke/expiry are purged (`retention-staff-invites`).
 - **Where:** migration `0023_staff_invites`; `packages/db/src/invites.ts`; `packages/shared/src/admin.ts`; `apps/api/src/admin/invites.ts`, `auth/invite-accept.ts`; staff section and `/invite` page in `apps/pos-web`.

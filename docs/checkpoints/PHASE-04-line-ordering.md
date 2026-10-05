@@ -42,3 +42,4 @@ Customers order and pay through the shop's LINE OA, within the free message budg
 ## Log
 - 2026-10-04: kickoff, LINE package and webhook, reserved IP, webhook verified ([PROGRESS](../PROGRESS.md)).
 - 2026-10-04: retention jobs, ordering flow, rich menu ([PROGRESS](../PROGRESS.md)).
+- 2026-10-05: docs/04 aligned with the built flow ([PROGRESS](../PROGRESS.md)).

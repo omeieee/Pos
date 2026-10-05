@@ -32,7 +32,7 @@ Sources: [LINE pricing](https://developers.line.biz/en/docs/messaging-api/pricin
 
 | Situation | How it is sent | Cost |
 |---|---|---|
-| Customer places an order | The app calls `liff.sendMessages("ยืนยันออเดอร์ #L-012")`, the webhook gets a replyToken, and the bot **replies** with the Flex summary + QR | Free |
+| Customer places an order | The app calls `liff.sendMessages("ยืนยันออเดอร์ #L-012")`, the webhook gets a replyToken, and the bot **replies** with the Flex summary and how to pay (a button opens the order page, which makes the QR) | Free |
 | Customer changes payment method, taps "โอนแล้ว", sends a slip, or asks "สถานะ" | Reply | Free |
 | New follower | Reply to the `follow` event (greeting + how to order) | Free |
 | Order ready | Push (policy `ready-only`) | 1 |
@@ -65,7 +65,7 @@ Size 2500×1686 (six areas) or 2500×843 (three areas) ⚠️ confirm current sp
 Suggested areas: **สั่งอาหาร** (open the app) · **ออเดอร์ของฉัน** (app status page) · **เมนูวันนี้** · **วิธีชำระเงิน** · **ติดต่อร้าน** (tells staff someone is waiting) · **เวลาเปิด-ปิด**.
 
 ### 1.5 Customer app notes (`apps/liff-web`)
-- Identity: `liff.getIDToken()` → `POST /v1/auth/line`. The server verifies the token with LINE and uses the `sub` claim as the `userId`.
+- Identity: `liff.getIDToken()` → `POST /v1/app/session`. The server verifies the token with LINE and uses the `sub` claim as the `userId`.
 - Keep the bundle small (target < 200 KB JS gzipped). Menu images are served resized from R2/CDN.
 - `sendMessages` only works when the app was opened from the OA chat or rich menu. Otherwise the app shows the QR itself.
 - The privacy notice appears on first use, and the acknowledgement is stored in `customers.privacy_ack_at`.
@@ -100,7 +100,7 @@ The P1 tests compute the CRC, then compare the decoded TLV fields and the CRC wi
 
 ### 2.3 The "same phone" problem (LINE customers)
 A customer cannot scan a QR that is on their own screen. The flow therefore:
-1. sends the QR as an **image message** (a free reply), so the customer can save it and use "scan from gallery" in their bank app;
+1. shows the QR on the customer app's order page, freshly made each time it is opened (the signed QR link lasts five minutes, so **no QR picture is sent in chat**; the Flex reply has a button that opens the order page), so the customer can save it and use "scan from gallery" in their bank app;
 2. shows the PromptPay ID and the exact amount as copyable text, for a manual transfer;
 3. offers the "โอนแล้ว" button and slip upload.
 
@@ -134,7 +134,7 @@ Sources: [PRD merchant registration](https://www.prd.go.th/th/content/category/d
 - **At the counter:** the cashier picks "ไทยช่วยไทย". The POS shows the **full amount to type into ถุงเงิน** in large type, plus an *estimated* split. Example for ฿95: government ≈ ฿57, customer ≈ ฿38. The estimate ignores the customer's remaining daily cap, which only เป๋าตัง knows.
 
   Staff create the QR in ถุงเงิน, the customer scans it, staff see the success notice, and then confirm in the POS (optionally with the ถุงเงิน reference).
-- **LINE orders:** the method appears as "ไทยช่วยไทย — ชำระที่หน้าร้าน". The free reply explains that payment is made in person at pickup with เป๋าตัง and shows the amount. The order stays `unpaid` until staff confirm at the counter. Room delivery with gov co-pay is **not offered** until Q2 confirms it is allowed.
+- **LINE orders:** the method appears as "ไทยช่วยไทย — ชำระที่หน้าร้าน". The free reply explains that payment is made in person with เป๋าตัง at the storefront or the entrance hand-over (the shop delivers only to the building entrance) and shows the amount; it carries no QR, no image and no URL. The order stays `unpaid` until staff confirm at the counter. Room delivery with gov co-pay is **not offered** until Q2 confirms it is allowed.
 - **Accounting:** revenue is the full amount on the sale date. The total is a receivable until the next-day settlement. The reconciliation report compares it with the Krungthai statement.
 
 ## 4. Delivery platforms (Grab, LINE MAN)
