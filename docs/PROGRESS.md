@@ -32,6 +32,15 @@ Newest entries first. Add entries with `/checkpoint`. Each entry covers what cha
 
 ---
 
+## 2026-10-05 · P5 · Prep: Thai SOP draft, UAT checklist, privacy notice refresh
+- **Summary:** work that needs no owner answers, done while P5 questions are open. Thai staff SOP draft (payment confirmation, fake slips, ไทยช่วยไทย, outage mode, day close, lost device, staff on/off, LINE rules) and a UAT checklist (staff app on iPad/iPhone/laptop, LINE on iOS/Android, operations drills). Privacy notice retention rows brought in line with what is built.
+- **Changed:** new `docs/p5/SOP-th.md`, `docs/p5/UAT-checklist.md`; `design/privacy-notice-th.md`.
+- **Verification:** docs only; no tests run. SOP button names are from memory of the design and must be checked on a device in UAT. No end-of-day summary screen exists yet (SOP says so).
+- **Decisions:** none. P5 is still "not started": waiting for the owner's answers (list given in chat 2026-10-05).
+- **Open issues:** SOPs marked draft; paper backup form, slip storage, notice publication and ถุงเงิน handover terms need the owner.
+- **Next:** owner answers, then UAT on real devices.
+- **Commit:** see git log (`docs(p5): ...`)
+
 ## 2026-10-05 · P4 · docs/04 aligned with the built LINE flow
 - **Summary:** fixed stale statements in `docs/04-integrations.md`: customer auth route is `POST /v1/app/session`; no QR picture is sent in chat (the Flex reply opens the order page, which makes a fresh QR); ไทยช่วยไทย in LINE is paid face to face at the storefront or entrance hand-over, with no QR, image or URL.
 - **Changed:** `docs/04-integrations.md` only (checked against `apps/api/src/customer-app/routes.ts` and `packages/line/src/flex.ts`).
