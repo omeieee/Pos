@@ -16,8 +16,8 @@ import {
   type ServiceWorkerHost,
 } from './platform/appUpdates.ts';
 import { type TextClipboard, webClipboard } from './platform/clipboard.ts';
-import { type FileOutput, webFileOutput } from './platform/fileOutput.ts';
 import { apiBaseUrl } from './platform/config.ts';
+import { type FileOutput, webFileOutput } from './platform/fileOutput.ts';
 import { type Lifecycle, webLifecycle } from './platform/lifecycle.ts';
 import { type LocalStore, openLocalStore } from './platform/localStore.ts';
 import { createWebPhotoEngine } from './platform/photo.ts';

@@ -35,6 +35,7 @@ describe('the hub', () => {
       '#/settings/line-ordering',
       '#/settings/payments',
       '#/settings/promptpay',
+      '#/settings/receipt',
       '#/settings/gov-copay',
       '#/settings/devices',
       '#/settings/staff',
@@ -54,6 +55,7 @@ describe('the hub', () => {
       '#/settings/line-ordering',
       '#/settings/payments',
       '#/settings/promptpay',
+      '#/settings/receipt',
       '#/settings/gov-copay',
     ]);
     const card = screen.getByText(th['settings.promptpay.title']).closest('a') as HTMLElement;
@@ -66,7 +68,7 @@ describe('the hub', () => {
     await open('cashier', 'hub');
     expect(links()).not.toContain('#/settings/menu');
     expect(links()).not.toContain('#/settings/devices');
-    expect(screen.getAllByText(th['settings.hub.readOnly']).length).toBe(8);
+    expect(screen.getAllByText(th['settings.hub.readOnly']).length).toBe(9);
   });
 });
 

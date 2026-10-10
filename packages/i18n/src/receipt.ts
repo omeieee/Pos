@@ -22,6 +22,11 @@ export interface ReceiptOrder {
   placedAt: string;
   completedAt: string | null;
   payment?: { method: string } | null;
+  /**
+   * What the shop printed on the receipt, from the server. The tax ID and address lines are
+   * printed only when they are set; the customer's receipt has no shop block and prints neither.
+   */
+  shop?: { nameTh: string; nameEn: string | null; taxId: string | null; address: string | null };
 }
 
 /** A receipt exists once the order is paid and not cancelled (owner, 2026-10-11: offered after payment). */
@@ -44,14 +49,27 @@ export function receiptHtml(order: ReceiptOrder, locale: Locale): string {
       return `<tr><td>${escapeHtml(name)} ×${item.qty}</td><td>${escapeHtml(formatBaht(item.lineTotalSatang, locale))}</td></tr>`;
     })
     .join('');
+  const shopName = order.shop
+    ? locale === 'en' && order.shop.nameEn
+      ? order.shop.nameEn
+      : order.shop.nameTh
+    : null;
+  const taxLine = order.shop?.taxId
+    ? `<p><small>${say('receipt.taxId', { taxId: order.shop.taxId })}</small></p>
+`
+    : '';
+  const addressLine = order.shop?.address
+    ? `<p><small>${escapeHtml(order.shop.address)}</small></p>
+`
+    : '';
   const when = escapeHtml(formatDate(order.completedAt ?? order.placedAt, locale, 'dateTime'));
   return `<!doctype html>
 <html lang="${locale}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${say('lineBot.receipt.title')} ${escapeHtml(order.orderNo)}</title>
 <style>body{font-family:sans-serif;max-width:420px;margin:24px auto;padding:0 16px;color:#1c1411}table{width:100%;border-collapse:collapse}td{padding:6px 0}td:last-child{text-align:right}.total td{border-top:1px solid #999;font-weight:700}small{color:#666}</style>
 </head><body>
-<h1>${say('liff.app.name')}</h1>
-<h2>${say('lineBot.receipt.title')} · ${escapeHtml(order.orderNo)}</h2>
+<h1>${shopName === null ? say('liff.app.name') : escapeHtml(shopName)}</h1>
+${addressLine}${taxLine}<h2>${say('lineBot.receipt.title')} · ${escapeHtml(order.orderNo)}</h2>
 <p><small>${when}</small></p>
 <table>${rows}<tr class="total"><td>${say('lineBot.receipt.total')}</td><td>${escapeHtml(formatBaht(order.totalSatang, locale))}</td></tr></table>
 <p><small>${say('lineBot.receipt.method', { method: methodLabel })}</small></p>

@@ -5,6 +5,7 @@
 import {
   DEFAULT_DELIVERY_SETTINGS,
   DEFAULT_OPENING_HOURS,
+  DEFAULT_RECEIPT_SETTINGS,
   DEFAULT_SHOP_SETTINGS,
 } from '@sds/shared';
 import { vi } from 'vitest';
@@ -33,6 +34,7 @@ const DEFAULT_READS = {
   numbering: { cutoffMinutes: 240, timeZone: 'Asia/Bangkok' },
   payments: { cash: true, promptpay: true, platform: true, other: false },
   deliveryList: DEFAULT_DELIVERY_SETTINGS,
+  receipt: DEFAULT_RECEIPT_SETTINGS,
   promptpayMasked: { idType: 'phone', idMasked: '******1234' },
   govCopay: { scheme: null },
 } as const;

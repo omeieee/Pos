@@ -10,6 +10,7 @@ import { LineOrderingForm } from './LineOrderingForm.tsx';
 import { NumberingForm } from './NumberingForm.tsx';
 import { PaymentsForm } from './PaymentsForm.tsx';
 import { PromptpayForm } from './PromptpayForm.tsx';
+import { ReceiptForm } from './ReceiptForm.tsx';
 import { SettingSection } from './SettingSection.tsx';
 import { SettingsPage } from './SettingsPage.tsx';
 import { ShopForm } from './ShopForm.tsx';
@@ -70,6 +71,12 @@ function SectionBody({ def, editable }: { def: SectionDef; editable: boolean }) 
       return (
         <SettingSection name="promptpay" editable={editable}>
           {(p) => <PromptpayForm {...p} />}
+        </SettingSection>
+      );
+    case 'receipt':
+      return (
+        <SettingSection name="receipt" editable={editable}>
+          {(p) => <ReceiptForm {...p} />}
         </SettingSection>
       );
     case 'gov-copay':

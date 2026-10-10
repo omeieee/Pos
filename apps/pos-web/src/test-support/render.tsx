@@ -122,6 +122,7 @@ export function createFakeApi(
       overrides.orders?.transition ?? unexpected('orders.transition'),
     ),
     cancel: vi.fn<Orders['cancel']>(overrides.orders?.cancel ?? unexpected('orders.cancel')),
+    receipt: vi.fn<Orders['receipt']>(overrides.orders?.receipt ?? unexpected('orders.receipt')),
   };
   const payments = {
     create: vi.fn<Payments['create']>(overrides.payments?.create ?? unexpected('payments.create')),

@@ -17,6 +17,7 @@ export const SECTION_IDS = [
   'delivery',
   'line-ordering',
   'promptpay',
+  'receipt',
   'gov-copay',
   'devices',
   'staff',
@@ -90,6 +91,14 @@ export const SECTIONS: readonly SectionDef[] = [
     descKey: 'settings.promptpay.desc',
     view: 'settings.view',
     edit: 'settings.promptpay',
+    stepUpToOpen: false,
+  },
+  {
+    id: 'receipt',
+    titleKey: 'settings.receipt.title',
+    descKey: 'settings.receipt.desc',
+    view: 'settings.view',
+    edit: 'settings.receipt',
     stepUpToOpen: false,
   },
   {

@@ -14,6 +14,8 @@ const FEED_KEY: Record<ResourceName, string> = {
   delivery: 'delivery',
   lineOrdering: 'line_ordering',
   promptpay: 'promptpay',
+  // Never on the realtime feed (the server keeps the tax ID off it): nothing to compare.
+  receipt: 'receipt',
   copay: 'gov_copay',
 };
 

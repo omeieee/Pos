@@ -46,6 +46,7 @@ import {
   idParamSchema,
   invitePreviewInputSchema,
   invitePreviewResponseSchema,
+  issueReceiptInputSchema,
   itemDtoSchema,
   lineOrderingPatchInputSchema,
   lineOrderingSchema,
@@ -85,6 +86,9 @@ import {
   promptpaySettingsSchema,
   publicMenuQuerySchema,
   publicMenuResponseSchema,
+  receiptPatchInputSchema,
+  receiptResponseSchema,
+  receiptSettingsSchema,
   recipientsQuerySchema,
   recipientsResponseSchema,
   registerDeviceInputSchema,
@@ -512,6 +516,23 @@ export function createApiClient(options: ApiClientOptions) {
           device: 'optional',
         })
       ).data,
+
+    /**
+     * Issues the receipt of a paid order (RECEIPT_NOT_AVAILABLE until a payment is confirmed). Every
+     * new `clientRequestId` is one audited issue; a retry of the same press passes the same id.
+     */
+    receipt: async (id: string, options?: { clientRequestId?: string }) => {
+      const clientRequestId = options?.clientRequestId ?? newClientRequestId();
+      const { data } = await post({
+        path: `${orderPath(id)}/receipt`,
+        body: checked(issueReceiptInputSchema, { clientRequestId }),
+        schema: receiptResponseSchema,
+        session: true,
+        device: 'optional',
+        headers: { 'Idempotency-Key': clientRequestId },
+      });
+      return { receipt: data, clientRequestId };
+    },
   };
 
   const menu = {
@@ -844,6 +865,8 @@ export function createApiClient(options: ApiClientOptions) {
       lineOrderingPatchInputSchema,
     ),
     promptpayMasked,
+    /** The tax ID and address printed on receipts. Owner only to change, with a step-up. */
+    receipt: settingsResource('receipt', receiptSettingsSchema, receiptPatchInputSchema),
     /** The ไทยช่วยไทย scheme (`scheme` null: none saved yet). Owner only, with a step-up. */
     govCopay: {
       read: async () =>

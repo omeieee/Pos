@@ -226,7 +226,7 @@ function PaymentPanelBody({ orderId }: { orderId: string }) {
           <div className="g-t-c" style={s('max-width:420px')}>
             {tr('payment.change.confirmedLocked')}
           </div>
-          <ReceiptActions order={order} received={received} />
+          <ReceiptActions key={order.id} order={order} received={received} />
           {received && role && paymentActions(role, received).voidRefund ? (
             <button type="button" className="g-btn" onClick={() => setVoiding(true)}>
               {tr('payment.void.button')}

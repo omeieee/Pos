@@ -54,6 +54,8 @@ export interface SetupOptions {
   payments?: PaymentDto[];
   frames?: RealtimeFrame[];
   api?: Partial<ApiClient['payments']>;
+  /** What the order calls answer (the receipt). */
+  orders?: Partial<ApiClient['orders']>;
   /** The device starts offline (the outbox queues cash instead of sending it). */
   offline?: boolean;
   /** The PromptPay ID saved on the device (see `createTestServices`). */
@@ -64,6 +66,7 @@ export async function setup(options: SetupOptions = {}) {
   const { auth, stepUp } = await createTestAuth(options.role ?? 'cashier');
   const env = createTestServices({
     auth,
+    ...(options.orders ? { orders: options.orders } : {}),
     ...(options.offline ? { offline: true } : {}),
     ...(options.promptpay ? { promptpay: options.promptpay } : {}),
     payments: {

@@ -48,6 +48,7 @@ export const API_ERROR_KEYS = {
   PAYMENT_NOT_PENDING: 'error.paymentNotPending',
   METHOD_UNCHANGED: 'error.methodUnchanged',
   QR_NOT_AVAILABLE: 'error.qrNotAvailable',
+  RECEIPT_NOT_AVAILABLE: 'error.receiptNotAvailable',
   QR_LINK_INVALID: 'error.qrLinkInvalid',
   QR_LINK_EXPIRED: 'error.qrLinkExpired',
   ORDER_HAS_PAYMENT: 'error.orderHasPayment',

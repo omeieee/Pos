@@ -28,6 +28,8 @@ import type {
   PaymentsSettings,
   PromptpayMasked,
   PromptpayPatchInput,
+  ReceiptPatchInput,
+  ReceiptSettings,
   ShopPatchInput,
   ShopSettings,
 } from '@sds/shared';
@@ -47,6 +49,8 @@ export interface SettingsResources {
   lineOrdering: { value: LineOrdering; input: LineOrderingPatchInput };
   /** Masked, always: the ID in clear never reaches the store (the client reduces it). */
   promptpay: { value: PromptpayMasked | null; input: PromptpayPatchInput };
+  /** The tax ID and address on receipts. Owner only, step-up first. */
+  receipt: { value: ReceiptSettings; input: ReceiptPatchInput };
   /** The saved scheme, or null when none was ever saved. Owner only. */
   copay: { value: GovCopayDto | null; input: GovCopayPatchInput };
 }
@@ -119,6 +123,7 @@ const initial = (): SettingsState => ({
     delivery: emptySlot(),
     lineOrdering: emptySlot(),
     promptpay: emptySlot(),
+    receipt: emptySlot(),
     copay: emptySlot(),
   },
   pending: [],
@@ -161,6 +166,7 @@ export function createSettingsStore(deps: SettingsDeps): SettingsStore {
     lineOrdering: resource(s.lineOrdering),
     // Owner only, and the step-up comes first.
     promptpay: resource(s.promptpayMasked, true),
+    receipt: resource(s.receipt, true),
     // The scheme answers `{ scheme }`; its version is the row's (0: none saved yet).
     copay: resource(
       {

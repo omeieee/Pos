@@ -1,15 +1,25 @@
 import { canDownloadReceipt, type ReceiptOrder } from '@sds/i18n';
-import type { OrderDto, PaymentDto } from '@sds/shared';
+import type { OrderDto, PaymentDto, ReceiptResponse } from '@sds/shared';
 
 /**
- * The receipt of a paid order: the server's order (its total and lines) with the method of the
- * payment that was received. Nothing is computed here. Null while there is nothing to issue: the
- * order is not paid, is cancelled, or no confirmed payment is known.
+ * Is there anything to issue? Only a paid, uncancelled order with a payment received. This only
+ * decides whether the button shows; the server decides whether a receipt can be issued.
  */
-export function receiptFor(
-  order: OrderDto,
+export const canIssueReceipt = (
+  order: Pick<OrderDto, 'paymentStatus' | 'status'>,
   received: Pick<PaymentDto, 'method'> | undefined,
-): ReceiptOrder | null {
-  if (!received || !canDownloadReceipt(order)) return null;
-  return { ...order, payment: { method: received.method } };
+): boolean => received !== undefined && canDownloadReceipt(order);
+
+/**
+ * The receipt as the server issued it: its order, the method of its confirmed payment and the
+ * shop's name, tax ID and address. Nothing is read from the order on screen, and nothing is
+ * computed here.
+ */
+export function receiptFromResponse(response: ReceiptResponse): ReceiptOrder {
+  const { order, payment, shop } = response;
+  return {
+    ...order,
+    payment: { method: payment.method },
+    shop: { nameTh: shop.nameTh, nameEn: shop.nameEn, taxId: shop.taxId, address: shop.address },
+  };
 }
