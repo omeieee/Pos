@@ -72,7 +72,6 @@ const KNOWN: Record<string, MessageKey> = {
   PAYMENT_NOT_PENDING: 'liff.error.PAYMENT_NOT_PENDING',
   QR_NOT_AVAILABLE: 'liff.error.QR_NOT_AVAILABLE',
   NOT_FOUND: 'liff.error.NOT_FOUND',
-  TOO_MANY_OPEN_ORDERS: 'liff.error.TOO_MANY_OPEN_ORDERS',
   ORDER_TOO_LARGE: 'liff.error.ORDER_TOO_LARGE',
   SLIP_TOO_LARGE: 'liff.error.SLIP_TOO_LARGE',
   FST_ERR_CTP_BODY_TOO_LARGE: 'liff.error.SLIP_TOO_LARGE',
@@ -85,5 +84,8 @@ const KNOWN: Record<string, MessageKey> = {
 
 /** The message key for a failed call: the API's own code when we know it, else a generic one. */
 export function errorKey(error: unknown): MessageKey {
+  if (error instanceof ApiFailure && error.fields.includes('member.phone')) {
+    return 'liff.member.phoneBad';
+  }
   return (error instanceof ApiFailure ? KNOWN[error.code] : undefined) ?? 'liff.error.generic';
 }

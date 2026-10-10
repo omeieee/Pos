@@ -83,6 +83,32 @@ describe('the customer API client', () => {
     expect(always401.calls).toHaveLength(4); // sign in, call, sign in, call
   });
 
+  test('a validation error carries the refused field paths', async () => {
+    const { fetcher } = server((call) =>
+      call.url.endsWith('/session')
+        ? session('t')
+        : {
+            status: 400,
+            body: {
+              code: 'VALIDATION_ERROR',
+              message: 'x',
+              details: { issues: [{ path: 'member.phone', code: 'custom' }] },
+            },
+          },
+    );
+    const api = createApi({
+      baseUrl: 'https://a.test',
+      credential: () => ({ idToken: 'x' }),
+      fetch: fetcher,
+    });
+    const error = await api.checkout().catch((e: unknown) => e);
+    expect(error).toMatchObject({
+      status: 400,
+      code: 'VALIDATION_ERROR',
+      fields: ['member.phone'],
+    });
+  });
+
   test('errors carry the API code; a dead network is NETWORK; no credential is NO_CREDENTIAL', async () => {
     const { fetcher } = server((call) =>
       call.url.endsWith('/session')

@@ -25,6 +25,8 @@ export class ApiFailure extends Error {
   constructor(
     readonly status: number,
     readonly code: string,
+    /** The request fields the API refused (`member.phone`), from a VALIDATION_ERROR; else empty. */
+    readonly fields: readonly string[] = [],
   ) {
     super(`${status} ${code}`);
     this.name = 'ApiFailure';
@@ -54,13 +56,20 @@ export function createApi(options: ApiOptions) {
 
   async function failure(response: Response): Promise<ApiFailure> {
     let code = 'ERROR';
+    let fields: string[] = [];
     try {
-      const body = (await response.json()) as { code?: unknown };
+      const body = (await response.json()) as {
+        code?: unknown;
+        details?: { issues?: { path?: unknown }[] };
+      };
       if (typeof body.code === 'string') code = body.code;
+      fields = (body.details?.issues ?? []).flatMap((i) =>
+        typeof i.path === 'string' ? [i.path] : [],
+      );
     } catch {
       // not JSON: keep the generic code
     }
-    return new ApiFailure(response.status, code);
+    return new ApiFailure(response.status, code, fields);
   }
 
   async function signIn(): Promise<CustomerSessionResponse> {

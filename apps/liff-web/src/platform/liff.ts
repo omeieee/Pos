@@ -34,6 +34,8 @@ export interface Platform {
   canSendMessages(): boolean;
   /** Says something in the shop's chat as the customer. Failures are swallowed: it is a courtesy. */
   sendText(text: string): Promise<void>;
+  /** True inside LINE's own browser, which drops `<a download>` and opens few other windows. */
+  inLineClient(): boolean;
   /** The ✕ of the header: closes the LIFF window inside LINE; in a plain browser tab it does nothing. */
   close(): void;
 }
@@ -77,6 +79,7 @@ export async function startPlatform(liffId: string | undefined): Promise<Platfor
     // `sendMessages` posts into the chat the app was opened from: only a 1:1 chat is the shop's.
     // From a group, a room or anywhere else the confirmation would land in the wrong place.
     canSendMessages: () => liff.isInClient() && liff.getContext()?.type === 'utou',
+    inLineClient: () => liff.isInClient(),
     close() {
       if (liff.isInClient()) liff.closeWindow();
     },

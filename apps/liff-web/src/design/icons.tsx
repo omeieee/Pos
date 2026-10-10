@@ -132,6 +132,11 @@ const ICONS = {
       <path d="M21 16l-5-4-7 7" />
     </>
   ),
+  phone: (
+    <>
+      <path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A15 15 0 0 1 3 6a2 2 0 0 1 2-2z" />
+    </>
+  ),
 } satisfies Record<string, ReactNode>;
 
 export type GiName = keyof typeof ICONS;

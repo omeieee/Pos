@@ -3,7 +3,9 @@ import type { AppPayMethod, MyOrder, MyQrResponse } from '@sds/shared';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Gi, type GiName } from '../design/icons.tsx';
 import { s } from '../design/style.ts';
+import { telHref } from '../model/contact.ts';
 import { nextPollDelayMs } from '../model/poll.ts';
+import { browserSaveEnv, qrFileName, saveQrImage, toPng } from '../model/qr-save.ts';
 import { canDownloadReceipt, receiptFileName, receiptHtml } from '../model/receipt.ts';
 import { orderSteps } from '../model/steps.ts';
 import { errorKey, useApp, useT } from './app-context.tsx';
@@ -95,23 +97,36 @@ function useOrder(id: string) {
   return { order, setOrder, failure, reload: load };
 }
 
-export function OrderScreen({ id, flag }: { id: string; flag: string | null }) {
+export function OrderScreen({
+  id,
+  flag,
+  shopPhone,
+}: {
+  id: string;
+  flag: string | null;
+  /** The shop's phone from the API, when it sends one. */
+  shopPhone: string | null;
+}) {
   const tr = useT();
   const { api, locale, go, platform } = useApp();
   const { order, setOrder, failure } = useOrder(id);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [changing, setChanging] = useState(false);
+  const [slipSent, setSlipSent] = useState(false);
+  const tel = telHref(shopPhone);
 
-  async function act(run: () => Promise<MyOrder>) {
-    if (busy) return;
+  async function act(run: () => Promise<MyOrder>): Promise<boolean> {
+    if (busy) return false;
     setBusy(true);
     setError(null);
     try {
       setOrder(await run());
       setChanging(false);
+      return true;
     } catch (e) {
       setError(tr(errorKey(e)));
+      return false;
     } finally {
       setBusy(false);
     }
@@ -211,7 +226,12 @@ export function OrderScreen({ id, flag }: { id: string; flag: string | null }) {
                   order={order}
                   busy={busy}
                   onClaim={() => void act(() => api.claim(order.id))}
-                  onSlip={(file) => void act(() => api.attachSlip(order.id, file))}
+                  slipSent={slipSent}
+                  onSlip={(file) =>
+                    void act(() => api.attachSlip(order.id, file)).then((ok) => {
+                      if (ok) setSlipSent(true);
+                    })
+                  }
                 />
               ) : null}
               {method === 'gov_copay' && waiting ? (
@@ -300,6 +320,13 @@ export function OrderScreen({ id, flag }: { id: string; flag: string | null }) {
             </button>
           ) : null}
 
+          {tel ? (
+            <a className="g-btn g-btn-block" href={tel}>
+              <Gi n="phone" size="sm" />
+              {tr('liff.contact.call')}
+            </a>
+          ) : null}
+
           <button type="button" className="g-btn g-btn-block" onClick={() => go('/orders')}>
             {tr('liff.nav.orders')}
           </button>
@@ -344,19 +371,24 @@ function downloadReceipt(order: MyOrder, locale: Locale) {
 function PromptPayPanel({
   order,
   busy,
+  slipSent,
   onClaim,
   onSlip,
 }: {
   order: MyOrder;
   busy: boolean;
+  slipSent: boolean;
   onClaim: () => void;
   onSlip: (file: File) => void;
 }) {
   const tr = useT();
-  const { api, locale } = useApp();
+  const { api, locale, platform } = useApp();
   const [qr, setQr] = useState<MyQrResponse | null>(null);
   const [failed, setFailed] = useState(false);
-  const [saveHint, setSaveHint] = useState(false);
+  /** The picture as a PNG made on this device, and the `blob:` link the page shows it from. */
+  const [image, setImage] = useState<{ png: Blob; src: string } | null>(null);
+  const [saved, setSaved] = useState<'downloaded' | null>(null);
+  const [viewing, setViewing] = useState(false);
   const showQr = order.actions.showQr;
   const claimed = order.payment?.status === 'claimed';
   const orderId = order.id;
@@ -378,24 +410,43 @@ function PromptPayPanel({
     return () => clearInterval(timer);
   }, [fetchQr, showQr]);
 
-  /** Saves the picture when the browser lets the page fetch it; otherwise says how to save it by hand. */
+  // The QR is fetched once per link and redrawn as a PNG here. A `blob:` picture is on the page's
+  // own origin, so a long-press in LINE's browser can save it; if the fetch fails the page keeps
+  // showing the API's own link (the picture still appears, only "save" gets weaker).
+  const qrUrl = qr?.url;
+  useEffect(() => {
+    if (!qrUrl) return;
+    let cancelled = false;
+    let made: string | null = null;
+    void (async () => {
+      try {
+        const response = await fetch(api.absolute(qrUrl));
+        if (!response.ok) throw new Error('qr');
+        const png = await toPng(await response.blob());
+        if (cancelled) return;
+        made = URL.createObjectURL(png);
+        setImage({ png, src: made });
+      } catch {
+        if (!cancelled) setImage(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+      if (made) URL.revokeObjectURL(made);
+    };
+  }, [api, qrUrl]);
+
+  /** Share sheet, then a plain download outside LINE, else show the picture large to press and hold. */
   async function save() {
-    if (!qr) return;
-    try {
-      const response = await fetch(api.absolute(qr.url));
-      if (!response.ok) throw new Error('qr');
-      const blob = await response.blob();
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(blob);
-      link.download = `promptpay-${order.orderNo}.${blob.type.includes('svg') ? 'svg' : 'png'}`;
-      document.body.append(link);
-      link.click();
-      link.remove();
-      setTimeout(() => URL.revokeObjectURL(link.href), 4000);
-      setSaveHint(false);
-    } catch {
-      setSaveHint(true);
-    }
+    setSaved(null);
+    if (!image) return setViewing(true);
+    const outcome = await saveQrImage(
+      image.png,
+      qrFileName(order.orderNo),
+      browserSaveEnv(platform.inLineClient()),
+    );
+    if (outcome === 'manual') setViewing(true);
+    else if (outcome === 'downloaded') setSaved('downloaded');
   }
 
   const amount = qr ? formatBaht(qr.amountSatang, locale) : '';
@@ -432,7 +483,7 @@ function PromptPayPanel({
             >
               {qr ? (
                 <img
-                  src={api.absolute(qr.url)}
+                  src={image?.src ?? api.absolute(qr.url)}
                   alt={tr('liff.qr.alt', { amount })}
                   width={158}
                   height={158}
@@ -494,56 +545,80 @@ function PromptPayPanel({
           <b>{tr('liff.order.claimedTitle')}</b>
           <br />
           {tr('liff.order.claimed')}
+          {order.actions.attachSlip && !slipSent ? (
+            <>
+              <br />
+              {tr('liff.order.claimedSlip')}
+            </>
+          ) : null}
+        </Notice>
+      ) : null}
+      {slipSent ? (
+        <Notice tone="ok" icon="check">
+          {tr('liff.slip.sent')}
         </Notice>
       ) : null}
 
-      {order.actions.claim ? (
+      {order.actions.claim || showQr || order.actions.attachSlip ? (
         <div className="g-rise" style={s('display:flex;flex-direction:column;gap:10px;--d:.16s')}>
-          <button
-            type="button"
-            className="g-btn g-btn-p g-btn-lg g-btn-block"
-            disabled={busy}
-            aria-busy={busy}
-            onClick={onClaim}
-          >
-            <Gi n="check" />
-            {busy ? tr('liff.order.claiming') : tr('liff.order.claim')}
-          </button>
-          {showQr ? (
+          {order.actions.claim ? (
+            <button
+              type="button"
+              className="g-btn g-btn-p g-btn-lg g-btn-block"
+              disabled={busy}
+              aria-busy={busy}
+              onClick={onClaim}
+            >
+              <Gi n="check" />
+              {busy ? tr('liff.order.claiming') : tr('liff.order.claim')}
+            </button>
+          ) : null}
+          {showQr || order.actions.attachSlip ? (
             <div style={s('display:flex;gap:10px')}>
-              <button
-                type="button"
-                className="g-btn"
-                style={s('flex:1')}
-                disabled={!qr}
-                onClick={() => void save()}
-              >
-                <Gi n="download" size="sm" />
-                {tr('liff.qr.save')}
-              </button>
-              <label className="g-btn" style={s('flex:1;cursor:pointer')} aria-disabled={busy}>
-                <input
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  className="sr-only"
-                  disabled={busy}
-                  onChange={(event) => {
-                    const file = event.target.files?.[0];
-                    event.target.value = '';
-                    if (file) onSlip(file);
-                  }}
-                />
-                <Gi n="image" size="sm" />
-                {tr('liff.qr.attachSlip')}
-              </label>
+              {showQr ? (
+                <button
+                  type="button"
+                  className="g-btn"
+                  style={s('flex:1')}
+                  disabled={!qr}
+                  onClick={() => void save()}
+                >
+                  <Gi n="download" size="sm" />
+                  {tr('liff.qr.save')}
+                </button>
+              ) : null}
+              {order.actions.attachSlip ? (
+                <label className="g-btn" style={s('flex:1;cursor:pointer')} aria-disabled={busy}>
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    className="sr-only"
+                    disabled={busy}
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      event.target.value = '';
+                      if (file) onSlip(file);
+                    }}
+                  />
+                  <Gi n="image" size="sm" />
+                  {tr('liff.qr.attachSlip')}
+                </label>
+              ) : null}
             </div>
           ) : null}
-          {saveHint ? (
+          {saved === 'downloaded' ? (
             <p className="g-t-c" role="status" style={s('margin:0;padding:0 6px')}>
-              {tr('liff.qr.help')}
+              {tr('liff.qr.saved')}
             </p>
           ) : null}
         </div>
+      ) : null}
+      {viewing && qr ? (
+        <QrViewer
+          src={image?.src ?? api.absolute(qr.url)}
+          alt={tr('liff.qr.alt', { amount })}
+          onClose={() => setViewing(false)}
+        />
       ) : null}
 
       <div
@@ -556,6 +631,52 @@ function PromptPayPanel({
         </div>
       </div>
     </>
+  );
+}
+
+/** The QR as a large picture on its own, so "press and hold to save" has a big, plain target. */
+function QrViewer({ src, alt, onClose }: { src: string; alt: string; onClose: () => void }) {
+  const tr = useT();
+  const dialog = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    dialog.current?.focus({ preventScroll: true });
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
+  return (
+    <div className="overlay liff-overlay" role="presentation">
+      <button
+        type="button"
+        tabIndex={-1}
+        aria-hidden="true"
+        className="liff-scrim"
+        onClick={onClose}
+      />
+      <div
+        ref={dialog}
+        tabIndex={-1}
+        className="sheet liff-sheet"
+        role="dialog"
+        aria-modal="true"
+        aria-label={tr('liff.qr.title')}
+        style={s('align-items:center;gap:14px')}
+      >
+        <img
+          src={src}
+          alt={alt}
+          style={s('width:min(100%,360px);aspect-ratio:1;background:#fff;border-radius:16px')}
+        />
+        <p className="g-t-s" role="status" style={s('margin:0;text-align:center')}>
+          {tr('liff.qr.holdToSave')}
+        </p>
+        <button type="button" className="g-btn g-btn-p g-btn-block" onClick={onClose}>
+          {tr('liff.close')}
+        </button>
+      </div>
+    </div>
   );
 }
 

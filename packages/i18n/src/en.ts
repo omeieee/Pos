@@ -136,6 +136,47 @@ export const en = {
   'order.cancel.hasPayment':
     'This order has a payment the customer claimed or that was received. Tap “Money not found”, or ask a manager to cancel the payment on this page, then cancel the order.',
   'order.cancel.reasonShown': 'Cancelled because: {reason}',
+  // Owner: correct or void a past order (2026-10-11)
+  'order.fix.edit': 'Edit order',
+  'order.fix.void': 'Void order',
+  'order.fix.editTitle': 'Edit order {orderNo}',
+  'order.fix.voidTitle': 'Void order {orderNo} (owner)',
+  'order.fix.audited':
+    'This needs you to confirm who you are again, and is written to the audit log.',
+  'order.fix.lines': 'Dishes',
+  'order.fix.qtyDown': 'Fewer {name}',
+  'order.fix.qtyUp': 'More {name}',
+  'order.fix.remove': 'Remove {name}',
+  'order.fix.lastLine': 'An order needs at least one line. To drop everything, void the order.',
+  'order.fix.priceKept': 'Price as sold',
+  'order.fix.priceNew': "Today's menu price",
+  'order.fix.add': 'Add a dish',
+  'order.fix.addNone': 'No dish can be added here (dishes with options are not supported yet).',
+  'order.fix.note': 'Order note',
+  'order.fix.reason': 'Why is it changed',
+  'order.fix.reasonPlaceholder': 'e.g. wrong quantity entered',
+  'order.fix.voidReason': 'Why is it voided',
+  'order.fix.payment.label': 'This order has a payment. What should happen to it',
+  'order.fix.payment.hintEdit':
+    'If the total changes you must choose before saving. If it does not change, no choice is needed.',
+  'order.fix.payment.hintVoid': 'Choose before voiding the order.',
+  'order.fix.afterEdit':
+    'If the total changes, the existing payment is cancelled in full and the new total must be collected again on the payment page. The system works out the new total when you save.',
+  'order.fix.afterVoid':
+    'The order becomes cancelled and is left out of sales. Its payment is cancelled, voided or refunded as you choose.',
+  'order.fix.understand': 'I understand what this does to the money',
+  'order.fix.save': 'Save the change',
+  'order.fix.voidConfirm': 'Void the order',
+  'order.fix.keep': 'Do not change',
+  'order.fix.sending': 'Sending…',
+  'order.fix.error.voided': 'This order is already voided, so it cannot be edited.',
+  'error.paymentActionRequired': 'This order has a payment. Choose to void or refund it first.',
+  'error.nothingToChange': 'Nothing was changed.',
+  'error.discountExceedsSubtotal':
+    'The discount would be larger than the lines after this change, so it cannot be saved.',
+  'error.unknownOrderItem': 'That line is not on this order. Close this and open it again.',
+  'order.member.label': 'Customer details',
+  'order.member.phone': 'Phone {phone}',
 
   'orders.title': 'Today’s orders',
   'orders.filter.label': 'Show orders',
@@ -281,6 +322,8 @@ export const en = {
     'Fake slips are common. Check the money in the bank app before you confirm.',
   'payment.slip.none': 'The customer has not attached a slip.',
   'payment.slip.failed': 'Could not open the slip. Try again.',
+  'payment.slip.has': 'Slip attached',
+  'payment.slip.missing': 'The customer has not attached a slip yet',
   'payment.promptpay.customer.close': 'Back to staff view (hold 1 second)',
   'payment.promptpay.customer.scanAny': 'Scan with any bank app',
   'payment.promptpay.customer.amountIncluded': 'The amount is already in the QR. Do not type it.',
@@ -1355,8 +1398,6 @@ export const en = {
   'liff.error.SLIP_TOO_LARGE': 'The slip picture is over 5 MB. Try a smaller one.',
   'liff.error.SLIP_TYPE_UNSUPPORTED': 'Only JPEG, PNG or WebP pictures work.',
   'liff.error.NOT_FOUND': 'We cannot find that order.',
-  'liff.error.TOO_MANY_OPEN_ORDERS':
-    'You already have several open orders. Please wait until one is done.',
   'liff.error.ORDER_TOO_LARGE':
     'An order can have up to 50 items. Please reduce the quantity or split it.',
   'liff.privacy.title': 'Privacy notice',
@@ -1437,6 +1478,16 @@ export const en = {
   'liff.checkout.estimateNote': 'Estimate. The shop prices the order when you place it.',
   'liff.checkout.order': 'Place order',
   'liff.checkout.emptyBack': 'Back to the menu',
+  'liff.member.title': 'Member details (optional)',
+  'liff.member.fullName': 'Full name',
+  'liff.member.nickname': 'Nickname',
+  'liff.member.building': 'Your building / room (if not the pick-up building)',
+  'liff.member.phone': 'Phone number',
+  'liff.member.phoneBad':
+    'That phone number is not valid. Type it like 0812345678, or leave it empty.',
+  'liff.member.note':
+    'Fill in any or none; ordering does not depend on it. The shop uses it to tell whose order it is. Ask to see, fix or delete it by typing in the shop LINE chat.',
+  'liff.member.privacy': 'Read the privacy notice',
   'liff.method.title.promptpay': 'PromptPay',
   'liff.method.title.cash': 'Cash on collection',
   'liff.method.title.gov_copay': 'Thai Chuay Thai Plus',
@@ -1459,4 +1510,9 @@ export const en = {
   'liff.qr.save': 'Save QR',
   'liff.receipt.download': 'Download receipt',
   'liff.qr.attachSlip': 'Attach slip',
+  'liff.order.claimedSlip': 'You can send a slip too. It helps the shop check faster.',
+  'liff.slip.sent': 'Slip sent. The shop will check it and confirm.',
+  'liff.qr.saved': 'QR picture saved',
+  'liff.qr.holdToSave': 'Press and hold the QR picture, then choose “Save Image”',
+  'liff.contact.call': 'Call the shop',
 } as const satisfies Record<MessageKey, string>;

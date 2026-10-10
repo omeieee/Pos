@@ -3,6 +3,7 @@ import type { CheckoutInfo, PublicMenuResponse } from '@sds/shared';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { type Api, createApi } from './api/client.ts';
 import type { Cart } from './model/cart.ts';
+import { shopPhoneOf } from './model/contact.ts';
 import { apiBaseUrl } from './platform/config.ts';
 import { type Platform, startPlatform } from './platform/liff.ts';
 import {
@@ -149,7 +150,7 @@ function Screens({ path }: { path: string }) {
     // First use (or a new notice version): the notice comes before anything else.
     return <PrivacyGate refreshInfo={refreshInfo} />;
   }
-  if (orderId) return <OrderScreen id={orderId} flag={flag} />;
+  if (orderId) return <OrderScreen id={orderId} flag={flag} shopPhone={shopPhoneOf(info)} />;
   if (pathname === '/orders') return <OrdersScreen />;
   if (!menu) {
     return (

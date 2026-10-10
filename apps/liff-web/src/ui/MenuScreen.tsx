@@ -14,6 +14,7 @@ import {
   unitEstimate,
 } from '../model/cart.ts';
 import { clock } from '../model/checkout.ts';
+import { shopPhoneOf, telHref } from '../model/contact.ts';
 import { useApp, useT } from './app-context.tsx';
 import { BarButton, Body, Dock, Header, Notice } from './Chrome.tsx';
 import { DishThumb } from './DishThumb.tsx';
@@ -140,7 +141,7 @@ export function MenuScreen({
         ) : null}
       </Header>
 
-      {more ? <MoreMenu onClose={() => setMore(false)} /> : null}
+      {more ? <MoreMenu tel={telHref(shopPhoneOf(info))} onClose={() => setMore(false)} /> : null}
 
       <Body label={tr('liff.menu.title')} bottom={count > 0 ? 132 : 28} fade={count > 0 ? 170 : 0}>
         {info && !info.delivery.open ? (
@@ -278,7 +279,7 @@ export function MenuScreen({
 }
 
 /** The "more" menu under the header bar: the way to the customer's own orders. */
-function MoreMenu({ onClose }: { onClose: () => void }) {
+function MoreMenu({ tel, onClose }: { tel: string | null; onClose: () => void }) {
   const tr = useT();
   const { go } = useApp();
   useEffect(() => {
@@ -319,6 +320,12 @@ function MoreMenu({ onClose }: { onClose: () => void }) {
           <Gi n="receipt" />
           {tr('liff.nav.orders')}
         </button>
+        {tel ? (
+          <a role="menuitem" className="g-side" href={tel} style={s('text-decoration:none')}>
+            <Gi n="phone" />
+            {tr('liff.contact.call')}
+          </a>
+        ) : null}
       </div>
     </>
   );

@@ -39,3 +39,16 @@ describe('the remembered language', () => {
     expect(() => storeLocale('th')).not.toThrow();
   });
 });
+
+describe('errorKey for the member form', () => {
+  test('a refused phone number gets the friendly phone message', async () => {
+    const { ApiFailure } = await import('../api/client.ts');
+    const { errorKey } = await import('./app-context.tsx');
+    expect(errorKey(new ApiFailure(400, 'VALIDATION_ERROR', ['member.phone']))).toBe(
+      'liff.member.phoneBad',
+    );
+    expect(errorKey(new ApiFailure(400, 'VALIDATION_ERROR', ['items.0']))).toBe(
+      'liff.error.generic',
+    );
+  });
+});
