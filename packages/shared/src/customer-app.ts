@@ -11,12 +11,11 @@
 import { z } from 'zod';
 import { buildingNameSchema, deliveryNoteSchema, recipientNameSchema } from './delivery.ts';
 import { ORDER_PAYMENT_STATUSES, ORDER_STATUSES, PAYMENT_STATUSES } from './enums.ts';
+import { memberInputSchema, memberProfileSchema } from './member.ts';
 import { orderLineInputSchema } from './schemas.ts';
 
 const isoInstant = z.iso.datetime();
 
-/** Orders a customer may have open (not completed or cancelled) at once. */
-export const MAX_OPEN_ORDERS = 3;
 /** Most items, counted by quantity, in one customer order. */
 export const MAX_ORDER_QUANTITY = 50;
 
@@ -79,10 +78,14 @@ export const checkoutInfoSchema = z.object({
       deliveryNote: z.string().nullable(),
     })
     .nullable(),
+  /** The member profile saved for this customer, to prefill the form (owner, 2026-10-11). Absent from an older server. */
+  member: memberProfileSchema.optional(),
   privacyAcknowledged: z.boolean(),
   privacyVersion: z.string(),
   /** The shop's PromptPay ID for the "transfer by hand" text (null until the owner sets one). */
   promptpayConfigured: z.boolean(),
+  /** The shop's phone number from the shop settings, for a "call us" link; null when none is saved. */
+  shopPhone: z.string().max(30).nullable().optional(),
 });
 export type CheckoutInfo = z.infer<typeof checkoutInfoSchema>;
 
@@ -97,6 +100,12 @@ export const appOrderInputSchema = z.strictObject({
   deliveryNote: deliveryNoteSchema.optional(),
   note: z.string().max(500).optional(),
   paymentMethod: appPayMethodSchema,
+  /**
+   * The member form (owner, 2026-10-11), sent with the payment method in this one call. All fields
+   * optional; a field left out keeps the saved value, an empty string clears it. Saved on the
+   * customer and copied onto the order. Ignored on a replay of an order that was already saved.
+   */
+  member: memberInputSchema.optional(),
 });
 export type AppOrderInput = z.infer<typeof appOrderInputSchema>;
 
@@ -151,6 +160,8 @@ export const myOrderSchema = z.object({
     changeMethod: z.boolean(),
     /** Show the PromptPay QR (fresh every time). */
     showQr: z.boolean(),
+    /** Attach (or replace) the transfer slip picture: while a PromptPay payment is pending or claimed. */
+    attachSlip: z.boolean(),
     /** The methods the customer can switch to right now. */
     methods: z.array(appPayMethodSchema),
   }),

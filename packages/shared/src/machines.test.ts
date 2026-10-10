@@ -32,6 +32,7 @@ const ORDER_EXPECTED: Partial<Record<`${OrderStatus}>${OrderStatus}`, Expected>>
   'ready>completed': { actors: ['owner', 'manager', 'cashier', 'kitchen'] },
   'preparing>cancelled': { actors: ['owner', 'manager'], reason: true },
   'ready>cancelled': { actors: ['owner', 'manager'], reason: true },
+  'completed>cancelled': { actors: ['owner'], reason: true, stepUp: true },
 };
 
 const PAYMENT_EXPECTED: Partial<Record<`${PaymentStatus}>${PaymentStatus}`, Expected>> = {
@@ -96,8 +97,8 @@ describe('order machine: every state pair × every actor', () => {
     );
   });
 
-  test('terminal states have no exits', () => {
-    expect(orderMachine.targets('completed')).toEqual([]);
+  test('cancelled has no exits; a finished order can only be voided (owner)', () => {
+    expect(orderMachine.targets('completed')).toEqual(['cancelled']);
     expect(orderMachine.targets('cancelled')).toEqual([]);
   });
 

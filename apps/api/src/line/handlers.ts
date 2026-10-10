@@ -18,6 +18,7 @@ import { type MyOrder, PRIVACY_NOTICE_VERSION } from '@sds/shared';
 import { claimPayment, selectPayment, viewOrder } from '../customer-app/service.ts';
 import { ApiError } from '../errors.ts';
 import type { EventBus } from '../events.ts';
+import { currentBusinessDate } from '../orders/business-day.ts';
 import { currentPromptpayId, lineOrderingNow } from '../settings/service.ts';
 import { MAX_SLIP_BYTES } from '../slips/image.ts';
 import { attachSlip } from '../slips/service.ts';
@@ -294,12 +295,15 @@ async function handleSlip(
   }
 }
 
+/** How many of the sender's latest orders are looked at; open orders are no longer capped at 3. */
+const WAITING_SLIP_SCAN = 20;
+
 /** The id of the sender's latest order that is open and has a PromptPay payment pending or claimed. */
 async function waitingPromptpayOrder(
   ctx: HandlerContext,
   customerId: string,
 ): Promise<string | undefined> {
-  const rows = await ordersRepo.listOrdersForCustomer(ctx.db, customerId, 3);
+  const rows = await ordersRepo.listOrdersForCustomer(ctx.db, customerId, WAITING_SLIP_SCAN);
   for (const row of rows) {
     if (row.status === 'completed' || row.status === 'cancelled') continue;
     const payments = await paymentsRepo.listPaymentsForOrder(ctx.db, row.id);
@@ -380,12 +384,59 @@ async function handleSetMethod(
 
 // ---------- Keywords and the rich menu ----------
 
+/**
+ * A chat button (menu, payment, contact, hours, status) is answered once per customer per business
+ * day (owner, 2026-10-11); a repeat press the same day sends nothing. The mark is in the database,
+ * so it survives a restart. Only the live delivery counts (a retry has no reply token and says
+ * nothing anyway, so it must not use up the day), and a send that fails gives the mark back.
+ * Replies that carry an order's result (confirmation, slip received, errors) never come here.
+ * A customer the bot does not know yet is answered every time: there is no one to key the mark on.
+ */
+async function oncePerDay(
+  ctx: HandlerContext,
+  customerId: string | undefined,
+  button: string,
+  replyToken: string | undefined,
+  send: () => Promise<void>,
+): Promise<void> {
+  if (!customerId || !replyToken) return send();
+  const day = await currentBusinessDate(ctx.db, ctx.now());
+  if (!(await lineRepo.claimButtonReply(ctx.db, customerId, button, day))) return;
+  try {
+    await send();
+  } catch (error) {
+    await lineRepo.releaseButtonReply(ctx.db, customerId, button, day).catch(() => undefined);
+    throw error;
+  }
+}
+
 async function handleKeyword(
   ctx: HandlerContext,
   event: Extract<RoutedEvent, { kind: 'keyword' }>,
 ): Promise<void> {
   const customer = await lineRepo.findCustomerByLineUserId(ctx.db, event.userId);
-  const who = customer ? { customerId: customer.id } : {};
+  // Staff are still alerted to every contact request (one per 10 minutes); only the reply is limited.
+  if (event.keyword === 'contact' && contactAlertAllowed(ctx, event.userId)) {
+    ctx.events.publish({
+      type: 'alert.security',
+      kind: 'line.contact_request',
+      severity: 'info',
+      at: ctx.now().toISOString(),
+      staffId: null,
+      deviceId: null,
+    });
+  }
+  return oncePerDay(ctx, customer?.id, event.keyword, event.replyToken, () =>
+    answerKeyword(ctx, event, customer?.id),
+  );
+}
+
+async function answerKeyword(
+  ctx: HandlerContext,
+  event: Extract<RoutedEvent, { kind: 'keyword' }>,
+  customerId: string | undefined,
+): Promise<void> {
+  const who = customerId ? { customerId } : {};
   switch (event.keyword) {
     case 'menu':
       await say(
@@ -399,18 +450,7 @@ async function handleKeyword(
       await say(ctx, event.replyToken, [payInfoCard()], { template: 'pay_info', ...who });
       return;
     case 'contact':
-      // Staff answer in OA Manager (the rich-menu tap shows in the chat as "ติดต่อร้าน"). One
-      // alert per customer per 10 minutes; every tap is still answered.
-      if (contactAlertAllowed(ctx, event.userId)) {
-        ctx.events.publish({
-          type: 'alert.security',
-          kind: 'line.contact_request',
-          severity: 'info',
-          at: ctx.now().toISOString(),
-          staffId: null,
-          deviceId: null,
-        });
-      }
+      // Staff answer in OA Manager (the rich-menu tap shows in the chat as "ติดต่อร้าน").
       await say(ctx, event.replyToken, [botText('lineBot.contact.reply')], {
         template: 'contact',
         ...who,
@@ -433,7 +473,7 @@ async function handleKeyword(
       return;
     }
     case 'status':
-      return handleStatus(ctx, event.replyToken, customer?.id);
+      return handleStatus(ctx, event.replyToken, customerId);
   }
 }
 

@@ -1,5 +1,6 @@
 import { insertAudit, retentionRepo } from '@sds/db';
 import { RETENTION_DAYS } from '@sds/shared';
+import { currentBusinessDate } from '../orders/business-day.ts';
 import type { JobDeps } from './jobs.ts';
 
 /**
@@ -33,6 +34,18 @@ export async function purgeLineEvents(deps: JobDeps, bounds: Bounds = {}) {
   const before = cutoff(deps, RETENTION_DAYS.lineEvents);
   const deleted = await drain(bounds, (limit) =>
     retentionRepo.purgeLineEventsBatch(deps.db, { before, limit, now: deps.now() }),
+  );
+  return { deleted };
+}
+
+/** Chat-button reply marks older than a week: a mark only matters on its own business day. */
+export async function purgeButtonReplies(deps: JobDeps, bounds: Bounds = {}) {
+  const beforeDate = await currentBusinessDate(
+    deps.db,
+    new Date(deps.now().getTime() - 7 * 86_400_000),
+  );
+  const deleted = await drain(bounds, (limit) =>
+    retentionRepo.purgeButtonRepliesBatch(deps.db, { beforeDate, limit }),
   );
   return { deleted };
 }

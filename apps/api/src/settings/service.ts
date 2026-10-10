@@ -208,6 +208,12 @@ export async function currentDeliverySettings(db: Db): Promise<DeliverySettings>
   return row ? deliverySettingsSchema.parse(row.value) : DEFAULT_DELIVERY_SETTINGS;
 }
 
+/** The shop's public phone number (settings `shop`), or null when none is saved. */
+export async function currentShopPhone(db: Db): Promise<string | null> {
+  const row = await getSettingRow(db, 'shop');
+  return row ? shopSettingsSchema.parse(row.value).phone : null;
+}
+
 /** The tax ID and address for receipts: the saved ones, or both empty when never saved. */
 export async function currentReceiptSettings(db: Db): Promise<ReceiptSettings> {
   const row = await getSettingRow(db, 'receipt');

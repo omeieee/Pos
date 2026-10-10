@@ -43,6 +43,7 @@ describe('the job list', () => {
         'retention-recipients',
         'retention-line-customers',
         'retention-staff-invites',
+        'retention-button-replies',
       ]),
     );
     for (const j of JOBS) expect(j.cron.trim().split(/\s+/)).toHaveLength(5);

@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { CreateOrderInput } from '@sds/shared';
+import type { CreateOrderInput, MemberInput } from '@sds/shared';
 
 /**
  * A fingerprint of what an order request asks for, to tell a genuine retry (same request id,
@@ -8,7 +8,7 @@ import type { CreateOrderInput } from '@sds/shared';
  * set, so its ids are sorted; the item order is kept because it is the order on the ticket.
  * Everything that reaches the order is in it; prices are not, because the client sends none.
  */
-export function orderRequestHash(input: CreateOrderInput): string {
+export function orderRequestHash(input: CreateOrderInput, member?: MemberInput): string {
   const canonical = JSON.stringify({
     channel: input.channel,
     fulfillment: input.fulfillment,
@@ -22,6 +22,17 @@ export function orderRequestHash(input: CreateOrderInput): string {
           deliveryBuilding: input.deliveryBuilding,
           recipientName: input.recipientName ?? null,
           deliveryNote: input.deliveryNote || null,
+        }
+      : {}),
+    // Added only when the form was sent, so every order saved before it keeps its fingerprint.
+    ...(member !== undefined
+      ? {
+          member: {
+            fullName: member.fullName,
+            nickname: member.nickname,
+            building: member.building,
+            phone: member.phone,
+          },
         }
       : {}),
     items: input.items.map((item) => ({

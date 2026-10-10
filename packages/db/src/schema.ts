@@ -274,6 +274,13 @@ export const customers = pgTable(
     roomNo: text('room_no'),
     note: text('note'),
     /**
+     * The member profile (owner, 2026-10-11): `full_name` and `member_building` here, with
+     * `nickname` and `phone` above. All optional, given by the customer at checkout. Personal data
+     * (PDPA): cleared by `anonymizeCustomer`. Apart from `building` (the 30-day recipient book).
+     */
+    fullName: text('full_name'),
+    memberBuilding: text('member_building'),
+    /**
      * The recipient the shop last delivered to for this customer (owner, 2026-10-02), remembered
      * automatically from orders so the next order can show it. Personal data (PDPA): cleared by
      * `anonymizeCustomer` (owner-only `POST /v1/customers/{id}/anonymize`) and, 30 days after the
@@ -456,6 +463,15 @@ export const orders = pgTable(
     recipientName: text('recipient_name'),
     deliveryNote: text('delivery_note'),
     customerId: uuid('customer_id').references(() => customers.id),
+    /**
+     * The customer's member profile as it was when the order was placed (owner, 2026-10-11), so
+     * staff can tell who it is for. Personal data (PDPA): cleared with the customer
+     * (`anonymizeCustomer`) and 30 days after the order is finished (`anonymizeOrderSnapshotsBatch`).
+     */
+    memberFullName: text('member_full_name'),
+    memberNickname: text('member_nickname'),
+    memberBuilding: text('member_building'),
+    memberPhone: text('member_phone'),
     status: text('status').notNull(),
     paymentStatus: text('payment_status').notNull().default('unpaid'),
     subtotalSatang: money('subtotal_satang').notNull(),
@@ -534,6 +550,11 @@ export const orderItems = pgTable(
     modifiers: jsonb('modifiers').notNull().default([]),
     note: text('note'),
     lineTotalSatang: money('line_total_satang').notNull(),
+    /**
+     * Set when the owner removed this line from a past order (2026-10-11). Rows are never deleted:
+     * every reader of an order's lines skips a removed one, and the audit log keeps the before/after.
+     */
+    removedAt: ts('removed_at'),
   },
   (t) => [
     index('order_items_order_id_idx').on(t.orderId),
@@ -697,6 +718,28 @@ export const lineEvents = pgTable('line_events', {
   /** How many times the retry sweep has run this event (a first, live run is not counted). */
   attempts: integer('attempts').notNull().default(0),
 });
+
+/**
+ * One row per customer, chat button and business day: the bot answers a rich-menu or keyword button
+ * (menu, payment, contact, hours, status) once a day (owner, 2026-10-11). The primary key is the
+ * gate: `insert ... on conflict do nothing` lets exactly one of two webhook deliveries reply.
+ * Not personal data beyond the customer id; purged after a week.
+ */
+export const lineButtonReplies = pgTable(
+  'line_button_replies',
+  {
+    customerId: uuid('customer_id')
+      .notNull()
+      .references(() => customers.id),
+    button: text('button').notNull(),
+    businessDate: date('business_date', { mode: 'string' }).notNull(),
+    repliedAt: ts('replied_at').notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.customerId, t.button, t.businessDate] }),
+    index('line_button_replies_business_date_idx').on(t.businessDate),
+  ],
+);
 
 export const lineMessageLog = pgTable(
   'line_message_log',

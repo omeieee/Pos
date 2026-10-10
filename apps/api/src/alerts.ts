@@ -27,7 +27,10 @@ export function alertReport(event: SecurityAlertEvent): AlertReport {
       deviceId: event.deviceId,
       // Picked field by field: nothing else of `subject` can ride along.
       ...(event.subject
-        ? { paymentId: event.subject.paymentId, orderId: event.subject.orderId }
+        ? {
+            ...(event.subject.paymentId ? { paymentId: event.subject.paymentId } : {}),
+            orderId: event.subject.orderId,
+          }
         : {}),
       ...(event.detail ? { openPromptpayPayments: event.detail.openPromptpayPayments } : {}),
     },

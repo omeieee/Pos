@@ -10,7 +10,7 @@
  * erases a recipient 30 days after their last order (owner, 2026-10-03), or the owner does it on
  * request. `listRecipients` returns nothing but the five fields staff need.
  */
-import { ANONYMIZED_RECIPIENT_NAME } from '@sds/shared';
+import { ANONYMIZED_RECIPIENT_NAME, type MemberProfile } from '@sds/shared';
 import { and, desc, eq, isNotNull, isNull, or, sql } from 'drizzle-orm';
 import type { Db } from './client.ts';
 import { customers, orders, payments } from './schema.ts';
@@ -102,6 +102,50 @@ export async function recordRecipientOrder(
   return row.id;
 }
 
+/** The member profile saved on a live customer (all null when none, or for an unknown id). */
+export async function getMemberProfile(db: Db, customerId: string): Promise<MemberProfile> {
+  const [row] = await db
+    .select({
+      fullName: customers.fullName,
+      nickname: customers.nickname,
+      building: customers.memberBuilding,
+      phone: customers.phone,
+    })
+    .from(customers)
+    .where(and(eq(customers.id, customerId), isNull(customers.anonymizedAt)))
+    .limit(1);
+  return row ?? { fullName: null, nickname: null, building: null, phone: null };
+}
+
+/**
+ * Saves the member profile on a live customer, in the caller's transaction. Writes nothing when
+ * nothing changed, so a repeated form does not bump the customer's rev and version.
+ */
+export async function saveMemberProfile(
+  db: Db,
+  customerId: string,
+  profile: MemberProfile,
+): Promise<void> {
+  const saved = await getMemberProfile(db, customerId);
+  if (
+    saved.fullName === profile.fullName &&
+    saved.nickname === profile.nickname &&
+    saved.building === profile.building &&
+    saved.phone === profile.phone
+  ) {
+    return;
+  }
+  await db
+    .update(customers)
+    .set({
+      fullName: profile.fullName,
+      nickname: profile.nickname,
+      memberBuilding: profile.building,
+      phone: profile.phone,
+    })
+    .where(and(eq(customers.id, customerId), isNull(customers.anonymizedAt)));
+}
+
 export type AnonymizeResult =
   | { found: false }
   | {
@@ -122,7 +166,7 @@ export type AnonymizeResult =
  * or used by a new order again.
  *
  * The customer's ORDERS are tax records and stay (rows, totals, items, `delivery_building`). Only
- * the person on them is erased: `delivery_note` becomes null and `recipient_name` becomes
+ * the person on them is erased: the member snapshot and `delivery_note` become null and `recipient_name` becomes
  * `ANONYMIZED_RECIPIENT_NAME` on entrance deliveries (the check `orders_entrance_delivery_recipient`
  * needs a non-empty name there, so the check stays as it is) and null elsewhere. The order's own
  * `note` (kitchen note) and `room_no` are not touched. The sync trigger gives each changed row a
@@ -175,6 +219,8 @@ export async function anonymizeCustomer(db: Db, id: string, at: Date): Promise<A
       pictureUrl: null,
       nickname: null,
       phone: null,
+      fullName: null,
+      memberBuilding: null,
       roomNo: null,
       note: null,
       building: null,
@@ -189,12 +235,20 @@ export async function anonymizeCustomer(db: Db, id: string, at: Date): Promise<A
     .set({
       recipientName: sql`case when ${orders.fulfillment} = 'entrance_delivery' then ${ANONYMIZED_RECIPIENT_NAME} else null end`,
       deliveryNote: null,
+      memberFullName: null,
+      memberNickname: null,
+      memberBuilding: null,
+      memberPhone: null,
     })
     .where(
       and(
         eq(orders.customerId, id),
         // Skip orders that already hold the erased text (the retention job may have got there first).
         or(
+          isNotNull(orders.memberFullName),
+          isNotNull(orders.memberNickname),
+          isNotNull(orders.memberBuilding),
+          isNotNull(orders.memberPhone),
           and(
             isNotNull(orders.recipientName),
             sql`${orders.recipientName} <> ${ANONYMIZED_RECIPIENT_NAME}`,

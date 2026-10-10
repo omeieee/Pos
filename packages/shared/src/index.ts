@@ -8,6 +8,7 @@ export * from './delivery.ts';
 export * from './enums.ts';
 export * from './gov-copay.ts';
 export * from './image.ts';
+export * from './member.ts';
 export * from './menu.ts';
 export * from './money.ts';
 export * from './order-machine.ts';

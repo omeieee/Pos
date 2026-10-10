@@ -169,6 +169,13 @@
       "when": 1791132821363,
       "tag": "0023_staff_invites",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1791673538964,
+      "tag": "0024_member_profile_button_replies",
+      "breakpoints": true
     }
   ]
 }

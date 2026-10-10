@@ -294,6 +294,54 @@ describe('the customer uploads a slip', () => {
     expect(h.events.slice(marker).some((e) => e.type === 'payment.upserted')).toBe(true);
   });
 
+  test('a slip can be attached after "โอนแล้ว" too: the claim without a picture stays claimed and staff then find the slip', async () => {
+    const token = await customer();
+    const order = await place(token);
+    // The customer taps "โอนแล้ว" first (no picture), as most do.
+    const claimed = await call('POST', `/v1/app/orders/${order.id}/claim`, token);
+    expect(claimed.statusCode).toBe(200);
+    expect((await paymentRow(order.id))?.slip_image_key).toBeNull();
+    // The app must be told the picture may still be attached (it only offered it while pending).
+    const view = (await call('GET', `/v1/app/orders/${order.id}`, token)).json() as MyOrder;
+    expect(view.payment?.status).toBe('claimed');
+    expect(view.actions.claim).toBe(false);
+    expect(view.actions.attachSlip).toBe(true);
+
+    const claimedRow = await paymentRow(order.id);
+    const marker = h.events.length;
+    const res = await upload(token, order.id, JPEG);
+    expect(res.statusCode).toBe(200);
+    expect(res.json().actions.attachSlip).toBe(true);
+    const row = await paymentRow(order.id);
+    expect(row?.status).toBe('claimed');
+    // pos-web refreshes the slip indicator on a rev change: the attach bumps it and is announced.
+    expect(Number(row?.rev)).toBeGreaterThan(Number(claimedRow?.rev));
+    expect(Number(row?.version)).toBeGreaterThan(Number(claimedRow?.version));
+    const frames = h.events
+      .slice(marker)
+      .filter((e) => e.type === 'payment.upserted' && e.id === row?.id);
+    expect(frames).toHaveLength(1);
+    expect(frames[0]).toMatchObject({ rev: Number(row?.rev) });
+    const staff = await call('GET', `/v1/payments/${row?.id}/slip`, staffToken);
+    expect(staff.statusCode).toBe(200);
+    expect(Buffer.from(staff.rawPayload)).toEqual(JPEG);
+  });
+
+  test('the app is offered the slip only while a PromptPay payment waits (pending or claimed)', async () => {
+    const token = await customer();
+    const cash = await place(token, 'cash');
+    expect(cash.actions.attachSlip).toBe(false);
+    const order = await place(token);
+    expect(order.actions.attachSlip).toBe(true);
+    await call('POST', `/v1/app/orders/${order.id}/claim`, token);
+    await h.client.query(
+      "update payments set status = 'confirmed', confirmed_by_staff_id = $2, confirmed_at = now() where order_id = $1",
+      [order.id, owner.staffId],
+    );
+    const done = (await call('GET', `/v1/app/orders/${order.id}`, token)).json() as MyOrder;
+    expect(done.actions.attachSlip).toBe(false);
+  });
+
   test('a cash order, and a payment staff already confirmed, take no slip and leave no file', async () => {
     const token = await customer();
     const cash = await place(token, 'cash');

@@ -4,6 +4,7 @@
  */
 import { z } from 'zod';
 import { ORDER_PAYMENT_STATUSES, ORDER_STATUSES } from './enums.ts';
+import { memberProfileSchema } from './member.ts';
 import {
   fulfillmentSchema,
   isoDateSchema,
@@ -49,6 +50,12 @@ export const orderDtoSchema = z.object({
   recipientName: z.string().nullable(),
   deliveryNote: z.string().nullable(),
   customerId: z.uuid().nullable(),
+  /**
+   * The member profile as it was when the order was placed (owner, 2026-10-11), so staff can tell
+   * who it is for: full name, nickname, building, phone. Personal data (PDPA). Null when the
+   * customer gave none; absent from an older server.
+   */
+  member: memberProfileSchema.nullable().optional(),
   status: z.enum(ORDER_STATUSES),
   paymentStatus: z.enum(ORDER_PAYMENT_STATUSES),
   subtotalSatang: nonNegativeSatangSchema,
@@ -118,3 +125,64 @@ export const cancelOrderInputSchema = z.object({
   expectedVersion: version.optional(),
 });
 export type CancelOrderInput = z.infer<typeof cancelOrderInputSchema>;
+
+// ---------- Owner correction of a past order (owner decision, 2026-10-11) ----------
+
+/** What to do with a payment that was confirmed, when the order's money changes or the order is voided. */
+export const PAST_ORDER_PAYMENT_ACTIONS = ['void', 'refund'] as const;
+export type PastOrderPaymentAction = (typeof PAST_ORDER_PAYMENT_ACTIONS)[number];
+export const pastOrderPaymentActionSchema = z.enum(PAST_ORDER_PAYMENT_ACTIONS);
+
+/** Keeps a saved line at the price it was sold at; only the quantity and note can change. */
+const keepLineSchema = z.strictObject({
+  orderItemId: z.uuid(),
+  qty: z.number().int().min(1).max(99),
+  note: z.string().max(200).nullable().optional(),
+});
+
+/** A new line, priced from the menu as it is now. */
+const newLineSchema = z.strictObject({
+  menuItemId: z.uuid(),
+  qty: z.number().int().min(1).max(99),
+  modifierOptionIds: z.array(z.uuid()).max(20).default([]),
+  note: z.string().max(200).optional(),
+});
+
+/**
+ * PATCH /v1/orders/{id}/correction: owner only, fresh step-up, any order. `items` is the whole new
+ * list: a saved line you leave out is removed (kept in the database, marked removed), a line with
+ * `orderItemId` keeps its saved price, a line with `menuItemId` is new. The server recomputes every
+ * total. When the total changes while a payment is claimed or confirmed, `paymentAction` must say
+ * what to do with it (the payments are then cancelled, voided or refunded, whole: staff collect
+ * the new total again).
+ */
+export const correctOrderInputSchema = z
+  .strictObject({
+    expectedVersion: version,
+    reason: z.string().trim().min(1).max(200),
+    note: z.string().max(500).nullable().optional(),
+    items: z
+      .array(z.union([keepLineSchema, newLineSchema]))
+      .min(1)
+      .max(50)
+      .optional(),
+    paymentAction: pastOrderPaymentActionSchema.optional(),
+  })
+  .refine((v) => v.note !== undefined || v.items !== undefined, {
+    message: 'give note or items',
+    path: ['items'],
+  });
+export type CorrectOrderInput = z.infer<typeof correctOrderInputSchema>;
+
+/**
+ * POST /v1/orders/{id}/void: owner only, fresh step-up, any order that is not already cancelled.
+ * The order becomes `cancelled`; its payments are cancelled, or voided or refunded when confirmed
+ * (`paymentAction` is then required). `clientRequestId` makes a retry safe.
+ */
+export const voidOrderInputSchema = z.strictObject({
+  clientRequestId: z.uuid(),
+  reason: z.string().trim().min(1).max(200),
+  expectedVersion: version.optional(),
+  paymentAction: pastOrderPaymentActionSchema.optional(),
+});
+export type VoidOrderInput = z.infer<typeof voidOrderInputSchema>;

@@ -135,3 +135,22 @@ describe('orderRequestHash', () => {
     expect(hash(over as Partial<CreateOrderInput>)).not.toBe(hash());
   });
 });
+
+describe('orderRequestHash and the member form', () => {
+  test('an order sent without a form keeps the fingerprint it was saved with', () => {
+    expect(orderRequestHash(base, undefined)).toBe(hash());
+  });
+
+  test('the form is part of the request: another value, or a cleared field, is another fingerprint', () => {
+    const form = { fullName: 'ทดสอบ', phone: '0812345678' };
+    expect(orderRequestHash(base, form)).not.toBe(hash());
+    expect(orderRequestHash(base, form)).toBe(orderRequestHash(base, { ...form }));
+    expect(orderRequestHash(base, { ...form, phone: '0898765432' })).not.toBe(
+      orderRequestHash(base, form),
+    );
+    // Leaving a field out (keep) is not the same as clearing it (null).
+    expect(orderRequestHash(base, { fullName: 'ทดสอบ', phone: null })).not.toBe(
+      orderRequestHash(base, { fullName: 'ทดสอบ' }),
+    );
+  });
+});

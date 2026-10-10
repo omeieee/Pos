@@ -45,6 +45,7 @@ import {
   type OrderDto,
   type OrderPaymentStatus,
   type OrderPaymentsResponse,
+  type PastOrderPaymentAction,
   type PaymentMethod,
   type PaymentQrUrlResponse,
   type PaymentResult,
@@ -907,6 +908,78 @@ export async function settlePaymentsForOrderCancel(
     if (!cancelled) throw versionConflict(payment.version); // cannot happen under the order lock
     emitPayment(emit, cancelled);
     after.push(cancelled);
+  }
+  return derivePaymentStatus(satang(order.totalSatang), amountsOf(after));
+}
+
+/**
+ * An owner's correction or void of a past order (decision 2026-10-11) puts every payment of the
+ * order out of play, in the caller's transaction and through the same state machine and audit as a
+ * manual move: pending and claimed payments are cancelled, a confirmed one is voided or refunded
+ * (`action`, the owner's explicit choice: a refund says the money went back). Voids and refunds
+ * need a fresh step-up, write an audit row and alert the owner, exactly as `movePayment` does.
+ * Returns the order's payment status afterwards. Nothing is created: staff collect any new total
+ * through the normal payment flow.
+ */
+export async function retirePaymentsForOwnerChange(
+  tx: Db,
+  ctx: Pick<CoreContext, 'now'>,
+  actor: Principal,
+  order: ordersRepo.OrderRow,
+  reason: string,
+  action: PastOrderPaymentAction | undefined,
+  emit: Emit,
+  meta: RequestMeta,
+): Promise<OrderPaymentStatus> {
+  const all = await paymentsRepo.listPaymentsForOrder(tx, order.id);
+  if (all.some((p) => p.status === 'confirmed') && action === undefined) {
+    throw conflict(
+      'PAYMENT_ACTION_REQUIRED',
+      'A payment was confirmed. Say whether to void or refund it',
+    );
+  }
+  const after: paymentsRepo.PaymentRow[] = [];
+  for (const payment of all) {
+    const to: PaymentStatus | null =
+      payment.status === 'pending' || payment.status === 'claimed'
+        ? 'cancelled'
+        : payment.status === 'confirmed'
+          ? action === 'refund'
+            ? 'refunded'
+            : 'voided'
+          : null;
+    if (to === null) {
+      after.push(payment);
+      continue;
+    }
+    const result = paymentMachine.transition(payment.status as PaymentStatus, to, {
+      actor: { kind: 'staff', role: actor.role },
+      reason,
+    });
+    if (!result.ok) throw transitionFailure(result.error, payment.status, to);
+    if (result.stepUp && !hasFreshStepUp(actor, ctx.now())) throw stepUpRequired();
+    const updated = await paymentsRepo.updatePaymentIfVersion(tx, payment.id, payment.version, {
+      status: to,
+      voidReason: reason,
+    });
+    if (!updated) throw versionConflict(payment.version); // cannot happen under the order lock
+    const audit =
+      to === 'voided' ? 'payment.void' : to === 'refunded' ? 'payment.refund' : 'payment.cancel';
+    await auditPayment(tx, actor, meta, audit, payment.id, snapshot(payment), {
+      status: to,
+      reason,
+    });
+    if (to === 'voided' || to === 'refunded') {
+      emit(
+        securityAlert(ctx, `payment.${to}`, 'critical', {
+          staffId: actor.staffId,
+          deviceId: actor.deviceId,
+          subject: { paymentId: payment.id, orderId: order.id },
+        }),
+      );
+    }
+    emitPayment(emit, updated);
+    after.push(updated);
   }
   return derivePaymentStatus(satang(order.totalSatang), amountsOf(after));
 }

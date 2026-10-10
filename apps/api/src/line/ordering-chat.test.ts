@@ -438,6 +438,7 @@ describe('keywords and the rich menu', () => {
     await deliver(text(U_A, 'เวลาเปิด'));
     expect(allText(lastReply())).toContain('ทุกเวลา');
     await setMode('closed');
+    h.clock.advanceSeconds(86_400); // the hours button answers once per business day
     await deliver(text(U_A, 'เวลาเปิด'));
     expect(allText(lastReply())).toContain('ยังไม่เปิดรับออเดอร์');
     await h.client.query("delete from settings where key = 'line_ordering'");
@@ -458,8 +459,65 @@ describe('keywords and the rich menu', () => {
   });
 });
 
+describe('chat buttons answer once per customer per business day', () => {
+  const buttons: [string, () => Record<string, unknown>][] = [
+    ['menu', () => text(U_A, 'เมนู')],
+    ['payment', () => postback(U_A, 'rm=pay-info')],
+    ['hours', () => text(U_A, 'เวลาเปิด')],
+    ['contact', () => postback(U_A, 'rm=contact')],
+    ['status', () => text(U_A, 'สถานะ')],
+  ];
+
+  test.each(buttons)('%s: a repeat press the same day sends nothing', async (_name, press) => {
+    await signIn('id-token-a-0000000000000000000000');
+    await deliver(press());
+    expect(replies()).toHaveLength(1);
+    await deliver(press());
+    await deliver(press());
+    expect(replies()).toHaveLength(1);
+  });
+
+  test('each button has its own answer, another customer is not affected, and the next business day answers again', async () => {
+    await signIn('id-token-a-0000000000000000000000');
+    await signIn('id-token-b-0000000000000000000000');
+    await deliver(text(U_A, 'เมนู'));
+    await deliver(text(U_A, 'เวลาเปิด'));
+    expect(replies()).toHaveLength(2);
+    await deliver(text(U_B, 'เมนู'));
+    expect(replies()).toHaveLength(3);
+    await deliver(text(U_A, 'เมนู'));
+    expect(replies()).toHaveLength(3);
+
+    // The business day ends at the 04:00 Bangkok cutoff, not at midnight: 03:00 the next morning
+    // is still the same day, 04:30 is a new one.
+    h.clock.advanceSeconds(12 * 3600); // 03:00 Bangkok
+    await deliver(text(U_A, 'เมนู'));
+    expect(replies()).toHaveLength(3);
+    h.clock.advanceSeconds(90 * 60); // 04:30 Bangkok
+    await deliver(text(U_A, 'เมนู'));
+    expect(replies()).toHaveLength(4);
+  });
+
+  test('the mark is kept in the database, so it survives a restart', async () => {
+    await signIn('id-token-a-0000000000000000000000');
+    await deliver(text(U_A, 'เมนู'));
+    const marks = await h.client.query<{ button: string }>(
+      'select button from line_button_replies order by replied_at desc limit 1',
+    );
+    expect(marks.rows[0]?.button).toBe('menu');
+  });
+
+  test('replies that carry an order result are never limited', async () => {
+    const token = await signIn('id-token-a-0000000000000000000000');
+    const order = await place(token);
+    await deliver(postback(U_A, `action=paid&order=${order.id}`));
+    await deliver(postback(U_A, `action=paid&order=${order.id}`));
+    expect(replies().length).toBe(2);
+  });
+});
+
 describe('the contact alert', () => {
-  test('the customer is answered every time, but staff are alerted once per customer per 10 minutes', async () => {
+  test('the customer is answered once a day, but staff are alerted once per customer per 10 minutes', async () => {
     await signIn('id-token-a-0000000000000000000000');
     await signIn('id-token-b-0000000000000000000000');
     const contactAlerts = () => h.alerts.filter((a) => a.kind === 'line.contact_request').length;
@@ -467,10 +525,12 @@ describe('the contact alert', () => {
     await deliver(postback(U_A, 'rm=contact'));
     await deliver(postback(U_A, 'rm=contact'));
     await deliver(text(U_A, 'ติดต่อ'));
-    expect(replies()).toHaveLength(3); // each tap is answered, for free
+    // The customer is answered once per business day (owner, 2026-10-11); staff are still alerted.
+    expect(replies()).toHaveLength(1);
     expect(contactAlerts() - before).toBe(1);
-    // Another customer is a separate budget.
+    // Another customer is a separate budget, for the reply and for the alert.
     await deliver(postback(U_B, 'rm=contact'));
+    expect(replies()).toHaveLength(2);
     expect(contactAlerts() - before).toBe(2);
     // After ten minutes the same customer can alert again, and not a moment sooner.
     h.clock.advanceSeconds(9 * 60);
@@ -639,6 +699,14 @@ describe('a picture in the chat', () => {
     expect(replies()).toHaveLength(1);
     expect(pushes()).toHaveLength(0);
     expect(allText(lastReply())).toContain(order.orderNo);
+  });
+
+  test('finds the waiting PromptPay order even when more than three newer orders are open', async () => {
+    const token = await signIn('id-token-a-0000000000000000000000');
+    const waiting = await place(token);
+    for (let i = 0; i < 4; i += 1) await place(token, 'cash');
+    await deliver(image(U_A, '4003'));
+    expect(await paymentOf(waiting.id)).toMatchObject([{ method: 'promptpay', status: 'claimed' }]);
   });
 
   test('a second picture replaces the first and deletes the old file', async () => {

@@ -53,6 +53,10 @@ const orderColumns = {
   recipientName: orders.recipientName,
   deliveryNote: orders.deliveryNote,
   customerId: orders.customerId,
+  memberFullName: orders.memberFullName,
+  memberNickname: orders.memberNickname,
+  memberBuilding: orders.memberBuilding,
+  memberPhone: orders.memberPhone,
   status: orders.status,
   paymentStatus: orders.paymentStatus,
   subtotalSatang: orders.subtotalSatang,
@@ -257,7 +261,7 @@ export const SYNC_POLICY = {
     'requestHash',
     'updatedAt',
   ]),
-  order_items: policy(orderItems, orderItemColumns, ['unitCostSatang']),
+  order_items: policy(orderItems, orderItemColumns, ['unitCostSatang', 'removedAt']),
   payments: policy(payments, paymentColumns, [
     'qrPayload',
     'slipImageKey',
@@ -296,6 +300,9 @@ export const SYNC_POLICY = {
     'pictureUrl',
     'phone',
     'note',
+    // The member profile reaches staff on the order snapshot, not through the customer feed.
+    'fullName',
+    'memberBuilding',
     // The remembered recipient (building, name, details) is read through GET /v1/recipients, which
     // staff who can create orders call; it stays out of the feed.
     'building',
@@ -449,7 +456,7 @@ async function attachOrderItems(db: Db, entries: SyncEntry[]): Promise<void> {
   const rows = await db
     .select(orderItemColumns)
     .from(orderItems)
-    .where(inArray(orderItems.orderId, ids))
+    .where(and(inArray(orderItems.orderId, ids), isNull(orderItems.removedAt)))
     .orderBy(asc(orderItems.id));
   for (const row of rows) {
     const list = byId.get(row.orderId) ?? [];

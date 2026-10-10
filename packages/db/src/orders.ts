@@ -46,6 +46,9 @@ export interface OrderPatch {
   cancelReason?: string;
   note?: string | null;
   roomNo?: string | null;
+  /** Owner correction of a past order only: the recomputed amounts (the table check keeps them consistent). */
+  subtotalSatang?: number;
+  totalSatang?: number;
   /** Derived from the order's payments by the payment service, in the payment's transaction. */
   paymentStatus?: OrderPaymentStatus;
 }
@@ -61,6 +64,11 @@ export interface NewOrder {
   recipientName: string | null;
   deliveryNote: string | null;
   customerId: string | null;
+  /** The member profile as it was at placement (owner, 2026-10-11); all null when none. */
+  memberFullName?: string | null;
+  memberNickname?: string | null;
+  memberBuilding?: string | null;
+  memberPhone?: string | null;
   status: OrderStatus;
   subtotalSatang: number;
   discountSatang: number;
@@ -152,7 +160,7 @@ export async function loadOrderItems(
   const rows = await db
     .select()
     .from(orderItems)
-    .where(inArray(orderItems.orderId, [...orderIds]))
+    .where(and(inArray(orderItems.orderId, [...orderIds]), isNull(orderItems.removedAt)))
     .orderBy(asc(orderItems.id));
   for (const row of rows) {
     const list = byOrder.get(row.orderId);
@@ -184,6 +192,29 @@ export async function insertOrderItems(
     .insert(orderItems)
     .values(items.map((item) => ({ ...item, orderId })))
     .returning();
+}
+
+/** New quantity, note and amount of one saved line (owner correction). Never its price snapshot. */
+export async function updateOrderItemLine(
+  db: Db,
+  id: string,
+  patch: { qty: number; note: string | null; lineTotalSatang: number },
+): Promise<OrderItemRow | undefined> {
+  const [row] = await db.update(orderItems).set(patch).where(eq(orderItems.id, id)).returning();
+  return row;
+}
+
+/** Marks lines as removed from a past order. The rows stay; readers skip them. */
+export async function markOrderItemsRemoved(
+  db: Db,
+  ids: readonly string[],
+  at: Date,
+): Promise<void> {
+  if (ids.length === 0) return;
+  await db
+    .update(orderItems)
+    .set({ removedAt: at })
+    .where(inArray(orderItems.id, [...ids]));
 }
 
 /**
@@ -315,20 +346,6 @@ export async function listOrdersForCustomer(
     .where(eq(orders.customerId, customerId))
     .orderBy(desc(orders.placedAt), desc(orders.id))
     .limit(limit);
-}
-
-/** How many of the customer's orders are still open (not completed, not cancelled). */
-export async function countOpenOrdersForCustomer(db: Db, customerId: string): Promise<number> {
-  const [row] = await db
-    .select({ n: sql<number>`count(*)::int` })
-    .from(orders)
-    .where(
-      and(
-        eq(orders.customerId, customerId),
-        sql`${orders.status} not in ('completed', 'cancelled')`,
-      ),
-    );
-  return row?.n ?? 0;
 }
 
 /** One order, only when it belongs to this customer. */

@@ -1371,7 +1371,8 @@ describe('cancelling', () => {
     const done = await place(manager);
     await transition(manager, done.id, { to: 'ready' });
     await transition(manager, done.id, { to: 'completed' });
-    expect((await cancel(manager, done.id, { reason: 'ทดสอบ' })).statusCode).toBe(409);
+    // A finished order can only be voided by the owner (POST /:id/void); a manager is refused.
+    expect((await cancel(manager, done.id, { reason: 'ทดสอบ' })).statusCode).toBe(403);
 
     const gone = await place(manager);
     await cancel(manager, gone.id, { reason: 'ทดสอบ' });

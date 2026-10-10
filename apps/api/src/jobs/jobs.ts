@@ -3,6 +3,7 @@ import {
   anonymizeOrders,
   expireEmptyLineCustomers,
   expireRecipients,
+  purgeButtonReplies,
   purgeLineEvents,
   purgeSlips,
   purgeStaffInvites,
@@ -33,6 +34,8 @@ export const JOBS: readonly JobDefinition[] = [
   { name: 'retention-recipients', cron: '50 3 * * *', run: expireRecipients },
   // Followers and app visitors who never ordered or acknowledged the notice.
   { name: 'retention-line-customers', cron: '55 3 * * *', run: expireEmptyLineCustomers },
+  // Chat-button reply marks (once a day per button) older than a week.
+  { name: 'retention-button-replies', cron: '57 3 * * *', run: purgeButtonReplies },
   // Invites of no use any more (they hold an e-mail).
   { name: 'retention-staff-invites', cron: '58 3 * * *', run: purgeStaffInvites },
   // Transfer slip pictures, 90 days after the payment was confirmed or cancelled (file first, then the key).

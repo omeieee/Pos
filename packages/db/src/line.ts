@@ -6,7 +6,13 @@
  */
 import { and, asc, eq, gt, inArray, isNotNull, isNull, lte, or, sql } from 'drizzle-orm';
 import type { Db } from './client.ts';
-import { customers, lineEvents, lineMessageLog, lineQuotaMonths } from './schema.ts';
+import {
+  customers,
+  lineButtonReplies,
+  lineEvents,
+  lineMessageLog,
+  lineQuotaMonths,
+} from './schema.ts';
 
 /**
  * Records a webhook event by its `webhookEventId`. True when it is new, false when LINE sent it
@@ -205,6 +211,43 @@ export async function findCustomerByLineUserId(
     .where(and(eq(customers.lineUserId, lineUserId), isNull(customers.anonymizedAt)))
     .limit(1);
   return row;
+}
+
+/**
+ * Takes this customer's one reply for a chat button on a business day (owner, 2026-10-11). True for
+ * the first caller, false for every later one: the primary key decides in one statement, so two
+ * deliveries of the same press cannot both answer. The mark survives restarts.
+ */
+export async function claimButtonReply(
+  db: Db,
+  customerId: string,
+  button: string,
+  businessDate: string,
+): Promise<boolean> {
+  const rows = await db
+    .insert(lineButtonReplies)
+    .values({ customerId, button, businessDate })
+    .onConflictDoNothing()
+    .returning({ customerId: lineButtonReplies.customerId });
+  return rows.length > 0;
+}
+
+/** Gives the day's reply back when sending it failed, so the customer's next press is answered. */
+export async function releaseButtonReply(
+  db: Db,
+  customerId: string,
+  button: string,
+  businessDate: string,
+): Promise<void> {
+  await db
+    .delete(lineButtonReplies)
+    .where(
+      and(
+        eq(lineButtonReplies.customerId, customerId),
+        eq(lineButtonReplies.button, button),
+        eq(lineButtonReplies.businessDate, businessDate),
+      ),
+    );
 }
 
 class RollbackReservation extends Error {

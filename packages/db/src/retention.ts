@@ -25,7 +25,14 @@ import { and, asc, eq, inArray, isNotNull, isNull, lt, or, sql } from 'drizzle-o
 import { insertAudit } from './audit.ts';
 import type { Db } from './client.ts';
 import { anonymizeCustomer } from './customers.ts';
-import { customers, lineEvents, orders, payments, staffInvites } from './schema.ts';
+import {
+  customers,
+  lineButtonReplies,
+  lineEvents,
+  orders,
+  payments,
+  staffInvites,
+} from './schema.ts';
 
 /** Deletes up to `limit` events that arrived before `before`. Returns how many. */
 export async function purgeLineEventsBatch(
@@ -53,6 +60,32 @@ export async function purgeLineEventsBatch(
     }
     return deleted.length;
   });
+}
+
+/**
+ * Deletes up to `limit` chat-button reply marks of business days before `beforeDate`
+ * (`YYYY-MM-DD`). A mark only matters on its own day; nothing personal is in it, so no audit row.
+ */
+export async function purgeButtonRepliesBatch(
+  db: Db,
+  args: { beforeDate: string; limit: number },
+): Promise<number> {
+  const old = db
+    .select({
+      customerId: lineButtonReplies.customerId,
+      button: lineButtonReplies.button,
+      businessDate: lineButtonReplies.businessDate,
+    })
+    .from(lineButtonReplies)
+    .where(lt(lineButtonReplies.businessDate, args.beforeDate))
+    .limit(args.limit);
+  const deleted = await db
+    .delete(lineButtonReplies)
+    .where(
+      sql`(${lineButtonReplies.customerId}, ${lineButtonReplies.button}, ${lineButtonReplies.businessDate}) in (${old})`,
+    )
+    .returning({ customerId: lineButtonReplies.customerId });
+  return deleted.length;
 }
 
 /**
@@ -97,7 +130,7 @@ const roomAfter = sql`case when ${orders.fulfillment} = 'room_delivery' then ${A
 
 /**
  * Anonymises up to `limit` finished orders (completed or cancelled before `before`): recipient
- * name, building, room number and delivery note. An order whose columns already hold the erased
+ * name, building, room number, delivery note and the member snapshot (name, nickname, building, phone). An order whose columns already hold the erased
  * values is not selected, so a second run changes nothing and bumps no version.
  */
 export async function anonymizeOrderSnapshotsBatch(
@@ -117,6 +150,10 @@ export async function anonymizeOrderSnapshotsBatch(
             sql`${orders.deliveryBuilding} is distinct from ${buildingAfter}`,
             sql`${orders.roomNo} is distinct from ${roomAfter}`,
             isNotNull(orders.deliveryNote),
+            isNotNull(orders.memberFullName),
+            isNotNull(orders.memberNickname),
+            isNotNull(orders.memberBuilding),
+            isNotNull(orders.memberPhone),
           ),
         ),
       )
@@ -129,6 +166,10 @@ export async function anonymizeOrderSnapshotsBatch(
         deliveryBuilding: buildingAfter,
         roomNo: roomAfter,
         deliveryNote: null,
+        memberFullName: null,
+        memberNickname: null,
+        memberBuilding: null,
+        memberPhone: null,
       })
       .where(inArray(orders.id, due))
       .returning({ id: orders.id });

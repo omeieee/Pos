@@ -11,6 +11,8 @@ import {
   initialOrderStatus,
   type ListOrdersQuery,
   type ListOrdersResponse,
+  type MemberInput,
+  mergeMember,
   ORDER_NO_PREFIX,
   type OrderDto,
   type OrderStatus,
@@ -101,6 +103,12 @@ export async function createOrder(
   /** The staff member, or null for a customer's own order (the customer app). */
   actor: Principal | null,
   input: CreateOrderInput,
+  /**
+   * The member form of a customer's own order (owner, 2026-10-11), kept out of the staff request
+   * schema. Saved on the customer and copied onto the order in this same transaction, so a replay
+   * or a lost race writes nothing.
+   */
+  member?: MemberInput,
 ): Promise<{ order: OrderDto; replay: boolean }> {
   // Owner decision 2026-10-02: each channel offers one way to be served (entrance delivery for
   // storefront, LINE and phone; the platform's for Grab and LINE MAN). Checked before anything is
@@ -120,7 +128,7 @@ export async function createOrder(
     if (!actor) throw forbidden();
     requireOwnerForOriginalStaff(actor, input.originalStaffId, ctx.now());
   }
-  const requestHash = orderRequestHash(input);
+  const requestHash = orderRequestHash(input, member);
   const existing = await ordersRepo.findOrderByClientRequestId(ctx.db, input.clientRequestId);
   if (existing) return replayOf(ctx.db, existing, requestHash, input.originalStaffId);
 
@@ -170,6 +178,12 @@ export async function createOrder(
               input.customerId,
             )
           : (input.customerId ?? null);
+      let profile =
+        customerId === null ? null : await customersRepo.getMemberProfile(tx, customerId);
+      if (customerId !== null && member !== undefined && profile !== null) {
+        profile = mergeMember(profile, member);
+        await customersRepo.saveMemberProfile(tx, customerId, profile);
+      }
       const status = initialOrderStatus(input.channel);
       const row = await ordersRepo.insertOrder(tx, {
         orderNo: `${ORDER_NO_PREFIX[input.channel]}-${String(seq).padStart(3, '0')}`,
@@ -181,6 +195,10 @@ export async function createOrder(
         recipientName: input.recipientName ?? null,
         deliveryNote: input.deliveryNote || null,
         customerId,
+        memberFullName: profile?.fullName ?? null,
+        memberNickname: profile?.nickname ?? null,
+        memberBuilding: profile?.building ?? null,
+        memberPhone: profile?.phone ?? null,
         status,
         subtotalSatang: priced.totals.subtotal,
         discountSatang: priced.totals.discount,

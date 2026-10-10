@@ -13,14 +13,13 @@
  *   ไทยช่วยไทย is a pending payment staff handle face to face (rule 4).
  */
 import { createHash } from 'node:crypto';
-import { type Db, lineRepo, ordersRepo, paymentsRepo } from '@sds/db';
+import { customersRepo, type Db, lineRepo, ordersRepo, paymentsRepo } from '@sds/db';
 import {
   type AppOrderInput,
   type AppOrderResult,
   type AppPayMethod,
   type CheckoutInfo,
   type CustomerSessionResponse,
-  MAX_OPEN_ORDERS,
   MAX_ORDER_QUANTITY,
   type MyOrder,
   type MyOrdersResponse,
@@ -47,6 +46,7 @@ import {
   currentDeliverySettings,
   currentPaymentsSettings,
   currentPromptpayId,
+  currentShopPhone,
   lineOrderingNow,
 } from '../settings/service.ts';
 import type { CoreContext } from '../tx.ts';
@@ -123,9 +123,11 @@ export async function checkoutInfo(
     buildings: (await currentDeliverySettings(ctx.db)).buildings,
     methods: await methodsOffered(ctx.db),
     lastRecipient: recipient ?? null,
+    member: await customersRepo.getMemberProfile(ctx.db, customer.customerId),
     privacyAcknowledged: customer.privacyAckVersion === PRIVACY_NOTICE_VERSION,
     privacyVersion: PRIVACY_NOTICE_VERSION,
     promptpayConfigured: (await currentPromptpayId(ctx.db)) !== null,
+    shopPhone: await currentShopPhone(ctx.db),
   };
 }
 
@@ -182,6 +184,7 @@ export async function viewOrder(ctx: CoreContext, order: ordersRepo.OrderRow): P
       claim: !closed && open?.method === 'promptpay' && open.status === 'pending',
       changeMethod: canChange,
       showQr: !closed && open?.method === 'promptpay',
+      attachSlip: !closed && open?.method === 'promptpay',
       methods: canChange ? await methodsOffered(ctx.db) : [],
     },
   });
@@ -261,27 +264,24 @@ export async function placeOrder(
         max: MAX_ORDER_QUANTITY,
       });
     }
-    // A few open orders at a time: a bound on spam and on a stuck kitchen queue.
-    if (
-      (await ordersRepo.countOpenOrdersForCustomer(ctx.db, customer.customerId)) >= MAX_OPEN_ORDERS
-    ) {
-      throw conflict('TOO_MANY_OPEN_ORDERS', 'You already have several open orders', {
-        max: MAX_OPEN_ORDERS,
-      });
-    }
   }
 
-  const { order, replay } = await createOrder(ctx, null, {
-    clientRequestId: input.clientRequestId,
-    channel: 'line',
-    fulfillment: 'entrance_delivery',
-    customerId: customer.customerId,
-    deliveryBuilding: input.deliveryBuilding,
-    recipientName: input.recipientName,
-    ...(input.deliveryNote ? { deliveryNote: input.deliveryNote } : {}),
-    ...(input.note ? { note: input.note } : {}),
-    items: input.items,
-  });
+  const { order, replay } = await createOrder(
+    ctx,
+    null,
+    {
+      clientRequestId: input.clientRequestId,
+      channel: 'line',
+      fulfillment: 'entrance_delivery',
+      customerId: customer.customerId,
+      deliveryBuilding: input.deliveryBuilding,
+      recipientName: input.recipientName,
+      ...(input.deliveryNote ? { deliveryNote: input.deliveryNote } : {}),
+      ...(input.note ? { note: input.note } : {}),
+      items: input.items,
+    },
+    input.member,
+  );
   if (order.customerId !== customer.customerId) {
     throw conflict(
       'IDEMPOTENCY_KEY_REUSED',

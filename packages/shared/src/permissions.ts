@@ -7,6 +7,8 @@ export const PERMISSIONS = [
   'order.advance',
   'order.cancel_new',
   'order.cancel_in_progress',
+  /** Edit or void any order, including a paid or finished one (owner decision 2026-10-11). */
+  'order.edit_past',
   'payment.record',
   'payment.confirm',
   'payment.cancel_claimed',
@@ -66,6 +68,7 @@ export const STEP_UP_PERMISSIONS: ReadonlySet<Permission> = new Set<Permission>(
   'settings.gov_copay',
   'settings.receipt',
   'payment.void_refund',
+  'order.edit_past',
   'staff.manage',
   'device.manage',
   'data.export',

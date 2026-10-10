@@ -9,7 +9,6 @@ import { promptpayPayload } from '@sds/promptpay';
 import {
   ANONYMIZED_BUILDING,
   ANONYMIZED_RECIPIENT_NAME,
-  MAX_OPEN_ORDERS,
   type MyOrder,
   myOrderSchema,
   PRIVACY_NOTICE_VERSION,
@@ -596,31 +595,15 @@ describe('placing an order', () => {
 });
 
 describe('limits on one customer', () => {
-  test('a new order is refused while the customer already has 3 open ones; finishing one frees a place', async () => {
+  test('there is no cap on open orders per customer (the shop-wide stop switch is the control)', async () => {
     const token = await customer(TOKEN_B);
-    const placed: string[] = [];
-    for (let i = 0; i < MAX_OPEN_ORDERS; i++) {
-      const { res, json } = await order(token, { paymentMethod: 'cash' });
-      expect(res.statusCode).toBe(201);
-      placed.push(json.order.id);
+    for (let i = 0; i < 5; i++) {
+      expect((await order(token, { paymentMethod: 'cash' })).res.statusCode).toBe(201);
     }
-    const refused = await order(token, { paymentMethod: 'cash' });
-    expect(refused.res.statusCode).toBe(409);
-    expect(refused.json).toMatchObject({ code: 'TOO_MANY_OPEN_ORDERS' });
-    // Nothing was written for the refused one, and no alert was raised.
-    const count = await h.client.query(
-      "select id from orders where customer_id = (select id from customers where line_user_id = $1) and status not in ('completed','cancelled')",
-      [U_B],
-    );
-    expect(count.rows).toHaveLength(MAX_OPEN_ORDERS);
-    // A retry of an order that already exists is not refused.
+    // A retry of an order that already exists is still an idempotent replay.
     const payload = body({ paymentMethod: 'cash' });
-    await h.client.query("update orders set status = 'completed' where id = $1", [placed[0]]);
     expect((await call('POST', '/v1/app/orders', token, payload)).statusCode).toBe(201);
     expect((await call('POST', '/v1/app/orders', token, payload)).statusCode).toBe(200);
-    // Cancelled and completed orders do not count.
-    await h.client.query("update orders set status = 'cancelled' where id = $1", [placed[1]]);
-    expect((await order(token, { paymentMethod: 'cash' })).res.statusCode).toBe(201);
   });
 
   test("one customer's open orders do not block another", async () => {
@@ -920,6 +903,139 @@ describe('remembering the recipient', () => {
     });
     const later = await signIn(TOKEN_C); // the old session ended long ago
     expect((await call('GET', '/v1/app/checkout', later)).json().lastRecipient).toBeNull();
+  });
+});
+
+// Made-up person: not a real customer.
+const MEMBER = {
+  fullName: 'ทดสอบ ตัวอย่าง',
+  nickname: 'ทีม',
+  building: 'B1',
+  phone: '081-234-5678',
+};
+
+const staffOrder = async (id: string) => {
+  h.clock.advanceSeconds(31); // a TOTP code works once per 30-second step
+  const staff = await h.ownerSession(owner);
+  return (await call('GET', `/v1/orders/${id}`, staff)).json();
+};
+
+describe('the member profile (owner, 2026-10-11)', () => {
+  test('none of it is required to order, and the order then carries no member', async () => {
+    const token = await customer(TOKEN_A);
+    const { res, json } = await order(token);
+    expect(res.statusCode).toBe(201);
+    expect((await staffOrder(json.order.id)).member).toBeNull();
+  });
+
+  test('is sent with the payment method in one call, saved on the customer and copied onto the order', async () => {
+    const token = await customer(TOKEN_A);
+    const { res, json } = await order(token, { paymentMethod: 'cash', member: MEMBER });
+    expect(res.statusCode).toBe(201);
+    const dto = await staffOrder(json.order.id);
+    expect(dto.member).toEqual({
+      fullName: MEMBER.fullName,
+      nickname: MEMBER.nickname,
+      building: 'B1',
+      phone: '0812345678', // normalised
+    });
+    // The form prefills the next visit.
+    const info = (await call('GET', '/v1/app/checkout', token)).json();
+    expect(info.member).toEqual(dto.member);
+    // The customer's own view of the order does not echo the profile.
+    expect(JSON.stringify(json.order)).not.toContain('0812345678');
+  });
+
+  test('a field left out keeps its value, an empty one clears it, and an older order keeps its snapshot', async () => {
+    const token = await customer(TOKEN_A);
+    const first = (await order(token, { member: MEMBER })).json.order;
+    const second = (await order(token, { member: { nickname: '', phone: '0898765432' } })).json
+      .order;
+    const a = await staffOrder(first.id);
+    const b = await staffOrder(second.id);
+    expect(a.member.nickname).toBe(MEMBER.nickname);
+    expect(b.member).toEqual({
+      fullName: MEMBER.fullName,
+      nickname: null,
+      building: 'B1',
+      phone: '0898765432',
+    });
+    // No member in the request: the saved profile is copied as it stands.
+    const third = (await order(token)).json.order;
+    expect((await staffOrder(third.id)).member).toEqual(b.member);
+  });
+
+  test('is checked: a bad phone, an over-long name and an unknown field are 400s, control characters are stripped', async () => {
+    const token = await customer(TOKEN_A);
+    for (const member of [
+      { phone: '12345' },
+      { nickname: 'ก'.repeat(41) },
+      { email: 'a@example.com' },
+    ]) {
+      const res = await call('POST', '/v1/app/orders', token, body({ member }));
+      expect(res.statusCode, JSON.stringify(member)).toBe(400);
+    }
+    const { json } = await order(token, { member: { fullName: 'ทดสอบ\u0007​ ตัวอย่าง' } });
+    expect((await staffOrder(json.order.id)).member.fullName).toBe('ทดสอบ ตัวอย่าง');
+  });
+
+  test('a replay writes nothing: the same request id with a different form is refused, the same form returns the order', async () => {
+    const token = await customer(TOKEN_A);
+    const requestBody = body({ member: MEMBER });
+    const first = await call('POST', '/v1/app/orders', token, requestBody);
+    expect(first.statusCode).toBe(201);
+    const again = await call('POST', '/v1/app/orders', token, requestBody);
+    expect(again.statusCode).toBe(200);
+    expect(again.json().replay).toBe(true);
+    const changed = await call('POST', '/v1/app/orders', token, {
+      ...requestBody,
+      member: { ...MEMBER, nickname: 'อื่น' },
+    });
+    expect(changed.statusCode).toBe(409);
+    expect(changed.json().code).toBe('IDEMPOTENCY_KEY_REUSED');
+  });
+
+  test('erasing the customer erases the profile and the snapshot, and none of it reaches the logs', async () => {
+    const token = await customer(TOKEN_A);
+    const { json } = await order(token, { member: MEMBER });
+    const id = (
+      await h.client.query<{ id: string }>('select id from customers where line_user_id = $1', [
+        U_A,
+      ])
+    ).rows[0]?.id as string;
+    await customersRepo.anonymizeCustomer(h.db, id, h.clock.now());
+    const row = (
+      await h.client.query(
+        'select member_full_name, member_nickname, member_building, member_phone from orders where id = $1',
+        [json.order.id],
+      )
+    ).rows[0];
+    expect(Object.values(row ?? {}).every((v) => v === null)).toBe(true);
+    const saved = (
+      await h.client.query(
+        'select full_name, nickname, member_building, phone from customers where id = $1',
+        [id],
+      )
+    ).rows[0];
+    expect(Object.values(saved ?? {}).every((v) => v === null)).toBe(true);
+    const logs = h.logs();
+    for (const value of [MEMBER.fullName, MEMBER.nickname, '0812345678', '081-234-5678']) {
+      expect(logs, value).not.toContain(value);
+    }
+  });
+});
+
+describe('the shop phone in the checkout info', () => {
+  test('is the phone from the shop settings, or null when none is saved', async () => {
+    const token = await customer(TOKEN_A);
+    await h.client.query("delete from settings where key = 'shop'");
+    expect((await call('GET', '/v1/app/checkout', token)).json().shopPhone).toBeNull();
+    await h.client.query(
+      "insert into settings (key, value, updated_by) values ('shop', $1::jsonb, $2)",
+      [JSON.stringify({ nameTh: 'ร้านทดสอบ', phone: '021234567' }), owner.staffId],
+    );
+    expect((await call('GET', '/v1/app/checkout', token)).json().shopPhone).toBe('021234567');
+    await h.client.query("delete from settings where key = 'shop'");
   });
 });
 

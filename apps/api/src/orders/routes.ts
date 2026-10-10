@@ -1,17 +1,20 @@
 import {
   cancelOrderInputSchema,
+  correctOrderInputSchema,
   createOrderInputSchema,
   issueReceiptInputSchema,
   listOrdersQuerySchema,
   orderIdParamSchema,
   patchOrderInputSchema,
   transitionOrderInputSchema,
+  voidOrderInputSchema,
 } from '@sds/shared';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { type GuardFactory, principalOf } from '../auth/guards.ts';
 import { ApiError } from '../errors.ts';
 import type { CoreContext } from '../tx.ts';
 import { parse } from '../validate.ts';
+import { correctOrder, voidOrder } from './correction.ts';
 import { issueReceipt } from './receipt.ts';
 import { createOrder, getOrder, listOrdersForDay, patchOrder, transitionOrder } from './service.ts';
 
@@ -87,6 +90,37 @@ export async function registerOrderRoutes(
       .header('cache-control', 'no-store')
       .status(replay ? 200 : 201)
       .send(result);
+  });
+
+  // The owner's correction and void of any order, paid or finished included (decision 2026-10-11).
+  // `order.edit_past` is owner-only and asks for a fresh step-up in the guard.
+  app.patch('/:id/correction', { onRequest: guard('order.edit_past') }, async (request) =>
+    correctOrder(
+      ctx,
+      principalOf(request),
+      idOf(request),
+      parse(correctOrderInputSchema, request.body),
+      { ip: request.ip ?? null },
+    ),
+  );
+
+  app.post('/:id/void', { onRequest: guard('order.edit_past') }, async (request, reply) => {
+    const input = parse(voidOrderInputSchema, request.body);
+    const header = request.headers['idempotency-key'];
+    if (
+      header !== undefined &&
+      String(header).toLowerCase() !== input.clientRequestId.toLowerCase()
+    ) {
+      throw new ApiError(
+        400,
+        'IDEMPOTENCY_KEY_MISMATCH',
+        'Idempotency-Key must equal clientRequestId',
+      );
+    }
+    const { order, replay } = await voidOrder(ctx, principalOf(request), idOf(request), input, {
+      ip: request.ip ?? null,
+    });
+    return reply.status(replay ? 200 : 201).send(order);
   });
 
   app.post('/:id/cancel', { onRequest: guard() }, async (request) => {

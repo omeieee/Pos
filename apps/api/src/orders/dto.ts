@@ -23,6 +23,15 @@ export function toOrderDto(
     recipientName: order.recipientName,
     deliveryNote: order.deliveryNote,
     customerId: order.customerId,
+    member:
+      order.memberFullName || order.memberNickname || order.memberBuilding || order.memberPhone
+        ? {
+            fullName: order.memberFullName,
+            nickname: order.memberNickname,
+            building: order.memberBuilding,
+            phone: order.memberPhone,
+          }
+        : null,
     status: order.status,
     paymentStatus: order.paymentStatus,
     subtotalSatang: order.subtotalSatang,
