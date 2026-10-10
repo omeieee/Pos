@@ -32,6 +32,7 @@ describe('the hub', () => {
       '#/settings/hours',
       '#/settings/numbering',
       '#/settings/delivery',
+      '#/settings/line-ordering',
       '#/settings/payments',
       '#/settings/promptpay',
       '#/settings/gov-copay',
@@ -50,6 +51,7 @@ describe('the hub', () => {
       '#/settings/hours',
       '#/settings/numbering',
       '#/settings/delivery',
+      '#/settings/line-ordering',
       '#/settings/payments',
       '#/settings/promptpay',
       '#/settings/gov-copay',
@@ -64,7 +66,7 @@ describe('the hub', () => {
     await open('cashier', 'hub');
     expect(links()).not.toContain('#/settings/menu');
     expect(links()).not.toContain('#/settings/devices');
-    expect(screen.getAllByText(th['settings.hub.readOnly']).length).toBe(7);
+    expect(screen.getAllByText(th['settings.hub.readOnly']).length).toBe(8);
   });
 });
 

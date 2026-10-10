@@ -275,6 +275,12 @@ export const en = {
     'Check the bank app shows {amount} received for this order, then confirm',
   'payment.promptpay.customerSays': 'Customer says they paid',
   'payment.promptpay.notFound': 'Money not found',
+  'payment.slip.view': "View the customer's slip",
+  'payment.slip.alt': "The customer's slip",
+  'payment.slip.warning':
+    'Fake slips are common. Check the money in the bank app before you confirm.',
+  'payment.slip.none': 'The customer has not attached a slip.',
+  'payment.slip.failed': 'Could not open the slip. Try again.',
   'payment.promptpay.customer.close': 'Back to staff view (hold 1 second)',
   'payment.promptpay.customer.scanAny': 'Scan with any bank app',
   'payment.promptpay.customer.amountIncluded': 'The amount is already in the QR. Do not type it.',
@@ -899,6 +905,20 @@ export const en = {
   'settings.numbering.desc': 'Cutoff time; order numbers restart each day',
   'settings.payments.title': 'Payment methods',
   'settings.payments.desc': 'Turn cash, PromptPay, platform and other on or off',
+  'settings.lineOrdering.title': 'Ordering in LINE',
+  'settings.lineOrdering.desc': 'Always open, off, or by the delivery hours',
+  'settings.lineOrdering.hint':
+    'Controls whether customers can order in LINE. Orders already placed are not cancelled.',
+  'settings.lineOrdering.open': 'Open at any time',
+  'settings.lineOrdering.closed': 'Ordering off',
+  'settings.lineOrdering.scheduled': 'By delivery hours',
+  'settings.lineOrdering.openHint':
+    'Customers can order at any time, even outside the delivery hours.',
+  'settings.lineOrdering.closedHint': 'Customers cannot order in LINE until you turn it back on.',
+  'settings.lineOrdering.scheduledHint':
+    'Orders only during the delivery hours set under “Opening hours”.',
+  'settings.lineOrdering.hoursLink': 'Go to opening hours',
+  'settings.lineOrdering.legend': 'LINE ordering mode',
   'settings.delivery.title': 'Delivery buildings',
   'settings.delivery.desc': 'The buildings the shop delivers to',
   'settings.promptpay.title': 'PromptPay',
@@ -1238,9 +1258,8 @@ export const en = {
   'lineBot.pay.promptpay': 'Transfer by PromptPay to {promptpayId}, exactly {amount}.',
   'lineBot.pay.promptpayAfter':
     'After you transfer, tap "I have paid" or send the slip in this chat. Staff will check that the money arrived.',
-  'lineBot.pay.govCopay':
-    'Pay with Thai Chuay Thai when you collect the food at the building entrance. Staff handle it with you in person. Full price {amount}.',
-  'lineBot.pay.govCopayNote': 'The shop never sends this QR through LINE.',
+  'lineBot.pay.govCopay': "Thai Chuay Thai: we'll send you the QR shortly. Full price {amount}.",
+  'lineBot.pay.govCopayNote': 'Sending it to you in just a moment.',
   'lineBot.pay.paidButton': 'I have paid',
   'lineBot.pay.changeButton': 'Change payment method',
   'lineBot.ready.title': 'Your food is ready · {orderNo}',
@@ -1284,7 +1303,7 @@ export const en = {
     'PromptPay: transfer the order total, then tap "I have paid". Staff check the money arrived.',
   'lineBot.payInfo.cash': 'Cash: pay when you collect at the building entrance.',
   'lineBot.payInfo.govCopay':
-    'Thai Chuay Thai: pay when you collect at the building entrance; staff handle it with you (only while the scheme runs).',
+    "Thai Chuay Thai: we'll send you the QR shortly (only while the scheme runs).",
   'lineBot.payInfo.altText': 'How to pay: PromptPay, cash, Thai Chuay Thai',
   'lineBot.contact.reply': 'Got it. Staff will reply in this chat.',
   'lineBot.hours.today': 'Today we deliver {from}–{to} (to the building entrance only).',
@@ -1318,6 +1337,8 @@ export const en = {
   'liff.error.PAYMENT_NOT_PENDING':
     'You already reported a transfer, so the method cannot change. Tell staff in the chat.',
   'liff.error.QR_NOT_AVAILABLE': 'There is no QR for this order now.',
+  'liff.error.SLIP_TOO_LARGE': 'The slip picture is over 5 MB. Try a smaller one.',
+  'liff.error.SLIP_TYPE_UNSUPPORTED': 'Only JPEG, PNG or WebP pictures work.',
   'liff.error.NOT_FOUND': 'We cannot find that order.',
   'liff.error.TOO_MANY_OPEN_ORDERS':
     'You already have several open orders. Please wait until one is done.',
@@ -1358,8 +1379,7 @@ export const en = {
   'liff.checkout.payment': 'Payment method',
   'liff.checkout.method.cash': 'Cash · pay when you collect',
   'liff.checkout.method.promptpay': 'PromptPay · transfer, then tap I have paid',
-  'liff.checkout.method.gov_copay':
-    'Thai Chuay Thai · pay when you collect; staff handle it with you',
+  'liff.checkout.method.gov_copay': "Thai Chuay Thai · we'll send you the QR shortly",
   'liff.checkout.place': 'Place order · {amount}',
   'liff.checkout.placing': 'Ordering…',
   'liff.checkout.required': 'Please enter the recipient name and pick a building.',
@@ -1371,8 +1391,7 @@ export const en = {
   'liff.order.placed': 'Order placed. The shop will update you in the chat.',
   'liff.order.paymentFailed': 'Could not start the payment. Please choose a method again.',
   'liff.order.cashNote': 'Pay cash when you collect at the building entrance.',
-  'liff.order.copayNote':
-    'Thai Chuay Thai: pay when you collect at the entrance; staff handle it with you. Full price {amount}.',
+  'liff.order.copayNote': 'Sending it to you in just a moment.',
   'liff.order.claim': 'I have paid',
   'liff.order.claimed': 'Reported. Waiting for staff to check the money arrived.',
   'liff.order.claiming': 'Sending…',
@@ -1408,7 +1427,7 @@ export const en = {
   'liff.method.title.gov_copay': 'Thai Chuay Thai Plus',
   'liff.method.sub.promptpay': 'Scan the QR after ordering · the shop confirms',
   'liff.method.sub.cash': 'Pay staff at the building entrance',
-  'liff.method.sub.gov_copay': 'Pay staff when you collect · staff check your eligibility',
+  'liff.method.sub.gov_copay': "We'll send you the QR shortly",
   'liff.order.steps': 'Order progress',
   'liff.order.step.ordered': 'Ordered',
   'liff.order.step.pay': 'Payment',
@@ -1423,5 +1442,6 @@ export const en = {
   'liff.qr.scanHelp':
     'Scan with your bank app, transfer the exact amount, then tap the button below',
   'liff.qr.save': 'Save QR',
+  'liff.receipt.download': 'Download receipt',
   'liff.qr.attachSlip': 'Attach slip',
 } as const satisfies Record<MessageKey, string>;

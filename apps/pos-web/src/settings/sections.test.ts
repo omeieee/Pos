@@ -28,6 +28,7 @@ describe('who sees which card', () => {
       numbering: true,
       payments: true,
       delivery: true,
+      'line-ordering': true,
       promptpay: false,
       'gov-copay': false,
     });
@@ -37,7 +38,7 @@ describe('who sees which card', () => {
     const entries = hubEntries(permissionsOf('cashier'));
     expect(entries.map((e) => e.section.id)).not.toContain('devices');
     expect(entries.map((e) => e.section.id)).not.toContain('staff');
-    expect(entries.length).toBe(7);
+    expect(entries.length).toBe(8);
     expect(entries.some((e) => e.canEdit)).toBe(false);
   });
 

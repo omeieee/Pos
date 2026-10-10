@@ -19,6 +19,8 @@ import type {
   DeliverySettings,
   GovCopayDto,
   GovCopayPatchInput,
+  LineOrdering,
+  LineOrderingPatchInput,
   NumberingPatchInput,
   OpeningHours,
   OpeningHoursPatchInput,
@@ -42,6 +44,7 @@ export interface SettingsResources {
   numbering: { value: BusinessDaySettings; input: NumberingPatchInput };
   payments: { value: PaymentsSettings; input: PaymentsPatchInput };
   delivery: { value: DeliverySettings; input: DeliveryPatchInput };
+  lineOrdering: { value: LineOrdering; input: LineOrderingPatchInput };
   /** Masked, always: the ID in clear never reaches the store (the client reduces it). */
   promptpay: { value: PromptpayMasked | null; input: PromptpayPatchInput };
   /** The saved scheme, or null when none was ever saved. Owner only. */
@@ -114,6 +117,7 @@ const initial = (): SettingsState => ({
     numbering: emptySlot(),
     payments: emptySlot(),
     delivery: emptySlot(),
+    lineOrdering: emptySlot(),
     promptpay: emptySlot(),
     copay: emptySlot(),
   },
@@ -154,6 +158,7 @@ export function createSettingsStore(deps: SettingsDeps): SettingsStore {
     numbering: resource(s.numbering),
     payments: resource(s.payments),
     delivery: resource(s.deliveryList),
+    lineOrdering: resource(s.lineOrdering),
     // Owner only, and the step-up comes first.
     promptpay: resource(s.promptpayMasked, true),
     // The scheme answers `{ scheme }`; its version is the row's (0: none saved yet).

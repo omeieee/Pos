@@ -12,6 +12,7 @@ const FEED_KEY: Record<ResourceName, string> = {
   numbering: 'business_day',
   payments: 'payment_methods',
   delivery: 'delivery',
+  lineOrdering: 'line_ordering',
   promptpay: 'promptpay',
   copay: 'gov_copay',
 };

@@ -47,6 +47,8 @@ import {
   invitePreviewInputSchema,
   invitePreviewResponseSchema,
   itemDtoSchema,
+  lineOrderingPatchInputSchema,
+  lineOrderingSchema,
   listDevicesResponseSchema,
   listInvitesResponseSchema,
   listOrdersQuerySchema,
@@ -836,6 +838,11 @@ export function createApiClient(options: ApiClientOptions) {
     ),
     numbering: settingsResource('numbering', businessDaySettingsSchema, numberingPatchInputSchema),
     payments: settingsResource('payments', paymentsSettingsSchema, paymentsPatchInputSchema),
+    lineOrdering: settingsResource(
+      'line-ordering',
+      lineOrderingSchema,
+      lineOrderingPatchInputSchema,
+    ),
     promptpayMasked,
     /** The ไทยช่วยไทย scheme (`scheme` null: none saved yet). Owner only, with a step-up. */
     govCopay: {
@@ -974,6 +981,32 @@ export function createApiClient(options: ApiClientOptions) {
         })
       ).data;
       return { ...link, url: joinUrl(options.baseUrl, link.url) };
+    },
+
+    /**
+     * The customer's slip picture, as a Blob. It is fetched with the session header (an `<img>`
+     * cannot send one), shown from a blob URL and never stored. A missing slip is `SLIP_NOT_FOUND`.
+     */
+    slip: async (id: string): Promise<Blob> => {
+      const bearer = options.getSessionToken();
+      if (!bearer) throw new ApiClientError('UNAUTHENTICATED', { status: 401 });
+      const headers: Record<string, string> = { Authorization: `Bearer ${bearer}` };
+      const deviceToken = options.getDeviceToken();
+      if (deviceToken) headers['X-Device-Token'] = deviceToken;
+      let response: Response;
+      try {
+        response = await doFetch(buildUrl(`${paymentPath(id)}/slip`), {
+          method: 'GET',
+          headers,
+          credentials: 'omit',
+          cache: 'no-store',
+          referrerPolicy: 'no-referrer',
+        });
+      } catch {
+        throw new ApiClientError('NETWORK');
+      }
+      if (!response.ok) throw errorFromResponse(response.status, await response.text());
+      return response.blob();
     },
   };
 

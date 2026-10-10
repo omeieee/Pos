@@ -146,12 +146,14 @@ export function MenuScreen({
         {info && !info.delivery.open ? (
           <div style={s('margin-bottom:12px')}>
             <Notice tone="warn" icon="clock">
-              {info.delivery.window
-                ? tr('liff.menu.closed', {
-                    from: clock(info.delivery.window.openMinute),
-                    to: clock(info.delivery.window.closeMinute),
-                  })
-                : tr('liff.menu.closedToday')}
+              {info.delivery.mode === 'closed'
+                ? tr('liff.menu.paused')
+                : info.delivery.window
+                  ? tr('liff.menu.closed', {
+                      from: clock(info.delivery.window.openMinute),
+                      to: clock(info.delivery.window.closeMinute),
+                    })
+                  : tr('liff.menu.closedToday')}
             </Notice>
           </div>
         ) : null}

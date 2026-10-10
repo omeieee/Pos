@@ -30,6 +30,7 @@ import {
   businessDaySettingsSchema,
   DEFAULT_CUTOFF_MINUTES,
   DEFAULT_DELIVERY_SETTINGS,
+  DEFAULT_LINE_ORDERING,
   DEFAULT_OPENING_HOURS,
   DEFAULT_SHOP_SETTINGS,
   type DeliverySettings,
@@ -40,6 +41,9 @@ import {
   govCopayDtoSchema,
   govCopayPatchInputSchema,
   govCopaySchemeSchema,
+  lineOrderingOpenAt,
+  lineOrderingPatchInputSchema,
+  lineOrderingSchema,
   maskPromptpayId,
   numberingPatchInputSchema,
   type OpeningHours,
@@ -101,6 +105,15 @@ export const RESOURCES: readonly Resource[] = [
     schema: openingHoursSchema,
     defaults: DEFAULT_OPENING_HOURS,
     patch: openingHoursPatchInputSchema,
+    editPermission: 'settings.edit',
+  },
+  {
+    // Whether LINE takes orders: always, never, or by the delivery hours (the default).
+    route: 'line-ordering',
+    key: 'line_ordering',
+    schema: lineOrderingSchema,
+    defaults: DEFAULT_LINE_ORDERING,
+    patch: lineOrderingPatchInputSchema,
     editPermission: 'settings.edit',
   },
   {
@@ -182,6 +195,13 @@ export async function currentDeliverySettings(db: Db): Promise<DeliverySettings>
 export async function currentOpeningHours(db: Db): Promise<OpeningHours> {
   const row = await getSettingRow(db, 'opening_hours');
   return row ? openingHoursSchema.parse(row.value) : DEFAULT_OPENING_HOURS;
+}
+
+/** Whether LINE takes an order now, by the owner's switch and (when scheduled) the delivery hours. */
+export async function lineOrderingNow(db: Db, instant: Date) {
+  const row = await getSettingRow(db, 'line_ordering');
+  const { mode } = row ? lineOrderingSchema.parse(row.value) : DEFAULT_LINE_ORDERING;
+  return lineOrderingOpenAt(mode, await currentOpeningHours(db), instant);
 }
 
 /** The payment methods the shop takes now: the saved switches, or the defaults when never saved. */

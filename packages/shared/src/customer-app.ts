@@ -61,6 +61,8 @@ export const checkoutInfoSchema = z.object({
   delivery: z.object({
     open: z.boolean(),
     window: z.object({ openMinute: z.number().int(), closeMinute: z.number().int() }).nullable(),
+    /** The owner's LINE ordering switch; absent from an older server (the hours then decide). */
+    mode: z.enum(['open', 'closed', 'scheduled']).optional(),
   }),
   /** The buildings the shop delivers to (owner-editable list). */
   buildings: z.array(z.string()),

@@ -209,6 +209,43 @@ export function serviceOpenAt(
   return { open: minute >= window.openMinute && minute < window.closeMinute, window };
 }
 
+// ---------- LINE ordering switch ----------
+
+export const LINE_ORDERING_MODES = ['open', 'closed', 'scheduled'] as const;
+export type LineOrderingMode = (typeof LINE_ORDERING_MODES)[number];
+const lineOrderingModeSchema = z.enum(LINE_ORDERING_MODES);
+
+/**
+ * Whether the LINE channel takes orders (owner): `open` at any time, `closed` (ordering off), or
+ * `scheduled`, which follows the delivery opening hours above. Never saved means `scheduled`,
+ * the behaviour before this setting existed.
+ */
+export const lineOrderingSchema = z.object({ mode: lineOrderingModeSchema.default('scheduled') });
+export type LineOrdering = z.infer<typeof lineOrderingSchema>;
+
+export const DEFAULT_LINE_ORDERING: LineOrdering = { mode: 'scheduled' };
+
+export const lineOrderingPatchInputSchema = z.strictObject({
+  expectedVersion,
+  mode: lineOrderingModeSchema,
+});
+export type LineOrderingPatchInput = z.infer<typeof lineOrderingPatchInputSchema>;
+
+/**
+ * Whether LINE takes an order at this instant. `window` is today's delivery window only when the
+ * hours decide (`scheduled`); `open` and `closed` have none to show.
+ */
+export function lineOrderingOpenAt(
+  mode: LineOrderingMode,
+  hours: OpeningHours,
+  instant: Date,
+  timeZone: string = SHOP_TIME_ZONE,
+): { open: boolean; window: DayWindow | null; mode: LineOrderingMode } {
+  if (mode === 'open') return { open: true, window: null, mode };
+  if (mode === 'closed') return { open: false, window: null, mode };
+  return { ...serviceOpenAt(hours, instant, 'delivery', timeZone), mode };
+}
+
 // ---------- Numbering and business day ----------
 
 export const numberingPatchInputSchema = z

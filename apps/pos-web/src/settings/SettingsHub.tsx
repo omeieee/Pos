@@ -14,6 +14,7 @@ const CHIP: Record<SectionId | 'menu', { icon: GiName; color: string }> = {
   hours: { icon: 'clock', color: '#5b6fd6' },
   numbering: { icon: 'receipt', color: '#7a5af5' },
   delivery: { icon: 'building', color: '#c7691a' },
+  'line-ordering': { icon: 'chat', color: '#1b7a43' },
   payments: { icon: 'cash', color: '#1b7a43' },
   promptpay: { icon: 'qr', color: '#2457b8' },
   'gov-copay': { icon: 'bank', color: '#c7691a' },
@@ -30,7 +31,7 @@ const GROUPS: readonly {
   {
     id: 'shop',
     titleKey: 'settings.group.shop',
-    rows: ['menu', 'shop', 'hours', 'numbering', 'delivery'],
+    rows: ['menu', 'shop', 'hours', 'numbering', 'delivery', 'line-ordering'],
   },
   {
     id: 'payments',

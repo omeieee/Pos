@@ -6,6 +6,7 @@ import { CopayForm } from './CopayForm.tsx';
 import { DeliveryForm } from './DeliveryForm.tsx';
 import { DevicesScreen } from './DevicesScreen.tsx';
 import { HoursForm } from './HoursForm.tsx';
+import { LineOrderingForm } from './LineOrderingForm.tsx';
 import { NumberingForm } from './NumberingForm.tsx';
 import { PaymentsForm } from './PaymentsForm.tsx';
 import { PromptpayForm } from './PromptpayForm.tsx';
@@ -57,6 +58,12 @@ function SectionBody({ def, editable }: { def: SectionDef; editable: boolean }) 
       return (
         <SettingSection name="delivery" editable={editable}>
           {(p) => <DeliveryForm {...p} />}
+        </SettingSection>
+      );
+    case 'line-ordering':
+      return (
+        <SettingSection name="lineOrdering" editable={editable}>
+          {(p) => <LineOrderingForm {...p} />}
         </SettingSection>
       );
     case 'promptpay':

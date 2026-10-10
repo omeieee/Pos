@@ -2,9 +2,13 @@ import { describe, expect, test } from 'vitest';
 import { govCopaySchemeSchema } from './gov-copay.ts';
 import {
   DEFAULT_DELIVERY_SETTINGS,
+  DEFAULT_LINE_ORDERING,
   deliveryPatchInputSchema,
   deliverySettingsSchema,
   govCopayPatchInputSchema,
+  lineOrderingOpenAt,
+  lineOrderingPatchInputSchema,
+  lineOrderingSchema,
   maskPromptpayId,
   numberingPatchInputSchema,
   openingHoursPatchInputSchema,
@@ -315,5 +319,59 @@ describe('delivery buildings (settings.delivery)', () => {
     expect(deliveryPatchInputSchema.safeParse({ expectedVersion: 1, buildings: [] }).success).toBe(
       false,
     );
+  });
+});
+
+describe('LINE ordering switch', () => {
+  const hours = openingHoursSchema.parse({
+    storefront: { openMinute: 660, closeMinute: 1380 },
+    delivery: { openMinute: 780, closeMinute: 1380 },
+  });
+  // 2026-10-07 in Bangkok (UTC+7): 03:00, 12:00 (before delivery opens at 13:00), 15:00.
+  const night = new Date('2026-10-06T20:00:00Z');
+  const noon = new Date('2026-10-07T05:00:00Z');
+  const afternoon = new Date('2026-10-07T08:00:00Z');
+
+  test('a never-saved setting follows the delivery hours, as LINE ordering did before it existed', () => {
+    expect(DEFAULT_LINE_ORDERING).toEqual({ mode: 'scheduled' });
+    expect(lineOrderingSchema.parse({})).toEqual({ mode: 'scheduled' });
+  });
+
+  test('scheduled gives exactly what the delivery hours give', () => {
+    for (const at of [night, noon, afternoon]) {
+      const expected = serviceOpenAt(hours, at, 'delivery');
+      expect(lineOrderingOpenAt('scheduled', hours, at)).toEqual({
+        ...expected,
+        mode: 'scheduled',
+      });
+    }
+  });
+
+  test('open takes orders at any time, with no window to show', () => {
+    expect(lineOrderingOpenAt('open', hours, night)).toEqual({
+      open: true,
+      window: null,
+      mode: 'open',
+    });
+    expect(lineOrderingOpenAt('open', hours, noon).open).toBe(true);
+  });
+
+  test('closed takes no orders, even inside the delivery hours', () => {
+    expect(lineOrderingOpenAt('closed', hours, afternoon)).toEqual({
+      open: false,
+      window: null,
+      mode: 'closed',
+    });
+  });
+
+  test('a patch needs the version and a known mode', () => {
+    expect(
+      lineOrderingPatchInputSchema.safeParse({ expectedVersion: 0, mode: 'open' }).success,
+    ).toBe(true);
+    expect(lineOrderingPatchInputSchema.safeParse({ expectedVersion: 0 }).success).toBe(false);
+    expect(lineOrderingPatchInputSchema.safeParse({ expectedVersion: 0, mode: 'x' }).success).toBe(
+      false,
+    );
+    expect(lineOrderingPatchInputSchema.safeParse({ mode: 'open' }).success).toBe(false);
   });
 });

@@ -114,7 +114,9 @@ beforeEach(async () => {
   newDay();
   await setPromptpay(PHONE);
   await setScheme(true);
-  await h.client.query("delete from settings where key in ('payment_methods', 'opening_hours')");
+  await h.client.query(
+    "delete from settings where key in ('payment_methods', 'opening_hours', 'line_ordering')",
+  );
   // Earlier tests' orders must not fill the per-customer limit of open orders.
   await h.client.query(
     "update orders set status = 'completed' where channel = 'line' and status not in ('completed', 'cancelled')",
@@ -383,6 +385,51 @@ describe('placing an order', () => {
       ],
     );
     expect((await order(token)).res.statusCode).toBe(201);
+  });
+
+  test("the owner's LINE switch: open at any time, off, or by the delivery hours", async () => {
+    const setMode = (mode: string) =>
+      h.client.query(
+        `insert into settings (key, value, updated_by) values ('line_ordering', $1::jsonb, $2)
+         on conflict (key) do update set value = $1::jsonb`,
+        [JSON.stringify({ mode }), owner.staffId],
+      );
+    newDay(3); // 10:00 Bangkok: delivery opens at 13:00
+    const token = await customer(TOKEN_A);
+
+    await setMode('open');
+    expect((await call('GET', '/v1/app/checkout', token)).json().delivery).toEqual({
+      open: true,
+      window: null,
+      mode: 'open',
+    });
+    expect((await order(token)).res.statusCode).toBe(201); // outside the delivery hours
+
+    await setMode('closed');
+    const refused = await order(token);
+    expect(refused.res.statusCode).toBe(409);
+    expect(refused.json).toMatchObject({ code: 'SHOP_CLOSED', details: { mode: 'closed' } });
+    expect((await call('GET', '/v1/app/checkout', token)).json().delivery).toMatchObject({
+      open: false,
+      mode: 'closed',
+    });
+
+    await setMode('scheduled');
+    expect((await order(token)).res.statusCode).toBe(409); // 10:00 is before 13:00
+  });
+
+  test('an order accepted just before the LINE switch went off still replays', async () => {
+    const token = await customer(TOKEN_A);
+    const payload = body();
+    expect((await call('POST', '/v1/app/orders', token, payload)).statusCode).toBe(201);
+    await h.client.query(
+      `insert into settings (key, value, updated_by) values ('line_ordering', '{"mode":"closed"}'::jsonb, $1)`,
+      [owner.staffId],
+    );
+    const again = await call('POST', '/v1/app/orders', token, payload);
+    expect(again.statusCode).toBe(200);
+    expect(again.json().replay).toBe(true);
+    expect((await order(token)).res.statusCode).toBe(409); // a new order is refused
   });
 
   test('PromptPay starts a pending payment for exactly the order total; cash records nothing', async () => {
