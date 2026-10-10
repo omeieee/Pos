@@ -1,6 +1,7 @@
 import type { LineClient, LineMessage } from '@sds/line';
 import { PRIVACY_NOTICE_VERSION } from '@sds/shared';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
+import { createMemorySlipStore } from '../slips/store.ts';
 import { createHarness, type Harness } from '../test-support/harness.ts';
 import { LINE_EVENT_RETRY, retryLineEvents } from './retry.ts';
 import { createLineRuntime, type LineRuntime } from './runtime.ts';
@@ -31,7 +32,13 @@ afterAll(async () => {
   await h.close();
 });
 
-const deps = () => ({ db: h.db, events: h.bus, now: h.clock.now, line: runtime });
+const deps = () => ({
+  db: h.db,
+  events: h.bus,
+  now: h.clock.now,
+  line: runtime,
+  slips: createMemorySlipStore(),
+});
 const minutesAgo = (m: number) => new Date(h.clock.now().getTime() - m * 60_000);
 
 let n = 0;

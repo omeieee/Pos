@@ -95,6 +95,7 @@ describe('retention days', () => {
       orderPersonalData: 30,
       recipientBook: 30,
       staffInvites: 30,
+      slipImages: 90,
     });
   });
 });
@@ -420,5 +421,71 @@ describe('retention queries send no Date parameter to the driver', () => {
     await retention.expireEmptyLineCustomersBatch(logged, args);
     expect(seen.length).toBeGreaterThan(0);
     expect(seen.filter((value) => value instanceof Date)).toEqual([]);
+  });
+});
+
+describe('slip images', () => {
+  const cutoff = () => new Date(NOW.getTime() - RETENTION_DAYS.slipImages * 86_400_000);
+  const KEY = (n: number) => `${String(n).padStart(32, 'k')}`;
+
+  async function payment(args: { status: string; updatedDaysAgo: number; key: string | null }) {
+    const orderId = await order({});
+    // The sync trigger stamps updated_at; replica mode skips it so the row can be made old.
+    await client.query("set session_replication_role = 'replica'");
+    const [row] = await q<{ id: string }>(
+      `insert into payments (order_id, method, status, amount_satang, slip_image_key, void_reason, client_request_id, updated_at)
+       values ($1, 'promptpay', $2, 6500, $3, $4, gen_random_uuid(), $5) returning id`,
+      [
+        orderId,
+        args.status,
+        args.key,
+        args.status === 'claimed' ? null : 'test',
+        daysAgo(args.updatedDaysAgo),
+      ],
+    );
+    await client.query("set session_replication_role = 'origin'");
+    return row?.id as string;
+  }
+
+  test('only an ended payment that still has a key and is older than 90 days is due', async () => {
+    const old = await payment({ status: 'cancelled', updatedDaysAgo: 91, key: KEY(1) });
+    await payment({ status: 'cancelled', updatedDaysAgo: 89, key: KEY(2) });
+    await payment({ status: 'claimed', updatedDaysAgo: 200, key: KEY(3) });
+    await payment({ status: 'cancelled', updatedDaysAgo: 200, key: null });
+    const due = await retention.findDueSlips(db, { before: cutoff(), limit: 50 });
+    expect(due).toEqual([{ id: old, key: KEY(1) }]);
+  });
+
+  test('clearing the key is one audited batch with no key in it, and a changed key is left alone', async () => {
+    const a = await payment({ status: 'cancelled', updatedDaysAgo: 120, key: KEY(4) });
+    const b = await payment({ status: 'cancelled', updatedDaysAgo: 120, key: KEY(5) });
+    await q('update payments set slip_image_key = $2 where id = $1', [b, KEY(6)]);
+    const before = (
+      await q<{ n: string }>(
+        "select count(*) n from audit_log where action = 'retention.slips.delete'",
+      )
+    )[0];
+    const cleared = await retention.clearSlipKeys(db, {
+      slips: [
+        { id: a, key: KEY(4) },
+        { id: b, key: KEY(5) },
+      ],
+      now: NOW,
+    });
+    expect(cleared).toBe(1);
+    expect(
+      (await q<{ k: string | null }>('select slip_image_key k from payments where id = $1', [a]))[0]
+        ?.k,
+    ).toBeNull();
+    expect(
+      (await q<{ k: string | null }>('select slip_image_key k from payments where id = $1', [b]))[0]
+        ?.k,
+    ).toBe(KEY(6));
+    const rows = await q<{ after: unknown }>(
+      "select after from audit_log where action = 'retention.slips.delete' order by at",
+    );
+    expect(rows.length).toBe(Number(before?.n) + 1);
+    expect(JSON.stringify(rows.at(-1)?.after)).toBe(JSON.stringify({ deleted: 1, afterDays: 90 }));
+    expect(await retention.clearSlipKeys(db, { slips: [], now: NOW })).toBe(0);
   });
 });

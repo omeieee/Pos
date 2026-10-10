@@ -31,7 +31,11 @@ services:
       LINE_LIFF_ID: ${LINE_LIFF_ID:-}
       PRIVACY_CONTROLLER_NAME: ${PRIVACY_CONTROLLER_NAME:-}
       PRIVACY_CONTACT_EMAIL: ${PRIVACY_CONTACT_EMAIL:-}
+      SLIP_DIR: /data/slips
       GIT_SHA: ${GIT_SHA:-unknown}
+    # Slip images (D-24) live on the VM disk in a named volume, so a redeploy keeps them.
+    volumes:
+      - slips_data:/data/slips
     # Reachable only by caddy on the internal network; nothing published.
     expose:
       - "3000"
@@ -135,3 +139,4 @@ networks:
 volumes:
   caddy_data: {}
   caddy_config: {}
+  slips_data: {}

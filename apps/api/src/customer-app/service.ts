@@ -29,7 +29,6 @@ import {
   PRIVACY_NOTICE_VERSION,
   type PrivacyAckResponse,
   type SelectPaymentInput,
-  serviceOpenAt,
 } from '@sds/shared';
 import { z } from 'zod';
 import type { AuthContext, RequestMeta } from '../auth/service.ts';
@@ -39,15 +38,16 @@ import {
   type CustomerActor,
   changePaymentMethod,
   createPayment,
+  type MoveInput,
   movePayment,
   paymentQrUrl,
   withdrawPendingPayment,
 } from '../payments/service.ts';
 import {
   currentDeliverySettings,
-  currentOpeningHours,
   currentPaymentsSettings,
   currentPromptpayId,
+  lineOrderingNow,
 } from '../settings/service.ts';
 import type { CoreContext } from '../tx.ts';
 import { CUSTOMER_SESSION_SECONDS, type CustomerPrincipal, signCustomerToken } from './session.ts';
@@ -116,7 +116,7 @@ export async function checkoutInfo(
   customer: CustomerPrincipal,
 ): Promise<CheckoutInfo> {
   const now = ctx.now();
-  const open = serviceOpenAt(await currentOpeningHours(ctx.db), now, 'delivery');
+  const open = await lineOrderingNow(ctx.db, now);
   const recipient = await ordersRepo.latestRecipientForCustomer(ctx.db, customer.customerId);
   return {
     delivery: open,
@@ -247,10 +247,11 @@ export async function placeOrder(
         'Please read and accept the privacy notice first',
       );
     }
-    const open = serviceOpenAt(await currentOpeningHours(ctx.db), now, 'delivery');
+    const open = await lineOrderingNow(ctx.db, now);
     if (!open.open) {
-      throw conflict('SHOP_CLOSED', 'The shop is not delivering right now', {
+      throw conflict('SHOP_CLOSED', 'The shop is not taking LINE orders right now', {
         window: open.window,
+        mode: open.mode,
       });
     }
     await assertMethodOffered(ctx.db, input.paymentMethod);
@@ -370,6 +371,7 @@ export async function claimPayment(
   customerId: string,
   orderId: string,
   meta: RequestMeta,
+  slip?: MoveInput['slip'],
 ): Promise<MyOrder> {
   const order = await ownOrder(ctx.db, customerId, orderId);
   const payments = await paymentsRepo.listPaymentsForOrder(ctx.db, order.id);
@@ -377,7 +379,7 @@ export async function claimPayment(
   if (!waiting || waiting.method !== 'promptpay') {
     throw conflict('NO_PAYMENT_TO_CLAIM', 'There is no PromptPay payment waiting for this order');
   }
-  await movePayment(ctx, actorOf(customerId), waiting.id, 'claim', {}, meta);
+  await movePayment(ctx, actorOf(customerId), waiting.id, 'claim', slip ? { slip } : {}, meta);
   return viewOrder(ctx, await ownOrder(ctx.db, customerId, orderId));
 }
 

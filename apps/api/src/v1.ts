@@ -18,6 +18,7 @@ import { registerOrderRoutes } from './orders/routes.ts';
 import { registerPaymentRoutes } from './payments/routes.ts';
 import { type RealtimeOptions, registerRealtimeRoutes, setupRealtime } from './realtime/routes.ts';
 import { registerSettingsRoutes } from './settings/routes.ts';
+import { createMemorySlipStore, type SlipStore } from './slips/store.ts';
 
 export interface V1Deps {
   db: Db;
@@ -31,6 +32,8 @@ export interface V1Deps {
   realtime?: RealtimeOptions;
   /** LINE secrets and client. Omitted: the webhook answers 503 and nothing is sent. */
   line?: LineRuntime;
+  /** Where slip images live (D-24). Omitted: in memory, which only tests want. */
+  slips?: SlipStore;
 }
 
 /**
@@ -99,6 +102,7 @@ export async function registerV1(app: FastifyInstance, deps: V1Deps): Promise<vo
   const context: ModuleContext = { auth, guard: createGuard(auth) };
   const lineRuntime =
     deps.line ?? createLineRuntime({ channelSecret: undefined, channelAccessToken: undefined });
+  const slips = deps.slips ?? createMemorySlipStore();
   // One push per LINE order when staff complete it, through the quota-aware sender.
   registerCompletionPush({ db: deps.db, runtime: lineRuntime, events: deps.events, now: auth.now });
   // The WebSocket plugin lives on the root instance, ahead of the /v1 scope that declares /v1/ws.
@@ -134,15 +138,20 @@ export async function registerV1(app: FastifyInstance, deps: V1Deps): Promise<vo
         prefix: '/settings',
       });
       await v1.register(
-        (scope) => registerLineRoutes(scope, context.auth, context.guard, lineRuntime),
+        (scope) => registerLineRoutes(scope, context.auth, context.guard, lineRuntime, slips),
         { prefix: '/line' },
       );
       // The customer app (LIFF): its own session and guard, never the staff ones.
-      await v1.register((scope) => registerCustomerAppRoutes(scope, context.auth, lineRuntime), {
-        prefix: '/app',
-      });
+      await v1.register(
+        (scope) => registerCustomerAppRoutes(scope, context.auth, lineRuntime, slips),
+        {
+          prefix: '/app',
+        },
+      );
       // Payments: /v1/orders/:id/payments and /v1/payments/... (no prefix of its own).
-      await v1.register((scope) => registerPaymentRoutes(scope, context.auth, context.guard));
+      await v1.register((scope) =>
+        registerPaymentRoutes(scope, context.auth, context.guard, slips),
+      );
       // Device and staff management: /v1/devices and /v1/staff (no prefix of its own).
       await v1.register((scope) => registerAdminRoutes(scope, context.auth, context.guard));
       // Catch-up sync and the WebSocket: /v1/sync and /v1/ws (no prefix of its own).

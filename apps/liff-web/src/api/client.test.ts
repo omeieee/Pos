@@ -5,6 +5,7 @@ interface Call {
   url: string;
   method: string;
   auth: string | null;
+  type: string | null;
   body: string;
 }
 
@@ -15,6 +16,7 @@ function server(handler: (call: Call, n: number) => { status: number; body?: unk
       url: String(url),
       method: init?.method ?? 'GET',
       auth: new Headers(init?.headers).get('authorization'),
+      type: new Headers(init?.headers).get('content-type'),
       body: String(init?.body ?? ''),
     };
     calls.push(call);
@@ -133,5 +135,22 @@ describe('the customer API client', () => {
     await api.selectPayment('order-1', 'cash');
     const body = JSON.parse(calls.at(-1)?.body ?? '{}') as Record<string, unknown>;
     expect(Object.keys(body).sort()).toEqual(['clientRequestId', 'method']);
+  });
+
+  test('sends a slip as the raw picture with its own content type', async () => {
+    const { calls, fetcher } = server((call) =>
+      call.url.endsWith('/session') ? session('tok-1') : { status: 200, body: { id: 'o' } },
+    );
+    const api = createApi({
+      baseUrl: 'https://api.example.test',
+      credential: () => ({ idToken: 'liff-id-token' }),
+      fetch: fetcher,
+    });
+    await api.attachSlip('order-1', new Blob(['x'], { type: 'image/png' }));
+    const slip = calls[calls.length - 1];
+    expect(slip?.url).toBe('https://api.example.test/v1/app/orders/order-1/slip');
+    expect(slip?.method).toBe('POST');
+    expect(slip?.type).toBe('image/png');
+    expect(slip?.auth).toBe('Bearer tok-1');
   });
 });

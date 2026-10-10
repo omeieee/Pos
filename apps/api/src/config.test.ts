@@ -24,7 +24,13 @@ describe('loadConfig', () => {
         liffId: undefined,
       },
       privacy: { controller: 'omeie', contactEmail: 'omeza25482548@gmail.com' },
+      slipDir: '/data/slips',
     });
+  });
+
+  test('the slip directory comes from SLIP_DIR, empty means the default', () => {
+    expect(loadConfig({ ...base, SLIP_DIR: '/var/slips' }).slipDir).toBe('/var/slips');
+    expect(loadConfig({ ...base, SLIP_DIR: '' }).slipDir).toBe('/data/slips');
   });
 
   test('the privacy notice controller and contact come from the environment, empty means the default', () => {

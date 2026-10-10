@@ -83,6 +83,7 @@ export function createApi(options: ApiOptions) {
       ...init,
       headers: {
         ...(init.body === undefined ? {} : { 'content-type': 'application/json' }),
+        ...(init.headers as Record<string, string> | undefined),
         authorization: `Bearer ${session?.token ?? ''}`,
       },
     });
@@ -119,6 +120,13 @@ export function createApi(options: ApiOptions) {
         clientRequestId: crypto.randomUUID(),
       }),
     claim: (id: string) => post<MyOrder>(`/v1/app/orders/${id}/claim`),
+    /** The slip picture as the raw body; the shop still confirms the money by hand. */
+    attachSlip: (id: string, file: Blob) =>
+      authed<MyOrder>(`/v1/app/orders/${id}/slip`, {
+        method: 'POST',
+        body: file,
+        headers: { 'content-type': file.type },
+      }),
     /** A fresh link every time: it lasts five minutes. `url` is relative to the API origin. */
     qr: (id: string) => authed<MyQrResponse>(`/v1/app/orders/${id}/qr`),
     /** Where an `<img>` loads the QR picture from. */

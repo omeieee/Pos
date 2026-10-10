@@ -4,6 +4,7 @@ import {
   expireEmptyLineCustomers,
   expireRecipients,
   purgeLineEvents,
+  purgeSlips,
   purgeStaffInvites,
 } from './retention.ts';
 
@@ -33,4 +34,6 @@ export const JOBS: readonly JobDefinition[] = [
   { name: 'retention-line-customers', cron: '55 3 * * *', run: expireEmptyLineCustomers },
   // Invites of no use any more (they hold an e-mail).
   { name: 'retention-staff-invites', cron: '58 3 * * *', run: purgeStaffInvites },
+  // Transfer slip pictures, 90 days after the payment was confirmed or cancelled (file first, then the key).
+  { name: 'retention-slips', cron: '5 4 * * *', run: purgeSlips },
 ];

@@ -8,7 +8,7 @@ import {
   orderStatusCard,
   payInfoCard,
   paymentInstructions,
-  readyWithReceipt,
+  readyCard,
   receiptCard,
 } from './flex.ts';
 import { parsePostback } from './postback.ts';
@@ -96,8 +96,7 @@ describe('paymentInstructions', () => {
     const json = JSON.stringify(msg);
     expect(json).not.toMatch(/https?:/i);
     expect(json).not.toMatch(/qr\.png/i);
-    expect(allText(msg)).toContain('ทางเข้าตึก');
-    expect(allText(msg)).toContain('ไม่ส่ง QR ทาง LINE');
+    expect(allText(msg)).toContain('เดี๋ยวจะส่ง QR ให้นะคะ');
   });
 
   test('cash: pay at hand-over, no image', () => {
@@ -112,21 +111,14 @@ describe('paymentInstructions', () => {
   });
 });
 
-describe('readyWithReceipt', () => {
-  const msg = readyWithReceipt({
-    orderNo: 'L-012',
-    building: 'B1',
-    items,
-    totalSatang: 12000,
-    methodLabel: 'พร้อมเพย์',
-  });
+describe('readyCard', () => {
+  const msg = readyCard({ orderNo: 'L-012', building: 'B1' });
   test('snapshot', () => expect(msg).toMatchSnapshot());
-  test('carries ready, every item, the total and the method', () => {
+  test('says ready with the order number and has no receipt', () => {
     const text = allText(msg);
     expect(text).toContain('อาหารพร้อมแล้ว');
-    expect(text).toContain('ก๋วยเตี๋ยวต้มยำ');
-    expect(text).toContain('฿120.00');
-    expect(text).toContain('พร้อมเพย์');
+    expect(text).toContain('L-012');
+    expect(text).not.toContain('ใบเสร็จ');
     expect(msg.altText).toContain('L-012');
   });
 });
@@ -200,7 +192,7 @@ describe('orderStatusCard, menuLink, payInfoCard, receiptCard', () => {
     const msg = payInfoCard();
     expect(msg).toMatchSnapshot();
     expect(allText(msg)).toContain('ไทยช่วยไทย');
-    expect(JSON.stringify(msg)).not.toMatch(/https?:|image|qr/i);
+    expect(JSON.stringify(msg)).not.toMatch(/https?:|"image"|qr\.png/i);
   });
   test('the receipt card carries items, total and method', () => {
     const msg = receiptCard({

@@ -9,6 +9,9 @@ import type { AuthContext } from '../auth/service.ts';
 import { ApiError } from '../errors.ts';
 import { LiffUnavailableError } from '../line/liff-verify.ts';
 import type { LineRuntime } from '../line/runtime.ts';
+import { MAX_SLIP_BYTES, SLIP_CONTENT_TYPES } from '../slips/image.ts';
+import { attachSlip } from '../slips/service.ts';
+import type { SlipStore } from '../slips/store.ts';
 import { parse } from '../validate.ts';
 import {
   acknowledgePrivacy,
@@ -36,12 +39,14 @@ const orderIdOf = (request: FastifyRequest) => parse(orderIdParamSchema, request
  *   in the session. A staff session does not work here and a customer session does not work on
  *   the staff routes. Limits: per address, and per customer on top (a per-customer ceiling that a
  *   shared mobile address cannot use up for everyone).
+ * - `POST /orders/:id/slip` takes the slip picture as the body and claims the payment with it.
  * - Answers are personal data (names, buildings) and money state: never cached.
  */
 export async function registerCustomerAppRoutes(
   app: FastifyInstance,
   ctx: AuthContext,
   runtime: LineRuntime,
+  slips: SlipStore,
 ): Promise<void> {
   if (typeof app.rateLimit !== 'function') {
     throw new Error('the customer routes need @fastify/rate-limit to be registered first');
@@ -148,6 +153,44 @@ export async function registerCustomerAppRoutes(
   app.post('/orders/:id/claim', writes, async (request) =>
     claimPayment(ctx, customerOf(request).customerId, orderIdOf(request), meta(request)),
   );
+
+  // A slip is the picture itself as the request body (Content-Type image/jpeg, image/png or
+  // image/webp). Only this scope reads those types, as raw bytes; the guard and the limits run in
+  // `onRequest`, before a byte of the body is read. The bytes are checked again for their magic
+  // numbers and the 5 MB cap in `attachSlip`. The room over the cap is only for that check's 413.
+  await app.register(async (upload) => {
+    for (const type of SLIP_CONTENT_TYPES) {
+      upload.addContentTypeParser(
+        type,
+        { parseAs: 'buffer', bodyLimit: MAX_SLIP_BYTES + 1024 },
+        (_request, body, done) => done(null, body),
+      );
+    }
+    upload.post(
+      '/orders/:id/slip',
+      {
+        bodyLimit: MAX_SLIP_BYTES + 1024,
+        // The per-customer limit only. @fastify/rate-limit runs ONE limiter per request (the first),
+        // so a limiter after `byAddress` would never count; the guard rejects a bad token before
+        // any body is read, and this one counts the customers that are signed in.
+        onRequest: [guard, byCustomer(6)],
+      },
+      async (request) => {
+        // Any other content type (JSON, text) arrives parsed, not as bytes: refused the same way.
+        if (!Buffer.isBuffer(request.body)) {
+          throw new ApiError(415, 'SLIP_TYPE_UNSUPPORTED', 'Send a JPEG, PNG or WebP picture');
+        }
+        return attachSlip(
+          ctx,
+          slips,
+          customerOf(request).customerId,
+          orderIdOf(request),
+          request.body,
+          meta(request),
+        );
+      },
+    );
+  });
 
   app.get('/orders/:id/qr', reads, async (request) =>
     myQr(ctx, customerOf(request).customerId, orderIdOf(request)),

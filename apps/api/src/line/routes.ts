@@ -13,6 +13,7 @@ import { z } from 'zod';
 import { type GuardFactory, markLineSignatureCheck } from '../auth/guards.ts';
 import type { AuthContext } from '../auth/service.ts';
 import { ApiError } from '../errors.ts';
+import type { SlipStore } from '../slips/store.ts';
 import { handleEvent } from './handlers.ts';
 import { buildSender, type LineRuntime, readPolicy } from './runtime.ts';
 import { toStoredRoute } from './stored-route.ts';
@@ -46,6 +47,7 @@ export async function registerLineRoutes(
   ctx: AuthContext,
   guard: GuardFactory,
   runtime: LineRuntime,
+  slips: SlipStore,
 ): Promise<void> {
   await app.register(async (webhook) => {
     // Only this scope reads JSON as raw bytes: the signature is over exactly what LINE sent.
@@ -115,7 +117,7 @@ export async function registerLineRoutes(
         });
 
         if (fresh.length > 0) {
-          runtime.track(processEvents(ctx, runtime, fresh, request.log));
+          runtime.track(processEvents(ctx, runtime, slips, fresh, request.log));
         }
         return reply.code(200).send({});
       },
@@ -146,6 +148,7 @@ interface FreshEvent {
 async function processEvents(
   ctx: AuthContext,
   runtime: LineRuntime,
+  slips: SlipStore,
   events: FreshEvent[],
   log: FastifyRequest['log'],
 ): Promise<void> {
@@ -163,6 +166,8 @@ async function processEvents(
           contactAlertedAt: runtime.contactAlertedAt,
           noticeUrl: runtime.noticeUrl,
           privacy: runtime.privacy,
+          client: runtime.client,
+          slips,
         },
         event.routed,
       );

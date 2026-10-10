@@ -1,9 +1,10 @@
-import { formatBaht, type MessageKey } from '@sds/i18n';
+import { formatBaht, type Locale, type MessageKey } from '@sds/i18n';
 import type { AppPayMethod, MyOrder, MyQrResponse } from '@sds/shared';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Gi, type GiName } from '../design/icons.tsx';
 import { s } from '../design/style.ts';
 import { nextPollDelayMs } from '../model/poll.ts';
+import { canDownloadReceipt, receiptFileName, receiptHtml } from '../model/receipt.ts';
 import { orderSteps } from '../model/steps.ts';
 import { errorKey, useApp, useT } from './app-context.tsx';
 import { BarButton, Body, Header, Notice } from './Chrome.tsx';
@@ -210,6 +211,7 @@ export function OrderScreen({ id, flag }: { id: string; flag: string | null }) {
                   order={order}
                   busy={busy}
                   onClaim={() => void act(() => api.claim(order.id))}
+                  onSlip={(file) => void act(() => api.attachSlip(order.id, file))}
                 />
               ) : null}
               {method === 'gov_copay' && waiting ? (
@@ -287,6 +289,17 @@ export function OrderScreen({ id, flag }: { id: string; flag: string | null }) {
             </li>
           </ul>
 
+          {canDownloadReceipt(order) ? (
+            <button
+              type="button"
+              className="g-btn g-btn-block"
+              onClick={() => downloadReceipt(order, locale)}
+            >
+              <Gi n="download" size="sm" />
+              {tr('liff.receipt.download')}
+            </button>
+          ) : null}
+
           <button type="button" className="g-btn g-btn-block" onClick={() => go('/orders')}>
             {tr('liff.nav.orders')}
           </button>
@@ -311,6 +324,19 @@ export function OrderScreen({ id, flag }: { id: string; flag: string | null }) {
   );
 }
 
+/** Saves the receipt as a file; it is built on this device from the order the server sent. */
+function downloadReceipt(order: MyOrder, locale: Locale) {
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(
+    new Blob([receiptHtml(order, locale)], { type: 'text/html;charset=utf-8' }),
+  );
+  link.download = receiptFileName(order);
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(link.href), 4000);
+}
+
 /**
  * The PromptPay step: the QR for this order's exact total, the "โอนแล้ว" button (which only tells
  * the shop; staff confirm the money by hand) and the note that says so.
@@ -319,10 +345,12 @@ function PromptPayPanel({
   order,
   busy,
   onClaim,
+  onSlip,
 }: {
   order: MyOrder;
   busy: boolean;
   onClaim: () => void;
+  onSlip: (file: File) => void;
 }) {
   const tr = useT();
   const { api, locale } = useApp();
@@ -493,18 +521,21 @@ function PromptPayPanel({
                 <Gi n="download" size="sm" />
                 {tr('liff.qr.save')}
               </button>
-              {/* Slips are sent in the shop's chat today; there is no upload behind this yet. */}
-              <button
-                type="button"
-                className="g-btn"
-                style={s('flex:1')}
-                disabled
-                aria-disabled="true"
-                title={tr('nav.notReady')}
-              >
+              <label className="g-btn" style={s('flex:1;cursor:pointer')} aria-disabled={busy}>
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  className="sr-only"
+                  disabled={busy}
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    event.target.value = '';
+                    if (file) onSlip(file);
+                  }}
+                />
                 <Gi n="image" size="sm" />
                 {tr('liff.qr.attachSlip')}
-              </button>
+              </label>
             </div>
           ) : null}
           {saveHint ? (

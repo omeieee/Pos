@@ -6,6 +6,7 @@ import { GovCopayPanel } from './GovCopayPanel.tsx';
 import { PaymentMoves } from './PaymentMoves.tsx';
 import { PromptPayPanel } from './PromptPayPanel.tsx';
 import { type PayMethod, paymentActions } from './payment-model.ts';
+import { SlipView } from './SlipView.tsx';
 
 /** The screen of a payment that is waiting (pending or claimed), by method. */
 export function OpenPayment({
@@ -64,6 +65,9 @@ export function OpenPayment({
         </PaymentMoves>
       )}
       {claimedHint}
+      {payment.status === 'claimed' && payment.method === 'promptpay' ? (
+        <SlipView paymentId={payment.id} />
+      ) : null}
     </>
   );
 }

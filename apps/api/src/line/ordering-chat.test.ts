@@ -9,6 +9,7 @@ import { createHmac } from 'node:crypto';
 import type { LineClient, LineMessage } from '@sds/line';
 import { orderPlacedText } from '@sds/line';
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'vitest';
+import { createMemorySlipStore } from '../slips/store.ts';
 import { createHarness, type Harness, type OwnerFixture } from '../test-support/harness.ts';
 import { LiffUnavailableError, type LiffVerifier } from './liff-verify.ts';
 import { createLineRuntime, type LineRuntime } from './runtime.ts';
@@ -35,7 +36,20 @@ let pushFails = false;
 // One owner sign-in per test: a one-time code cannot be used twice in the same 30 seconds.
 let staffToken: string | undefined;
 
+// What LINE would hand back for a picture message id: a tiny made-up JPEG, or a failure.
+const JPEG = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(32, 1)]);
+let content: Awaited<ReturnType<NonNullable<LineClient['getMessageContent']>>> = {
+  ok: true,
+  bytes: JPEG,
+};
+const fetched: string[] = [];
+const slipStore = createMemorySlipStore();
+
 const fakeClient: LineClient = {
+  async getMessageContent(messageId) {
+    fetched.push(messageId);
+    return content;
+  },
   async reply(replyToken, messages) {
     sent.push({ kind: 'reply', to: replyToken, messages });
     return { ok: true };
@@ -63,7 +77,7 @@ beforeAll(async () => {
     { channelSecret: SECRET, channelAccessToken: undefined, liffId: LIFF_ID },
     { client: fakeClient, liffVerifier: verifier },
   );
-  h = await createHarness({ line: runtime });
+  h = await createHarness({ line: runtime, slips: slipStore });
   owner = await h.newOwner();
 }, 60_000);
 afterAll(async () => {
@@ -75,6 +89,8 @@ beforeEach(async () => {
   dayNo += 1;
   h.clock.set(new Date(Date.UTC(2029, 0, dayNo, 8, 0, 0)).toISOString()); // 15:00 Bangkok
   sent.length = 0;
+  fetched.length = 0;
+  content = { ok: true, bytes: JPEG };
   pushFails = false;
   staffToken = undefined;
   // Earlier tests' orders must not fill the per-customer limit of open orders.
@@ -348,7 +364,7 @@ describe('changing the payment method from the chat', () => {
     // ไทยช่วยไทย: words only. Staff handle it at the hand-over.
     const card = JSON.stringify(lastReply());
     expect(card).not.toMatch(/https?:|"image"|qr\.png/i);
-    expect(allText(lastReply())).toContain('ไม่ส่ง QR ทาง LINE');
+    expect(allText(lastReply())).toContain('เดี๋ยวจะส่ง QR ให้นะคะ');
 
     await deliver(postback(U_A, `action=set_method&order=${order.id}&method=cash`));
     expect((await paymentOf(order.id)).filter((p) => p.status === 'pending')).toEqual([]);
@@ -399,6 +415,23 @@ describe('keywords and the rich menu', () => {
     expect(pushes()).toHaveLength(0);
   });
 
+  test('the hours reply follows the LINE ordering switch', async () => {
+    await signIn('id-token-a-0000000000000000000000');
+    const setMode = (mode: string) =>
+      h.client.query(
+        `insert into settings (key, value, updated_by) values ('line_ordering', $1::jsonb, $2)
+         on conflict (key) do update set value = $1::jsonb`,
+        [JSON.stringify({ mode }), owner.staffId],
+      );
+    await setMode('open');
+    await deliver(text(U_A, 'เวลาเปิด'));
+    expect(allText(lastReply())).toContain('ทุกเวลา');
+    await setMode('closed');
+    await deliver(text(U_A, 'เวลาเปิด'));
+    expect(allText(lastReply())).toContain('ยังไม่เปิดรับออเดอร์');
+    await h.client.query("delete from settings where key = 'line_ordering'");
+  });
+
   test('"สถานะ" shows the latest order, or says there is none', async () => {
     await signIn('id-token-b-0000000000000000000000');
     await deliver(text(U_B, 'สถานะ'));
@@ -441,8 +474,8 @@ describe('the contact alert', () => {
   });
 });
 
-describe('the one push when a LINE order is completed', () => {
-  test('goes once, to the customer, carrying ready and the receipt, and is counted', async () => {
+describe('the one push when a LINE order is ready', () => {
+  test('goes once, at ready, to the customer, with no receipt, and is counted', async () => {
     const token = await signIn('id-token-a-0000000000000000000000');
     const order = await place(token, 'cash');
     await complete(order.id);
@@ -451,14 +484,12 @@ describe('the one push when a LINE order is completed', () => {
     const words = allText(pushes()[0]?.messages ?? []);
     expect(words).toContain('อาหารพร้อมแล้ว');
     expect(words).toContain(order.orderNo);
-    expect(words).toContain('฿120.00');
+    expect(words).not.toContain('ใบเสร็จ');
     const log = await h.client.query<{ counted: boolean }>(
       "select counted from line_message_log where order_id = $1 and kind = 'push'",
       [order.id],
     );
     expect(log.rows).toEqual([{ counted: true }]);
-    const quota = await h.client.query<{ used: number }>('select used from line_quota_months');
-    expect(quota.rows.reduce((sum, r) => sum + r.used, 0)).toBeGreaterThanOrEqual(1);
 
     // A later change to the same order (staff confirm the cash) does not push again.
     const staff = await staffSession();
@@ -487,7 +518,7 @@ describe('the one push when a LINE order is completed', () => {
     expect(sent).toHaveLength(0);
   });
 
-  test('policy off sends nothing, and the receipt still comes as a free reply to "สถานะ"', async () => {
+  test('policy off sends nothing, and "สถานะ" answers for free without a receipt', async () => {
     await h.client.query(
       "insert into settings (key, value, updated_by) values ('line_policy', $1::jsonb, $2)",
       [JSON.stringify({ push: 'off' }), owner.staffId],
@@ -497,13 +528,11 @@ describe('the one push when a LINE order is completed', () => {
     await complete(order.id);
     expect(pushes()).toHaveLength(0);
     await deliver(text(U_A, 'สถานะ'));
-    const words = allText(lastReply());
-    expect(words).toContain('ใบเสร็จรับเงินอิเล็กทรอนิกส์');
-    expect(words).toContain('฿120.00');
+    expect(allText(lastReply())).not.toContain('ใบเสร็จ');
     expect(pushes()).toHaveLength(0);
   });
 
-  test('at the monthly limit the push is dropped, the owner is warned once, and the receipt is a free reply', async () => {
+  test('at the monthly limit the push is dropped and the owner is warned once', async () => {
     await h.client.query(
       "insert into settings (key, value, updated_by) values ('line_policy', $1::jsonb, $2)",
       [JSON.stringify({ push: 'essential', monthlyLimit: 1, warnAtPercent: 80 }), owner.staffId],
@@ -525,11 +554,9 @@ describe('the one push when a LINE order is completed', () => {
       "select used from line_quota_months where month = '2029-01'",
     );
     expect(used.rows[0]?.used).toBe(1); // never past the limit
-    await deliver(text(U_A, 'สถานะ'));
-    expect(allText(lastReply())).toContain('ใบเสร็จรับเงินอิเล็กทรอนิกส์');
   });
 
-  test('a push LINE refuses gives the quota unit back, and the receipt is still available for free', async () => {
+  test('a push LINE refuses gives the quota unit back', async () => {
     pushFails = true;
     const token = await signIn('id-token-a-0000000000000000000000');
     const order = await place(token, 'cash');
@@ -545,8 +572,6 @@ describe('the one push when a LINE order is completed', () => {
         )
       ).rows,
     ).toHaveLength(0);
-    await deliver(text(U_A, 'สถานะ'));
-    expect(allText(lastReply())).toContain('ใบเสร็จรับเงินอิเล็กทรอนิกส์');
   });
 
   test('an erased customer gets nothing', async () => {
@@ -558,5 +583,97 @@ describe('the one push when a LINE order is completed', () => {
     );
     await complete(order.id);
     expect(sent).toHaveLength(0);
+  });
+});
+
+describe('a picture in the chat', () => {
+  const image = (userId: string, messageId = '4001') => ({
+    type: 'message',
+    ...base(userId),
+    message: { type: 'image', id: messageId },
+  });
+  const slipKey = async (orderId: string) =>
+    (
+      await h.client.query<{ slip_image_key: string | null }>(
+        'select slip_image_key from payments where order_id = $1',
+        [orderId],
+      )
+    ).rows[0]?.slip_image_key;
+
+  test('from a customer with a PromptPay order waiting: kept as the slip, the payment is claimed, one free reply', async () => {
+    const token = await signIn('id-token-a-0000000000000000000000');
+    const order = await place(token);
+    const marker = h.events.length;
+    await deliver(image(U_A, '4001'));
+
+    expect(fetched).toEqual(['4001']);
+    expect(await paymentOf(order.id)).toMatchObject([{ method: 'promptpay', status: 'claimed' }]);
+    const key = await slipKey(order.id);
+    expect(key).toBeTruthy();
+    expect(await slipStore.get(key as string)).toEqual(JPEG);
+    expect(
+      h.events
+        .slice(marker)
+        .some((e) => e.type === 'payment.upserted' && e.data.status === 'claimed'),
+    ).toBe(true);
+    // Never confirmed by a picture.
+    expect(
+      (
+        await h.client.query(
+          "select id from payments where order_id = $1 and status = 'confirmed'",
+          [order.id],
+        )
+      ).rows,
+    ).toHaveLength(0);
+    expect(replies()).toHaveLength(1);
+    expect(pushes()).toHaveLength(0);
+    expect(allText(lastReply())).toContain(order.orderNo);
+  });
+
+  test('a second picture replaces the first and deletes the old file', async () => {
+    const token = await signIn('id-token-a-0000000000000000000000');
+    const order = await place(token);
+    await deliver(image(U_A, '4002'));
+    const first = await slipKey(order.id);
+    await deliver(image(U_A, '4003'));
+    const second = await slipKey(order.id);
+    expect(second).toBeTruthy();
+    expect(second).not.toBe(first);
+    expect(await slipStore.get(first as string)).toBeNull();
+    expect(await slipStore.get(second as string)).toEqual(JPEG);
+  });
+
+  test("with no order waiting (none, cash, or another customer's order) nothing is downloaded or kept, and the usual reply is sent", async () => {
+    const tokenA = await signIn('id-token-a-0000000000000000000000');
+    await signIn('id-token-b-0000000000000000000000');
+    const cash = await place(tokenA, 'cash');
+    await deliver(image(U_A));
+    await deliver(image(U_B));
+    expect(fetched).toEqual([]);
+    expect(await slipKey(cash.id)).toBeUndefined();
+    expect(replies()).toHaveLength(2);
+    expect(allText(lastReply())).toContain('โอนแล้ว');
+  });
+
+  test('a picture LINE would not hand over leaves the payment as it was; a failure that may pass is retried by the sweep', async () => {
+    const token = await signIn('id-token-a-0000000000000000000000');
+    const order = await place(token);
+    content = { ok: false, definite: true, status: 404 };
+    await deliver(image(U_A));
+    expect(await paymentOf(order.id)).toMatchObject([{ status: 'pending' }]);
+    expect(await slipKey(order.id)).toBeNull();
+    expect(replies()).toHaveLength(1);
+
+    content = { ok: false, definite: false };
+    const id = 'evt-slip-transient';
+    await deliver({ ...image(U_A), webhookEventId: id });
+    const row = (
+      await h.client.query<{ error: string | null }>(
+        'select error from line_events where webhook_event_id = $1',
+        [id],
+      )
+    ).rows[0];
+    expect(row?.error).toBeTruthy();
+    expect(await slipKey(order.id)).toBeNull();
   });
 });

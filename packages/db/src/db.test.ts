@@ -126,7 +126,7 @@ describe('seed', () => {
       (select count(*)::int from modifier_options) as options,
       (select count(*)::int from menu_item_modifier_groups) as links,
       (select count(*)::int from settings) as settings,
-      (select count(*)::int from gov_copay_schemes where not enabled) as disabled_schemes`);
+      (select count(*)::int from gov_copay_schemes where enabled) as enabled_schemes`);
     expect(counts).toEqual({
       categories: 2,
       items: 6,
@@ -134,7 +134,7 @@ describe('seed', () => {
       options: 12,
       links: 12,
       settings: 6,
-      disabled_schemes: 1,
+      enabled_schemes: 1,
     });
 
     const [delivery] = await rows<{ value: unknown }>(

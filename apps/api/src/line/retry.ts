@@ -1,6 +1,7 @@
 import { type Db, lineRepo } from '@sds/db';
 import type { LineSender } from '@sds/line';
 import type { EventBus } from '../events.ts';
+import type { SlipStore } from '../slips/store.ts';
 import { handleEvent } from './handlers.ts';
 import { buildSender, type LineRuntime } from './runtime.ts';
 import { fromStoredRoute, storedRouteSchema } from './stored-route.ts';
@@ -21,6 +22,8 @@ export interface LineJobDeps {
   events: EventBus;
   now: () => Date;
   line: LineRuntime;
+  /** Where slip images live; a retried slip event stores its picture here. */
+  slips: SlipStore;
 }
 
 export interface RetryResult {
@@ -80,6 +83,8 @@ export async function retryLineEvents(
             contactAlertedAt: deps.line.contactAlertedAt,
             noticeUrl: deps.line.noticeUrl,
             privacy: deps.line.privacy,
+            client: deps.line.client,
+            slips: deps.slips,
           },
           fromStoredRoute(route),
         );

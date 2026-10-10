@@ -166,7 +166,8 @@ export async function seed(db: Db): Promise<{ seeded: boolean }> {
       ])
       .onConflictDoNothing();
 
-    // 04 §3.1: additional round. Disabled until the owner confirms ถุงเงิน participation (Q3).
+    // 04 §3.1: additional round. Owner asked for it to be on (2026-10-11); the ถุงเงิน terms for the
+    // entrance hand-over are still unconfirmed (Q3), so it can be switched off in Settings.
     await tx
       .insert(govCopaySchemes)
       .values({
@@ -182,7 +183,7 @@ export async function seed(db: Db): Promise<{ seeded: boolean }> {
         activeToMinute: 1380,
         channels: ['storefront'],
         settlementNote: 'Customer 40% next day 02:00, government 60% next day 17:30 (Krungthai)',
-        enabled: false,
+        enabled: true,
       })
       .onConflictDoNothing();
   });

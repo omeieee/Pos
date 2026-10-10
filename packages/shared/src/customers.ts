@@ -25,13 +25,14 @@ export const ANONYMIZED_ROOM_NO = 'ลบข้อมูลแล้ว';
 /**
  * How long personal data is kept (owner decisions, 2026-10-03; design/privacy-notice-th.md §3).
  * Days after: a LINE webhook event arrived; an order was completed (or cancelled); a remembered
- * recipient last ordered. Slip images (90 days) are not here: nothing stores slip images yet.
+ * recipient last ordered; a payment was confirmed or cancelled (`slipImages`, the transfer slip).
  */
 export const RETENTION_DAYS = {
   lineEvents: 30,
   orderPersonalData: 30,
   recipientBook: 30,
   staffInvites: 30,
+  slipImages: 90,
 } as const;
 
 /**

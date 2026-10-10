@@ -75,6 +75,8 @@ const envSchema = z
       emptyToUndefined,
       z.email().default(DEFAULT_PRIVACY.contactEmail),
     ),
+    /** Where transfer slip images are kept (D-24): a directory on a volume, never in the image. */
+    SLIP_DIR: z.preprocess(emptyToUndefined, z.string().min(1).default('/data/slips')),
     GIT_SHA: z.preprocess(emptyToUndefined, z.string().default('dev')),
   })
   .refine((e) => e.NODE_ENV !== 'production' || !disablesTls(e.DATABASE_URL), {
@@ -102,6 +104,8 @@ export type Config = {
   };
   /** Named in the privacy notice the LINE bot sends. */
   privacy: { controller: string; contactEmail: string };
+  /** Directory of the slip image files. */
+  slipDir: string;
 };
 
 export class ConfigError extends Error {}
@@ -132,5 +136,6 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
       liffId: e.LINE_LIFF_ID,
     },
     privacy: { controller: e.PRIVACY_CONTROLLER_NAME, contactEmail: e.PRIVACY_CONTACT_EMAIL },
+    slipDir: e.SLIP_DIR,
   };
 }

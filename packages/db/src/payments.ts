@@ -90,6 +90,8 @@ export interface PaymentPatch {
   schemeId?: string;
   estGovShareSatang?: number;
   estCustomerShareSatang?: number;
+  /** The stored slip image (a random key); null clears it. */
+  slipImageKey?: string | null;
 }
 
 export async function findPaymentById(db: Db, id: string): Promise<PaymentRow | undefined> {

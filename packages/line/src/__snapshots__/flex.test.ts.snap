@@ -334,7 +334,7 @@ exports[`orderStatusCard, menuLink, payInfoCard, receiptCard > the generic pay-i
         },
         {
           "size": "sm",
-          "text": "ไทยช่วยไทย: จ่ายตอนรับอาหารที่ทางเข้าตึก พนักงานดำเนินการร่วมกับคุณ (เฉพาะช่วงที่ร่วมโครงการ)",
+          "text": "ไทยช่วยไทย: เดี๋ยวจะส่ง QR ให้นะคะ (เฉพาะช่วงที่ร่วมโครงการ)",
           "type": "text",
           "wrap": true,
         },
@@ -521,14 +521,14 @@ exports[`paymentInstructions > gov_copay: pay at the hand-over, and the message 
           "wrap": true,
         },
         {
-          "text": "ชำระด้วยไทยช่วยไทย ตอนรับอาหารที่ทางเข้าตึก พนักงานจะดำเนินการร่วมกับคุณต่อหน้า ยอดเต็ม ฿120.50",
+          "text": "ชำระด้วยไทยช่วยไทย เดี๋ยวจะส่ง QR ให้นะคะ ยอดเต็ม ฿120.50",
           "type": "text",
           "wrap": true,
         },
         {
           "color": "#666666",
           "size": "sm",
-          "text": "ร้านจะไม่ส่ง QR ทาง LINE",
+          "text": "กำลังส่งให้สักครู่นะคะ",
           "type": "text",
           "wrap": true,
         },
@@ -636,7 +636,7 @@ exports[`paymentInstructions > promptpay: ID and exact amount in the text, a but
 }
 `;
 
-exports[`readyWithReceipt > snapshot 1`] = `
+exports[`readyCard > snapshot 1`] = `
 {
   "altText": "อาหารพร้อมแล้ว ออเดอร์ L-012",
   "contents": {
@@ -652,98 +652,6 @@ exports[`readyWithReceipt > snapshot 1`] = `
         {
           "size": "sm",
           "text": "ออเดอร์ L-012 พร้อมรับที่ทางเข้าตึก B1",
-          "type": "text",
-          "wrap": true,
-        },
-        {
-          "type": "separator",
-        },
-        {
-          "size": "sm",
-          "text": "ใบเสร็จรับเงินอิเล็กทรอนิกส์",
-          "type": "text",
-          "weight": "bold",
-          "wrap": true,
-        },
-        {
-          "contents": [
-            {
-              "flex": 4,
-              "size": "sm",
-              "text": "2 × ก๋วยเตี๋ยวต้มยำ",
-              "type": "text",
-              "wrap": true,
-            },
-            {
-              "align": "end",
-              "flex": 2,
-              "size": "sm",
-              "text": "฿110.00",
-              "type": "text",
-              "wrap": true,
-            },
-          ],
-          "layout": "horizontal",
-          "type": "box",
-        },
-        {
-          "contents": [
-            {
-              "flex": 4,
-              "size": "sm",
-              "text": "1 × น้ำเปล่า",
-              "type": "text",
-              "wrap": true,
-            },
-            {
-              "align": "end",
-              "flex": 2,
-              "size": "sm",
-              "text": "฿10.00",
-              "type": "text",
-              "wrap": true,
-            },
-          ],
-          "layout": "horizontal",
-          "type": "box",
-        },
-        {
-          "type": "separator",
-        },
-        {
-          "contents": [
-            {
-              "flex": 4,
-              "size": "sm",
-              "text": "ยอดชำระ",
-              "type": "text",
-              "weight": "bold",
-              "wrap": true,
-            },
-            {
-              "align": "end",
-              "flex": 2,
-              "size": "sm",
-              "text": "฿120.00",
-              "type": "text",
-              "weight": "bold",
-              "wrap": true,
-            },
-          ],
-          "layout": "horizontal",
-          "type": "box",
-        },
-        {
-          "color": "#666666",
-          "size": "xs",
-          "text": "ชำระด้วย พร้อมเพย์",
-          "type": "text",
-          "wrap": true,
-        },
-        {
-          "color": "#666666",
-          "size": "xs",
-          "text": "ขอบคุณที่อุดหนุนแซ่บโดนเส้นค่ะ",
           "type": "text",
           "wrap": true,
         },

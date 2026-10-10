@@ -9,6 +9,7 @@ import { alertOnAttempt, superviseJobs } from './jobs/supervisor.ts';
 import { createLineRuntime } from './line/runtime.ts';
 import { createPoolWatchdog } from './pool-watchdog.ts';
 import { sentryOptions } from './redact.ts';
+import { createFsSlipStore } from './slips/store.ts';
 import { registerV1 } from './v1.ts';
 
 function loadConfigOrExit() {
@@ -68,7 +69,8 @@ events.subscribe((event) => {
 });
 if (reportAlert) forwardAlerts(events, reportAlert);
 const line = createLineRuntime(config.line, { privacy: config.privacy });
-await registerV1(app, { db, authSecretKey: config.authSecretKey, events, line });
+const slips = createFsSlipStore(config.slipDir);
+await registerV1(app, { db, authSecretKey: config.authSecretKey, events, line, slips });
 
 // 0.0.0.0 so Caddy can reach the container over the Docker network.
 await app.listen({ host: '0.0.0.0', port: config.port });
@@ -80,7 +82,7 @@ const jobs = superviseJobs({
   start: () =>
     startJobs({
       databaseUrl: config.databaseUrl,
-      deps: { db, events, now: () => new Date(), line },
+      deps: { db, events, now: () => new Date(), line, slips },
       log: app.log,
     }),
   onFailure: (failure) => {

@@ -667,6 +667,13 @@ export interface MoveInput {
   expectedVersion?: number | undefined;
   reason?: string | undefined;
   referenceNote?: string | undefined;
+  /**
+   * Claim only: the customer's slip image, already stored under `key`. It is written in the same
+   * transaction as the claim (or, on a payment that is already claimed, replaces the old slip).
+   * `onReplaced` is called inside the transaction with the key of the slip it replaced, so the
+   * caller can delete that file once the transaction has committed.
+   */
+  slip?: { key: string; onReplaced?: (oldKey: string) => void } | undefined;
 }
 
 /**
@@ -695,6 +702,15 @@ export async function movePayment(
     if (!row) throw notFound('Payment');
 
     if (row.status === spec.to) {
+      // A second slip on a claim that is already made replaces the first; nothing else changes.
+      if (input.slip && moveName === 'claim') {
+        const swapped = await paymentsRepo.updatePaymentIfVersion(tx, row.id, row.version, {
+          slipImageKey: input.slip.key,
+        });
+        if (!swapped) throw versionConflict(row.version); // cannot happen under the row lock
+        if (row.slipImageKey) input.slip.onReplaced?.(row.slipImageKey);
+        return { payment: emitPayment(emit, swapped), order: await orderDto(tx, order) };
+      }
       return { payment: toPaymentDto(row), order: await orderDto(tx, order) };
     }
     if (input.expectedVersion !== undefined && row.version !== input.expectedVersion) {
@@ -741,7 +757,11 @@ export async function movePayment(
     }
     const patch: paymentsRepo.PaymentPatch =
       spec.to === 'claimed'
-        ? { status: 'claimed', claimedAt: now }
+        ? {
+            status: 'claimed',
+            claimedAt: now,
+            ...(input.slip && moveName === 'claim' ? { slipImageKey: input.slip.key } : {}),
+          }
         : spec.to === 'confirmed'
           ? {
               status: 'confirmed',
@@ -793,7 +813,10 @@ export async function listOrderPayments(
   const order = await ordersRepo.findOrderById(ctx.db, orderId);
   if (!order) throw notFound('Order');
   const rows = await paymentsRepo.listPaymentsForOrder(ctx.db, orderId);
-  return { payments: rows.map(toPaymentDto) };
+  return {
+    payments: rows.map(toPaymentDto),
+    slipPaymentIds: rows.filter((r) => r.slipImageKey !== null).map((r) => r.id),
+  };
 }
 
 // ---------- The QR picture ----------

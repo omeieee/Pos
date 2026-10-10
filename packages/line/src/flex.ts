@@ -276,17 +276,13 @@ export function payInfoCard(locale: Locale = 'th'): FlexMessage {
   };
 }
 
-export interface ReadyReceiptInput {
+export interface ReadyInput {
   orderNo: string;
   building: string;
-  items: readonly ReceiptItem[];
-  totalSatang: number;
-  /** The payment method's display name, already translated. */
-  methodLabel: string;
 }
 
-/** The one push per LINE order: "ready" and the e-receipt together. */
-export function readyWithReceipt(input: ReadyReceiptInput, locale: Locale = 'th'): FlexMessage {
+/** The one push per LINE order: the food is ready at the building entrance. No receipt (owner, 2026-10-11). */
+export function readyCard(input: ReadyInput, locale: Locale = 'th'): FlexMessage {
   return {
     type: 'flex',
     altText: t(locale, 'lineBot.ready.altText', { orderNo: input.orderNo }),
@@ -298,16 +294,6 @@ export function readyWithReceipt(input: ReadyReceiptInput, locale: Locale = 'th'
       text(t(locale, 'lineBot.ready.body', { orderNo: input.orderNo, building: input.building }), {
         size: 'sm',
       }),
-      separator,
-      text(t(locale, 'lineBot.receipt.title'), { weight: 'bold', size: 'sm' }),
-      ...itemRows(input.items, locale),
-      separator,
-      row(t(locale, 'lineBot.receipt.total'), formatBaht(input.totalSatang, locale), true),
-      text(t(locale, 'lineBot.receipt.method', { method: input.methodLabel }), {
-        size: 'xs',
-        color: '#666666',
-      }),
-      text(t(locale, 'lineBot.receipt.thanks'), { size: 'xs', color: '#666666' }),
     ]),
   };
 }
@@ -320,7 +306,7 @@ export interface ReceiptInput {
   methodLabel: string;
 }
 
-/** The e-receipt alone, for a free reply when no push could be sent (policy off or at the cap). */
+/** The e-receipt card. It is never sent on its own; staff issue it on request. */
 export function receiptCard(input: ReceiptInput, locale: Locale = 'th'): FlexMessage {
   return {
     type: 'flex',

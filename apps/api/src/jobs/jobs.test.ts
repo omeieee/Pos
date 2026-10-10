@@ -1,12 +1,14 @@
 import { ANONYMIZED_BUILDING, ANONYMIZED_RECIPIENT_NAME } from '@sds/shared';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 import { createLineRuntime } from '../line/runtime.ts';
+import { createMemorySlipStore } from '../slips/store.ts';
 import { createHarness, type Harness } from '../test-support/harness.ts';
 import { JOBS, type JobDeps } from './jobs.ts';
 import { purgeLineEvents, purgeStaffInvites, RETENTION_BATCH } from './retention.ts';
 
 let h: Harness;
 let deps: JobDeps;
+const slips = createMemorySlipStore();
 beforeAll(async () => {
   h = await createHarness();
   deps = {
@@ -14,6 +16,7 @@ beforeAll(async () => {
     events: h.bus,
     now: h.clock.now,
     line: createLineRuntime({ channelSecret: undefined, channelAccessToken: undefined }),
+    slips,
   };
 }, 60_000);
 afterAll(async () => {

@@ -131,7 +131,14 @@ export const changePaymentMethodResultSchema = z.object({
 });
 export type ChangePaymentMethodResult = z.infer<typeof changePaymentMethodResultSchema>;
 
-export const orderPaymentsResponseSchema = z.object({ payments: z.array(paymentDtoSchema) });
+export const orderPaymentsResponseSchema = z.object({
+  payments: z.array(paymentDtoSchema),
+  /**
+   * The payments of this order that have a slip image to look at (`GET /v1/payments/:id/slip`).
+   * Only a list of ids, and only on this REST answer: a slip is never in realtime frames or sync.
+   */
+  slipPaymentIds: z.array(z.uuid()).optional(),
+});
 export type OrderPaymentsResponse = z.infer<typeof orderPaymentsResponseSchema>;
 
 /** A short-lived link for an `<img>`: the signature in it is the only authentication. */

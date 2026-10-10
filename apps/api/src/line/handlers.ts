@@ -1,7 +1,8 @@
-import { type Db, lineRepo, ordersRepo } from '@sds/db';
+import { type Db, lineRepo, ordersRepo, paymentsRepo } from '@sds/db';
 import {
   botText,
   followGreeting,
+  type LineClient,
   type LineMessage,
   type LineSender,
   menuLink,
@@ -12,15 +13,17 @@ import {
   paymentInstructions,
   privacyAcknowledged,
   type RoutedEvent,
-  receiptCard,
 } from '@sds/line';
-import { type MyOrder, PRIVACY_NOTICE_VERSION, serviceOpenAt } from '@sds/shared';
+import { type MyOrder, PRIVACY_NOTICE_VERSION } from '@sds/shared';
 import { claimPayment, selectPayment, viewOrder } from '../customer-app/service.ts';
 import { ApiError } from '../errors.ts';
 import type { EventBus } from '../events.ts';
-import { currentOpeningHours, currentPromptpayId } from '../settings/service.ts';
+import { currentPromptpayId, lineOrderingNow } from '../settings/service.ts';
+import { MAX_SLIP_BYTES } from '../slips/image.ts';
+import { attachSlip } from '../slips/service.ts';
+import type { SlipStore } from '../slips/store.ts';
 import type { CoreContext } from '../tx.ts';
-import { methodLabelOf, READY_RECEIPT_TEMPLATE, receiptItems } from './receipt.ts';
+import { receiptItems } from './receipt.ts';
 import type { LineRuntime } from './runtime.ts';
 
 export interface HandlerContext {
@@ -33,6 +36,10 @@ export interface HandlerContext {
   liffUrl: string | undefined;
   privacy: LineRuntime['privacy'];
   contactAlertedAt: LineRuntime['contactAlertedAt'];
+  /** Fetches the pictures customers send. Null when LINE is not configured. */
+  client: LineClient | null;
+  /** Where a slip picture is kept. */
+  slips: SlipStore;
 }
 
 const CONTACT_ALERT_WINDOW_MS = 10 * 60_000;
@@ -77,6 +84,8 @@ const REFUSALS: Record<string, Parameters<typeof botText>[0]> = {
   NO_PAYMENT_TO_CLAIM: 'lineBot.err.generic',
   AMOUNT_TOO_LARGE: 'lineBot.err.generic',
   NOTHING_TO_PAY: 'lineBot.err.generic',
+  SLIP_TOO_LARGE: 'lineBot.err.generic',
+  SLIP_TYPE_UNSUPPORTED: 'lineBot.err.generic',
 };
 
 /**
@@ -138,16 +147,8 @@ export async function handleEvent(ctx: HandlerContext, event: RoutedEvent): Prom
       return handleChangeMethod(ctx, event);
     case 'set_method':
       return handleSetMethod(ctx, event);
-    case 'slip_image': {
-      // The picture itself is not downloaded or kept here: staff see it in OA Manager, and the
-      // payment only moves when the customer taps "โอนแล้ว" (and staff confirm).
-      const customer = await lineRepo.findCustomerByLineUserId(ctx.db, event.userId);
-      await ctx.sender.reply(event.replyToken, [botText('lineBot.slip.reply')], {
-        template: 'slip_received',
-        ...(customer ? { customerId: customer.id } : {}),
-      });
-      return;
-    }
+    case 'slip_image':
+      return handleSlip(ctx, event);
     default:
       return;
   }
@@ -249,6 +250,66 @@ async function handleClaim(
   } catch (error) {
     await refuse(ctx, event.replyToken, error, customer.id);
   }
+}
+
+/**
+ * A picture in the chat. When the sender has a PromptPay payment waiting (their latest open
+ * order), the picture is fetched from LINE, kept as the slip and the payment becomes `claimed`
+ * (the same service as the app's upload and the "โอนแล้ว" button); staff still confirm. With no
+ * such order, or no way to fetch it, the picture is not kept and the sender hears the usual
+ * reply. A fetch that failed for a reason that may pass is thrown, so the retry sweep tries again.
+ */
+async function handleSlip(
+  ctx: HandlerContext,
+  event: Extract<RoutedEvent, { kind: 'slip_image' }>,
+): Promise<void> {
+  const customer = await lineRepo.findCustomerByLineUserId(ctx.db, event.userId);
+  const noOrder = () =>
+    say(ctx, event.replyToken, [botText('lineBot.slip.reply')], {
+      template: 'slip_received',
+      ...(customer ? { customerId: customer.id } : {}),
+    });
+  const fetchContent = ctx.client?.getMessageContent?.bind(ctx.client);
+  if (!customer || !fetchContent) return noOrder();
+  const waiting = await waitingPromptpayOrder(ctx, customer.id);
+  if (!waiting) return noOrder();
+
+  const content = await fetchContent(event.messageId, MAX_SLIP_BYTES);
+  if (!content.ok) {
+    await noOrder();
+    if (content.definite) return;
+    throw new Error('slip image could not be fetched');
+  }
+  try {
+    const order = await attachSlip(core(ctx), ctx.slips, customer.id, waiting, content.bytes, {
+      ip: null,
+    });
+    await say(ctx, event.replyToken, [botText('lineBot.claim.done', { orderNo: order.orderNo })], {
+      template: 'payment_claimed',
+      customerId: customer.id,
+      orderId: order.id,
+    });
+  } catch (error) {
+    await refuse(ctx, event.replyToken, error, customer.id);
+  }
+}
+
+/** The id of the sender's latest order that is open and has a PromptPay payment pending or claimed. */
+async function waitingPromptpayOrder(
+  ctx: HandlerContext,
+  customerId: string,
+): Promise<string | undefined> {
+  const rows = await ordersRepo.listOrdersForCustomer(ctx.db, customerId, 3);
+  for (const row of rows) {
+    if (row.status === 'completed' || row.status === 'cancelled') continue;
+    const payments = await paymentsRepo.listPaymentsForOrder(ctx.db, row.id);
+    if (
+      payments.some((p) => p.method === 'promptpay' && ['pending', 'claimed'].includes(p.status))
+    ) {
+      return row.id;
+    }
+  }
+  return undefined;
 }
 
 async function handleChangeMethod(
@@ -356,13 +417,18 @@ async function handleKeyword(
       });
       return;
     case 'hours': {
-      const open = serviceOpenAt(await currentOpeningHours(ctx.db), ctx.now(), 'delivery');
-      const text = open.window
-        ? said('lineBot.hours.today', {
-            from: hhmm(open.window.openMinute),
-            to: hhmm(open.window.closeMinute),
-          })
-        : said('lineBot.hours.closed');
+      const open = await lineOrderingNow(ctx.db, ctx.now());
+      const text =
+        open.mode === 'open'
+          ? said('lineBot.hours.always')
+          : open.mode === 'closed'
+            ? said('lineBot.hours.paused')
+            : open.window
+              ? said('lineBot.hours.today', {
+                  from: hhmm(open.window.openMinute),
+                  to: hhmm(open.window.closeMinute),
+                })
+              : said('lineBot.hours.closed');
       await say(ctx, event.replyToken, [{ type: 'text', text }], { template: 'hours', ...who });
       return;
     }
@@ -372,9 +438,8 @@ async function handleKeyword(
 }
 
 /**
- * "สถานะ": the latest order of the last day. When that order is completed and the one
- * "ready + receipt" push never went out (policy off, or the month's quota was used up), the
- * e-receipt comes here instead, as a free reply: the receipt is never lost to the quota.
+ * "สถานะ": the latest order of the last day, as a free reply. No receipt is attached: staff issue
+ * one only on request (owner, 2026-10-11).
  */
 async function handleStatus(
   ctx: HandlerContext,
@@ -412,19 +477,5 @@ async function handleStatus(
           status: said(`lineBot.status.${order.status}`),
         }),
   ];
-  if (
-    order.status === 'completed' &&
-    !(await lineRepo.hasPushForOrder(ctx.db, order.id, READY_RECEIPT_TEMPLATE))
-  ) {
-    messages.push(
-      receiptCard({
-        orderNo: order.orderNo,
-        building: order.deliveryBuilding ?? '',
-        items: receiptItems(order),
-        totalSatang: order.totalSatang,
-        methodLabel: methodLabelOf(order),
-      }),
-    );
-  }
   await say(ctx, replyToken, messages, { template: 'status', customerId, orderId: order.id });
 }

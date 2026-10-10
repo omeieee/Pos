@@ -90,6 +90,14 @@ describe('the real /v1 routes', () => {
     }
   });
 
+  test('the slip picture of a payment is a staff route, never open and never signed-URL', () => {
+    const view = h.routes.filter((r) => r.url === '/v1/payments/:id/slip');
+    expect(view.map((r) => r.method).sort()).toEqual(['GET', 'HEAD']);
+    for (const r of view) expect(r.guarded).toBe(true);
+    expect(SIGNED).not.toContain('GET /v1/payments/:id/slip');
+    expect(OPEN).not.toContain('GET /v1/payments/:id/slip');
+  });
+
   test('the customer app routes run the customer guard, which is not the staff guard', () => {
     const key = (r: { method: string; url: string }) =>
       `${r.method === 'HEAD' ? 'GET' : r.method} ${r.url}`;
@@ -102,6 +110,7 @@ describe('the real /v1 routes', () => {
       'POST /v1/app/orders',
       'POST /v1/app/orders/:id/claim',
       'POST /v1/app/orders/:id/payment',
+      'POST /v1/app/orders/:id/slip',
       'POST /v1/app/privacy-ack',
     ]);
     // None of them is also a staff route: one credential kind per route.

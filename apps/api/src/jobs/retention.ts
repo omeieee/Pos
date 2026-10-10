@@ -87,3 +87,37 @@ export async function expireEmptyLineCustomers(deps: JobDeps, bounds: Bounds = {
   });
   return { customers };
 }
+
+/**
+ * Slip images of payments confirmed or cancelled more than 90 days ago. The FILE is deleted
+ * first and the key cleared after: a file that will not go keeps its key and is tried again at
+ * the next run, so a failure can never leave an image that nothing points to. Counts only.
+ */
+export async function purgeSlips(deps: JobDeps, bounds: Bounds = {}) {
+  const before = cutoff(deps, RETENTION_DAYS.slipImages);
+  const size = bounds.batchSize ?? RETENTION_BATCH.size;
+  const maxBatches = bounds.maxBatches ?? RETENTION_BATCH.maxBatches;
+  let deleted = 0;
+  let failed = 0;
+  // Skipped ids are not selected again in this run, so one stuck file cannot spin the loop.
+  const skipped = new Set<string>();
+  for (let i = 0; i < maxBatches; i++) {
+    const due = (
+      await retentionRepo.findDueSlips(deps.db, { before, limit: size + skipped.size })
+    ).filter((slip) => !skipped.has(slip.id));
+    if (due.length === 0) break;
+    const gone: { id: string; key: string }[] = [];
+    for (const slip of due.slice(0, size)) {
+      try {
+        await deps.slips.delete(slip.key);
+        gone.push(slip);
+      } catch {
+        skipped.add(slip.id);
+        failed += 1;
+      }
+    }
+    deleted += await retentionRepo.clearSlipKeys(deps.db, { slips: gone, now: deps.now() });
+    if (gone.length < size) break;
+  }
+  return { deleted, failed };
+}

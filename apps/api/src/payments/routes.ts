@@ -12,6 +12,8 @@ import { z } from 'zod';
 import { type GuardFactory, markSignedUrlCheck, principalOf } from '../auth/guards.ts';
 import type { AuthContext } from '../auth/service.ts';
 import { ApiError } from '../errors.ts';
+import { readSlip } from '../slips/service.ts';
+import type { SlipStore } from '../slips/store.ts';
 import { parse } from '../validate.ts';
 import { checkQrLink } from './qr.ts';
 import {
@@ -59,16 +61,18 @@ function checkIdempotencyHeader(request: FastifyRequest, clientRequestId: string
  * - confirm: `payment.confirm`; cancel a claim: `payment.cancel_claimed`;
  * - void and refund: `payment.void_refund` (managers, owner), which the guard pairs with a fresh
  *   step-up.
+ * The slip picture (`GET /payments/:id/slip`) needs `payment.record` like the list.
  * The QR picture is the one route without a session: see `qr.png` below.
  */
 export async function registerPaymentRoutes(
   app: FastifyInstance,
   ctx: AuthContext,
   guard: GuardFactory,
+  slips: SlipStore,
 ): Promise<void> {
   // Payment answers are live money state: never cached by a browser or a proxy.
   app.addHook('onSend', async (_request, reply) => {
-    reply.header('cache-control', 'no-store');
+    if (!reply.hasHeader('cache-control')) reply.header('cache-control', 'no-store');
   });
 
   app.post(
@@ -160,6 +164,27 @@ export async function registerPaymentRoutes(
         ),
     );
   }
+
+  /**
+   * The customer's slip picture, for staff who can record payments. It holds a bank app screen
+   * (account names, numbers): never cached, never sniffed, and every look is an audit row.
+   */
+  app.get('/payments/:id/slip', { onRequest: guard('payment.record') }, async (request, reply) => {
+    const { bytes, contentType } = await readSlip(
+      ctx,
+      slips,
+      principalOf(request),
+      paymentIdOf(request),
+      meta(request),
+    );
+    return reply
+      .header('content-type', contentType)
+      .header('cache-control', 'private, no-store')
+      .header('x-content-type-options', 'nosniff')
+      .header('content-security-policy', "default-src 'none'; sandbox")
+      .header('referrer-policy', 'no-referrer')
+      .send(bytes);
+  });
 
   app.get('/payments/:id/qr-url', { onRequest: guard('payment.record') }, async (request) =>
     paymentQrUrl(ctx, paymentIdOf(request)),

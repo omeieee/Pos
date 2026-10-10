@@ -17,6 +17,8 @@ WORKDIR /app
 COPY --from=build --chown=node:node /repo/apps/api/dist ./dist
 ARG GIT_SHA=dev
 ENV GIT_SHA=${GIT_SHA}
+# Slip images (SLIP_DIR). A named volume mounted here starts with this owner, so `node` can write.
+RUN mkdir -p /data/slips && chown node:node /data/slips
 USER node
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \

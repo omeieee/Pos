@@ -1,9 +1,6 @@
 import { botText, type ReceiptItem } from '@sds/line';
 import type { MyOrder } from '@sds/shared';
 
-/** The template name in `line_message_log`: one counted push per order and template. */
-export const READY_RECEIPT_TEMPLATE = 'ready_receipt';
-
 /** How the customer paid, in words, for the receipt. */
 export function methodLabelOf(order: Pick<MyOrder, 'payment' | 'paymentStatus'>): string {
   if (!order.payment || order.payment.status === 'cancelled') {

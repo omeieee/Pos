@@ -11,8 +11,9 @@
  * - `expireRecipientsBatch`: erases the remembered recipients (counter customers with a recipient)
  *   whose last order is older than the cutoff, the way the owner's erasure request does.
  *
- * Not here: slip images (90 days). Nothing stores a slip image yet (`payments.slip_image_key` is
- * never written), so there is nothing to delete; add the job with the upload.
+ * - `findDueSlips` and `clearSlipKeys`: slip images (90 days after the payment was confirmed or
+ *   cancelled). The files live outside the database, so the job deletes the file FIRST and only
+ *   then clears the key here: a file that could not be deleted keeps its key and is tried again.
  */
 import {
   ANONYMIZED_BUILDING,
@@ -20,11 +21,11 @@ import {
   ANONYMIZED_ROOM_NO,
   RETENTION_DAYS,
 } from '@sds/shared';
-import { and, asc, inArray, isNotNull, isNull, lt, or, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNotNull, isNull, lt, or, sql } from 'drizzle-orm';
 import { insertAudit } from './audit.ts';
 import type { Db } from './client.ts';
 import { anonymizeCustomer } from './customers.ts';
-import { customers, lineEvents, orders, staffInvites } from './schema.ts';
+import { customers, lineEvents, orders, payments, staffInvites } from './schema.ts';
 
 /** Deletes up to `limit` events that arrived before `before`. Returns how many. */
 export async function purgeLineEventsBatch(
@@ -234,5 +235,61 @@ export async function expireEmptyLineCustomersBatch(
       });
     }
     return { customers: erased };
+  });
+}
+
+/**
+ * Payments that still hold a slip image key and ended before `before`: confirmed (the day staff
+ * confirmed it, which a later void or refund does not move) or cancelled, voided or refunded
+ * (the last change). A pending or claimed payment is still being paid, so its slip stays.
+ */
+export async function findDueSlips(
+  db: Db,
+  args: { before: Date; limit: number },
+): Promise<{ id: string; key: string }[]> {
+  const rows = await db
+    .select({ id: payments.id, key: payments.slipImageKey })
+    .from(payments)
+    .where(
+      and(
+        isNotNull(payments.slipImageKey),
+        inArray(payments.status, ['confirmed', 'cancelled', 'voided', 'refunded']),
+        sql`coalesce(${payments.confirmedAt}, ${payments.updatedAt}) < ${args.before.toISOString()}::timestamptz`,
+      ),
+    )
+    .orderBy(asc(payments.id))
+    .limit(args.limit);
+  return rows.flatMap((r) => (r.key === null ? [] : [{ id: r.id, key: r.key }]));
+}
+
+/**
+ * Clears the key of payments whose file is gone, in ONE transaction, and writes one `system`
+ * audit row with the count and the retention period only. A payment whose key changed in the
+ * meantime (a new slip) is left alone. The update goes through the sync trigger.
+ */
+export async function clearSlipKeys(
+  db: Db,
+  args: { slips: { id: string; key: string }[]; now: Date },
+): Promise<number> {
+  if (args.slips.length === 0) return 0;
+  return db.transaction(async (tx) => {
+    let cleared = 0;
+    for (const slip of args.slips) {
+      const done = await tx
+        .update(payments)
+        .set({ slipImageKey: null })
+        .where(and(eq(payments.id, slip.id), eq(payments.slipImageKey, slip.key)))
+        .returning({ id: payments.id });
+      cleared += done.length;
+    }
+    if (cleared > 0) {
+      await insertAudit(tx, {
+        actorType: 'system',
+        action: 'retention.slips.delete',
+        entity: 'payments',
+        after: { deleted: cleared, afterDays: RETENTION_DAYS.slipImages },
+      });
+    }
+    return cleared;
   });
 }
