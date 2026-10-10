@@ -88,8 +88,42 @@ export async function expireEmptyLineCustomers(deps: JobDeps, bounds: Bounds = {
   return { customers };
 }
 
+/** A slip file is written just before its payment row points to it: younger files are left alone. */
+export const SLIP_ORPHAN_GRACE_MS = 86_400_000;
+
 /**
- * Slip images of payments confirmed or cancelled more than 90 days ago. The FILE is deleted
+ * Slip files that no payment points to (an upload that failed half way, a crash between the file
+ * and the row) and that are older than the grace period. Looks at no more than `size` x
+ * `maxBatches` files per run, oldest first. Counts only.
+ */
+export async function sweepOrphanSlips(deps: JobDeps, bounds: Bounds = {}) {
+  const size = bounds.batchSize ?? RETENTION_BATCH.size;
+  const maxBatches = bounds.maxBatches ?? RETENTION_BATCH.maxBatches;
+  const olderThan = deps.now().getTime() - SLIP_ORPHAN_GRACE_MS;
+  const old = (await deps.slips.list())
+    .filter((file) => file.modifiedAt.getTime() < olderThan)
+    .sort((a, b) => a.modifiedAt.getTime() - b.modifiedAt.getTime())
+    .slice(0, size * maxBatches);
+  let deleted = 0;
+  let failed = 0;
+  for (let i = 0; i < old.length; i += size) {
+    const keys = old.slice(i, i + size).map((file) => file.key);
+    const referenced = await retentionRepo.findReferencedSlipKeys(deps.db, keys);
+    for (const key of keys) {
+      if (referenced.has(key)) continue;
+      try {
+        await deps.slips.delete(key);
+        deleted += 1;
+      } catch {
+        failed += 1;
+      }
+    }
+  }
+  return { deleted, failed };
+}
+
+/**
+ * Slip images of payments confirmed, cancelled, or left claimed, more than 90 days ago. The FILE is deleted
  * first and the key cleared after: a file that will not go keeps its key and is tried again at
  * the next run, so a failure can never leave an image that nothing points to. Counts only.
  */

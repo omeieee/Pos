@@ -447,13 +447,26 @@ describe('slip images', () => {
     return row?.id as string;
   }
 
-  test('only an ended payment that still has a key and is older than 90 days is due', async () => {
+  test('only a payment with a key that has not changed for 90 days is due (a claimed one too)', async () => {
     const old = await payment({ status: 'cancelled', updatedDaysAgo: 91, key: KEY(1) });
     await payment({ status: 'cancelled', updatedDaysAgo: 89, key: KEY(2) });
-    await payment({ status: 'claimed', updatedDaysAgo: 200, key: KEY(3) });
+    const stale = await payment({ status: 'claimed', updatedDaysAgo: 200, key: KEY(3) });
+    await payment({ status: 'claimed', updatedDaysAgo: 10, key: KEY(7) });
     await payment({ status: 'cancelled', updatedDaysAgo: 200, key: null });
     const due = await retention.findDueSlips(db, { before: cutoff(), limit: 50 });
-    expect(due).toEqual([{ id: old, key: KEY(1) }]);
+    expect(due).toHaveLength(2);
+    expect(due).toEqual(
+      expect.arrayContaining([
+        { id: old, key: KEY(1) },
+        { id: stale, key: KEY(3) },
+      ]),
+    );
+  });
+
+  test('findReferencedSlipKeys returns only the keys some payment holds', async () => {
+    await payment({ status: 'claimed', updatedDaysAgo: 1, key: KEY(8) });
+    expect(await retention.findReferencedSlipKeys(db, [KEY(8), KEY(9)])).toEqual(new Set([KEY(8)]));
+    expect(await retention.findReferencedSlipKeys(db, [])).toEqual(new Set());
   });
 
   test('clearing the key is one audited batch with no key in it, and a changed key is left alone', async () => {

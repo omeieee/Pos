@@ -6,6 +6,7 @@ import {
   purgeLineEvents,
   purgeSlips,
   purgeStaffInvites,
+  sweepOrphanSlips,
 } from './retention.ts';
 
 /** What every job gets. Jobs are plain functions of this, so tests call them directly. */
@@ -36,4 +37,6 @@ export const JOBS: readonly JobDefinition[] = [
   { name: 'retention-staff-invites', cron: '58 3 * * *', run: purgeStaffInvites },
   // Transfer slip pictures, 90 days after the payment was confirmed or cancelled (file first, then the key).
   { name: 'retention-slips', cron: '5 4 * * *', run: purgeSlips },
+  // Slip files no payment points to (after the purge above), older than a day.
+  { name: 'retention-slip-orphans', cron: '15 4 * * *', run: sweepOrphanSlips },
 ];

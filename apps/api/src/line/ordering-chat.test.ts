@@ -18,12 +18,22 @@ import { createLineRuntime, type LineRuntime } from './runtime.ts';
 const SECRET = 'test-channel-secret-not-real';
 const LIFF_ID = '1234567890-abcdefgh';
 const LIFF = `https://liff.line.me/${LIFF_ID}`;
-const U_A = 'Utest00000000000000000000000000a1';
-const U_B = 'Utest00000000000000000000000000b2';
-const TOKENS: Record<string, string> = {
-  'id-token-a-0000000000000000000000': U_A,
-  'id-token-b-0000000000000000000000': U_B,
-};
+// New people for every test (see `freshPeople`): the per-customer rate limits of the customer app
+// are real and count in wall-clock minutes, so tests that share a customer would use up each
+// other's quota.
+let U_A = '';
+let U_B = '';
+const TOKENS: Record<string, string> = {};
+let peopleNo = 0;
+function freshPeople(): void {
+  peopleNo += 1;
+  const id = (letter: string) => `Utest${String(peopleNo).padStart(23, '0')}${letter}${letter}0000`;
+  U_A = id('a');
+  U_B = id('b');
+  TOKENS['id-token-a-0000000000000000000000'] = U_A;
+  TOKENS['id-token-b-0000000000000000000000'] = U_B;
+}
+freshPeople();
 const PHONE = '0899994321';
 
 interface Sent {
@@ -86,6 +96,7 @@ afterAll(async () => {
 
 let dayNo = 0;
 beforeEach(async () => {
+  freshPeople();
   dayNo += 1;
   h.clock.set(new Date(Date.UTC(2029, 0, dayNo, 8, 0, 0)).toISOString()); // 15:00 Bangkok
   sent.length = 0;

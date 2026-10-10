@@ -8,7 +8,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { type MyOrder, RETENTION_DAYS } from '@sds/shared';
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'vitest';
-import { purgeSlips } from '../jobs/retention.ts';
+import { JOBS } from '../jobs/jobs.ts';
+import { purgeSlips, sweepOrphanSlips } from '../jobs/retention.ts';
 import { LiffUnavailableError, type LiffVerifier } from '../line/liff-verify.ts';
 import { createLineRuntime } from '../line/runtime.ts';
 import {
@@ -18,7 +19,7 @@ import {
   type OwnerFixture,
 } from '../test-support/harness.ts';
 import { MAX_SLIP_BYTES, sniffSlip } from './image.ts';
-import { createFsSlipStore, createMemorySlipStore, type SlipStore } from './store.ts';
+import { createFsSlipStore, createMemorySlipStore, newSlipKey, type SlipStore } from './store.ts';
 
 // Made-up LINE tokens: each one is its own customer, so the per-customer upload limit of one
 // test never counts against another.
@@ -363,6 +364,23 @@ describe('staff look at a slip', () => {
     );
   });
 
+  test('the staff view is rate limited per staff member (30 a minute), with the usual error shape', async () => {
+    const { payment } = await claimedWithSlip();
+    const device = await h.newDevice('ipad');
+    const staff = await h.newStaff('cashier', '8642');
+    const token = await h.pinSession(device.token, staff.id, '8642');
+    const statuses: number[] = [];
+    for (let i = 0; i < 33; i++) {
+      statuses.push((await call('GET', `/v1/payments/${payment.id}/slip`, token)).statusCode);
+    }
+    expect(statuses.slice(0, 30).every((s) => s === 200)).toBe(true);
+    const limited = await call('GET', `/v1/payments/${payment.id}/slip`, token);
+    expect(limited.statusCode).toBe(429);
+    expect(limited.json().code).toBe('RATE_LIMITED');
+    // Another staff member is not affected.
+    expect((await call('GET', `/v1/payments/${payment.id}/slip`, staffToken)).statusCode).toBe(200);
+  });
+
   test('a payment with no slip, an unknown payment and a lost file are 404 with the usual error shape', async () => {
     const token = await customer();
     const order = await place(token);
@@ -507,15 +525,71 @@ describe('the 90-day purge', () => {
     });
   });
 
-  test('a cancelled payment is purged too; a payment still waiting (claimed) keeps its slip however old', async () => {
+  test('a cancelled payment is purged too; a claimed one keeps its slip for 90 days, then loses it, still claimed', async () => {
     const waiting = await slipPayment('claimed');
     const cancelled = await slipPayment('cancelled');
-    const farFuture = new Date(Date.now() + 120 * DAY);
-    await purgeSlips(depsAt(farFuture, store));
-    expect(await keyOf(cancelled.id)).toBeNull();
-    expect(await store.get(cancelled.slip_image_key as string)).toBeNull();
+    // The database stamps updated_at with the real time, not the test clock.
+    await purgeSlips(depsAt(new Date(Date.now() + 89 * DAY), store));
     expect(await keyOf(waiting.id)).toBe(waiting.slip_image_key);
     expect(await store.get(waiting.slip_image_key as string)).toEqual(JPEG);
+
+    await purgeSlips(depsAt(new Date(Date.now() + 120 * DAY), store));
+    expect(await keyOf(cancelled.id)).toBeNull();
+    expect(await store.get(cancelled.slip_image_key as string)).toBeNull();
+    expect(await keyOf(waiting.id)).toBeNull();
+    expect(await store.get(waiting.slip_image_key as string)).toBeNull();
+    // Nothing about the money changed.
+    const after = await h.client.query<{ status: string }>(
+      'select status from payments where id = $1',
+      [waiting.id],
+    );
+    expect(after.rows[0]?.status).toBe('claimed');
+  });
+
+  describe('orphan sweep', () => {
+    const put = async () => {
+      const key = newSlipKey();
+      await store.put(key, JPEG);
+      return key;
+    };
+    const tomorrow = () => new Date(Date.now() + 2 * DAY);
+
+    test('deletes a file no payment points to, and keeps every file a payment points to', async () => {
+      const kept = await slipPayment('claimed');
+      const orphan = await put();
+      const result = await sweepOrphanSlips(depsAt(tomorrow(), store));
+      expect(result).toEqual({ deleted: 1, failed: 0 });
+      expect(await store.get(orphan)).toBeNull();
+      expect(await store.get(kept.slip_image_key as string)).toEqual(JPEG);
+      expect(await sweepOrphanSlips(depsAt(tomorrow(), store))).toEqual({ deleted: 0, failed: 0 });
+    });
+
+    test('leaves a young file alone: its payment row may be about to point to it', async () => {
+      const young = await put();
+      expect(await sweepOrphanSlips(depsAt(new Date(), store))).toEqual({ deleted: 0, failed: 0 });
+      expect(await store.get(young)).toEqual(JPEG);
+    });
+
+    test('a file that cannot be deleted is counted and the rest still goes', async () => {
+      const stuck = await put();
+      const other = await put();
+      const flaky: SlipStore = {
+        put: (k, b) => store.put(k, b),
+        get: (k) => store.get(k),
+        list: () => store.list(),
+        delete: async (k) => {
+          if (k === stuck) throw new Error('disk error');
+          await store.delete(k);
+        },
+      };
+      expect(await sweepOrphanSlips(depsAt(tomorrow(), flaky))).toEqual({ deleted: 1, failed: 1 });
+      expect(await store.get(other)).toBeNull();
+      expect(await store.get(stuck)).toEqual(JPEG);
+    });
+
+    test('the nightly job list carries it', () => {
+      expect(JOBS.map((j) => j.name)).toContain('retention-slip-orphans');
+    });
   });
 
   test('a file that cannot be deleted keeps its key, so the next run tries again', async () => {
@@ -525,6 +599,7 @@ describe('the 90-day purge', () => {
     const flaky: SlipStore = {
       put: (k, b) => store.put(k, b),
       get: (k) => store.get(k),
+      list: () => store.list(),
       delete: async (k) => {
         if (broken) throw new Error('disk error');
         await store.delete(k);

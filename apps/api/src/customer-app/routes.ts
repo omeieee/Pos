@@ -60,12 +60,22 @@ export async function registerCustomerAppRoutes(
   // Mobile networks put many customers behind one address, so the address limit is generous; the
   // per-customer limits are what stop one person from hammering the shop.
   const byAddress = app.rateLimit({ max: 300, timeWindow: '1 minute' });
-  const byCustomer = (max: number) =>
-    app.rateLimit({
+  // `app.rateLimit` hooks run only the FIRST limiter of a request (they share one "ran" flag), so
+  // a per-customer hook after `byAddress` would never count. `createRateLimit` has no such flag:
+  // it only counts, and this hook answers the standard 429 itself.
+  const byCustomer = (max: number) => {
+    const limiter = app.createRateLimit({
       max,
       timeWindow: '1 minute',
       keyGenerator: (request) => request.customer?.customerId ?? request.ip,
     });
+    return async (request: FastifyRequest): Promise<void> => {
+      const result = await limiter(request);
+      if (!result.isAllowed && result.isExceeded) {
+        throw new ApiError(429, 'RATE_LIMITED', 'Too many requests', { retryAfterMs: result.ttl });
+      }
+    };
+  };
   const reads = { onRequest: [byAddress, guard, byCustomer(120)] };
   const writes = { onRequest: [byAddress, guard, byCustomer(30)] };
 
@@ -170,9 +180,8 @@ export async function registerCustomerAppRoutes(
       '/orders/:id/slip',
       {
         bodyLimit: MAX_SLIP_BYTES + 1024,
-        // The per-customer limit only. @fastify/rate-limit runs ONE limiter per request (the first),
-        // so a limiter after `byAddress` would never count; the guard rejects a bad token before
-        // any body is read, and this one counts the customers that are signed in.
+        // The per-customer limit only: the guard rejects a bad token before any body is read, and
+        // this one counts the customers that are signed in.
         onRequest: [guard, byCustomer(6)],
       },
       async (request) => {

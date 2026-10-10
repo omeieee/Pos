@@ -169,22 +169,38 @@ export async function registerPaymentRoutes(
    * The customer's slip picture, for staff who can record payments. It holds a bank app screen
    * (account names, numbers): never cached, never sniffed, and every look is an audit row.
    */
-  app.get('/payments/:id/slip', { onRequest: guard('payment.record') }, async (request, reply) => {
-    const { bytes, contentType } = await readSlip(
-      ctx,
-      slips,
-      principalOf(request),
-      paymentIdOf(request),
-      meta(request),
-    );
-    return reply
-      .header('content-type', contentType)
-      .header('cache-control', 'private, no-store')
-      .header('x-content-type-options', 'nosniff')
-      .header('content-security-policy', "default-src 'none'; sandbox")
-      .header('referrer-policy', 'no-referrer')
-      .send(bytes);
+  // Per staff member, after the guard: one signed-in account cannot page through every slip.
+  const slipLimiter = app.createRateLimit({
+    max: 30,
+    timeWindow: '1 minute',
+    keyGenerator: (request) => request.auth?.staffId ?? request.ip,
   });
+  const slipViewLimit = async (request: FastifyRequest): Promise<void> => {
+    const result = await slipLimiter(request);
+    if (!result.isAllowed && result.isExceeded) {
+      throw new ApiError(429, 'RATE_LIMITED', 'Too many requests', { retryAfterMs: result.ttl });
+    }
+  };
+  app.get(
+    '/payments/:id/slip',
+    { onRequest: [guard('payment.record'), slipViewLimit] },
+    async (request, reply) => {
+      const { bytes, contentType } = await readSlip(
+        ctx,
+        slips,
+        principalOf(request),
+        paymentIdOf(request),
+        meta(request),
+      );
+      return reply
+        .header('content-type', contentType)
+        .header('cache-control', 'private, no-store')
+        .header('x-content-type-options', 'nosniff')
+        .header('content-security-policy', "default-src 'none'; sandbox")
+        .header('referrer-policy', 'no-referrer')
+        .send(bytes);
+    },
+  );
 
   app.get('/payments/:id/qr-url', { onRequest: guard('payment.record') }, async (request) =>
     paymentQrUrl(ctx, paymentIdOf(request)),

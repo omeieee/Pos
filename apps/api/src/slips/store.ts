@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, rename, stat, unlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 /**
@@ -13,6 +13,8 @@ export interface SlipStore {
   get(key: string): Promise<Buffer | null>;
   /** Deleting a file that is not there is not an error. */
   delete(key: string): Promise<void>;
+  /** Every stored file with its last write time (for the orphan sweep). Temporary files are not listed. */
+  list(): Promise<{ key: string; modifiedAt: Date }[]>;
 }
 
 /** 24 random bytes: 32 URL-safe characters. */
@@ -61,6 +63,19 @@ export function createFsSlipStore(directory: string): SlipStore {
         if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
       }
     },
+    async list() {
+      await ready;
+      const found: { key: string; modifiedAt: Date }[] = [];
+      for (const name of await readdir(directory)) {
+        if (!KEY_PATTERN.test(name)) continue; // temporary files and anything foreign
+        try {
+          found.push({ key: name, modifiedAt: (await stat(join(directory, name))).mtime });
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+        }
+      }
+      return found;
+    },
   };
 }
 
@@ -71,10 +86,12 @@ export interface MemorySlipStore extends SlipStore {
 
 export function createMemorySlipStore(): MemorySlipStore {
   const files = new Map<string, Buffer>();
+  const written = new Map<string, Date>();
   return {
     async put(key, bytes) {
       assertKey(key);
       files.set(key, Buffer.from(bytes));
+      written.set(key, new Date());
     },
     async get(key) {
       assertKey(key);
@@ -83,6 +100,10 @@ export function createMemorySlipStore(): MemorySlipStore {
     async delete(key) {
       assertKey(key);
       files.delete(key);
+      written.delete(key);
+    },
+    async list() {
+      return [...files.keys()].map((key) => ({ key, modifiedAt: written.get(key) ?? new Date() }));
     },
     keys: () => [...files.keys()],
   };

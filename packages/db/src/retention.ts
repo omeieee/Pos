@@ -241,7 +241,9 @@ export async function expireEmptyLineCustomersBatch(
 /**
  * Payments that still hold a slip image key and ended before `before`: confirmed (the day staff
  * confirmed it, which a later void or refund does not move) or cancelled, voided or refunded
- * (the last change). A pending or claimed payment is still being paid, so its slip stays.
+ * (the last change). A claimed payment (a slip that staff never confirmed or cancelled) is due
+ * once it has not changed for that long, so it cannot keep a slip forever. Only the key goes: the
+ * payment's status is never touched here.
  */
 export async function findDueSlips(
   db: Db,
@@ -253,13 +255,23 @@ export async function findDueSlips(
     .where(
       and(
         isNotNull(payments.slipImageKey),
-        inArray(payments.status, ['confirmed', 'cancelled', 'voided', 'refunded']),
+        inArray(payments.status, ['confirmed', 'claimed', 'cancelled', 'voided', 'refunded']),
         sql`coalesce(${payments.confirmedAt}, ${payments.updatedAt}) < ${args.before.toISOString()}::timestamptz`,
       ),
     )
     .orderBy(asc(payments.id))
     .limit(args.limit);
   return rows.flatMap((r) => (r.key === null ? [] : [{ id: r.id, key: r.key }]));
+}
+
+/** Which of these slip keys some payment still points to (the orphan sweep deletes the others). */
+export async function findReferencedSlipKeys(db: Db, keys: string[]): Promise<Set<string>> {
+  if (keys.length === 0) return new Set();
+  const rows = await db
+    .select({ key: payments.slipImageKey })
+    .from(payments)
+    .where(inArray(payments.slipImageKey, keys));
+  return new Set(rows.flatMap((r) => (r.key === null ? [] : [r.key])));
 }
 
 /**

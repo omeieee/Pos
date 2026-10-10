@@ -32,17 +32,30 @@ import {
 import { readCustomerToken } from './session.ts';
 
 // Made-up LINE user ids and tokens: not real people, not real tokens.
-const U_A = 'Utest00000000000000000000000000a1';
-const U_B = 'Utest00000000000000000000000000b2';
-const U_C = 'Utest00000000000000000000000000c3';
-const TOKENS: Record<string, string> = {
-  'id-token-a-0000000000000000000000': U_A,
-  'id-token-b-0000000000000000000000': U_B,
-  'id-token-c-0000000000000000000000': U_C,
-};
+// A, B and C are new people for every test (see `freshPeople`): the per-customer rate limits are
+// real and count in wall-clock minutes, so tests that share a customer would use each other's quota.
+let U_A = '';
+let U_B = '';
+let U_C = '';
+const U_D = 'Utest00000000000000000000000000d4';
+const TOKENS: Record<string, string> = {};
+let peopleNo = 0;
+function freshPeople(): void {
+  peopleNo += 1;
+  const id = (letter: string) => `Utest${String(peopleNo).padStart(23, '0')}${letter}${letter}0000`;
+  U_A = id('a');
+  U_B = id('b');
+  U_C = id('c');
+  TOKENS['id-token-a-0000000000000000000000'] = U_A;
+  TOKENS['id-token-b-0000000000000000000000'] = U_B;
+  TOKENS['id-token-c-0000000000000000000000'] = U_C;
+  TOKENS['id-token-d-0000000000000000000000'] = U_D;
+}
+freshPeople();
 const TOKEN_A = 'id-token-a-0000000000000000000000';
 const TOKEN_B = 'id-token-b-0000000000000000000000';
 const TOKEN_C = 'id-token-c-0000000000000000000000';
+const TOKEN_D = 'id-token-d-0000000000000000000000';
 const PHONE = '0899994321'; // test PromptPay ID, not real
 
 let h: Harness;
@@ -111,6 +124,7 @@ async function setPromptpay(id: string | null) {
 }
 
 beforeEach(async () => {
+  freshPeople();
   newDay();
   await setPromptpay(PHONE);
   await setScheme(true);
@@ -258,6 +272,16 @@ describe('the LIFF login', () => {
       ).statusCode;
     }
     expect(last).toBe(429);
+  });
+
+  test('a signed-in customer is limited per customer (30 writes a minute) even from many addresses', async () => {
+    const token = await signIn(TOKEN_D); // its own customer: the other tests must not share the count
+    const statuses: number[] = [];
+    // Every call comes from a new address, so only the per-customer limit can stop them.
+    for (let i = 0; i < 36; i++) statuses.push((await acknowledge(token)).statusCode);
+    expect(statuses.slice(0, 25).every((s) => s === 200)).toBe(true);
+    expect(statuses.filter((s) => s === 429).length).toBeGreaterThanOrEqual(4);
+    expect(statuses.at(-1)).toBe(429);
   });
 
   test('the session ends: after an hour, when tampered with, and when the customer is erased', async () => {
