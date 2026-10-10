@@ -7,6 +7,7 @@ import {
 import type { FastifyInstance } from 'fastify';
 import { type GuardFactory, principalOf } from '../auth/guards.ts';
 import type { AuthContext } from '../auth/service.ts';
+import type { SlipStore } from '../slips/store.ts';
 import { parse } from '../validate.ts';
 import { anonymizeCustomer } from './service.ts';
 
@@ -21,6 +22,7 @@ export async function registerCustomerRoutes(
   app: FastifyInstance,
   ctx: AuthContext,
   guard: GuardFactory,
+  slips: SlipStore,
 ): Promise<void> {
   app.addHook('onSend', async (_request, reply) => {
     reply.header('cache-control', 'no-store');
@@ -32,9 +34,16 @@ export async function registerCustomerRoutes(
     async (request): Promise<AnonymizeCustomerResponse> => {
       const { id } = parse(idParamSchema, request.params);
       const input = parse(anonymizeCustomerInputSchema, request.body ?? {});
-      const result = await anonymizeCustomer(ctx, principalOf(request), id, input, {
-        ip: request.ip ?? null,
-      });
+      const result = await anonymizeCustomer(
+        ctx,
+        principalOf(request),
+        id,
+        input,
+        {
+          ip: request.ip ?? null,
+        },
+        slips,
+      );
       return anonymizeCustomerResponseSchema.parse(result);
     },
   );

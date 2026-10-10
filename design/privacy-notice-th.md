@@ -30,7 +30,7 @@
 |---|---|
 | ชื่อผู้รับและตึกที่อยู่ในออเดอร์ที่เสร็จแล้ว | ลบชื่อและตึกออก (ทำให้ไม่ระบุตัวตน) **30 วันหลังออเดอร์เสร็จ** ส่วนรายการอาหารและยอดเงินเก็บไว้ทำบัญชี |
 | สมุดผู้รับ (ชื่อและตึกที่ระบบจำไว้ให้สั่งครั้งต่อไป) | เก็บจนถึง **30 วันหลังออเดอร์ล่าสุดของผู้รับคนนั้น** หรือจนกว่าคุณขอลบ แล้วแต่อย่างใดถึงก่อน |
-| รูปสลิป | ลบภายใน 90 วัน ⚠️ ตามแผนในระบบ ยังไม่ได้สร้างงานลบอัตโนมัติ |
+| รูปสลิป | ลบอัตโนมัติ **90 วัน** หลังการชำระเงินสิ้นสุด หรือทันทีเมื่อคุณขอลบข้อมูล |
 | บันทึกเหตุการณ์จาก LINE (ข้อความที่ส่งเข้าระบบ) | 30 วัน ⚠️ ยังไม่ได้สร้างงานลบอัตโนมัติ |
 | รหัสผู้ใช้ LINE และประวัติการสั่งที่ไม่ระบุตัวตนแล้ว | จนกว่าคุณขอลบ หรือร้านเห็นว่าไม่ได้ใช้งานแล้ว ⚠️ เจ้าของร้านกำหนดระยะเวลา |
 | ยอดขายและเอกสารทางบัญชี | ตามระยะเวลาที่กฎหมายภาษีและบัญชีกำหนด ⚠️ ตรวจกับผู้ทำบัญชี |
@@ -53,4 +53,4 @@
 เมื่อเพิ่มเพื่อนหรือเปิดแอปครั้งแรก ระบบจะแสดงประกาศนี้ให้กดรับทราบ ร้านบันทึกเวลาที่คุณกดรับทราบ ประกาศนี้อาจมีการปรับปรุง ร้านจะแจ้งให้ทราบผ่านแชทเมื่อมีการเปลี่ยนแปลงสำคัญ
 
 ---
-**For the owner (English):** ⚠️ items to decide or have checked: (1) full legal name and address of the controller; (2) a retention period for the LINE user id and anonymised history; (3) the tax-record retention period (ask your accountant); (4) the cloud providers' data-processing terms; (5) where to publish the notice (a public https page) and whether the shop wants a separate marketing opt-in now or never. Three retention jobs this notice promises do not exist yet: 30-day anonymisation of order names and building, the 30-day recipient-book expiry, and 90-day slip deletion (plus 30-day `line_events` deletion). Do not publish the notice until they are built or the wording is relaxed.
+**For the owner (English):** ⚠️ items to decide or have checked: (1) full legal name and address of the controller; (2) a retention period for the LINE user id and anonymised history; (3) the tax-record retention period (ask your accountant); (4) the cloud providers' data-processing terms; (5) where to publish the notice (a public https page) and whether the shop wants a separate marketing opt-in now or never. Three retention jobs this notice promises do not exist yet: 30-day anonymisation of order names and building, the 30-day recipient-book expiry, (the 90-day slip deletion is built, 2026-10-11; plus 30-day `line_events` deletion). Do not publish the notice until they are built or the wording is relaxed.

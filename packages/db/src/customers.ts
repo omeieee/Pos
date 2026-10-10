@@ -13,7 +13,7 @@
 import { ANONYMIZED_RECIPIENT_NAME } from '@sds/shared';
 import { and, desc, eq, isNotNull, isNull, or, sql } from 'drizzle-orm';
 import type { Db } from './client.ts';
-import { customers, orders } from './schema.ts';
+import { customers, orders, payments } from './schema.ts';
 
 export interface RecipientDetails {
   building: string;
@@ -128,6 +128,27 @@ export type AnonymizeResult =
  * `note` (kitchen note) and `room_no` are not touched. The sync trigger gives each changed row a
  * new rev and version, so the change reaches the feed. Already anonymised: nothing is written.
  */
+/**
+ * Clears the slip image key of every payment on the customer's orders and returns the keys, so the
+ * caller can delete the files once the transaction has committed (a customer's erasure includes
+ * the pictures they sent: they show a bank name and account number).
+ */
+export async function takeCustomerSlipKeys(db: Db, customerId: string): Promise<string[]> {
+  const held = await db
+    .select({ id: payments.id, key: payments.slipImageKey })
+    .from(payments)
+    .innerJoin(orders, eq(orders.id, payments.orderId))
+    .where(and(eq(orders.customerId, customerId), isNotNull(payments.slipImageKey)))
+    .for('update', { of: payments });
+  const keys: string[] = [];
+  for (const row of held) {
+    if (row.key === null) continue;
+    await db.update(payments).set({ slipImageKey: null }).where(eq(payments.id, row.id));
+    keys.push(row.key);
+  }
+  return keys;
+}
+
 export async function anonymizeCustomer(db: Db, id: string, at: Date): Promise<AnonymizeResult> {
   const [row] = await db
     .select({ anonymizedAt: customers.anonymizedAt, version: customers.version })

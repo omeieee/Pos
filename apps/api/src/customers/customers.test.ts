@@ -4,13 +4,15 @@ import {
   orderDtoSchema,
 } from '@sds/shared';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
+import { createMemorySlipStore } from '../slips/store.ts';
 import { createHarness, type Harness, type OwnerFixture } from '../test-support/harness.ts';
 
+const slipStore = createMemorySlipStore();
 let h: Harness;
 let owner: OwnerFixture;
 let device: { id: string; token: string };
 beforeAll(async () => {
-  h = await createHarness();
+  h = await createHarness({ slips: slipStore });
   owner = await h.newOwner({ pin: '246810' });
   device = await h.newDevice();
 }, 60_000);
@@ -98,6 +100,25 @@ describe('who may anonymise a customer', () => {
 });
 
 describe('POST /v1/customers/{id}/anonymize', () => {
+  test('erasing a customer also deletes the slip pictures on their orders and clears the keys', async () => {
+    const id = await seedCustomer();
+    const orderId = await seedEntranceOrder(id);
+    const key = 'k'.repeat(32);
+    await slipStore.put(key, Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]));
+    await h.client.query(
+      `insert into payments (order_id, method, status, amount_satang, client_request_id, slip_image_key)
+       values ($1, 'promptpay', 'claimed', 5000, gen_random_uuid(), $2)`,
+      [orderId, key],
+    );
+    const res = await anonymize(await admin(), id);
+    expect(res.statusCode).toBe(200);
+    expect(
+      (await h.client.query('select slip_image_key from payments where order_id = $1', [orderId]))
+        .rows,
+    ).toEqual([{ slip_image_key: null }]);
+    await expect(slipStore.get(key)).resolves.toBeNull();
+  });
+
   test('erases the person, keeps the orders as records, and tells the live feed', async () => {
     const token = await admin();
     const id = await seedCustomer();

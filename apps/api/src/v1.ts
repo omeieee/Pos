@@ -128,9 +128,12 @@ export async function registerV1(app: FastifyInstance, deps: V1Deps): Promise<vo
       await v1.register((scope) => registerRecipientRoutes(scope, context.auth, context.guard), {
         prefix: '/recipients',
       });
-      await v1.register((scope) => registerCustomerRoutes(scope, context.auth, context.guard), {
-        prefix: '/customers',
-      });
+      await v1.register(
+        (scope) => registerCustomerRoutes(scope, context.auth, context.guard, slips),
+        {
+          prefix: '/customers',
+        },
+      );
       await v1.register((scope) => registerMenuRoutes(scope, context.auth, context.guard), {
         prefix: '/menu',
       });

@@ -16,6 +16,7 @@ import {
 } from '../auth/service.ts';
 import { notFound } from '../errors.ts';
 import { toOrderDto } from '../orders/dto.ts';
+import type { SlipStore } from '../slips/store.ts';
 import { withTransaction } from '../tx.ts';
 
 /**
@@ -28,8 +29,10 @@ export async function anonymizeCustomer(
   id: string,
   input: AnonymizeCustomerInput,
   meta: RequestMeta,
+  slips: SlipStore,
 ): Promise<AnonymizeCustomerResponse> {
-  return withTransaction(ctx, async (tx, emit) => {
+  let slipKeys: string[] = [];
+  const response = await withTransaction(ctx, async (tx, emit) => {
     const result = await customersRepo.anonymizeCustomer(tx, id, ctx.now());
     if (!result.found) throw notFound('Customer');
     const response = {
@@ -38,6 +41,7 @@ export async function anonymizeCustomer(
       version: result.version,
     };
     if (!result.changed) return response;
+    slipKeys = await customersRepo.takeCustomerSlipKeys(tx, id);
 
     await insertAudit(tx, {
       actorType: 'staff',
@@ -47,7 +51,11 @@ export async function anonymizeCustomer(
       action: 'customer.anonymize',
       entity: 'customers',
       entityId: id,
-      after: { orders: result.orderIds.length, ...(input.reason ? { reason: input.reason } : {}) },
+      after: {
+        orders: result.orderIds.length,
+        slips: slipKeys.length,
+        ...(input.reason ? { reason: input.reason } : {}),
+      },
     });
     emit(
       securityAlert(ctx, 'customer.anonymized', 'warn', {
@@ -69,4 +77,7 @@ export async function anonymizeCustomer(
     }
     return response;
   });
+  // The files go after the commit: a failed delete leaves a stray file, never a lost key.
+  for (const key of slipKeys) await slips.delete(key).catch(() => undefined);
+  return response;
 }

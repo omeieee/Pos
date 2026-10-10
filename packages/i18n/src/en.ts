@@ -1243,7 +1243,7 @@ export const en = {
     'Tap "Order" in the menu below to order. We deliver to the building entrance only.',
   'lineBot.privacy.title': 'Privacy notice',
   'lineBot.privacy.summary':
-    'The shop keeps your LINE user ID, display name, the recipient name and building, and your orders, to prepare, deliver and take payment for them and to keep the shop accounts. Data controller: {controller}. To see, correct or delete your data, write to {contact}.',
+    'The shop keeps your LINE user ID, display name, the recipient name and building, your orders, and the slip picture if you send one (kept 90 days), to prepare, deliver and take payment for them and to keep the shop accounts. Data controller: {controller}. To see, correct or delete your data, write to {contact}.',
   'lineBot.privacy.readNotice': 'Read the full notice',
   'lineBot.privacy.ackButton': 'I understand',
   'lineBot.privacy.acked': 'Thank you. Your acknowledgement of the privacy notice is saved.',
@@ -1346,7 +1346,7 @@ export const en = {
     'An order can have up to 50 items. Please reduce the quantity or split it.',
   'liff.privacy.title': 'Privacy notice',
   'liff.privacy.body':
-    'The shop keeps your LINE user ID, the recipient name and building, notes and your orders, to prepare, deliver and take payment for them and to keep the shop accounts. Names and buildings are erased 30 days after an order is done. To see, correct or delete your data, write in the shop chat on LINE.',
+    'The shop keeps your LINE user ID, the recipient name and building, notes, your orders and the slip picture if you attach one (kept 90 days), to prepare, deliver and take payment for them and to keep the shop accounts. Names and buildings are erased 30 days after an order is done. To see, correct or delete your data, write in the shop chat on LINE.',
   'liff.privacy.accept': 'I understand, start ordering',
   'liff.menu.title': 'Menu',
   'liff.menu.empty': 'Nothing to order yet.',
