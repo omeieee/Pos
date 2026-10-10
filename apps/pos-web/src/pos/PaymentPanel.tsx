@@ -35,6 +35,7 @@ import {
 } from './payment-model.ts';
 import { flowFor } from './payment-store.ts';
 import { QueuedPaymentView } from './QueuedPaymentView.tsx';
+import { ReceiptActions } from './ReceiptActions.tsx';
 import { StartPanel } from './StartPanel.tsx';
 import { VoidRefundDialog } from './VoidRefundDialog.tsx';
 import './pay-glass.css';
@@ -225,6 +226,7 @@ function PaymentPanelBody({ orderId }: { orderId: string }) {
           <div className="g-t-c" style={s('max-width:420px')}>
             {tr('payment.change.confirmedLocked')}
           </div>
+          <ReceiptActions order={order} received={received} />
           {received && role && paymentActions(role, received).voidRefund ? (
             <button type="button" className="g-btn" onClick={() => setVoiding(true)}>
               {tr('payment.void.button')}

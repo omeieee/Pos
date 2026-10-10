@@ -16,6 +16,7 @@ import {
   type ServiceWorkerHost,
 } from './platform/appUpdates.ts';
 import { type TextClipboard, webClipboard } from './platform/clipboard.ts';
+import { type FileOutput, webFileOutput } from './platform/fileOutput.ts';
 import { apiBaseUrl } from './platform/config.ts';
 import { type Lifecycle, webLifecycle } from './platform/lifecycle.ts';
 import { type LocalStore, openLocalStore } from './platform/localStore.ts';
@@ -88,6 +89,8 @@ export interface Services {
   wakeLock: ScreenWakeLock;
   /** Copies text to the clipboard (a platform seam): the invite link, the recovery codes. */
   clipboard: TextClipboard;
+  /** Saves or prints a file such as a receipt (a platform seam). */
+  files: FileOutput;
   /** The service worker's update state. `updates.start()` registers it (production builds only). */
   updates: AppUpdates;
   /** Is the app in front, is the device online; the web one wraps the browser events. */
@@ -120,6 +123,7 @@ export function createServices(
     sound?: SoundPlayer;
     wakeLock?: ScreenWakeLock;
     clipboard?: TextClipboard;
+    files?: FileOutput;
     localStore?: () => Promise<LocalStore>;
     /** Tests shorten the wait before the saved menu is written. */
     catalogueDebounceMs?: number;
@@ -240,6 +244,7 @@ export function createServices(
     sound,
     wakeLock,
     clipboard: options.clipboard ?? webClipboard,
+    files: options.files ?? webFileOutput,
     lifecycle,
     updates,
     bindRealtime() {

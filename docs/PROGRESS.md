@@ -32,6 +32,11 @@ Newest entries first. Add entries with `/checkpoint`. Each entry covers what cha
 
 ---
 
+## 2026-10-11 · P4 · Staff "issue receipt" button and slip/rate-limit QA follow-ups
+- **Done (uncommitted):** staff "ออกใบเสร็จ" on the POS payment panel (confirmed payment only, on press only; save HTML file or print via the platform `files` service). Receipt builder moved to `packages/i18n/src/receipt.ts`, re-exported by liff-web. QA follow-ups: per-customer rate limits now count (`createRateLimit`), staff slip view limited to 30/min per staff, nightly orphan-slip sweep (`retention-slip-orphans`, 04:15), slips of payments left `claimed` are deleted after 90 days (status untouched).
+- **Verified:** build 12/12; api 1008, db 225 tests; pos-web, liff-web, i18n suites pass. No E2E or real-device check.
+- **Open:** print needs a real iPad/iPhone Safari check; receipt has no tax ID/address (needs owner + settings data); receipt issue not audited; claimed-slip clock uses `updated_at` (re-upload restarts it); orphan sweep writes no audit row. `PRIVACY_NOTICE_VERSION` not bumped (notice already says 90 days).
+
 ## 2026-10-11 · P4 · Payment slips: upload, staff view, 90-day retention (D-24)
 - **Done:** backend by backend-engineer (commit d51d18a in worktree `agent-af7a8e1ae3eba8816`, applied onto main as uncommitted changes): `POST /v1/app/orders/:id/slip` (raw JPEG/PNG/WebP up to 5 MB, magic-byte check, claims the payment), `GET /v1/payments/:id/slip` (staff, no-store, audited), LINE image messages stored the same way, `SlipStore` on the `slips_data` volume, nightly `retention-slips` at 90 days. Clients by the main session: the customer app's "แนบสลิป" button now uploads (`liff-web`), and the POS payment panel has "ดูสลิปที่ลูกค้าแนบ" for a claimed PromptPay payment with a fake-slip warning.
 - **Verified:** api 1001, db 224, line 69, liff-web 27, pos-web 1649, i18n 20, build 12/12. No test yet for the new `SlipView` component or `api.payments.slip`. Not tried on a real phone or the VM.

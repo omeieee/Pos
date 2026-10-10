@@ -321,6 +321,9 @@ export const en = {
   'payment.change.confirmedLocked':
     'Already paid, so the method cannot change. A manager has to cancel the payment first.',
   'payment.void.button': 'Cancel or refund',
+  'payment.receipt.issue': 'Issue receipt',
+  'payment.receipt.save': 'Save file',
+  'payment.receipt.print': 'Print',
   'payment.void.title': 'Cancel or refund',
   'payment.void.kindLabel': 'What to do',
   'payment.void.kind.void': 'Cancel the record (entered by mistake)',
