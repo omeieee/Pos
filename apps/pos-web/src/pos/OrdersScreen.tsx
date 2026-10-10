@@ -18,7 +18,9 @@ import {
 import { SyncPill } from '../ui/SyncPill.tsx';
 import { deliveryLabel } from './delivery-model.ts';
 import { elapsedText } from './elapsed-text.ts';
+import { MemberLine } from './MemberLine.tsx';
 import { localName } from './names.ts';
+import { OrderCorrectionActions } from './OrderCorrection.tsx';
 import {
   byNewest,
   currentBusinessDay,
@@ -184,6 +186,7 @@ function DetailPanel({ order, now }: { order: OrderDto; now: number }) {
           </span>
         </div>
       ) : null}
+      <MemberLine member={order.member} />
       <ul
         className="g-t-s"
         style={s('list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px')}
@@ -246,6 +249,7 @@ function DetailPanel({ order, now }: { order: OrderDto; now: number }) {
           {tr('orders.notifyCustomer')}
         </button>
       ) : null}
+      <OrderCorrectionActions order={order} />
       <div className="g-t-c" style={s('display:flex;gap:6px;align-items:flex-start')}>
         <Gi n="lock" style={s('width:14px;height:14px;margin-top:3px')} />
         {tr('orders.auditNote')}
@@ -525,6 +529,7 @@ function PhoneCard({ order, now, delay }: { order: OrderDto; now: number; delay:
         </div>
         <div className="g-t-s">{meta}</div>
         <div className="g-t-b">{itemsSummary(order, locale, true)}</div>
+        <MemberLine member={order.member} />
         {to || order.roomNo ? (
           <div className="g-t-s" style={s('display:flex;gap:8px;align-items:flex-start')}>
             <Gi n="building" size="sm" style={s('margin-top:2px')} />

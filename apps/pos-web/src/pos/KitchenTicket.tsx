@@ -15,6 +15,7 @@ import {
   waitProgress,
   waitSeconds,
 } from './kitchen-model.ts';
+import { MemberLine } from './MemberLine.tsx';
 import { localName } from './names.ts';
 
 /** The words for the payment, as plain information (never an action) on a ticket. */
@@ -165,6 +166,7 @@ export function KitchenTicket({
             {to?.note ? <div className="kb-opt">{to.note}</div> : null}
           </div>
         ) : null}
+        <MemberLine member={order.member} />
         <ul
           style={s(
             'list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px',

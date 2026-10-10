@@ -28,6 +28,7 @@ import {
   changeRoleInputSchema,
   claimPaymentInputSchema,
   confirmPaymentInputSchema,
+  correctOrderInputSchema,
   createCategoryInputSchema,
   createGroupInputSchema,
   createInviteInputSchema,
@@ -106,6 +107,7 @@ import {
   syncQuerySchema,
   syncResponseSchema,
   transitionOrderInputSchema,
+  voidOrderInputSchema,
 } from '@sds/shared';
 import { z } from 'zod';
 import { joinUrl } from '../platform/config.ts';
@@ -514,6 +516,37 @@ export function createApiClient(options: ApiClientOptions) {
           schema: orderDtoSchema,
           session: true,
           device: 'optional',
+        })
+      ).data,
+
+    /**
+     * The owner's correction of any order (quantities, lines, note). Owner only and a fresh step-up
+     * (`auth.runSensitive`). Saved lines keep their sold price; the server recomputes every total.
+     */
+    correct: async (id: string, input: z.input<typeof correctOrderInputSchema>) =>
+      (
+        await patch({
+          path: `${orderPath(id)}/correction`,
+          body: checked(correctOrderInputSchema, input),
+          schema: orderDtoSchema,
+          session: true,
+          device: 'optional',
+        })
+      ).data,
+
+    /**
+     * The owner voids any order that is not already cancelled. Owner only and a fresh step-up. A retry
+     * of the same press passes the same `clientRequestId` (it is also the Idempotency-Key).
+     */
+    void: async (id: string, input: z.input<typeof voidOrderInputSchema>) =>
+      (
+        await post({
+          path: `${orderPath(id)}/void`,
+          body: checked(voidOrderInputSchema, input),
+          schema: orderDtoSchema,
+          session: true,
+          device: 'optional',
+          headers: { 'Idempotency-Key': input.clientRequestId },
         })
       ).data,
 

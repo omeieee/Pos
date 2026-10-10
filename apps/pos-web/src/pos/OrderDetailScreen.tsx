@@ -16,7 +16,9 @@ import {
 import { deliveryLabel } from './delivery-model.ts';
 import { dishArt } from './dish-art.ts';
 import { LocalOrderScreen } from './LocalOrderScreen.tsx';
+import { MemberLine } from './MemberLine.tsx';
 import { localName } from './names.ts';
+import { OrderCorrectionActions } from './OrderCorrection.tsx';
 import { OrderMoves } from './OrderMoves.tsx';
 import { OrderSummary, type SummaryLine } from './OrderSummary.tsx';
 import { PaymentPanel } from './PaymentPanel.tsx';
@@ -146,6 +148,7 @@ export function OrderDetailScreen({ id }: { id: string }) {
   const actions = (
     <>
       {role ? <OrderMoves order={order} role={role} /> : null}
+      <OrderCorrectionActions order={order} />
       <a className="g-btn" href="#/new">
         <Gi n="plus" />
         {tr('order.detail.takeAnother')}
@@ -172,6 +175,7 @@ export function OrderDetailScreen({ id }: { id: string }) {
           </>
         }
         recipient={to ? { headline: to.headline, note: to.note } : null}
+        member={<MemberLine member={order.member} />}
         cancelReason={
           order.status === 'cancelled' && order.cancelReason
             ? tr('order.cancel.reasonShown', { reason: order.cancelReason })

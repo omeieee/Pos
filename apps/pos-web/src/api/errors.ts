@@ -52,6 +52,11 @@ export const API_ERROR_KEYS = {
   QR_LINK_INVALID: 'error.qrLinkInvalid',
   QR_LINK_EXPIRED: 'error.qrLinkExpired',
   ORDER_HAS_PAYMENT: 'error.orderHasPayment',
+  // The owner's correction and void of a past order
+  PAYMENT_ACTION_REQUIRED: 'error.paymentActionRequired',
+  NOTHING_TO_CHANGE: 'error.nothingToChange',
+  DISCOUNT_EXCEEDS_SUBTOTAL: 'error.discountExceedsSubtotal',
+  UNKNOWN_ORDER_ITEM: 'error.unknownOrderItem',
   // Pricing: sent inside ORDER_INVALID (`details.errors`), see `lineErrors`
   UNKNOWN_ITEM: 'error.unknownItem',
   ITEM_UNAVAILABLE: 'error.itemUnavailable',
@@ -167,7 +172,7 @@ export function codeFromStatus(status: number): string {
 export type Translate = (key: MessageKey, params?: MessageParams) => string;
 
 /** Where an error is shown; the sign-in screens say less than the generic text does. */
-export type ErrorContext = 'pin' | 'ownerSignIn' | 'stepUp' | 'payment';
+export type ErrorContext = 'pin' | 'ownerSignIn' | 'stepUp' | 'payment' | 'correction';
 
 /** "5 นาที" / "1 ชั่วโมง": whole minutes below an hour, whole hours above (rounded up). */
 export function waitText(tr: Translate, seconds: number): string {
@@ -207,6 +212,8 @@ export function errorText(tr: Translate, error: unknown, context?: ErrorContext)
   if (code === 'INVALID_TRANSITION' && context === 'payment') {
     return tr('error.paymentInvalidTransition');
   }
+  // For a correction, ORDER_CLOSED means the order was voided (a finished one can be corrected).
+  if (code === 'ORDER_CLOSED' && context === 'correction') return tr('order.fix.error.voided');
   if (code === 'ORDER_INVALID') {
     const cause = error.lineErrors[0]?.code;
     if (cause !== undefined && cause !== code && isKnownApiCode(cause)) {

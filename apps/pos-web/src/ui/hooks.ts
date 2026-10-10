@@ -1,4 +1,5 @@
 import { type Locale, type MessageKey, type MessageParams, translator } from '@sds/i18n';
+import type { StaffRole } from '@sds/shared';
 import {
   createContext,
   useContext,
@@ -31,6 +32,21 @@ export function useAuthStore(): AuthStore {
 
 export function useAuthState(): AuthState {
   return useStoreState(useAuthStore());
+}
+
+const noSubscription = () => () => undefined;
+
+/**
+ * The signed-in role, or undefined when nobody is (or no auth store is provided, as in a plain
+ * screen test). For small parts that only decide what to show.
+ */
+export function useStaffRole(): StaffRole | undefined {
+  const store = useContext(AuthContext);
+  return useSyncExternalStore(
+    store ? store.subscribe : noSubscription,
+    () => store?.getState().session?.staff.role,
+    () => undefined,
+  );
 }
 
 // ---------- Services (API, entity store, realtime connection) ----------

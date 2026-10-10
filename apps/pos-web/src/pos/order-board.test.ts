@@ -163,8 +163,13 @@ describe('the moves a role may make on an order', () => {
     expect(orderMoves('preparing', 'kitchen').map((m) => m.to)).toEqual(['ready']);
   });
 
-  test('a finished or cancelled order has no moves', () => {
-    expect(orderMoves('completed', 'owner')).toEqual([]);
+  test('a finished order can only be cancelled, by the owner; a cancelled one has no moves', () => {
+    expect(orderMoves('completed', 'owner')).toEqual([
+      { to: 'cancelled', kind: 'cancel', needsReason: true },
+    ]);
+    for (const role of ['manager', 'cashier', 'kitchen'] as const) {
+      expect(orderMoves('completed', role)).toEqual([]);
+    }
     expect(orderMoves('cancelled', 'owner')).toEqual([]);
   });
 });

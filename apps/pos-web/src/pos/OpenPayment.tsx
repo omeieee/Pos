@@ -66,7 +66,7 @@ export function OpenPayment({
       )}
       {claimedHint}
       {payment.status === 'claimed' && payment.method === 'promptpay' ? (
-        <SlipView paymentId={payment.id} />
+        <SlipView orderId={order.id} paymentId={payment.id} rev={payment.rev} />
       ) : null}
     </>
   );

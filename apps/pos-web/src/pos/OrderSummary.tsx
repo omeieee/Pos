@@ -32,6 +32,7 @@ export function OrderSummary({
   subtitle,
   badges,
   recipient,
+  member,
   cancelReason,
   lines,
   orderNote,
@@ -45,6 +46,8 @@ export function OrderSummary({
   subtitle: ReactNode;
   badges: ReactNode;
   recipient: { headline: string; note: string | null } | null;
+  /** Who the order is for (the customer's optional details), if the page shows them. */
+  member?: ReactNode;
   cancelReason?: string | null;
   lines: readonly SummaryLine[];
   orderNote: string | null;
@@ -156,6 +159,7 @@ export function OrderSummary({
           </div>
         </div>
       ) : null}
+      {member}
       {cancelReason ? <Callout tone="bad">{cancelReason}</Callout> : null}
 
       {phone ? (

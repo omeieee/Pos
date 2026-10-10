@@ -17,7 +17,10 @@ export function OrderMoves({ order, role }: { order: OrderDto; role: StaffRole }
   const { orderMoves: moveStore } = useServices();
   const flow = useStoreState(moveStore);
   const tr = useT();
-  const moves = orderMoves(order.status, role);
+  // The owner's void (with its payment choice) replaces the plain cancel of a finished order.
+  const moves = orderMoves(order.status, role).filter(
+    (move) => !(move.kind === 'cancel' && order.status === 'completed'),
+  );
   const [cancelling, setCancelling] = useState(false);
   if (moves.length === 0) return null;
 
