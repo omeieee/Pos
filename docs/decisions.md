@@ -32,6 +32,7 @@ This is the **single source of truth for technology and design choices**. Other 
 | D-20 | Offline PromptPay: staff devices cache the real PromptPay ID and render the QR locally (owner accepted the risk) | **Accepted** | 2026-10-02 |
 | D-21 | Menu photos are stored in Postgres and served by the API (no object storage, no new secret) | **Accepted** | 2026-10-02 |
 | D-23 | Co-owners and staff by e-mail invite: single-use invite link, any role, owners only | **Accepted** | 2026-10-04 |
+| D-24 | Transfer slip images are files on the Oracle VM disk behind a `SlipStore` seam, deleted 90 days after the payment ends | **Accepted** (owner delegated the choice) | 2026-10-11 |
 
 ---
 
@@ -204,3 +205,11 @@ This is the **single source of truth for technology and design choices**. Other 
 - **Why:** D-17 assumed one owner. The data model already keys credentials by staff id, so the change is the invite flow, role changes and the sole-owner assumptions in the terminal commands.
 - **Alternatives:** owner sets a temporary password (the owner would see the secret; rejected); a limited "admin" role (owner chose full co-owner); sending the link by e-mail (needs a sender; later).
 - **Revisit if:** the shop wants invite e-mails sent automatically, or Google sign-in.
+
+## D-24 · Transfer slip images on the VM disk — Accepted (owner delegated the choice, 2026-10-11)
+- **Decision:** a slip is a JPEG, PNG or WebP of at most 5 MB, stored as a file under a random 32-character key in `SLIP_DIR` (a named Docker volume on the VM, `slips_data`). The database keeps only the key (`payments.slip_image_key`), never in DTOs, realtime frames or sync. The code reaches the files through a small `SlipStore` interface (put, get, delete), so a bucket can replace the disk later. A slip only makes the payment `claimed` (D-07); staff confirm.
+- **Retention:** 90 days after the payment was confirmed (or, for cancelled, voided and refunded payments, last changed), by a nightly job (`retention-slips`) that deletes the file first and clears the key after. A file that cannot be deleted keeps its key and is tried again the next night.
+- **Access:** customers upload only to their own order's pending or claimed PromptPay payment (a second upload replaces the first). Staff with `payment.record` view it with `Cache-Control: private, no-store` and `nosniff`; every view writes an `audit_log` row.
+- **Why:** no new service, secret or cost (rule: free tier); a slip shows a customer's bank app, so it stays off the database backups' off-site copies unless the owner decides otherwise.
+- **Alternatives:** Postgres `bytea` (D-21 style; fills the free database and its backups), Supabase or Cloudflare R2 storage (a new credential and, for R2, a payment method).
+- **Revisit if:** the VM disk is lost or rebuilt (slips are NOT in the hourly database dump: a restore drill that must keep slips needs the `slips_data` volume copied too), or volume grows past what the VM disk can hold.

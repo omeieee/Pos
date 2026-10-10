@@ -204,3 +204,15 @@ On 2026-10-01 the owner authorized Claude to proceed automatically; for each que
 - **Sign-in:** invited people use e-mail + password + authenticator, plus a PIN on devices.
 - **Safety rules accepted:** the last owner cannot be demoted or removed; a role change ends the person's sessions; the owners are alerted. Recorded as D-23.
 
+### Release-readiness answers (owner, 2026-10-11)
+- **Slips (item 1):** where payment slip images are stored: the owner asked for a recommendation, free options only. Still open (candidates: Cloudflare R2 free tier, or the Oracle VM disk).
+- **Privacy notice (2):** the draft is approved; it is updated for the retention jobs before it is published.
+- **Receipts (3, Q11):** no automatic e-receipt. Staff get an option to issue a customer receipt. The receipt option itself is not built yet; how it reaches the customer (a push costs quota) is open.
+- **LINE push timing (4):** the one push goes at `ready`, not at `completed`, and carries no receipt. Built 2026-10-11.
+- **ไทยช่วยไทย in LINE (5):** all payment options are shown to the customer and the staff POS can switch between them, ไทยช่วยไทย included (the seeded scheme now starts enabled; the live database is switched on in Settings). Customer wording: method line "เดี๋ยวจะส่ง QR ให้นะคะ", while processing "กำลังส่งให้สักครู่นะคะ". Note: this wording reads as if the QR is sent; rule 4 (the QR is never sent through LINE, face to face only) is unchanged and needs the owner's confirmation of what "ส่ง" means.
+- **Room delivery (6):** none. Delivery is to the building entrance where the security guard is stationed (Q2 settled).
+- **Legal (7, Q3):** no employees; the owner runs everything personally; an individual-owned business, not a company.
+- **Pilot (8):** no staff; all existing equipment takes part. Start date and paper-backup process not stated.
+- **SOPs (9):** the owner said to stay on the Settings page; the SOP drafts are not started.
+- **Invitee phones (10):** later.
+
