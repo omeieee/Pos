@@ -564,6 +564,45 @@ describe('the 90-day purge', () => {
       expect(await sweepOrphanSlips(depsAt(tomorrow(), store))).toEqual({ deleted: 0, failed: 0 });
     });
 
+    test('writes one audit row with the counts, never a key; a run that does nothing writes none', async () => {
+      const auditRows = async () =>
+        (
+          await h.client.query<{ actor_type: string; after: Record<string, unknown> }>(
+            "select actor_type, after from audit_log where action = 'retention.slip_orphans.delete' order by at, id",
+          )
+        ).rows;
+      const before = (await auditRows()).length;
+      const first = await put();
+      const second = await put();
+      await sweepOrphanSlips(depsAt(tomorrow(), store));
+      const rows = await auditRows();
+      expect(rows).toHaveLength(before + 1);
+      expect(rows.at(-1)).toMatchObject({ actor_type: 'system', after: { deleted: 2, failed: 0 } });
+      expect(JSON.stringify(rows)).not.toContain(first);
+      expect(JSON.stringify(rows)).not.toContain(second);
+
+      await sweepOrphanSlips(depsAt(tomorrow(), store)); // nothing left: nothing written
+      expect(await auditRows()).toHaveLength(before + 1);
+    });
+
+    test('a file that will not go is in the audit counts too', async () => {
+      const stuck = await put();
+      const flaky: SlipStore = {
+        put: (k, b) => store.put(k, b),
+        get: (k) => store.get(k),
+        list: () => store.list(),
+        delete: async () => {
+          throw new Error('disk error');
+        },
+      };
+      await sweepOrphanSlips(depsAt(tomorrow(), flaky));
+      const rows = await h.client.query<{ after: Record<string, unknown> }>(
+        "select after from audit_log where action = 'retention.slip_orphans.delete' and after->>'deleted' = '0' and after->>'failed' = '1'",
+      );
+      expect(rows.rows).toHaveLength(1);
+      expect(await store.get(stuck)).toEqual(JPEG);
+    });
+
     test('leaves a young file alone: its payment row may be about to point to it', async () => {
       const young = await put();
       expect(await sweepOrphanSlips(depsAt(new Date(), store))).toEqual({ deleted: 0, failed: 0 });

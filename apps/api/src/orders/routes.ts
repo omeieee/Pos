@@ -1,6 +1,7 @@
 import {
   cancelOrderInputSchema,
   createOrderInputSchema,
+  issueReceiptInputSchema,
   listOrdersQuerySchema,
   orderIdParamSchema,
   patchOrderInputSchema,
@@ -11,6 +12,7 @@ import { type GuardFactory, principalOf } from '../auth/guards.ts';
 import { ApiError } from '../errors.ts';
 import type { CoreContext } from '../tx.ts';
 import { parse } from '../validate.ts';
+import { issueReceipt } from './receipt.ts';
 import { createOrder, getOrder, listOrdersForDay, patchOrder, transitionOrder } from './service.ts';
 
 const idOf = (request: FastifyRequest) => parse(orderIdParamSchema, request.params).id;
@@ -62,6 +64,30 @@ export async function registerOrderRoutes(
       parse(transitionOrderInputSchema, request.body),
     ),
   );
+
+  // A receipt only for a confirmed payment; every issue is an audit row. Same permission as
+  // listing an order's payments (cashier, manager, owner).
+  app.post('/:id/receipt', { onRequest: guard('payment.record') }, async (request, reply) => {
+    const input = parse(issueReceiptInputSchema, request.body);
+    const header = request.headers['idempotency-key'];
+    if (
+      header !== undefined &&
+      String(header).toLowerCase() !== input.clientRequestId.toLowerCase()
+    ) {
+      throw new ApiError(
+        400,
+        'IDEMPOTENCY_KEY_MISMATCH',
+        'Idempotency-Key must equal clientRequestId',
+      );
+    }
+    const { result, replay } = await issueReceipt(ctx, principalOf(request), idOf(request), input, {
+      ip: request.ip ?? null,
+    });
+    return reply
+      .header('cache-control', 'no-store')
+      .status(replay ? 200 : 201)
+      .send(result);
+  });
 
   app.post('/:id/cancel', { onRequest: guard() }, async (request) => {
     const input = parse(cancelOrderInputSchema, request.body);

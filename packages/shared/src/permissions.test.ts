@@ -11,6 +11,7 @@ test('only the owner can change the PromptPay ID, the co-pay scheme, staff or de
     for (const p of [
       'settings.promptpay',
       'settings.gov_copay',
+      'settings.receipt',
       'staff.manage',
       'device.manage',
       'data.export',
@@ -65,6 +66,7 @@ test('sensitive actions need step-up', () => {
       'payment.void_refund',
       'settings.gov_copay',
       'settings.promptpay',
+      'settings.receipt',
       'staff.manage',
     ].sort(),
   );

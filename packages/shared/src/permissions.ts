@@ -20,6 +20,8 @@ export const PERMISSIONS = [
   'settings.edit',
   'settings.promptpay',
   'settings.gov_copay',
+  /** The shop's tax ID and address printed on receipts. */
+  'settings.receipt',
   'staff.manage',
   'device.manage',
   'data.export',
@@ -62,6 +64,7 @@ export const ROLE_PERMISSIONS: Record<StaffRole, ReadonlySet<Permission>> = {
 export const STEP_UP_PERMISSIONS: ReadonlySet<Permission> = new Set<Permission>([
   'settings.promptpay',
   'settings.gov_copay',
+  'settings.receipt',
   'payment.void_refund',
   'staff.manage',
   'device.manage',

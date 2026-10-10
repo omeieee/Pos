@@ -1,4 +1,4 @@
-import { retentionRepo } from '@sds/db';
+import { insertAudit, retentionRepo } from '@sds/db';
 import { RETENTION_DAYS } from '@sds/shared';
 import type { JobDeps } from './jobs.ts';
 
@@ -118,6 +118,15 @@ export async function sweepOrphanSlips(deps: JobDeps, bounds: Bounds = {}) {
         failed += 1;
       }
     }
+  }
+  // One `system` audit row per run that did something: counts only, never a key.
+  if (deleted > 0 || failed > 0) {
+    await insertAudit(deps.db, {
+      actorType: 'system',
+      action: 'retention.slip_orphans.delete',
+      entity: 'slip_files',
+      after: { deleted, failed },
+    });
   }
   return { deleted, failed };
 }

@@ -32,6 +32,7 @@ import {
   DEFAULT_DELIVERY_SETTINGS,
   DEFAULT_LINE_ORDERING,
   DEFAULT_OPENING_HOURS,
+  DEFAULT_RECEIPT_SETTINGS,
   DEFAULT_SHOP_SETTINGS,
   type DeliverySettings,
   deliveryPatchInputSchema,
@@ -55,6 +56,9 @@ import {
   paymentsSettingsSchema,
   promptpayPatchInputSchema,
   promptpaySettingsSchema,
+  type ReceiptSettings,
+  receiptPatchInputSchema,
+  receiptSettingsSchema,
   SHOP_TIME_ZONE,
   shopPatchInputSchema,
   shopSettingsSchema,
@@ -84,6 +88,8 @@ interface Resource {
   editPermission: Permission;
   /** Special handling for the PromptPay ID. */
   promptpay?: true;
+  /** The receipt tax ID and address: own audit action and owner alert; never put on the realtime feed. */
+  receipt?: true;
   /** The change also answers PUT (a whole-value replacement) besides PATCH. Same handler. */
   put?: true;
 }
@@ -153,6 +159,17 @@ export const RESOURCES: readonly Resource[] = [
     editPermission: 'settings.promptpay',
     promptpay: true,
   },
+  {
+    // The tax ID and address printed on receipts (owner, 2026-10-11): owner only, step-up, audit,
+    // alert. Empty until the owner enters them. Read by the receipt endpoint, not synced.
+    route: 'receipt',
+    key: 'receipt',
+    schema: receiptSettingsSchema,
+    defaults: DEFAULT_RECEIPT_SETTINGS,
+    patch: receiptPatchInputSchema,
+    editPermission: 'settings.receipt',
+    receipt: true,
+  },
 ];
 
 export interface SettingResponse {
@@ -189,6 +206,12 @@ export async function currentPromptpayId(db: Db): Promise<PromptpaySettings | nu
 export async function currentDeliverySettings(db: Db): Promise<DeliverySettings> {
   const row = await getSettingRow(db, 'delivery');
   return row ? deliverySettingsSchema.parse(row.value) : DEFAULT_DELIVERY_SETTINGS;
+}
+
+/** The tax ID and address for receipts: the saved ones, or both empty when never saved. */
+export async function currentReceiptSettings(db: Db): Promise<ReceiptSettings> {
+  const row = await getSettingRow(db, 'receipt');
+  return row ? receiptSettingsSchema.parse(row.value) : DEFAULT_RECEIPT_SETTINGS;
 }
 
 /** The opening hours now in force: the saved ones, or the defaults when never saved. */
@@ -276,7 +299,11 @@ export async function patchSetting(
       actorType: 'staff',
       actorId: actor.staffId,
       deviceId: actor.deviceId,
-      action: resource.promptpay ? 'settings.promptpay_change' : 'settings.update',
+      action: resource.promptpay
+        ? 'settings.promptpay_change'
+        : resource.receipt
+          ? 'settings.receipt_change'
+          : 'settings.update',
       entity: 'settings',
       entityId: resource.key,
       before: view.before,
@@ -291,6 +318,15 @@ export async function patchSetting(
           detail: { openPromptpayPayments: openPromptpay },
         }),
       );
+    }
+    if (resource.receipt) {
+      emit(
+        securityAlert(ctx, 'settings.receipt_changed', 'warn', {
+          staffId: actor.staffId,
+          deviceId: actor.deviceId,
+        }),
+      );
+      return toResponse(resource, saved);
     }
     emit({
       type: 'settings.updated',

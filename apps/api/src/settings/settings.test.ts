@@ -58,6 +58,7 @@ describe('access', () => {
     'delivery',
     'promptpay',
     'gov-copay',
+    'receipt',
   ];
 
   test('nobody without a session', async () => {
@@ -1038,6 +1039,123 @@ describe('government co-pay scheme', () => {
       before: { govShareBp: 6000, enabled: false },
       after: { govShareBp: 5000, enabled: true },
     });
+  });
+});
+
+describe('receipt settings: the shop tax ID and address', () => {
+  // A made-up number that only satisfies the check digit.
+  const TAX_ID = '1234567890121';
+  const ADDRESS = '1 ถนนทดสอบ แขวงทดสอบ กรุงเทพฯ 10000';
+
+  test('nothing is saved by default: GET says empty at version 0', async () => {
+    await clearSettings();
+    const token = await staffToken('cashier');
+    expect((await call('GET', '/v1/settings/receipt', token)).json()).toEqual({
+      value: { taxId: null, address: null },
+      version: 0,
+      rev: 0,
+      updatedAt: null,
+    });
+  });
+
+  test('owner only, and only after a fresh step-up', async () => {
+    await clearSettings();
+    const body = { expectedVersion: 0, taxId: TAX_ID };
+    const manager = await staffToken('manager');
+    await call('POST', '/v1/auth/step-up', manager, { pin: '4821' });
+    const denied = await call('PATCH', '/v1/settings/receipt', manager, body);
+    expect(denied.statusCode).toBe(403);
+    expect(denied.json()).toMatchObject({ code: 'FORBIDDEN' });
+
+    h.clock.advanceSeconds(90);
+    const signedInOnly = await h.ownerSession(owner);
+    const noStepUp = await call('PATCH', '/v1/settings/receipt', signedInOnly, body);
+    expect(noStepUp.statusCode).toBe(403);
+    expect(noStepUp.json()).toMatchObject({ code: 'STEP_UP_REQUIRED' });
+    expect((await call('GET', '/v1/settings/receipt', signedInOnly)).json().version).toBe(0);
+  });
+
+  test('the owner saves both after step-up: audited (who, before, after), owner alerted, nothing broadcast', async () => {
+    await clearSettings();
+    const token = await ownerStepped();
+    const alertsBefore = h.alerts.length;
+    const eventsBefore = h.events.length;
+    const res = await call('PATCH', '/v1/settings/receipt', token, {
+      expectedVersion: 0,
+      taxId: TAX_ID,
+      address: ADDRESS,
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ version: 1, value: { taxId: TAX_ID, address: ADDRESS } });
+
+    const audit = (await h.auditRows('receipt')).find(
+      (a) => a.action === 'settings.receipt_change',
+    );
+    expect(audit).toMatchObject({
+      actorType: 'staff',
+      actorId: owner.staffId,
+      entity: 'settings',
+      before: { taxId: null, address: null },
+      after: { taxId: TAX_ID, address: ADDRESS },
+    });
+    expect(h.alerts.slice(alertsBefore)).toEqual([
+      expect.objectContaining({
+        kind: 'settings.receipt_changed',
+        severity: 'warn',
+        staffId: owner.staffId,
+      }),
+    ]);
+    // Not a synced setting: no realtime frame carries it.
+    expect(h.events.slice(eventsBefore).some((e) => e.type === 'settings.updated')).toBe(false);
+  });
+
+  test('a later change needs the current version, can clear a field, and a no-op writes nothing', async () => {
+    await clearSettings();
+    const t1 = await ownerStepped();
+    await call('PATCH', '/v1/settings/receipt', t1, {
+      expectedVersion: 0,
+      taxId: TAX_ID,
+      address: ADDRESS,
+    });
+    const t2 = await ownerStepped();
+    const stale = await call('PATCH', '/v1/settings/receipt', t2, {
+      expectedVersion: 0,
+      address: null,
+    });
+    expect(stale.statusCode).toBe(409);
+    expect(stale.json()).toMatchObject({ code: 'VERSION_CONFLICT' });
+
+    const rows = (await h.auditRows('receipt')).length;
+    const same = await call('PATCH', '/v1/settings/receipt', t2, {
+      expectedVersion: 1,
+      taxId: TAX_ID,
+    });
+    expect(same.statusCode).toBe(200);
+    expect(same.json().version).toBe(1);
+    expect((await h.auditRows('receipt')).length).toBe(rows);
+
+    const cleared = await call('PATCH', '/v1/settings/receipt', t2, {
+      expectedVersion: 1,
+      address: null,
+    });
+    expect(cleared.json()).toMatchObject({ version: 2, value: { taxId: TAX_ID, address: null } });
+  });
+
+  test('a bad tax ID or an unknown field is refused, and nothing is saved', async () => {
+    await clearSettings();
+    const token = await ownerStepped();
+    for (const body of [
+      { expectedVersion: 0, taxId: '1234567890122' },
+      { expectedVersion: 0, taxId: '12345' },
+      { expectedVersion: 0, address: '   ' },
+      { expectedVersion: 0 },
+      { expectedVersion: 0, taxId: TAX_ID, phone: '0812345678' },
+    ]) {
+      const res = await call('PATCH', '/v1/settings/receipt', token, body);
+      expect(res.statusCode, JSON.stringify(body)).toBe(400);
+      expect(res.json()).toMatchObject({ code: 'VALIDATION_ERROR' });
+    }
+    expect((await call('GET', '/v1/settings/receipt', token)).json().version).toBe(0);
   });
 });
 
