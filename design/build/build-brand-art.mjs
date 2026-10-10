@@ -33,7 +33,9 @@ for (const f of FONTS) {
   f.path = join(cache, `${f.key}.ttf`);
   if (!existsSync(f.path)) writeFileSync(f.path, Buffer.from(await (await fetch(f.url)).arrayBuffer()));
 }
-const used = new Set([...' 0123456789.,:·-/฿()+']);
+// U+0E4D (nikhahit) and U+0E32 (sara aa) are always kept: browsers decompose sara am (U+0E33)
+// into them before shaping, so a subset without them mis-draws "ำ" (seen on "ชำ").
+const used = new Set([...' 0123456789.,:·-/฿()+ํา']);
 const KANIT = "'SDS Kanit', Kanit, 'Leelawadee UI', Tahoma, sans-serif";
 const PLEX = "'SDS Plex', 'IBM Plex Sans Thai', 'Leelawadee UI', Tahoma, sans-serif";
 const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
