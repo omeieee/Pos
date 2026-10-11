@@ -92,6 +92,7 @@ const ICON = {
   cart: '<path d="M3 4h2.4l2.1 11h10.2l2-8H6.4"/><circle cx="9.6" cy="19.3" r="1.3"/><circle cx="16.8" cy="19.3" r="1.3"/>',
   baht: '<circle cx="12" cy="12" r="9.5"/><path d="M10 7.2h3.4a2.2 2.2 0 0 1 0 4.4H10M10 11.6h3.9a2.2 2.2 0 0 1 0 4.4H10M10 7.2V16M12 5.6v1.6M12 16v1.6"/>',
   chat: '<path d="M4 5h16v11h-6.5L9 20v-4H4z"/><path d="M8.5 10.5h.01M12 10.5h.01M15.5 10.5h.01" stroke-width="2.6"/>',
+  user: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
   building: '<path d="M5 21V4h9v17M14 9h5v12M3 21h18"/>',
   chevronRight: '<path d="M9 6l6 6-6 6"/>',
 };
@@ -189,9 +190,9 @@ const TILES = [
     ink: G.chili,
   },
   {
-    ic: 'baht',
-    label: 'วิธีชำระเงิน',
-    sub: ['PromptPay · เงินสด', 'ไทยช่วยไทย'],
+    ic: 'user',
+    label: 'ข้อมูลสมาชิก',
+    sub: ['ชื่อ · เบอร์โทร · ตึก'],
     soft: G.amberSoft,
     ink: G.amberInk,
   },
@@ -268,7 +269,7 @@ const LIFF = '{{LIFF_BASE_URL}}';
 const actions = [
   { type: 'uri', label: 'สั่งอาหาร', uri: `${LIFF}/menu` },
   { type: 'uri', label: 'ออเดอร์ของฉัน', uri: `${LIFF}/orders` },
-  { type: 'postback', label: 'วิธีชำระเงิน', data: 'rm=pay-info', displayText: 'วิธีชำระเงิน' },
+  { type: 'uri', label: 'ข้อมูลสมาชิก', uri: `${LIFF}/member` },
   { type: 'postback', label: 'ติดต่อร้าน', data: 'rm=contact', displayText: 'ติดต่อร้าน' },
 ];
 const menuJson = (m, name) => ({

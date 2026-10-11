@@ -48,7 +48,7 @@ describe('rich menu', () => {
       for (const area of menu.areas) {
         if (area.action.type === 'uri') {
           expect(area.action.uri).toMatch(
-            /^https:\/\/liff\.line\.me\/1234567890-abcdefgh\/(menu|orders)$/,
+            /^https:\/\/liff\.line\.me\/1234567890-abcdefgh\/(menu|orders|member)$/,
           );
         }
         if (area.action.type === 'postback') {

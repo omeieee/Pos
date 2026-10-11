@@ -41,10 +41,9 @@
         "height": 843
       },
       "action": {
-        "type": "postback",
-        "label": "วิธีชำระเงิน",
-        "data": "rm=pay-info",
-        "displayText": "วิธีชำระเงิน"
+        "type": "uri",
+        "label": "ข้อมูลสมาชิก",
+        "uri": "{{LIFF_BASE_URL}}/member"
       }
     },
     {
