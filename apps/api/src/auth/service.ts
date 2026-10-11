@@ -89,6 +89,7 @@ export function securityAlert(
     deviceId?: string | null;
     subject?: SecurityAlertEvent['subject'];
     detail?: SecurityAlertEvent['detail'];
+    slip2go?: SecurityAlertEvent['slip2go'];
   },
 ): AppEvent {
   return {
@@ -100,6 +101,7 @@ export function securityAlert(
     deviceId: who.deviceId ?? null,
     ...(who.subject ? { subject: who.subject } : {}),
     ...(who.detail ? { detail: who.detail } : {}),
+    ...(who.slip2go ? { slip2go: who.slip2go } : {}),
   };
 }
 

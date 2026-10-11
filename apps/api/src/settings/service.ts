@@ -244,6 +244,19 @@ export async function currentPromptpayId(db: Db): Promise<PromptpaySettings | nu
 }
 
 /**
+ * The shop's receiving account with its bank code, read at bank-check time (D-27). Null unless
+ * BOTH are set: Slip2Go needs the bank to type the account. Never returned by a route.
+ */
+export async function currentBankAccount(
+  db: Db,
+): Promise<{ bankCode: string; accountNumber: string } | null> {
+  const row = await getSettingRow(db, 'bank_account');
+  const parsed = row ? bankAccountSettingsSchema.safeParse(row.value) : null;
+  if (!parsed?.success || !parsed.data.bankCode || !parsed.data.accountNumber) return null;
+  return { bankCode: parsed.data.bankCode, accountNumber: parsed.data.accountNumber };
+}
+
+/**
  * The shop's receiving account number, read at slip-check time (D-26). Never returned by a route.
  * A missing or damaged row is just "no account": it must not break the PromptPay comparison.
  */

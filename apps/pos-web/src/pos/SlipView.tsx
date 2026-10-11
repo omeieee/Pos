@@ -90,8 +90,10 @@ export function SlipView({
         setHint(
           found
             ? {
-                check: found.check,
-                amountSatang: found.amountSatang,
+                // Without an OCR reading (OCR off, only the bank check ran) it shows as unreadable
+                // until the screens learn the bank-check verdict (D-27, Slice 5).
+                check: found.check ?? 'unreadable',
+                amountSatang: found.amountSatang ?? null,
                 qrFound: found.qrFound,
                 recipient: found.recipientCheck,
               }
@@ -111,7 +113,7 @@ export function SlipView({
         );
         onCheck?.({
           hasSlip: has,
-          check: found?.check ?? null,
+          check: found ? (found.check ?? 'unreadable') : null,
           recipient: found?.recipientCheck ?? null,
           duplicate: used !== undefined,
         });

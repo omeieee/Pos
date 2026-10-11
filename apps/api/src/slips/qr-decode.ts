@@ -10,9 +10,11 @@ import { sniffSlip } from './image.ts';
  * the picture never leaves the machine. It runs INSIDE a worker thread (`qr.ts`), because decoding
  * is CPU work that would otherwise stop the API on the small shop server.
  *
- * Only what the parser accepts is returned (the sending bank and the reference). The raw QR text
- * is dropped here and never leaves this module. JPEG and PNG are read; WebP is not (no small pure
- * JavaScript decoder), so a WebP slip simply has no QR reading.
+ * Only what the parser accepts is returned: the sending bank and the reference, and for the bank
+ * check (D-27) the raw text of that same slip QR (`readSlipQrText`). The raw text is for memory
+ * only: it is sent to Slip2Go and never stored, logged or put in an answer. A QR the parser does
+ * not accept (a PromptPay QR, a link, a bad CRC) is never returned. JPEG and PNG are read; WebP is
+ * not (no small pure JavaScript decoder), so a WebP slip simply has no QR reading.
  */
 
 /** A picture as plain RGBA pixels. */
@@ -94,12 +96,23 @@ function cut(source: Raster, region: Region): Raster {
   return { width: outW, height: outH, data };
 }
 
+/** A slip QR as parsed, with the exact text it was read from (memory only, see above). */
+export interface SlipQrText {
+  qr: SlipQr;
+  raw: string;
+}
+
 /**
  * The slip QR on the picture, or null when there is none, it cannot be read, or it is not a slip
  * QR (a CRC that does not match counts as unreadable). Tries the regions in turn and stops at the
  * first slip QR; the time `budgetMs` is checked between tries. Never throws for a bad picture.
  */
 export function readSlipQr(bytes: Uint8Array, budgetMs = 15_000): SlipQr | null {
+  return readSlipQrText(bytes, budgetMs)?.qr ?? null;
+}
+
+/** Like `readSlipQr`, and the raw text of the QR as well. */
+export function readSlipQrText(bytes: Uint8Array, budgetMs = 15_000): SlipQrText | null {
   const until = Date.now() + budgetMs;
   let raster: Raster | null;
   try {
@@ -113,7 +126,7 @@ export function readSlipQr(bytes: Uint8Array, budgetMs = 15_000): SlipQr | null 
     const part = cut(raster, region);
     const found = jsQR(part.data, part.width, part.height, { inversionAttempts: 'dontInvert' });
     const parsed = found ? parseSlipQr(found.data) : null;
-    if (parsed) return parsed;
+    if (parsed && found) return { qr: parsed, raw: found.data };
   }
   return null;
 }

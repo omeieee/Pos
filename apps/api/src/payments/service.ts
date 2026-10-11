@@ -57,6 +57,7 @@ import {
   planAdjustment,
   type SlipCheck,
   type SlipRecipientCheck,
+  type SlipVerifyVerdict,
   satang,
   type TransitionError,
 } from '@sds/shared';
@@ -708,28 +709,48 @@ export interface MoveInput {
    * Claim only: the customer's slip image, already stored under `key`. It is written in the same
    * transaction as the claim (or, on a payment that is already claimed, replaces the old slip).
    * `onReplaced` is called inside the transaction with the key of the slip it replaced, so the
-   * caller can delete that file once the transaction has committed. `read` marks the slip to be
-   * read automatically (D-26); a new slip always clears the hint of the old one.
+   * caller can delete that file once the transaction has committed. `ocr` and `verify` mark the
+   * slip to be read automatically: the amount (D-26) and the bank check (D-27). A new slip always
+   * clears the hints of the old one, except that the very same picture sent again keeps its bank
+   * verdict (no second call to the service).
    */
   slip?:
-    | { key: string; hash: string; onReplaced?: (oldKey: string) => void; read?: boolean }
+    | {
+        key: string;
+        hash: string;
+        onReplaced?: (oldKey: string) => void;
+        ocr?: boolean;
+        verify?: boolean;
+      }
     | undefined;
 }
 
-/** A new slip: its key, with the old reading cleared (and a new one asked for when it is on). */
-const slipPatch = (slip: {
-  key: string;
-  hash: string;
-  read?: boolean;
-}): paymentsRepo.PaymentPatch => ({
+/**
+ * A new slip: its key, with the old readings cleared (and new ones asked for when they are on).
+ * The same picture again on a payment that already has a bank verdict keeps that verdict and the
+ * QR key it filled (D-27): re-sending the same file must not spend another call.
+ */
+const slipPatch = (
+  slip: { key: string; hash: string; ocr?: boolean; verify?: boolean },
+  current: paymentsRepo.PaymentRow,
+): paymentsRepo.PaymentPatch => ({
   slipImageKey: slip.key,
-  slipCheck: slip.read ? 'pending' : null,
+  slipCheck: slip.ocr ? 'pending' : null,
   slipAmountSatang: null,
   // The picture's hash is kept for the duplicate hint; the reference hash comes with the reading.
   slipImageHash: slip.hash,
   slipRefHash: null,
-  slipQrHash: null,
   slipRecipientCheck: null,
+  ...(current.slipImageHash === slip.hash && current.slipVerify !== null
+    ? {}
+    : {
+        slipQrHash: null,
+        slipVerify: slip.verify ? 'pending' : null,
+        slipVerifyCode: null,
+        slipVerifyRef: null,
+        slipVerifyAttempts: 0,
+        slipVerifiedAt: null,
+      }),
 });
 
 /**
@@ -761,7 +782,7 @@ export async function movePayment(
       // A second slip on a claim that is already made replaces the first; nothing else changes.
       if (input.slip && moveName === 'claim') {
         const swapped = await paymentsRepo.updatePaymentIfVersion(tx, row.id, row.version, {
-          ...slipPatch(input.slip),
+          ...slipPatch(input.slip, row),
         });
         if (!swapped) throw versionConflict(row.version); // cannot happen under the row lock
         if (row.slipImageKey) input.slip.onReplaced?.(row.slipImageKey);
@@ -816,7 +837,7 @@ export async function movePayment(
         ? {
             status: 'claimed',
             claimedAt: now,
-            ...(input.slip && moveName === 'claim' ? slipPatch(input.slip) : {}),
+            ...(input.slip && moveName === 'claim' ? slipPatch(input.slip, row) : {}),
           }
         : spec.to === 'confirmed'
           ? {
@@ -892,15 +913,27 @@ export async function listOrderPayments(
     payments: rows.map(toPaymentDto),
     slipPaymentIds: rows.filter((r) => r.slipImageKey !== null).map((r) => r.id),
     slipChecks: rows.flatMap((r) =>
-      r.slipImageKey !== null && r.slipCheck !== null
+      r.slipImageKey !== null && (r.slipCheck !== null || r.slipVerify !== null)
         ? [
             {
               paymentId: r.id,
-              check: r.slipCheck as SlipCheck,
-              amountSatang: r.slipAmountSatang === null ? null : satang(r.slipAmountSatang),
+              ...(r.slipCheck !== null
+                ? {
+                    check: r.slipCheck as SlipCheck,
+                    amountSatang: r.slipAmountSatang === null ? null : satang(r.slipAmountSatang),
+                  }
+                : {}),
               qrFound: r.slipQrHash !== null,
               ...(r.slipRecipientCheck !== null
                 ? { recipientCheck: r.slipRecipientCheck as SlipRecipientCheck }
+                : {}),
+              ...(r.slipVerify !== null
+                ? {
+                    verify: {
+                      verdict: r.slipVerify as SlipVerifyVerdict,
+                      ...(r.slipVerifiedAt !== null ? { at: r.slipVerifiedAt.toISOString() } : {}),
+                    },
+                  }
                 : {}),
             },
           ]

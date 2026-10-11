@@ -12,6 +12,7 @@ import { sentryOptions } from './redact.ts';
 import { createSlipChecker, installSlipChecker } from './slips/checker.ts';
 import { createTesseractOcr } from './slips/ocr.ts';
 import { createWorkerQrReader } from './slips/qr.ts';
+import { createSlip2goVerifier, installSlipVerifier } from './slips/slip2go.ts';
 import { createFsSlipStore } from './slips/store.ts';
 import { registerV1 } from './v1.ts';
 
@@ -73,14 +74,22 @@ events.subscribe((event) => {
 if (reportAlert) forwardAlerts(events, reportAlert);
 const line = createLineRuntime(config.line, { privacy: config.privacy });
 const slips = createFsSlipStore(config.slipDir);
-// The automatic reading of slips (D-26): Tesseract on this machine, one picture at a time.
-if (config.slipOcr) {
+// The automatic reading of slips, one picture at a time: the amount with Tesseract on this machine
+// (D-26) and/or the bank check by Slip2Go (D-27). The checker starts when either is on.
+const verifier = config.slipVerifier
+  ? createSlip2goVerifier({ ...config.slipVerifier, log: app.log })
+  : null;
+installSlipVerifier(verifier);
+if (config.slipOcr || verifier) {
   installSlipChecker(
     createSlipChecker({
       ctx: { db, now: () => new Date(), events },
       slips,
-      ocr: createTesseractOcr(config.slipOcr),
+      ...(config.slipOcr ? { ocr: createTesseractOcr(config.slipOcr) } : {}),
       ...(config.slipQr ? { qr: createWorkerQrReader() } : {}),
+      ...(verifier && config.slipVerifier
+        ? { verifier, dailyCap: config.slipVerifier.dailyCap }
+        : {}),
       log: app.log,
     }),
   );

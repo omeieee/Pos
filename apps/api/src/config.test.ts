@@ -27,6 +27,8 @@ describe('loadConfig', () => {
       slipDir: '/data/slips',
       slipOcr: null,
       slipQr: true,
+      slipVerifier: null,
+      slipAutoconfirm: null,
     });
   });
 
@@ -44,6 +46,69 @@ describe('loadConfig', () => {
     expect(loadConfig({ ...base, SLIP_QR: 'off' }).slipQr).toBe(false);
     expect(loadConfig({ ...base, SLIP_QR: 'on' }).slipQr).toBe(true);
     expect(() => loadConfig({ ...base, SLIP_OCR_LANG: 'eng; rm -rf /' })).toThrow(ConfigError);
+  });
+
+  test('the bank check by Slip2Go is off by default and needs its key when on (D-27)', () => {
+    expect(loadConfig(base).slipVerifier).toBeNull();
+    expect(loadConfig({ ...base, SLIP_VERIFIER: 'off' }).slipVerifier).toBeNull();
+    const on = { ...base, SLIP_VERIFIER: 'slip2go', SLIP2GO_SECRET_KEY: 'k-not-a-real-key' };
+    expect(loadConfig(on).slipVerifier).toEqual({
+      baseUrl: 'https://connect.slip2go.com',
+      secretKey: 'k-not-a-real-key',
+      timeoutMs: 15_000,
+      dailyCap: 100,
+    });
+    expect(
+      loadConfig({
+        ...on,
+        SLIP2GO_BASE_URL: 'https://slip2go.example.test',
+        SLIP2GO_TIMEOUT_MS: '5000',
+        SLIP2GO_DAILY_CAP: '20',
+      }).slipVerifier,
+    ).toEqual({
+      baseUrl: 'https://slip2go.example.test',
+      secretKey: 'k-not-a-real-key',
+      timeoutMs: 5000,
+      dailyCap: 20,
+    });
+    expect(
+      loadConfig({ ...on, SLIP2GO_SECRET_KEY: '', SLIP_VERIFIER: 'off' }).slipVerifier,
+    ).toBeNull();
+  });
+
+  test('the Slip2Go settings are checked, and the error never shows the key', () => {
+    const on = { ...base, SLIP_VERIFIER: 'slip2go' };
+    expect(() => loadConfig(on)).toThrow(/SLIP2GO_SECRET_KEY/);
+    expect(() =>
+      loadConfig({ ...on, SLIP2GO_SECRET_KEY: 'k', SLIP2GO_BASE_URL: 'http://insecure.test' }),
+    ).toThrow(ConfigError);
+    expect(() => loadConfig({ ...on, SLIP2GO_SECRET_KEY: 'k', SLIP2GO_DAILY_CAP: '0' })).toThrow(
+      ConfigError,
+    );
+    expect(() => loadConfig({ ...base, SLIP_VERIFIER: 'other' })).toThrow(ConfigError);
+    try {
+      loadConfig({ ...on, SLIP2GO_SECRET_KEY: 'SECRET-KEY-VALUE', SLIP2GO_TIMEOUT_MS: 'abc' });
+      expect.unreachable();
+    } catch (error) {
+      expect(String(error)).not.toContain('SECRET-KEY-VALUE');
+    }
+  });
+
+  test('auto-confirm is off by default, has a ceiling, and needs the bank check (D-27)', () => {
+    const on = { ...base, SLIP_VERIFIER: 'slip2go', SLIP2GO_SECRET_KEY: 'k' };
+    expect(loadConfig(on).slipAutoconfirm).toBeNull();
+    expect(loadConfig({ ...on, SLIP_AUTOCONFIRM: 'off' }).slipAutoconfirm).toBeNull();
+    expect(loadConfig({ ...on, SLIP_AUTOCONFIRM: 'on' }).slipAutoconfirm).toEqual({
+      maxSatang: 100_000,
+    });
+    expect(
+      loadConfig({ ...on, SLIP_AUTOCONFIRM: 'on', SLIP_AUTOCONFIRM_MAX_SATANG: '50000' })
+        .slipAutoconfirm,
+    ).toEqual({ maxSatang: 50_000 });
+    expect(() => loadConfig({ ...base, SLIP_AUTOCONFIRM: 'on' })).toThrow(/SLIP_VERIFIER/);
+    expect(() =>
+      loadConfig({ ...on, SLIP_AUTOCONFIRM: 'on', SLIP_AUTOCONFIRM_MAX_SATANG: '0' }),
+    ).toThrow(ConfigError);
   });
 
   test('the slip directory comes from SLIP_DIR, empty means the default', () => {

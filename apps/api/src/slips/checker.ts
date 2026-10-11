@@ -1,30 +1,48 @@
 import { createHash } from 'node:crypto';
-import { paymentsRepo } from '@sds/db';
+import { ordersRepo, paymentsRepo } from '@sds/db';
 import {
   checkSlipRecipient,
   compareSlipAmount,
   extractSlipAmount,
   extractSlipRef,
+  normaliseSlipRef,
   type SlipCheck,
   type SlipRecipientCheck,
+  type SlipVerifyResult,
+  slip2goReceivers,
+  slip2goVerdict,
 } from '@sds/shared';
+import { securityAlert } from '../auth/service.ts';
+import { currentBusinessDate } from '../orders/business-day.ts';
 import { toPaymentDto } from '../payments/dto.ts';
-import { currentBankAccountNumber, currentPromptpayId } from '../settings/service.ts';
+import {
+  currentBankAccount,
+  currentBankAccountNumber,
+  currentPromptpayId,
+} from '../settings/service.ts';
 import { type CoreContext, withTransaction } from '../tx.ts';
-import { imageSize } from './image.ts';
+import { imageSize, sniffSlip } from './image.ts';
 import type { SlipOcr } from './ocr.ts';
 import type { SlipQrReader } from './qr.ts';
+import type { SlipVerifier } from './slip2go.ts';
 import type { SlipStore } from './store.ts';
 
 /**
- * The automatic reading of a slip (D-26). It looks for the amount on the picture and compares it
- * with what the payment charges. The answer is only a hint on the payment (`slip_check`): it never
- * confirms or rejects money (CLAUDE.md rule 2), never fails an upload, and keeps only the amount
- * and the verdict, the word `match`/`mismatch`/`unknown` for whether the receiver on the slip looks
- * like the shop's PromptPay ID or receiving account (read from settings now, never kept), plus hashes of the bank reference and of the reference inside the slip's small
- * QR (for the duplicate hint; never the references themselves). The OCR text, which holds names and account numbers, is dropped at once.
+ * The automatic reading of a slip. Two independent readings, each switched on by its own setting,
+ * each with its own `pending` mark on the payment:
+ *
+ * - the amount on the picture (D-26, Tesseract OCR, `slip_check`);
+ * - the bank check by Slip2Go (D-27, `slip_verify`): does the transfer exist, did it go to the
+ *   shop, is it this payment's amount, is it newer than the order.
+ *
+ * Both are only hints on the payment: they never confirm or reject money (CLAUDE.md rule 2) except
+ * for the one automatic confirmation D-27 allows (`autoConfirm`, off unless configured), and never
+ * fail an upload. They keep only verdicts, words, hashes and Slip2Go's result code and reference:
+ * the OCR text, the QR text, names and account numbers are dropped at once.
  */
 export interface SlipChecker {
+  /** Which readings this checker does; the upload marks a new slip `pending` for exactly these. */
+  readonly wants: { readonly ocr: boolean; readonly verify: boolean };
   /** Reads the slip of this payment soon, one at a time. Never throws. */
   enqueue(paymentId: string): void;
   /** Reads the payments still marked pending (after a restart, or a full queue). Returns how many were read. */
@@ -40,55 +58,70 @@ export const MAX_OCR_PIXELS = 16_000_000;
 /** Beyond this many waiting, the rest is left to the sweep. */
 const MAX_QUEUED = 50;
 const SWEEP_LIMIT = 5;
+/** Calls to Slip2Go per slip when it keeps failing (network, 429, 5xx, bank error), then `unchecked`. */
+export const MAX_VERIFY_ATTEMPTS = 3;
+/** The transfer may predate the order a little (the customer paid while the cart was open). */
+const DATE_SLACK_MS = 10 * 60_000;
+export const DEFAULT_DAILY_CAP = 100;
+
+/** What the bank check decided for one picture. */
+type VerifyOutcome =
+  | {
+      kind: 'final';
+      verdict: SlipVerifyResult;
+      code: string | null;
+      ref: string | null;
+      /** A call was made (it counts as an attempt). */
+      called: boolean;
+      /** Which owner alert this answer calls for, once per business date. */
+      alert: 'account' | 'cap' | null;
+    }
+  | { kind: 'retry'; code: string | null; alert: null };
+
+interface Evaluated {
+  ocr: {
+    check: Exclude<SlipCheck, 'pending'>;
+    amount: number | null;
+    refHash: string | null;
+    recipient: SlipRecipientCheck | null;
+  } | null;
+  verify: VerifyOutcome | null;
+  /** From the local QR decode, or else from Slip2Go's sender bank and transaction reference. */
+  qrHash: string | null;
+  businessDate: string;
+}
 
 export function createSlipChecker(args: {
   ctx: CoreContext;
   slips: SlipStore;
-  ocr: SlipOcr;
-  /** Reads the slip's small QR (D-26); without one, only the printed reference is used. */
+  /** Reads the amount on the picture (D-26). Without it only the bank check runs. */
+  ocr?: SlipOcr;
+  /** Reads the slip's small QR (D-26); it also supplies the QR text for the bank check. */
   qr?: SlipQrReader;
+  /** The bank check by Slip2Go (D-27). */
+  verifier?: SlipVerifier;
+  /** Calls to the verifier per business date; above it a slip is left to the staff tick. */
+  dailyCap?: number;
   /** Counts and ids only: never the text. */
   log?: { warn(obj: Record<string, unknown>, msg: string): void };
 }): SlipChecker {
-  const { ctx, slips, ocr, qr } = args;
+  const { ctx, slips, ocr, qr, verifier } = args;
+  if (!ocr && !verifier) throw new Error('a slip checker needs the OCR or the verifier');
+  const dailyCap = args.dailyCap ?? DEFAULT_DAILY_CAP;
   const waiting = new Set<string>();
   /** A new slip arrived for a payment that is being read: read it again when this one ends. */
   const again = new Set<string>();
   let tail: Promise<void> = Promise.resolve();
 
-  async function evaluate(
-    key: string,
-    expected: number,
-  ): Promise<{
-    check: Exclude<SlipCheck, 'pending'>;
-    amount: number | null;
-    refHash: string | null;
-    qrHash: string | null;
-    recipient: SlipRecipientCheck | null;
-  }> {
-    const bytes = await slips.get(key);
-    const size = bytes ? imageSize(bytes) : null;
-    if (!bytes || !size || size.width * size.height > MAX_OCR_PIXELS) {
-      return { check: 'unreadable', amount: null, refHash: null, qrHash: null, recipient: null };
-    }
-    // The small QR first: it is cheap, it works on screenshots and re-photos, and it still counts
-    // when the text cannot be read. A failure here only means "no QR key"; it never fails the check.
-    let qrHash: string | null = null;
-    if (qr) {
-      try {
-        const found = await qr.read(bytes);
-        if (found) qrHash = sha256(`${found.sendingBank}:${found.transRef}`);
-      } catch (error) {
-        args.log?.warn({ reason: error instanceof Error ? error.message : 'QR_FAILED' }, 'slip QR');
-      }
-    }
+  async function readOcr(bytes: Buffer, expected: number): Promise<NonNullable<Evaluated['ocr']>> {
+    if (!ocr) throw new Error('no OCR');
     let text: string;
     try {
       text = await ocr.read(bytes);
     } catch (error) {
       // The class of the failure only: the message of a reader could echo what it read.
       args.log?.warn({ reason: error instanceof Error ? error.message : 'OCR_FAILED' }, 'slip OCR');
-      return { check: 'unreadable', amount: null, refHash: null, qrHash, recipient: null };
+      return { check: 'unreadable', amount: null, refHash: null, recipient: null };
     }
     const amount = extractSlipAmount(text);
     // Only the hash of the normalised reference leaves this function: two slips of one transfer
@@ -108,26 +141,208 @@ export function createSlipChecker(args: {
     } catch {
       args.log?.warn({}, 'slip recipient');
     }
-    return { check: compareSlipAmount(amount, expected), amount, refHash, qrHash, recipient };
+    return { check: compareSlipAmount(amount, expected), amount, refHash, recipient };
+  }
+
+  /** The bank check: one call to Slip2Go, or a reason not to make it. */
+  async function readVerify(
+    row: paymentsRepo.PaymentRow,
+    bytes: Buffer | null,
+    usable: boolean,
+    rawQr: string | null,
+    businessDate: string,
+  ): Promise<{ outcome: VerifyOutcome; qrHash: string | null }> {
+    if (!verifier) throw new Error('no verifier');
+    const noCall = (alert: 'cap' | null = null) => ({
+      outcome: {
+        kind: 'final' as const,
+        verdict: 'unchecked' as const,
+        code: null,
+        ref: null,
+        called: false,
+        alert,
+      },
+      qrHash: null,
+    });
+    const mime = bytes ? sniffSlip(bytes) : null;
+    // The QR text goes first (no picture leaves the machine); the picture only when no QR was read,
+    // and only as JPEG or PNG (Slip2Go documents nothing else).
+    const image = !rawQr && usable && bytes && (mime === 'image/jpeg' || mime === 'image/png');
+    if (!rawQr && !image) return noCall();
+    const promptpay = await currentPromptpayId(ctx.db);
+    const bank = await currentBankAccount(ctx.db);
+    // Nothing to check the receiver against: a call would let a transfer to anyone pass.
+    const receivers = slip2goReceivers(promptpay?.idValue ?? null, bank);
+    if (receivers.length === 0) return noCall();
+    const order = await ordersRepo.findOrderById(ctx.db, row.orderId);
+    if (!order) return noCall();
+    const conditions = {
+      amountSatang: row.amountSatang,
+      receivers,
+      notBefore: new Date(order.placedAt.getTime() - DATE_SLACK_MS),
+    };
+    // The cap counts calls in its own table, so replacing the slip over and over cannot hide them.
+    if ((await paymentsRepo.slipVerifyCallsOn(ctx.db, businessDate)) >= dailyCap)
+      return noCall('cap');
+    await paymentsRepo.recordSlipVerifyCall(ctx.db, businessDate);
+    const result = rawQr
+      ? await verifier.verifyQr(rawQr, conditions)
+      : await verifier.verifyImage(bytes as Buffer, mime as string, conditions);
+    if (result.kind === 'transient') {
+      return { outcome: { kind: 'retry', code: null, alert: null }, qrHash: null };
+    }
+    // Rule 1: the amount Slip2Go reports is compared with the payment's own, in satang. A valid that
+    // reports no amount, or another one, is not valid.
+    const localAmountOk =
+      result.code === '200200' ? result.amountSatang === row.amountSatang : null;
+    const decided = slip2goVerdict(result.code, localAmountOk);
+    const code = /^\d{6}$/.test(result.code) ? result.code : null;
+    // The duplicate key, built exactly like the local one so that the two can meet.
+    const transRef = result.transRef ? normaliseSlipRef(result.transRef) : null;
+    const qrHash =
+      transRef && result.senderBank && /^\d{3}$/.test(result.senderBank)
+        ? sha256(`${result.senderBank}:${transRef}`)
+        : null;
+    if (decided.retry) return { outcome: { kind: 'retry', code, alert: null }, qrHash };
+    return {
+      outcome: {
+        kind: 'final',
+        verdict: decided.verdict,
+        code,
+        ref: result.referenceId ? result.referenceId.slice(0, 100) : null,
+        called: true,
+        alert: decided.alert ? 'account' : null,
+      },
+      qrHash,
+    };
+  }
+
+  async function evaluate(
+    row: paymentsRepo.PaymentRow,
+    key: string,
+    wantOcr: boolean,
+    wantVerify: boolean,
+  ): Promise<Evaluated> {
+    const businessDate = await currentBusinessDate(ctx.db, ctx.now());
+    const bytes = await slips.get(key);
+    const size = bytes ? imageSize(bytes) : null;
+    const usable = Boolean(bytes && size && size.width * size.height <= MAX_OCR_PIXELS);
+    // The small QR first: it is cheap, it works on screenshots and re-photos, and it still counts
+    // when the text cannot be read. A failure here only means "no QR key"; it never fails the check.
+    let localHash: string | null = null;
+    let rawQr: string | null = null;
+    if (qr && bytes && usable) {
+      try {
+        const found = qr.readRaw ? await qr.readRaw(bytes) : null;
+        const parsed = qr.readRaw ? (found?.qr ?? null) : await qr.read(bytes);
+        if (parsed) localHash = sha256(`${parsed.sendingBank}:${parsed.transRef}`);
+        // The text is for the bank check only and is dropped with this call.
+        if (wantVerify && found) rawQr = found.raw;
+      } catch (error) {
+        args.log?.warn({ reason: error instanceof Error ? error.message : 'QR_FAILED' }, 'slip QR');
+      }
+    }
+    const ocrPart = wantOcr
+      ? bytes && usable
+        ? await readOcr(bytes, row.amountSatang)
+        : { check: 'unreadable' as const, amount: null, refHash: null, recipient: null }
+      : null;
+    let verifyPart: VerifyOutcome | null = null;
+    let remoteHash: string | null = null;
+    if (wantVerify) {
+      const done = await readVerify(row, bytes ?? null, usable, rawQr, businessDate);
+      verifyPart = done.outcome;
+      remoteHash = done.qrHash;
+    }
+    return {
+      ocr: ocrPart,
+      verify: verifyPart,
+      qrHash: localHash ?? remoteHash,
+      businessDate,
+    };
   }
 
   async function read(paymentId: string): Promise<void> {
     const row = await paymentsRepo.findPaymentById(ctx.db, paymentId);
-    if (row?.slipCheck !== 'pending' || !row.slipImageKey) return;
+    if (!row?.slipImageKey) return;
+    const wantOcr = Boolean(ocr) && row.slipCheck === 'pending';
+    const wantVerify = Boolean(verifier) && row.slipVerify === 'pending';
+    if (!wantOcr && !wantVerify) return;
     const key = row.slipImageKey;
-    const { check, amount, refHash, qrHash, recipient } = await evaluate(key, row.amountSatang);
+    const hash = row.slipImageHash;
+    const done = await evaluate(row, key, wantOcr, wantVerify);
     await withTransaction(ctx, async (tx, emit) => {
+      // Lock order, always: the order row, then the payment (see `payments/service.ts`).
+      await ordersRepo.lockOrderById(tx, row.orderId);
       const locked = await paymentsRepo.lockPaymentById(tx, paymentId);
-      // A newer slip, or a purge, came in while the picture was being read: this answer is stale.
-      if (locked?.slipImageKey !== key || locked.slipCheck !== 'pending') return;
-      const updated = await paymentsRepo.updatePaymentIfVersion(tx, locked.id, locked.version, {
-        slipCheck: check,
-        slipAmountSatang: amount,
-        slipRefHash: refHash,
-        slipQrHash: qrHash,
-        slipRecipientCheck: recipient,
-      });
-      // The payment's status is never touched. Devices get the new rev and ask for the hint.
+      // The owner hears about the account once a day, even when this answer turns out stale.
+      if (done.verify?.alert) {
+        const first = await paymentsRepo.claimSlipVerifyAlert(
+          tx,
+          done.businessDate,
+          done.verify.alert,
+        );
+        if (first) {
+          emit(
+            securityAlert(
+              ctx,
+              done.verify.alert === 'cap' ? 'slip2go.cap_reached' : 'slip2go.unavailable',
+              'warn',
+              {
+                slip2go:
+                  done.verify.alert === 'account' && done.verify.code
+                    ? { code: done.verify.code }
+                    : {},
+              },
+            ),
+          );
+        }
+      }
+      if (!locked) return;
+      // A newer slip, or a purge, came in while the picture was being read: that answer is stale.
+      // The amount reading follows the file; the bank check follows the picture (the same picture
+      // sent again keeps its answer, so it must not be thrown away).
+      const ocrFresh = wantOcr && locked.slipImageKey === key && locked.slipCheck === 'pending';
+      const verifyFresh =
+        wantVerify &&
+        locked.slipImageKey !== null &&
+        locked.slipImageHash === hash &&
+        locked.slipVerify === 'pending';
+      if (!ocrFresh && !verifyFresh) return;
+
+      const patch: paymentsRepo.PaymentPatch = {};
+      if (ocrFresh && done.ocr) {
+        patch.slipCheck = done.ocr.check;
+        patch.slipAmountSatang = done.ocr.amount;
+        patch.slipRefHash = done.ocr.refHash;
+        patch.slipRecipientCheck = done.ocr.recipient;
+      }
+      if (done.qrHash !== null) patch.slipQrHash = done.qrHash;
+      if (verifyFresh && done.verify) {
+        const outcome = done.verify;
+        if (outcome.kind === 'retry') {
+          const attempts = locked.slipVerifyAttempts + 1;
+          patch.slipVerifyAttempts = attempts;
+          if (attempts >= MAX_VERIFY_ATTEMPTS) {
+            patch.slipVerify = 'unchecked';
+            patch.slipVerifyCode = outcome.code;
+            patch.slipVerifiedAt = ctx.now();
+          }
+        } else {
+          patch.slipVerify = outcome.verdict;
+          patch.slipVerifyCode = outcome.code;
+          patch.slipVerifyRef = outcome.ref;
+          patch.slipVerifyAttempts = locked.slipVerifyAttempts + (outcome.called ? 1 : 0);
+          patch.slipVerifiedAt = ctx.now();
+        }
+      }
+      const updated = await paymentsRepo.updatePaymentIfVersion(
+        tx,
+        locked.id,
+        locked.version,
+        patch,
+      );
+      // The payment's status is never touched here. Devices get the new rev and ask for the hint.
       if (updated) {
         emit({
           type: 'payment.upserted',
@@ -157,14 +372,18 @@ export function createSlipChecker(args: {
   }
 
   return {
+    wants: { ocr: Boolean(ocr), verify: Boolean(verifier) },
     enqueue(paymentId) {
       if (waiting.has(paymentId)) again.add(paymentId);
       else if (waiting.size < MAX_QUEUED) void schedule(paymentId);
     },
     async sweep(limit = SWEEP_LIMIT) {
-      const ids = (await paymentsRepo.listPendingSlipChecks(ctx.db, limit)).filter(
-        (id) => !waiting.has(id),
-      );
+      const ids = (
+        await paymentsRepo.listPendingSlipChecks(ctx.db, limit, {
+          ocr: Boolean(ocr),
+          verify: Boolean(verifier),
+        })
+      ).filter((id) => !waiting.has(id));
       await Promise.all(ids.map(schedule));
       return ids.length;
     },
@@ -180,7 +399,7 @@ export function createSlipChecker(args: {
 
 // One checker per process, installed by `server.ts` (the picture can arrive through the customer
 // app or a LINE chat, and neither should have to carry the reader around). Without one - tests,
-// or SLIP_OCR=off - a slip simply gets no hint.
+// or both SLIP_OCR=off and SLIP_VERIFIER=off - a slip simply gets no hint.
 let installed: SlipChecker | null = null;
 
 export const installSlipChecker = (checker: SlipChecker | null): void => {

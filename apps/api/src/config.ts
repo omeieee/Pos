@@ -97,7 +97,43 @@ const envSchema = z
     ),
     /** Reads the small QR on a slip (D-26), a duplicate hint only. `off` turns it off; default on whenever the slip reading is on. */
     SLIP_QR: z.preprocess(emptyToUndefined, z.enum(['on', 'off']).optional()),
+    /**
+     * The bank check of a slip by Slip2Go (D-27). Off by default; `slip2go` needs the secret key.
+     * The key is a secret: it is never logged and never in an error message.
+     */
+    SLIP_VERIFIER: z.preprocess(emptyToUndefined, z.enum(['off', 'slip2go']).default('off')),
+    SLIP2GO_BASE_URL: z.preprocess(
+      emptyToUndefined,
+      z
+        .url({ protocol: /^https$/, error: 'must be an https URL' })
+        .default('https://connect.slip2go.com'),
+    ),
+    SLIP2GO_SECRET_KEY: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
+    SLIP2GO_TIMEOUT_MS: z.preprocess(
+      emptyToUndefined,
+      z.coerce.number().int().min(1000).max(60_000).default(15_000),
+    ),
+    /** Calls to Slip2Go per business date; above it a slip is left to the staff tick. */
+    SLIP2GO_DAILY_CAP: z.preprocess(
+      emptyToUndefined,
+      z.coerce.number().int().min(1).max(100_000).default(100),
+    ),
+    /** The server confirms a PromptPay payment itself on a valid bank check (D-27). Default off. */
+    SLIP_AUTOCONFIRM: z.preprocess(emptyToUndefined, z.enum(['on', 'off']).default('off')),
+    /** Above this amount (satang) staff still confirm by hand. Default 1,000 THB. */
+    SLIP_AUTOCONFIRM_MAX_SATANG: z.preprocess(
+      emptyToUndefined,
+      z.coerce.number().int().min(1).max(100_000_000).default(100_000),
+    ),
     GIT_SHA: z.preprocess(emptyToUndefined, z.string().default('dev')),
+  })
+  .refine((e) => e.SLIP_VERIFIER !== 'slip2go' || e.SLIP2GO_SECRET_KEY !== undefined, {
+    path: ['SLIP2GO_SECRET_KEY'],
+    error: 'is required when SLIP_VERIFIER=slip2go',
+  })
+  .refine((e) => e.SLIP_AUTOCONFIRM !== 'on' || e.SLIP_VERIFIER === 'slip2go', {
+    path: ['SLIP_AUTOCONFIRM'],
+    error: 'needs SLIP_VERIFIER=slip2go',
   })
   .refine((e) => e.NODE_ENV !== 'production' || !disablesTls(e.DATABASE_URL), {
     path: ['DATABASE_URL'],
@@ -130,6 +166,10 @@ export type Config = {
   slipOcr: { lang: string; timeoutMs: number } | null;
   /** The slip's small QR is read as well (D-26); only when the slip reading is on. */
   slipQr: boolean;
+  /** The bank check by Slip2Go (D-27); null when it is off. `secretKey` is a secret: never log it. */
+  slipVerifier: { baseUrl: string; secretKey: string; timeoutMs: number; dailyCap: number } | null;
+  /** The server confirms a valid PromptPay slip itself (D-27); null when it is off. */
+  slipAutoconfirm: { maxSatang: number } | null;
 };
 
 export class ConfigError extends Error {}
@@ -166,5 +206,16 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
         ? { lang: e.SLIP_OCR_LANG, timeoutMs: e.SLIP_OCR_TIMEOUT_MS }
         : null,
     slipQr: e.SLIP_QR !== 'off',
+    slipVerifier:
+      e.SLIP_VERIFIER === 'slip2go' && e.SLIP2GO_SECRET_KEY !== undefined
+        ? {
+            baseUrl: e.SLIP2GO_BASE_URL,
+            secretKey: e.SLIP2GO_SECRET_KEY,
+            timeoutMs: e.SLIP2GO_TIMEOUT_MS,
+            dailyCap: e.SLIP2GO_DAILY_CAP,
+          }
+        : null,
+    slipAutoconfirm:
+      e.SLIP_AUTOCONFIRM === 'on' ? { maxSatang: e.SLIP_AUTOCONFIRM_MAX_SATANG } : null,
   };
 }

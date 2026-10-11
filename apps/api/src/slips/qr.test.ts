@@ -9,7 +9,7 @@ import { PNG } from 'pngjs';
 import QRCode from 'qrcode';
 import { describe, expect, test } from 'vitest';
 import { createWorkerQrReader } from './qr.ts';
-import { readSlipQr } from './qr-decode.ts';
+import { readSlipQr, readSlipQrText } from './qr-decode.ts';
 
 const tlv = (tag: string, value: string) =>
   `${tag}${String(value.length).padStart(2, '0')}${value}`;
@@ -116,7 +116,28 @@ describe('readSlipQr', () => {
   });
 });
 
+describe('readSlipQrText (the raw text for the bank check, D-27)', () => {
+  test('returns the parsed QR together with its raw text', () => {
+    expect(readSlipQrText(png(page(SLIP_QR_TEXT)))).toEqual({ qr: EXPECTED, raw: SLIP_QR_TEXT });
+  });
+
+  test('gives null for anything readSlipQr gives null for', () => {
+    expect(readSlipQrText(png(page('https://example.com/pay?id=1234567890')))).toBeNull();
+    expect(readSlipQrText(png(page(`${SLIP_QR_TEXT.slice(0, -4)}0000`)))).toBeNull();
+    expect(readSlipQrText(Buffer.from('not a picture'))).toBeNull();
+  });
+});
+
 describe('createWorkerQrReader', () => {
+  test('readRaw answers with the raw text too, and read still answers with the parsed values only', async () => {
+    const reader = createWorkerQrReader();
+    expect(await reader.readRaw(png(page(SLIP_QR_TEXT)))).toEqual({
+      qr: EXPECTED,
+      raw: SLIP_QR_TEXT,
+    });
+    expect(await reader.readRaw(Buffer.from('nothing here'))).toBeNull();
+  }, 30_000);
+
   test('reads the QR in a worker thread and answers with the parsed values only', async () => {
     const reader = createWorkerQrReader();
     const found = await reader.read(png(page(SLIP_QR_TEXT)));

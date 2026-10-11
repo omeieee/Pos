@@ -17,8 +17,8 @@ import { newSlipKey, type SlipStore } from './store.ts';
  * transaction (`claimPayment`, the same function as the plain "โอนแล้ว"). If that fails the new
  * file is deleted; if it replaced an earlier slip, the old file is deleted after the commit.
  *
- * When the automatic reading is on (D-26) the payment is marked `pending` in that same transaction
- * and the reading is queued after the commit. It runs in the background: it can neither delay the
+ * When an automatic reading is on (the amount, D-26; the bank check, D-27) the payment is marked
+ * `pending` for each in that same transaction and the reading is queued after the commit. It runs in the background: it can neither delay the
  * answer nor make the upload fail.
  */
 export async function attachSlip(
@@ -44,7 +44,8 @@ export async function attachSlip(
       key,
       hash: createHash('sha256').update(bytes).digest('hex'),
       onReplaced: (oldKey) => replaced.add(oldKey),
-      read: checker !== null,
+      ocr: checker?.wants.ocr ?? false,
+      verify: checker?.wants.verify ?? false,
     });
   } catch (error) {
     await slips.delete(key).catch(() => undefined);

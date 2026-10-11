@@ -16,6 +16,7 @@ import { REFUND_METHODS } from './payment-adjustment.ts';
 import { nonNegativeSatangSchema, paymentMethodSchema } from './schemas.ts';
 import { SLIP_CHECKS } from './slip-amount.ts';
 import { SLIP_RECIPIENT_CHECKS } from './slip-recipient.ts';
+import { SLIP_VERIFY_VERDICTS } from './slip-verify.ts';
 
 const isoInstant = z.iso.datetime();
 const version = z.number().int().min(1);
@@ -176,8 +177,9 @@ export const orderPaymentsResponseSchema = z.object({
     .array(
       z.object({
         paymentId: z.uuid(),
-        check: z.enum(SLIP_CHECKS),
-        amountSatang: nonNegativeSatangSchema.nullable(),
+        /** The OCR amount reading (D-26). Absent when OCR is off and only the bank check ran. */
+        check: z.enum(SLIP_CHECKS).optional(),
+        amountSatang: nonNegativeSatangSchema.nullable().optional(),
         /** Whether a readable slip QR (D-26) was found on the picture; false is a neutral note, not an alarm. */
         qrFound: z.boolean().optional(),
         /**
@@ -185,6 +187,13 @@ export const orderPaymentsResponseSchema = z.object({
          * never a decision. Absent when it was not read (no ID set, or reading off).
          */
         recipientCheck: z.enum(SLIP_RECIPIENT_CHECKS).optional(),
+        /**
+         * The bank check by Slip2Go (D-27): a hint for staff. `at` is when the verdict landed (absent
+         * while `pending`). Never in sync, realtime or a customer answer.
+         */
+        verify: z
+          .object({ verdict: z.enum(SLIP_VERIFY_VERDICTS), at: isoInstant.optional() })
+          .optional(),
       }),
     )
     .optional(),

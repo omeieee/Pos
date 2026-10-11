@@ -14,6 +14,7 @@ export interface AlertReport {
     paymentId?: string;
     orderId?: string;
     openPromptpayPayments?: number;
+    slip2go?: { code?: string; quotaSlips?: number; expiresOn?: string };
   };
 }
 
@@ -33,6 +34,20 @@ export function alertReport(event: SecurityAlertEvent): AlertReport {
           }
         : {}),
       ...(event.detail ? { openPromptpayPayments: event.detail.openPromptpayPayments } : {}),
+      // Picked field by field too: a result code, slips left and a date, nothing else.
+      ...(event.slip2go
+        ? {
+            slip2go: {
+              ...(event.slip2go.code !== undefined ? { code: event.slip2go.code } : {}),
+              ...(event.slip2go.quotaSlips !== undefined
+                ? { quotaSlips: event.slip2go.quotaSlips }
+                : {}),
+              ...(event.slip2go.expiresOn !== undefined
+                ? { expiresOn: event.slip2go.expiresOn }
+                : {}),
+            },
+          }
+        : {}),
     },
   };
 }

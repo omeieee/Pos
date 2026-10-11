@@ -88,6 +88,29 @@ describe('forwardAlerts (security alerts to Sentry)', () => {
     expect(JSON.stringify(report)).not.toContain('0899994321');
   });
 
+  test('a Slip2Go alert carries a result code, slips left and a date, and nothing else (D-27)', () => {
+    const report = alertReport(
+      alert({
+        kind: 'slip2go.quota_low',
+        severity: 'warn',
+        staffId: null,
+        deviceId: null,
+        slip2go: {
+          code: '401004',
+          quotaSlips: 12,
+          expiresOn: '2026-10-19',
+          shop: 'PRIVATE',
+        } as never,
+      }),
+    );
+    expect(report.extra).toEqual({
+      staffId: null,
+      deviceId: null,
+      slip2go: { code: '401004', quotaSlips: 12, expiresOn: '2026-10-19' },
+    });
+    expect(JSON.stringify(report)).not.toContain('PRIVATE');
+  });
+
   test('missing ids stay null', () => {
     expect(alertReport(alert({ staffId: null, deviceId: null })).extra).toEqual({
       staffId: null,

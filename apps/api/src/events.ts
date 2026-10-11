@@ -21,6 +21,11 @@ export interface SecurityAlertEvent {
    * count only). They are NOT cancelled; the owner is warned to check them (decision 2026-10-02).
    */
   detail?: { openPromptpayPayments: number };
+  /**
+   * A Slip2Go account alert (D-27: `slip2go.unavailable`, `.cap_reached`, `.quota_low`,
+   * `.package_expiring`): a result code, a number of slips left, a date. Numbers and dates only.
+   */
+  slip2go?: { code?: string; quotaSlips?: number; expiresOn?: string };
 }
 
 /**
