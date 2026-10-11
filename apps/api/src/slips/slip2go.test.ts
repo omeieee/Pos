@@ -161,6 +161,7 @@ describe('verifyImage', () => {
     expect(form).toBeInstanceOf(FormData);
     const file = form.get('file') as File;
     expect(file.type).toBe('image/png');
+    expect(file.name).toBe('slip.png');
     expect(Buffer.from(await file.arrayBuffer())).toEqual(bytes);
     expect(JSON.parse(String(form.get('payload')))).toEqual({
       checkAmount: { type: 'eq', amount: '15.00' },

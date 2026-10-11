@@ -924,6 +924,23 @@ describe('auto-confirm (D-27)', () => {
     expect((await state(second.order.id))?.status).toBe('claimed');
   });
 
+  test('one transfer cannot confirm two orders, whichever is checked first', async () => {
+    on();
+    localQr = null;
+    // A: the first call fails, so A has no Slip2Go key yet. B (another photo of the same transfer,
+    // claimed later) is checked and confirmed. Then A's retry answers valid with the same key.
+    respond = (_c, n) =>
+      n === 1 ? new Error('reset') : { body: answer('200200', currentAmountBaht) };
+    const a = await sendSlip(picture(1));
+    expect((await state(a.order.id))?.status).toBe('claimed');
+    const b = await sendSlip(picture(2));
+    expect((await state(b.order.id))?.status).toBe('confirmed');
+    await checker.sweep();
+    await checker.idle();
+    expect(await state(a.order.id)).toMatchObject({ status: 'claimed', auto_confirmed: false });
+    expect((await row(a.order.id))?.slip_verify).toBe('valid');
+  });
+
   test('the payment must still be claimed when the answer commits', async () => {
     on();
     const { token, order } = await start();

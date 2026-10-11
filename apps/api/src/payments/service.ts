@@ -926,9 +926,10 @@ export async function autoConfirmClaimedPayment(
   if (!paymentMachine.transition('claimed', 'confirmed', { actor: { kind: 'system' } }).ok) {
     return null;
   }
-  const earlier = await paymentsRepo.findEarlierSlipUse(tx, {
+  // Any other payment that used this slip counts, earlier or later (D-27): two photos of one
+  // transfer must not both confirm, whichever is checked first.
+  const earlier = await paymentsRepo.findOtherSlipUse(tx, {
     id: payment.id,
-    claimedAt: payment.claimedAt,
     slipImageHash: payment.slipImageHash,
     slipRefHash: patch.slipRefHash !== undefined ? patch.slipRefHash : payment.slipRefHash,
     slipQrHash: patch.slipQrHash !== undefined ? patch.slipQrHash : payment.slipQrHash,

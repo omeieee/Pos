@@ -177,7 +177,9 @@ export function createSlip2goVerifier(
     },
     async verifyImage(bytes, mime, conditions) {
       const form = new FormData();
-      form.append('file', new Blob([new Uint8Array(bytes)], { type: mime }), 'slip');
+      // Some upload validators look at the extension, so the file is named after its type.
+      const name = mime === 'image/png' ? 'slip.png' : 'slip.jpg';
+      form.append('file', new Blob([new Uint8Array(bytes)], { type: mime }), name);
       form.append('payload', JSON.stringify(conditionObject(conditions)));
       return readAnswer(
         await send('/api/verify-slip/qr-image/info', { method: 'POST', body: form }),

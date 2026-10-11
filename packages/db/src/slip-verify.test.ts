@@ -281,6 +281,38 @@ describe('an automatic confirmation (D-27, migration 0032)', () => {
   });
 });
 
+describe('findOtherSlipUse (the strict duplicate rule of an automatic confirmation)', () => {
+  test('finds a payment that used the same slip even when it was claimed LATER', async () => {
+    const earlier = await claimedPayment(null, { slipQrHash: 'qr-key-1' });
+    const later = await claimedPayment(null, { slipQrHash: 'qr-key-1' });
+    // The staff hint only looks backwards in time ...
+    expect(await repo.findEarlierSlipUse(db, earlier)).toBeUndefined();
+    // ... the automatic rule looks at every other payment that used the slip.
+    expect(await repo.findOtherSlipUse(db, earlier)).toMatchObject({ status: 'claimed' });
+    expect(await repo.findOtherSlipUse(db, later)).toMatchObject({ status: 'claimed' });
+  });
+
+  test('matches by image, reference or QR key; ignores itself, other keys and rejected payments', async () => {
+    const byImage = await claimedPayment(null, { slipImageHash: 'img-1' });
+    const byRef = await claimedPayment(null, { slipRefHash: 'ref-1' });
+    expect(await repo.findOtherSlipUse(db, byImage)).toBeUndefined();
+    expect(await repo.findOtherSlipUse(db, byRef)).toBeUndefined();
+    await claimedPayment(null, { slipImageHash: 'img-1' });
+    await claimedPayment(null, { slipRefHash: 'ref-1' });
+    expect(await repo.findOtherSlipUse(db, byImage)).toBeDefined();
+    expect(await repo.findOtherSlipUse(db, byRef)).toBeDefined();
+    const loner = await claimedPayment(null, { slipQrHash: 'qr-unique' });
+    expect(await repo.findOtherSlipUse(db, loner)).toBeUndefined();
+    const cancelled = await claimedPayment(null, { slipQrHash: 'qr-cancelled' });
+    const other = await claimedPayment(null, { slipQrHash: 'qr-cancelled' });
+    await repo.updatePaymentIfVersion(db, other.id, other.version, { status: 'cancelled' });
+    expect(await repo.findOtherSlipUse(db, cancelled)).toBeUndefined();
+    expect(
+      await repo.findOtherSlipUse(db, { ...loner, slipQrHash: null, slipImageHash: null }),
+    ).toBeUndefined();
+  });
+});
+
 describe('daily Slip2Go usage', () => {
   test('counts calls per business date and lets an alert go out once a day', async () => {
     const date = '2026-10-01';

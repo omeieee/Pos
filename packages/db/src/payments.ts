@@ -299,6 +299,32 @@ export async function findEarlierSlipUse(
   return { orderNo: row.orderNo, status: row.status as PaymentStatus, matchedBy };
 }
 
+/**
+ * ANY other payment that holds the same slip picture, bank reference or QR reference, whenever it
+ * was claimed (D-27). `findEarlierSlipUse` only looks backwards in time, which is right for a hint
+ * to staff but not for an automatic confirmation: the key from Slip2Go arrives at check time, so
+ * the checks of two photos of one transfer can run in either order, and each must see the other.
+ */
+export async function findOtherSlipUse(
+  db: Db,
+  payment: Pick<PaymentRow, 'id' | 'slipImageHash' | 'slipRefHash' | 'slipQrHash'>,
+): Promise<{ status: PaymentStatus } | undefined> {
+  const same = [
+    payment.slipImageHash ? eq(payments.slipImageHash, payment.slipImageHash) : undefined,
+    payment.slipRefHash ? eq(payments.slipRefHash, payment.slipRefHash) : undefined,
+    payment.slipQrHash ? eq(payments.slipQrHash, payment.slipQrHash) : undefined,
+  ].filter((c) => c !== undefined);
+  if (same.length === 0) return undefined;
+  const [row] = await db
+    .select({ status: payments.status })
+    .from(payments)
+    .where(
+      and(ne(payments.id, payment.id), inArray(payments.status, SLIP_USED_STATUSES), or(...same)),
+    )
+    .limit(1);
+  return row ? { status: row.status as PaymentStatus } : undefined;
+}
+
 // ---------- Partial refunds (D-25) ----------
 
 export type RefundRow = typeof paymentRefunds.$inferSelect;
