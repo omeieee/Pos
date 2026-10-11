@@ -7,7 +7,7 @@ import { telHref } from '../model/contact.ts';
 import { nextPollDelayMs } from '../model/poll.ts';
 import { browserSaveEnv, qrFileName, saveQrImage, toPng } from '../model/qr-save.ts';
 import { canDownloadReceipt, receiptFileName, receiptHtml } from '../model/receipt.ts';
-import { orderSteps } from '../model/steps.ts';
+import { awaitsTransferConfirmation, isPaymentRejected, orderSteps } from '../model/steps.ts';
 import { errorKey, useApp, useT } from './app-context.tsx';
 import { BarButton, Body, Header, Notice } from './Chrome.tsx';
 import { PayButton } from './PayOption.tsx';
@@ -108,8 +108,45 @@ export function OrderScreen({
   shopPhone: string | null;
 }) {
   const tr = useT();
-  const { api, locale, go, platform } = useApp();
+  const { platform } = useApp();
   const { order, setOrder, failure } = useOrder(id);
+
+  if (!order) {
+    return (
+      <>
+        <Header
+          left={<BarButton icon="x" label={tr('liff.close')} onClick={() => platform.close()} />}
+          title={tr('liff.order.status')}
+        />
+        <Body label={tr('liff.order.status')}>
+          {failure ? (
+            <Notice tone="bad" icon="warn" alert>
+              {tr(errorKey(failure))}
+            </Notice>
+          ) : (
+            <Notice icon="clock">{tr('liff.loading')}</Notice>
+          )}
+        </Body>
+      </>
+    );
+  }
+  return <OrderView order={order} setOrder={setOrder} flag={flag} shopPhone={shopPhone} />;
+}
+
+/** The loaded order page. Split from the polling shell so it can be rendered on its own. */
+export function OrderView({
+  order,
+  setOrder,
+  flag,
+  shopPhone,
+}: {
+  order: MyOrder;
+  setOrder: (order: MyOrder) => void;
+  flag: string | null;
+  shopPhone: string | null;
+}) {
+  const tr = useT();
+  const { api, locale, go, platform } = useApp();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [changing, setChanging] = useState(false);
@@ -134,27 +171,11 @@ export function OrderScreen({
 
   const close = <BarButton icon="x" label={tr('liff.close')} onClick={() => platform.close()} />;
 
-  if (!order) {
-    return (
-      <>
-        <Header left={close} title={tr('liff.order.status')} />
-        <Body label={tr('liff.order.status')}>
-          {failure ? (
-            <Notice tone="bad" icon="warn" alert>
-              {tr(errorKey(failure))}
-            </Notice>
-          ) : (
-            <Notice icon="clock">{tr('liff.loading')}</Notice>
-          )}
-        </Body>
-      </>
-    );
-  }
-
   const method = order.payment?.method;
   const waiting =
     order.payment && (order.payment.status === 'pending' || order.payment.status === 'claimed');
   const closed = order.status === 'completed' || order.status === 'cancelled';
+  const rejected = !closed && order.paymentStatus !== 'paid' && isPaymentRejected(order);
   const steps = orderSteps(order);
   const badge =
     order.status === 'cancelled' ? STATUS_BADGE.cancelled : PAYMENT_BADGE[order.paymentStatus];
@@ -192,6 +213,22 @@ export function OrderScreen({
             </Notice>
           ) : null}
 
+          {rejected ? (
+            <Notice tone="warn" icon="warn" alert>
+              <b>{tr('liff.order.rejectedTitle')}</b>
+              <br />
+              {tr('liff.order.rejectedBody')}
+              {tel ? (
+                <>
+                  <br />
+                  <a href={tel} style={s('font-weight:600')}>
+                    {tr('liff.contact.call')}
+                  </a>
+                </>
+              ) : null}
+            </Notice>
+          ) : null}
+
           {steps ? (
             <ol
               aria-label={tr('liff.order.steps')}
@@ -218,10 +255,15 @@ export function OrderScreen({
               {tr('lineBot.status.cancelled')}
             </Notice>
           )}
+          {awaitsTransferConfirmation(order) ? (
+            <p className="g-t-c" role="status" style={s('margin:0;text-align:center')}>
+              {tr('liff.order.awaitingTransfer')}
+            </p>
+          ) : null}
 
           {!closed && order.paymentStatus !== 'paid' ? (
             <>
-              {method === 'promptpay' && waiting ? (
+              {rejected || (method === 'promptpay' && waiting) ? (
                 <PromptPayPanel
                   order={order}
                   busy={busy}
@@ -239,7 +281,9 @@ export function OrderScreen({
                   {tr('liff.order.copayNote', { amount: formatBaht(order.totalSatang, locale) })}
                 </Notice>
               ) : null}
-              {!waiting ? <Notice icon="cash">{tr('liff.order.cashNote')}</Notice> : null}
+              {!waiting && !rejected ? (
+                <Notice icon="cash">{tr('liff.order.cashNote')}</Notice>
+              ) : null}
               {order.actions.changeMethod && order.actions.methods.length > 0 ? (
                 changing ? (
                   <MethodChoices

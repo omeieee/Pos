@@ -1371,6 +1371,8 @@ export const en = {
     'The shop has changed the items of order {orderNo}. New total {total}',
   'lineBot.orderChange.refund': 'The shop has refunded {amount}',
   'lineBot.orderChange.due': 'Amount to pay: {amount}. You can pay the shop directly.',
+  'lineBot.paymentRejected':
+    'The shop could not find your transfer for order {orderNo}. Please check and pay again, attach the slip, or contact the shop.',
   'lineBot.receipt.title': 'Electronic receipt',
   'lineBot.receipt.total': 'Amount paid',
   'lineBot.receipt.method': 'Paid by {method}',
@@ -1554,6 +1556,10 @@ export const en = {
   'liff.order.step.pickup': 'Pick up',
   'liff.order.payWaiting': 'To pay',
   'liff.order.claimedTitle': 'The shop is checking your transfer',
+  'liff.order.rejectedTitle': 'Payment not found',
+  'liff.order.rejectedBody':
+    'Payment not found. Please check and pay again, attach the slip, or contact the shop.',
+  'liff.order.awaitingTransfer': 'Waiting for the shop to confirm the transfer',
   'liff.order.shopChecks':
     'The shop checks the money arrived and confirms it. The "I have paid" button only tells the shop. This page updates when it is confirmed.',
   'liff.qr.amountLabel': 'Amount to transfer',

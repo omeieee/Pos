@@ -1264,6 +1264,8 @@ export const th = {
   'lineBot.orderChange.edited': 'ร้านแก้ไขรายการออเดอร์ {orderNo} แล้วค่ะ ยอดรวมใหม่ {total}',
   'lineBot.orderChange.refund': 'ร้านคืนเงินให้แล้ว {amount}',
   'lineBot.orderChange.due': 'ยอดที่ต้องชำระ {amount} ชำระกับทางร้านได้เลยค่ะ',
+  'lineBot.paymentRejected':
+    'ร้านยังไม่พบยอดโอนของออเดอร์ {orderNo} ค่ะ กรุณาตรวจสอบและโอนใหม่ หรือแนบสลิป หรือติดต่อร้านค่ะ',
   'lineBot.receipt.title': 'ใบเสร็จรับเงินอิเล็กทรอนิกส์',
   'lineBot.receipt.total': 'ยอดชำระ',
   'lineBot.receipt.method': 'ชำระด้วย {method}',
@@ -1431,6 +1433,9 @@ export const th = {
   'liff.order.step.pickup': 'รับที่ทางเข้า',
   'liff.order.payWaiting': 'รอชำระ',
   'liff.order.claimedTitle': 'ร้านกำลังตรวจยอดโอน',
+  'liff.order.rejectedTitle': 'ยังไม่พบยอดโอน',
+  'liff.order.rejectedBody': 'ร้านยังไม่พบยอดโอนของออเดอร์นี้ กรุณาตรวจสอบและโอนใหม่ หรือแนบสลิป หรือติดต่อร้าน',
+  'liff.order.awaitingTransfer': 'รอร้านยืนยันยอดโอน',
   'liff.order.shopChecks':
     'ร้านจะตรวจยอดเข้าบัญชีและยืนยันให้เอง ปุ่ม “โอนแล้ว” เป็นเพียงการแจ้งร้าน สถานะจะอัปเดตในหน้านี้เมื่อร้านยืนยันแล้ว',
   'liff.qr.amountLabel': 'ยอดที่ต้องโอน',

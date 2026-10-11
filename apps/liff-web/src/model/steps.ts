@@ -28,3 +28,22 @@ export function orderSteps(
     return n === next ? 'now' : 'todo';
   }) as [StepState, StepState, StepState, StepState];
 }
+
+/** Staff checked the bank and found no transfer. A missing flag (older server) means no. */
+export function isPaymentRejected(order: Pick<MyOrder, 'paymentRejected'>): boolean {
+  return order.paymentRejected === true;
+}
+
+/**
+ * A PromptPay order that is being cooked or is ready while staff have not confirmed the money.
+ * Cash and ไทยช่วยไทย are paid on hand-over, so they never show this.
+ */
+export function awaitsTransferConfirmation(
+  order: Pick<MyOrder, 'status' | 'paymentStatus' | 'payment' | 'paymentRejected'>,
+): boolean {
+  if (order.status === 'cancelled' || order.status === 'completed') return false;
+  if (order.status === 'new') return false;
+  if (order.paymentStatus === 'paid' || order.paymentStatus === 'refunded') return false;
+  if (isPaymentRejected(order)) return false;
+  return order.payment?.method === 'promptpay';
+}

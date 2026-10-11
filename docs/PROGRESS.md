@@ -32,6 +32,12 @@ Newest entries first. Add entries with `/checkpoint`. Each entry covers what cha
 
 ---
 
+## 2026-10-11 · P4 · Member page from the rich menu, rejected-claim notice, POS past orders and slips
+- **Done:** member form moved off checkout to `/member` (GET/PUT `/v1/app/member`), rich-menu middle tile is now "ข้อมูลสมาชิก" (uri action); rejecting a claimed PromptPay payment now sends one LINE message (`payment-rejected-push.ts`) and the customer app shows a "ยังไม่พบยอดโอน" banner with QR/claim/slip restored (server creates a fresh pending payment on qr/claim/slip; never auto-confirmed) plus a "รอร้านยืนยันยอดโอน" label on unconfirmed PromptPay orders that are preparing; POS: orders by day (past orders reachable, owner edit/void there), slip viewer on any PromptPay payment with a slip, new app version applied sooner.
+- **Root cause of the owner's two POS complaints:** the orders screen listed only today; the slip viewer was wired to claimed payments in the open panel only. PWA may have kept an old build: close and reopen the Home Screen app.
+- **Verified (qa-security-reviewer):** build 12/12; shared 890, db 237, i18n 22, line 69, api 1087, pos-web 1734, liff-web 69. No blockers.
+- **Open:** orders still start preparing regardless of payment (docs/03 line ~137 says PromptPay should wait for a claim; owner to decide, left as is); `GET /orders/:id/qr` writes a payment row after a rejection; new rich menu not yet uploaded to the test OA (upload after deploy; `/member` must be live first); CI gates on `pnpm lint` (run it before every push).
+
 ## 2026-10-11 · P4 · Partial adjust/refund/top-up (D-25), customer void/edit notice, profile clearing, privacy notice v2026-10-11, rich menu in web-app style
 - **Done:** `adjust` on owner order edits (lower total = append-only `payment_refunds` row, higher = new pending payment for the difference, staff confirm by hand; migration 0025); LINE notice after void/edit (quota-aware sender); nightly `retention-member-profiles` (24 months); privacy notice covers the member profile and `PRIVACY_NOTICE_VERSION` = 2026-10-11 (customers re-acknowledge); POS adjust sheet + payment ledger; rich menu redrawn in the web-app style and uploaded to the TEST OA (`richmenu-3f51803c...`, earlier test menus kept; owner's `.env.test` holds the test token).
 - **Verified (qa-security-reviewer):** build 12/12; shared 890, db 237, api 1072, pos-web 1728, liff-web 55, i18n 22. Fixed after it: refund done-message lists every new refund row; amount not shown until the ledger loads.
