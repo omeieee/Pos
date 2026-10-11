@@ -374,6 +374,7 @@ describe('what the slip view reports to the payment screen', () => {
       check: 'match',
       recipient: 'unknown',
       duplicate: true,
+      verdict: null,
     });
   });
 
@@ -383,6 +384,7 @@ describe('what the slip view reports to the payment screen', () => {
       hasSlip: false,
       check: null,
       recipient: null,
+      verdict: null,
       duplicate: false,
     });
   });

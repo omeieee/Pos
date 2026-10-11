@@ -1,4 +1,4 @@
-import type { SlipCheck, SlipRecipientCheck } from '@sds/shared';
+import type { SlipCheck, SlipRecipientCheck, SlipVerifyVerdict } from '@sds/shared';
 
 /** What the automatic reading says about the customer's slip (D-26), as the staff screen knows it. */
 export interface SlipFacts {
@@ -9,6 +9,8 @@ export interface SlipFacts {
   recipient: SlipRecipientCheck | null | undefined;
   /** The slip was used on an earlier payment. */
   duplicate: boolean;
+  /** What the bank check said (D-27); absent when the verifier is off or the list was unreadable. */
+  verdict?: SlipVerifyVerdict | null | undefined;
 }
 
 export const NO_SLIP: SlipFacts = {
@@ -20,10 +22,16 @@ export const NO_SLIP: SlipFacts = {
 
 /**
  * Whether confirming needs the tick "I checked the incoming transfer in the shop's bank app".
- * Only a slip whose receiver AND amount both read as `match` and that is not a duplicate keeps the
- * plain one-tap confirm; anything else (mismatch, unknown, not read, duplicate) needs the tick.
- * A payment without a slip is the staff's own bank-app check and keeps today's flow. This is a gate
- * on the screen only: the server never blocks (rule 2), it only records the tick in the audit log.
+ * A local duplicate always needs it. When the bank check (D-27) has answered, only `valid` keeps the
+ * plain one-tap confirm; every other verdict, `pending` included, needs the tick, and the OCR
+ * readings are not consulted. Without a bank verdict (verifier off, or the slip list could not be
+ * read) the older rule applies: the receiver AND amount must both read as `match`. A payment without
+ * a slip is the staff's own bank-app check and keeps today's flow. This is a gate on the screen
+ * only: the server never blocks (rule 2), it only records the tick in the audit log.
  */
-export const slipNeedsBankCheck = (f: SlipFacts): boolean =>
-  f.hasSlip && (f.recipient !== 'match' || f.check !== 'match' || f.duplicate);
+export const slipNeedsBankCheck = (f: SlipFacts): boolean => {
+  if (!f.hasSlip) return false;
+  if (f.duplicate) return true;
+  if (f.verdict) return f.verdict !== 'valid';
+  return f.recipient !== 'match' || f.check !== 'match';
+};

@@ -14,6 +14,7 @@ import {
   useStoreState,
   useT,
 } from '../ui/hooks.ts';
+import { AutoConfirmedNote } from './AutoConfirmedNote.tsx';
 import { CashPanel } from './CashPanel.tsx';
 import { GovCopaySteps } from './GovCopayPanel.tsx';
 import { MethodNotes, MethodTiles } from './MethodTiles.tsx';
@@ -247,6 +248,9 @@ function PaymentPanelBody({ orderId }: { orderId: string }) {
           <div className="g-t-c" style={s('max-width:420px')}>
             {tr('payment.change.confirmedLocked')}
           </div>
+          {received?.method === 'promptpay' ? (
+            <AutoConfirmedNote orderId={order.id} paymentId={received.id} rev={received.rev} />
+          ) : null}
           <ReceiptActions key={order.id} order={order} received={received} />
           {received && role && paymentActions(role, received).voidRefund ? (
             <button type="button" className="g-btn" onClick={() => setVoiding(true)}>

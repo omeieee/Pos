@@ -1,6 +1,7 @@
 import { formatBaht } from '@sds/i18n';
-import type { PaymentStatus, SlipCheck, SlipRecipientCheck } from '@sds/shared';
+import type { PaymentStatus, SlipCheck, SlipRecipientCheck, SlipVerifyVerdict } from '@sds/shared';
 import { useEffect, useState } from 'react';
+import { Gi } from '../design/icons.tsx';
 import { s } from '../design/style.ts';
 import { useLocale, useServices, useT } from '../ui/hooks.ts';
 import { Callout } from './PayParts.tsx';
@@ -11,6 +12,17 @@ const CHIP_TONE: Record<SlipCheck, string> = {
   mismatch: 'g-b-warn',
   unreadable: 'g-b-mute',
   pending: 'g-b-mute',
+};
+
+const VERIFY_TONE: Record<SlipVerifyVerdict, 'ok' | 'warn' | 'bad' | 'mute'> = {
+  valid: 'ok',
+  amount_mismatch: 'warn',
+  date_mismatch: 'warn',
+  receiver_mismatch: 'bad',
+  not_found: 'bad',
+  fraud: 'bad',
+  pending: 'mute',
+  unchecked: 'mute',
 };
 
 /** What the server says about a slip that was used before (D-26), as a hint: never a decision. */
@@ -65,7 +77,9 @@ export function SlipView({
   const locale = useLocale();
   const { api } = useServices();
   const [hint, setHint] = useState<{
-    check: SlipCheck;
+    /** The OCR amount reading; null when OCR is off (no OCR banner or chip then). */
+    check: SlipCheck | null;
+    verdict: SlipVerifyVerdict | null;
     amountSatang: number | null;
     qrFound: boolean | undefined;
     recipient: SlipRecipientCheck | undefined;
@@ -90,9 +104,8 @@ export function SlipView({
         setHint(
           found
             ? {
-                // Without an OCR reading (OCR off, only the bank check ran) it shows as unreadable
-                // until the screens learn the bank-check verdict (D-27, Slice 5).
-                check: found.check ?? 'unreadable',
+                check: found.check ?? null,
+                verdict: found.verify?.verdict ?? null,
                 amountSatang: found.amountSatang ?? null,
                 qrFound: found.qrFound,
                 recipient: found.recipientCheck,
@@ -113,7 +126,8 @@ export function SlipView({
         );
         onCheck?.({
           hasSlip: has,
-          check: found ? (found.check ?? 'unreadable') : null,
+          check: found?.check ?? null,
+          verdict: found?.verify?.verdict ?? null,
           recipient: found?.recipientCheck ?? null,
           duplicate: used !== undefined,
         });
@@ -159,7 +173,16 @@ export function SlipView({
       {known === 'has' ? (
         <p className="g-t-c" data-testid="slip-has" style={s('margin:0;font-weight:600')}>
           {tr('payment.slip.has')}
-          {hint ? (
+          {hint?.verdict ? (
+            <span
+              className={`g-badge g-b-${VERIFY_TONE[hint.verdict]}`}
+              data-testid="slip-verify-chip"
+              style={s('margin-left:8px')}
+            >
+              {tr(`payment.slip.verify.chip.${hint.verdict}`)}
+            </span>
+          ) : null}
+          {hint?.check ? (
             <span
               className={`g-badge ${CHIP_TONE[hint.check]}`}
               data-testid="slip-chip"
@@ -208,6 +231,7 @@ export function SlipView({
           </Callout>
         </div>
       ) : null}
+      {known === 'has' && hint?.verdict && !quiet ? <VerifyBanner verdict={hint.verdict} /> : null}
       {known === 'has' && hint?.recipient === 'mismatch' && !quiet ? (
         <div data-testid="slip-recipient" data-recipient="mismatch">
           <Callout tone="bad" role="alert">
@@ -225,7 +249,7 @@ export function SlipView({
           {tr('payment.slip.recipient.unknown')}
         </p>
       ) : null}
-      {known === 'has' && hint && !quiet ? (
+      {known === 'has' && hint?.check && !quiet ? (
         <div data-testid="slip-check" data-check={hint.check}>
           {hint.check === 'match' || hint.check === 'mismatch' ? (
             <Callout tone={hint.check === 'match' ? 'ok' : 'warn'} role="status">
@@ -289,6 +313,46 @@ export function SlipView({
           {tr('payment.slip.failed')}
         </p>
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * The bank check's answer (D-27, Slip2Go) as one banner. It says it is automatic and, but for a
+ * valid slip, never reads as a decision: staff still confirm (the gate only decides whether the
+ * tick is needed). `fraud` is the strongest one.
+ */
+function VerifyBanner({ verdict }: { verdict: SlipVerifyVerdict }) {
+  const tr = useT();
+  const tone = VERIFY_TONE[verdict];
+  const text = tr(`payment.slip.verify.${verdict}`);
+  return (
+    <div data-testid="slip-verify" data-verdict={verdict}>
+      {tone === 'mute' ? (
+        <div
+          className="g-sunk"
+          role="status"
+          style={s('padding:10px 12px;border-radius:14px;display:flex;gap:8px;align-items:center')}
+        >
+          <Gi n="clock" size="sm" style={s('flex:none')} />
+          <span className="g-t-s" style={s('font-weight:600')}>
+            {text}
+          </span>
+        </div>
+      ) : (
+        <Callout
+          tone={tone}
+          role={tone === 'ok' ? 'status' : 'alert'}
+          {...(verdict === 'fraud'
+            ? { style: s('border:2px solid var(--chili-ink);font-size:16px') }
+            : {})}
+        >
+          <span style={s('display:block;font-weight:700')}>{text}</span>
+          <span className="g-t-c" style={s('display:block;font-weight:500')}>
+            {tr('payment.slip.verify.hint')}
+          </span>
+        </Callout>
+      )}
     </div>
   );
 }

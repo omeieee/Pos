@@ -1,4 +1,4 @@
-import type { SlipCheck, SlipRecipientCheck } from '@sds/shared';
+import { SLIP_VERIFY_VERDICTS, type SlipCheck, type SlipRecipientCheck } from '@sds/shared';
 import { describe, expect, test } from 'vitest';
 import { NO_SLIP, type SlipFacts, slipNeedsBankCheck } from './slip-gate.ts';
 
@@ -47,5 +47,51 @@ describe('slipNeedsBankCheck (D-26): when staff must tick "I checked the bank ap
         duplicate: true,
       }),
     ).toBe(false);
+  });
+});
+
+describe('slipNeedsBankCheck with the bank verdict (D-27)', () => {
+  test('valid and not a duplicate: one tap, whatever the OCR says', () => {
+    expect(slipNeedsBankCheck(facts({ verdict: 'valid' }))).toBe(false);
+    expect(slipNeedsBankCheck(facts({ verdict: 'valid', check: null, recipient: null }))).toBe(
+      false,
+    );
+    expect(
+      slipNeedsBankCheck(facts({ verdict: 'valid', check: 'mismatch', recipient: 'mismatch' })),
+    ).toBe(false);
+  });
+
+  test.each(SLIP_VERIFY_VERDICTS.filter((v) => v !== 'valid'))(
+    'verdict %s needs the tick even when OCR says everything matches',
+    (verdict) => {
+      expect(slipNeedsBankCheck(facts({ verdict }))).toBe(true);
+    },
+  );
+
+  test('every verdict with a local duplicate needs the tick', () => {
+    for (const verdict of SLIP_VERIFY_VERDICTS) {
+      expect(slipNeedsBankCheck(facts({ verdict, duplicate: true }))).toBe(true);
+    }
+  });
+
+  test('verdict absent (verifier off): the OCR rule stays exactly as before', () => {
+    expect(slipNeedsBankCheck(facts({ verdict: null }))).toBe(false);
+    expect(slipNeedsBankCheck(facts({ verdict: undefined, check: 'mismatch' }))).toBe(true);
+    expect(slipNeedsBankCheck(facts({ verdict: null, recipient: null }))).toBe(true);
+  });
+
+  test('no OCR check and no verdict needs the tick', () => {
+    expect(slipNeedsBankCheck(facts({ check: null, recipient: null }))).toBe(true);
+  });
+
+  test('the slip list could not be read: a slip without any facts fails closed', () => {
+    expect(
+      slipNeedsBankCheck({ hasSlip: true, check: null, recipient: null, duplicate: false }),
+    ).toBe(true);
+  });
+
+  test('no slip: no tick for any verdict', () => {
+    expect(slipNeedsBankCheck({ ...NO_SLIP, verdict: 'valid' })).toBe(false);
+    expect(slipNeedsBankCheck({ ...NO_SLIP, verdict: 'fraud' })).toBe(false);
   });
 });

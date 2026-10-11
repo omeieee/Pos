@@ -403,6 +403,31 @@ export const en = {
     "Could not read the receiver on the slip clearly. Check the receiver and the incoming amount in the shop's bank app.",
   'payment.slip.recipient.chip.match': "Receiver matches the shop's account (automatic hint)",
   'payment.slip.recipient.chip.mismatch': 'Receiver differs',
+  'payment.slip.verify.valid': 'Checked with the bank: amount, receiver and time match (Slip2Go)',
+  'payment.slip.verify.amount_mismatch':
+    'The slip amount differs from the amount due (automatic check)',
+  'payment.slip.verify.receiver_mismatch':
+    "This slip went to another account, not the shop's (automatic check)",
+  'payment.slip.verify.date_mismatch':
+    'This slip was made before the order was placed (automatic check)',
+  'payment.slip.verify.not_found':
+    "Not found in the bank's records. It may be a fake slip (automatic check)",
+  'payment.slip.verify.fraud': 'Slip2Go says this is a fake slip (automatic check)',
+  'payment.slip.verify.pending': 'Checking with the bank…',
+  'payment.slip.verify.unchecked': 'Could not check automatically. Check in the bank app.',
+  'payment.slip.verify.chip.valid': 'Bank-checked',
+  'payment.slip.verify.chip.amount_mismatch': 'Amount differs (bank)',
+  'payment.slip.verify.chip.receiver_mismatch': 'Wrong receiver',
+  'payment.slip.verify.chip.date_mismatch': 'Time differs',
+  'payment.slip.verify.chip.not_found': 'Not in bank records',
+  'payment.slip.verify.chip.fraud': 'Fake slip',
+  'payment.slip.verify.chip.pending': 'Checking with bank',
+  'payment.slip.verify.chip.unchecked': 'Not auto-checked',
+  'payment.slip.verify.hint':
+    "Checked automatically by Slip2Go, as a help only. If unsure, look for the money in the shop's bank app.",
+  'payment.autoConfirmed.note':
+    'Confirmed automatically (Slip2Go): you can review it, and void or refund it.',
+  'payment.autoConfirmed.chip': 'Auto-confirmed',
   'payment.promptpay.customer.close': 'Back to staff view (hold 1 second)',
   'payment.promptpay.customer.scanAny': 'Scan with any bank app',
   'payment.promptpay.customer.amountIncluded': 'The amount is already in the QR. Do not type it.',
