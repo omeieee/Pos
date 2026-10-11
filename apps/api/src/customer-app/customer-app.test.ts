@@ -137,7 +137,7 @@ beforeEach(async () => {
 });
 
 function call(
-  method: 'GET' | 'POST' | 'PATCH',
+  method: 'GET' | 'POST' | 'PATCH' | 'PUT',
   url: string,
   token: string | undefined,
   body?: unknown,
@@ -1018,6 +1018,89 @@ describe('the member profile (owner, 2026-10-11)', () => {
       )
     ).rows[0];
     expect(Object.values(saved ?? {}).every((v) => v === null)).toBe(true);
+    const logs = h.logs();
+    for (const value of [MEMBER.fullName, MEMBER.nickname, '0812345678', '081-234-5678']) {
+      expect(logs, value).not.toContain(value);
+    }
+  });
+});
+
+describe('the member page: GET and PUT /v1/app/member', () => {
+  const put = (token: string | undefined, member: unknown) =>
+    call('PUT', '/v1/app/member', token, member);
+
+  test('is null until something is saved; PUT saves to the profile only and returns it', async () => {
+    const token = await customer(TOKEN_A);
+    const empty = await call('GET', '/v1/app/member', token);
+    expect(empty.statusCode).toBe(200);
+    expect(empty.json()).toEqual({ member: null });
+
+    const saved = await put(token, MEMBER);
+    expect(saved.statusCode).toBe(200);
+    const expected = {
+      fullName: MEMBER.fullName,
+      nickname: MEMBER.nickname,
+      building: 'B1',
+      phone: '0812345678',
+    };
+    expect(saved.json()).toEqual({ member: expected });
+    expect((await call('GET', '/v1/app/member', token)).json()).toEqual({ member: expected });
+    expect((await call('GET', '/v1/app/checkout', token)).json().member).toEqual(expected);
+    // Nothing else was made: no order.
+    expect((await call('GET', '/v1/app/orders', token)).json().orders).toEqual([]);
+  });
+
+  test('a field left out keeps its value and an empty one clears it; all cleared reads as null', async () => {
+    const token = await customer(TOKEN_A);
+    await put(token, MEMBER);
+    const next = await put(token, { nickname: '', phone: '0898765432' });
+    expect(next.json().member).toEqual({
+      fullName: MEMBER.fullName,
+      nickname: null,
+      building: 'B1',
+      phone: '0898765432',
+    });
+    const cleared = await put(token, { fullName: '', building: '', phone: '' });
+    expect(cleared.statusCode).toBe(200);
+    expect(cleared.json()).toEqual({ member: null });
+  });
+
+  test('uses the same checks as the order form', async () => {
+    const token = await customer(TOKEN_A);
+    for (const member of [
+      { phone: '12345' },
+      { nickname: 'ก'.repeat(41) },
+      { email: 'a@example.com' },
+    ]) {
+      const res = await put(token, member);
+      expect(res.statusCode, JSON.stringify(member)).toBe(400);
+    }
+    const ok = await put(token, { fullName: 'ทดสอบ\u0007​ ตัวอย่าง' });
+    expect(ok.json().member.fullName).toBe('ทดสอบ ตัวอย่าง');
+  });
+
+  test('needs a customer session; PUT needs the privacy notice acknowledged, GET does not', async () => {
+    expect((await call('GET', '/v1/app/member', undefined)).statusCode).toBe(401);
+    expect((await put(undefined, MEMBER)).statusCode).toBe(401);
+    const token = await signIn(TOKEN_A);
+    const refused = await put(token, MEMBER);
+    expect(refused.statusCode).toBe(403);
+    expect(refused.json().code).toBe('PRIVACY_NOT_ACKNOWLEDGED');
+    expect((await call('GET', '/v1/app/member', token)).json()).toEqual({ member: null });
+    await acknowledge(token);
+    expect((await put(token, MEMBER)).statusCode).toBe(200);
+  });
+
+  test("one customer never sees or changes another's profile", async () => {
+    const a = await customer(TOKEN_A);
+    const b = await customer(TOKEN_B);
+    await put(a, MEMBER);
+    expect((await call('GET', '/v1/app/member', b)).json()).toEqual({ member: null });
+  });
+
+  test('the personal data never reaches the logs', async () => {
+    const token = await customer(TOKEN_A);
+    await put(token, MEMBER);
     const logs = h.logs();
     for (const value of [MEMBER.fullName, MEMBER.nickname, '0812345678', '081-234-5678']) {
       expect(logs, value).not.toContain(value);

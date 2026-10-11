@@ -89,6 +89,12 @@ export const checkoutInfoSchema = z.object({
 });
 export type CheckoutInfo = z.infer<typeof checkoutInfoSchema>;
 
+// ---------- Member page ----------
+
+/** `GET` and `PUT /v1/app/member`: the saved profile, or null when every field is empty. The PUT body is `memberInputSchema`. */
+export const memberResponseSchema = z.object({ member: memberProfileSchema.nullable() });
+export type MemberResponse = z.infer<typeof memberResponseSchema>;
+
 // ---------- Orders ----------
 
 /** Place an order. The server prices it, numbers it and fixes channel, fulfilment and customer. */

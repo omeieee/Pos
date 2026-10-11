@@ -1,6 +1,7 @@
 import {
   appOrderInputSchema,
   customerSessionRequestSchema,
+  memberInputSchema,
   orderIdParamSchema,
   selectPaymentInputSchema,
 } from '@sds/shared';
@@ -17,11 +18,13 @@ import {
   acknowledgePrivacy,
   checkoutInfo,
   claimPayment,
+  getMember,
   getMyOrder,
   listMyOrders,
   myQr,
   openSession,
   placeOrder,
+  saveMember,
   selectPayment,
 } from './service.ts';
 import { createCustomerGuard, customerOf } from './session.ts';
@@ -124,6 +127,12 @@ export async function registerCustomerAppRoutes(
   );
 
   app.get('/checkout', reads, async (request) => checkoutInfo(ctx, customerOf(request)));
+
+  app.get('/member', reads, async (request) => getMember(ctx, customerOf(request)));
+
+  app.put('/member', writes, async (request) =>
+    saveMember(ctx, customerOf(request), parse(memberInputSchema, request.body)),
+  );
 
   app.post('/privacy-ack', writes, async (request) => acknowledgePrivacy(ctx, customerOf(request)));
 

@@ -21,9 +21,13 @@ import {
   type CheckoutInfo,
   type CustomerSessionResponse,
   MAX_ORDER_QUANTITY,
+  type MemberInput,
+  type MemberProfile,
+  type MemberResponse,
   type MyOrder,
   type MyOrdersResponse,
   type MyQrResponse,
+  mergeMember,
   myOrderSchema,
   PRIVACY_NOTICE_VERSION,
   type PrivacyAckResponse,
@@ -92,6 +96,46 @@ export async function acknowledgePrivacy(
 ): Promise<PrivacyAckResponse> {
   await lineRepo.acknowledgePrivacy(ctx.db, customer.lineUserId, ctx.now(), PRIVACY_NOTICE_VERSION);
   return { privacyAcknowledged: true, privacyVersion: PRIVACY_NOTICE_VERSION };
+}
+
+// ---------- The member page ----------
+
+/** The profile, or null when nothing is saved (every field empty). */
+const memberOrNull = (profile: MemberProfile): MemberResponse['member'] =>
+  Object.values(profile).every((v) => v === null) ? null : profile;
+
+export async function getMember(
+  ctx: CoreContext,
+  customer: CustomerPrincipal,
+): Promise<MemberResponse> {
+  return {
+    member: memberOrNull(await customersRepo.getMemberProfile(ctx.db, customer.customerId)),
+  };
+}
+
+/**
+ * Saves the member form on the customer only (no order): a field left out keeps its value, an empty
+ * one clears it. Like placing an order, it needs the current privacy notice acknowledged. Nothing
+ * here is logged or audited with the values.
+ */
+export async function saveMember(
+  ctx: CoreContext,
+  customer: CustomerPrincipal,
+  input: MemberInput,
+): Promise<MemberResponse> {
+  if (customer.privacyAckVersion !== PRIVACY_NOTICE_VERSION) {
+    throw new ApiError(
+      403,
+      'PRIVACY_NOT_ACKNOWLEDGED',
+      'Please read and accept the privacy notice first',
+    );
+  }
+  const merged = await ctx.db.transaction(async (tx) => {
+    const next = mergeMember(await customersRepo.getMemberProfile(tx, customer.customerId), input);
+    await customersRepo.saveMemberProfile(tx, customer.customerId, next);
+    return next;
+  });
+  return { member: memberOrNull(merged) };
 }
 
 // ---------- What is on offer right now ----------
