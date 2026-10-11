@@ -21,10 +21,10 @@ import {
   prefilled,
 } from '../model/checkout.ts';
 import { memberFormOf, memberInput, memberProblems } from '../model/member.ts';
-import { MemberSection } from './MemberSection.tsx';
 import { errorKey, useApp, useT } from './app-context.tsx';
 import { BarButton, Body, Dock, Header, Notice, SectionLabel } from './Chrome.tsx';
 import { DishThumb } from './DishThumb.tsx';
+import { MemberSection } from './MemberSection.tsx';
 import { METHOD_ORDER, PayRadio } from './PayOption.tsx';
 
 /**
