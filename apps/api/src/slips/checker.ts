@@ -1,16 +1,19 @@
+import { createHash } from 'node:crypto';
 import { paymentsRepo } from '@sds/db';
-import { compareSlipAmount, extractSlipAmount, type SlipCheck } from '@sds/shared';
+import { compareSlipAmount, extractSlipAmount, extractSlipRef, type SlipCheck } from '@sds/shared';
 import { toPaymentDto } from '../payments/dto.ts';
 import { type CoreContext, withTransaction } from '../tx.ts';
 import { imageSize } from './image.ts';
 import type { SlipOcr } from './ocr.ts';
+import type { SlipQrReader } from './qr.ts';
 import type { SlipStore } from './store.ts';
 
 /**
  * The automatic reading of a slip (D-26). It looks for the amount on the picture and compares it
  * with what the payment charges. The answer is only a hint on the payment (`slip_check`): it never
  * confirms or rejects money (CLAUDE.md rule 2), never fails an upload, and keeps only the amount
- * and the verdict. The OCR text, which holds names and account numbers, is dropped at once.
+ * and the verdict, plus hashes of the bank reference and of the reference inside the slip's small
+ * QR (for the duplicate hint; never the references themselves). The OCR text, which holds names and account numbers, is dropped at once.
  */
 export interface SlipChecker {
   /** Reads the slip of this payment soon, one at a time. Never throws. */
@@ -20,6 +23,8 @@ export interface SlipChecker {
   /** Resolves when everything queued so far is done (tests, shutdown). */
   idle(): Promise<void>;
 }
+
+const sha256 = (text: string): string => createHash('sha256').update(text).digest('hex');
 
 /** More pixels than this are not decoded: a phone screenshot is about 3 million. */
 export const MAX_OCR_PIXELS = 16_000_000;
@@ -31,10 +36,12 @@ export function createSlipChecker(args: {
   ctx: CoreContext;
   slips: SlipStore;
   ocr: SlipOcr;
+  /** Reads the slip's small QR (D-26); without one, only the printed reference is used. */
+  qr?: SlipQrReader;
   /** Counts and ids only: never the text. */
   log?: { warn(obj: Record<string, unknown>, msg: string): void };
 }): SlipChecker {
-  const { ctx, slips, ocr } = args;
+  const { ctx, slips, ocr, qr } = args;
   const waiting = new Set<string>();
   /** A new slip arrived for a payment that is being read: read it again when this one ends. */
   const again = new Set<string>();
@@ -43,11 +50,27 @@ export function createSlipChecker(args: {
   async function evaluate(
     key: string,
     expected: number,
-  ): Promise<{ check: Exclude<SlipCheck, 'pending'>; amount: number | null }> {
+  ): Promise<{
+    check: Exclude<SlipCheck, 'pending'>;
+    amount: number | null;
+    refHash: string | null;
+    qrHash: string | null;
+  }> {
     const bytes = await slips.get(key);
     const size = bytes ? imageSize(bytes) : null;
     if (!bytes || !size || size.width * size.height > MAX_OCR_PIXELS) {
-      return { check: 'unreadable', amount: null };
+      return { check: 'unreadable', amount: null, refHash: null, qrHash: null };
+    }
+    // The small QR first: it is cheap, it works on screenshots and re-photos, and it still counts
+    // when the text cannot be read. A failure here only means "no QR key"; it never fails the check.
+    let qrHash: string | null = null;
+    if (qr) {
+      try {
+        const found = await qr.read(bytes);
+        if (found) qrHash = sha256(`${found.sendingBank}:${found.transRef}`);
+      } catch (error) {
+        args.log?.warn({ reason: error instanceof Error ? error.message : 'QR_FAILED' }, 'slip QR');
+      }
     }
     let text: string;
     try {
@@ -55,17 +78,21 @@ export function createSlipChecker(args: {
     } catch (error) {
       // The class of the failure only: the message of a reader could echo what it read.
       args.log?.warn({ reason: error instanceof Error ? error.message : 'OCR_FAILED' }, 'slip OCR');
-      return { check: 'unreadable', amount: null };
+      return { check: 'unreadable', amount: null, refHash: null, qrHash };
     }
     const amount = extractSlipAmount(text);
-    return { check: compareSlipAmount(amount, expected), amount };
+    // Only the hash of the normalised reference leaves this function: two slips of one transfer
+    // share it, and it shows nothing if the database is read.
+    const ref = extractSlipRef(text);
+    const refHash = ref ? sha256(ref) : null;
+    return { check: compareSlipAmount(amount, expected), amount, refHash, qrHash };
   }
 
   async function read(paymentId: string): Promise<void> {
     const row = await paymentsRepo.findPaymentById(ctx.db, paymentId);
     if (row?.slipCheck !== 'pending' || !row.slipImageKey) return;
     const key = row.slipImageKey;
-    const { check, amount } = await evaluate(key, row.amountSatang);
+    const { check, amount, refHash, qrHash } = await evaluate(key, row.amountSatang);
     await withTransaction(ctx, async (tx, emit) => {
       const locked = await paymentsRepo.lockPaymentById(tx, paymentId);
       // A newer slip, or a purge, came in while the picture was being read: this answer is stale.
@@ -73,6 +100,8 @@ export function createSlipChecker(args: {
       const updated = await paymentsRepo.updatePaymentIfVersion(tx, locked.id, locked.version, {
         slipCheck: check,
         slipAmountSatang: amount,
+        slipRefHash: refHash,
+        slipQrHash: qrHash,
       });
       // The payment's status is never touched. Devices get the new rev and ask for the hint.
       if (updated) {

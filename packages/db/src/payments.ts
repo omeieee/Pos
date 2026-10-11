@@ -8,9 +8,9 @@
  * see "no open payment". The same order everywhere also rules out a deadlock.
  */
 import type { PaymentMethod, PaymentStatus, SlipCheck } from '@sds/shared';
-import { and, asc, count, eq, inArray, isNotNull } from 'drizzle-orm';
+import { and, asc, count, eq, inArray, isNotNull, lt, ne, or } from 'drizzle-orm';
 import type { Db } from './client.ts';
-import { paymentRefunds, payments } from './schema.ts';
+import { orders, paymentRefunds, payments } from './schema.ts';
 
 export type PaymentRow = typeof payments.$inferSelect;
 
@@ -95,6 +95,10 @@ export interface PaymentPatch {
   /** What the automatic reading of the slip found (D-26); a new slip resets both. */
   slipCheck?: SlipCheck | null;
   slipAmountSatang?: number | null;
+  /** SHA-256 (hex) of the slip picture and of the bank reference read from it (D-26). */
+  slipImageHash?: string | null;
+  slipRefHash?: string | null;
+  slipQrHash?: string | null;
 }
 
 export async function findPaymentById(db: Db, id: string): Promise<PaymentRow | undefined> {
@@ -169,6 +173,64 @@ export async function listPendingSlipChecks(db: Db, limit: number): Promise<stri
     .orderBy(asc(payments.rev))
     .limit(limit);
   return rows.map((r) => r.id);
+}
+
+/**
+ * Payment statuses whose slip counts as "already used" (D-26): a claim that is waiting, a
+ * confirmed payment, and a refunded one (the transfer was real). Pending has no slip; cancelled
+ * and voided payments were rejected or taken back, so their slips do not count.
+ */
+const SLIP_USED_STATUSES = ['claimed', 'confirmed', 'refunded'];
+
+/** What made two slips look like one: the reference in the slip's QR is the strongest. */
+export type SlipMatch = 'qr' | 'ref' | 'image';
+
+/**
+ * The earlier payment (any order) that holds the same slip picture, the same bank reference or
+ * the same QR reference as this one, or undefined. "Earlier" is by the time of the claim. It
+ * returns only what staff may see: the order's number, the payment's status and what matched.
+ */
+export async function findEarlierSlipUse(
+  db: Db,
+  payment: Pick<PaymentRow, 'id' | 'claimedAt' | 'slipImageHash' | 'slipRefHash' | 'slipQrHash'>,
+): Promise<{ orderNo: string; status: PaymentStatus; matchedBy: SlipMatch } | undefined> {
+  const same = [
+    payment.slipImageHash ? eq(payments.slipImageHash, payment.slipImageHash) : undefined,
+    payment.slipRefHash ? eq(payments.slipRefHash, payment.slipRefHash) : undefined,
+    payment.slipQrHash ? eq(payments.slipQrHash, payment.slipQrHash) : undefined,
+  ].filter((c) => c !== undefined);
+  if (same.length === 0 || payment.claimedAt === null) return undefined;
+  const [row] = await db
+    .select({
+      orderNo: orders.orderNo,
+      status: payments.status,
+      imageHash: payments.slipImageHash,
+      refHash: payments.slipRefHash,
+      qrHash: payments.slipQrHash,
+    })
+    .from(payments)
+    .innerJoin(orders, eq(orders.id, payments.orderId))
+    .where(
+      and(
+        ne(payments.id, payment.id),
+        inArray(payments.status, SLIP_USED_STATUSES),
+        or(...same),
+        or(
+          lt(payments.claimedAt, payment.claimedAt),
+          and(eq(payments.claimedAt, payment.claimedAt), lt(payments.id, payment.id)),
+        ),
+      ),
+    )
+    .orderBy(asc(payments.claimedAt), asc(payments.id))
+    .limit(1);
+  if (!row) return undefined;
+  const matchedBy: SlipMatch =
+    payment.slipQrHash && row.qrHash === payment.slipQrHash
+      ? 'qr'
+      : payment.slipRefHash && row.refHash === payment.slipRefHash
+        ? 'ref'
+        : 'image';
+  return { orderNo: row.orderNo, status: row.status as PaymentStatus, matchedBy };
 }
 
 // ---------- Partial refunds (D-25) ----------

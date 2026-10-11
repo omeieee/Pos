@@ -32,6 +32,11 @@ Newest entries first. Add entries with `/checkpoint`. Each entry covers what cha
 
 ---
 
+## 2026-10-11 · P4 · Duplicate-slip hint (image hash, OCR ref, slip QR)
+- **Done:** owner reused one slip on a new order and it went through. Now a hint only (rule 2): SHA-256 of image, OCR ref hash (0028), slip mini-QR decoded locally (jsqr/jpeg-js/pngjs in a worker thread; `slip_qr_hash`, 0029); staff get a red banner + extra tap; customer sees nothing new. `SLIP_QR=off` / `SLIP_OCR=off` switch it off. D-26 updated.
+- **Verified:** biome clean, build 12/12, shared 971, db 246, api 1157, pos-web 1774 (OfflinePromptPay test failed once in the full run, passed twice alone), liff-web 74, i18n 22.
+- **Not verified:** real slips (parser layouts partly synthetic), memory/time on the VM, Docker build, WebP slips not decoded. Does not prove funds arrived.
+
 ## 2026-10-11 · P4 · Owner real-use feedback: member-form loop, iPad pay screen, month view, kitchen, slip hint
 - **Done (uncommitted, NOT pushed, not deployed):** (1) member page typed one character at a time and hit 429: `useT()` returned a new `tr` each render so `MemberScreen.load` refetched and reset the form on every keystroke; `useT` is now `useCallback` per locale. (2) iPad payment pane scrolls as a whole (`PayFrame`), so QR/confirm stay reachable with many cancelled slip payments. (3) Orders month overview + `GET /v1/orders/summary?month=` (revenue only with `report.view` in UI; paid orders only). (4) Kitchen board redesigned for 2-second reading; LINE display name + picture stored on customer and copied to the order (migration 0026); `PRIVACY_NOTICE_VERSION` 2026-10-12; kitchen role no longer receives `member.phone` (`redactOrderForRole`). (5) Menu photos already existed (D-21); POS grid now shows them (`itemPhotoPath`); Caddyfile no longer forces `no-store` on photo URLs. (6) Void dialog: nothing preselected for a confirmed payment, void preselected for claimed (`defaultReverseKind`). (7) Slip amount hint by local Tesseract, hint only (D-26, migration 0027, `slip_check`), staff banner + extra tap on mismatch, customer can view/replace own slip.
 - **Verified:** biome clean (2 warnings pre-existing), `pnpm build` 12/12, all tests pass (shared 927, db 245, api 1126, pos-web 1766, liff-web 74, i18n 22, line 69 after snapshot update for the new privacy wording).

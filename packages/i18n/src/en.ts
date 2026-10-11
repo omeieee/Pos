@@ -388,9 +388,17 @@ export const en = {
   'payment.slip.chip.mismatch': 'Slip amount differs',
   'payment.slip.chip.unreadable': 'Slip not readable',
   'payment.slip.chip.pending': 'Reading slip',
+  'payment.slip.duplicate': 'This slip was already used with order {orderNo} (status: {status})',
+  'payment.slip.chip.duplicate': 'Duplicate slip',
+  'payment.slip.duplicateQr':
+    'The reference inside the slip QR matches an earlier slip: order {orderNo} (status: {status})',
+  'payment.slip.noQr': 'No QR found on the slip (not unusual; check the bank app as usual)',
   'payment.confirmMismatchAgain': 'Slip amount differs. Tap again to confirm {amount} received',
   'payment.confirmMismatchWarn':
     'The amount on the slip does not match the order. Check the bank app, then tap confirm again.',
+  'payment.confirmDuplicateAgain': 'Duplicate slip. Tap again to confirm {amount} received',
+  'payment.confirmDuplicateWarn':
+    'This slip matches one already used on another order. Check in the bank app that this is new money, then tap confirm again.',
   'payment.promptpay.customer.close': 'Back to staff view (hold 1 second)',
   'payment.promptpay.customer.scanAny': 'Scan with any bank app',
   'payment.promptpay.customer.amountIncluded': 'The amount is already in the QR. Do not type it.',

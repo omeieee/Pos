@@ -371,9 +371,16 @@ export const th = {
   'payment.slip.chip.mismatch': 'ยอดสลิปไม่ตรง',
   'payment.slip.chip.unreadable': 'อ่านสลิปไม่ได้',
   'payment.slip.chip.pending': 'กำลังอ่านสลิป',
+  'payment.slip.duplicate': 'สลิปนี้เคยใช้แล้วกับออเดอร์ {orderNo} (สถานะ {status})',
+  'payment.slip.chip.duplicate': 'สลิปซ้ำ',
+  'payment.slip.duplicateQr': 'รหัสอ้างอิงในคิวอาร์สลิปตรงกับสลิปเดิม ออเดอร์ {orderNo} (สถานะ {status})',
+  'payment.slip.noQr': 'ไม่พบคิวอาร์บนสลิป (ไม่ใช่เรื่องผิดปกติ ตรวจจากแอปธนาคารตามปกติ)',
   'payment.confirmMismatchAgain': 'ยอดสลิปไม่ตรง กดอีกครั้งเพื่อยืนยันรับเงิน {amount}',
   'payment.confirmMismatchWarn':
     'ยอดบนสลิปไม่ตรงกับออเดอร์ ตรวจยอดเข้าในแอปธนาคารให้แน่ใจ แล้วกดปุ่มยืนยันอีกครั้ง',
+  'payment.confirmDuplicateAgain': 'สลิปซ้ำ กดอีกครั้งเพื่อยืนยันรับเงิน {amount}',
+  'payment.confirmDuplicateWarn':
+    'สลิปนี้ตรงกับสลิปของออเดอร์อื่นที่เคยใช้แล้ว ตรวจยอดเข้าในแอปธนาคารให้แน่ใจว่าเป็นยอดใหม่ แล้วกดปุ่มยืนยันอีกครั้ง',
   'payment.promptpay.customer.close': 'กลับหน้าพนักงาน (กดค้าง 1 วินาที)',
   'payment.promptpay.customer.scanAny': 'สแกนด้วยแอปธนาคารใดก็ได้',
   'payment.promptpay.customer.amountIncluded': 'ยอดเงินใส่ไว้ใน QR แล้ว ไม่ต้องพิมพ์เอง',

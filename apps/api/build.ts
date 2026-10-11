@@ -22,6 +22,8 @@ const options: BuildOptions = {
     'owner-reset': 'src/cli/owner-reset.ts',
     'owner-unlock': 'src/cli/owner-unlock.ts',
     'richmenu-upload': 'src/cli/richmenu-upload.ts',
+    // The slip QR reader runs in a worker thread, which loads its own file (slips/qr.ts).
+    'slip-qr-worker': 'src/slips/qr-worker.ts',
   },
   outdir,
   bundle: true,

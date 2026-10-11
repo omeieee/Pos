@@ -637,6 +637,18 @@ export const payments = pgTable(
      */
     slipAmountSatang: money('slip_amount_satang'),
     slipCheck: text('slip_check'),
+    /**
+     * Duplicate-slip hint (D-26): SHA-256 (hex) of the picture's bytes, and of the bank reference
+     * read from it (null when none was found). Only the hashes are kept, never the text or the
+     * reference; cleared with the slip.
+     */
+    slipImageHash: text('slip_image_hash'),
+    slipRefHash: text('slip_ref_hash'),
+    /**
+     * SHA-256 (hex) of `sendingBank:transRef` read from the slip's small QR (D-26), or null when no
+     * readable QR was found. Not comparable with `slipRefHash` (another input). Cleared with the slip.
+     */
+    slipQrHash: text('slip_qr_hash'),
     referenceNote: text('reference_note'),
     claimedAt: ts('claimed_at'),
     confirmedByStaffId: uuid('confirmed_by_staff_id').references(() => staff.id),
@@ -661,6 +673,9 @@ export const payments = pgTable(
       .on(t.orderId)
       .where(sql`status in ('pending', 'claimed')`),
     index('payments_rev_idx').on(t.rev),
+    index('payments_slip_image_hash_idx').on(t.slipImageHash),
+    index('payments_slip_ref_hash_idx').on(t.slipRefHash),
+    index('payments_slip_qr_hash_idx').on(t.slipQrHash),
     check('payments_method', oneOf('method', PAYMENT_METHODS)),
     check('payments_status', oneOf('status', PAYMENT_STATUSES)),
     check('payments_slip_check', sql`slip_check is null or ${oneOf('slip_check', SLIP_CHECKS)}`),

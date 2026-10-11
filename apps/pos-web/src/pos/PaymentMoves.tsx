@@ -32,6 +32,7 @@ export function PaymentMoves({
   notFoundLabel,
   lead,
   slipMismatch = false,
+  slipDuplicate = false,
   children,
 }: {
   order: OrderDto;
@@ -44,6 +45,8 @@ export function PaymentMoves({
   lead?: ReactNode;
   /** The amount on the customer's slip differs from this payment (D-26): confirming takes two taps. */
   slipMismatch?: boolean;
+  /** The slip was already used on an earlier payment (D-26): confirming takes two taps too. */
+  slipDuplicate?: boolean;
   /** Extra controls (change method) shown with the secondary buttons. */
   children?: React.ReactNode;
 }) {
@@ -55,9 +58,10 @@ export function PaymentMoves({
   const [notFound, setNotFound] = useState(false);
   // On a slip mismatch the first tap on confirm only asks again; a new reading starts over.
   const [asked, setAsked] = useState(false);
+  const needsAsk = slipMismatch || slipDuplicate;
   useEffect(() => {
-    if (!slipMismatch) setAsked(false);
-  }, [slipMismatch]);
+    if (!needsAsk) setAsked(false);
+  }, [needsAsk]);
 
   const mine = flow.orderId === order.id;
   const moveAction = (MOVE_ACTIONS as readonly string[]).includes(flow.action ?? '');
@@ -69,7 +73,7 @@ export function PaymentMoves({
   useActivityHold(reference !== '');
 
   function confirm() {
-    if (slipMismatch && !asked) {
+    if (needsAsk && !asked) {
       setAsked(true);
       return;
     }
@@ -107,6 +111,11 @@ export function PaymentMoves({
         </>
       ) : null}
 
+      {slipDuplicate && asked ? (
+        <Callout tone="bad" role="alert">
+          {tr('payment.confirmDuplicateWarn')}
+        </Callout>
+      ) : null}
       {slipMismatch && asked ? (
         <Callout tone="warn" role="alert">
           {tr('payment.confirmMismatchWarn')}
@@ -159,9 +168,14 @@ export function PaymentMoves({
           <Gi n="check" />
           {sending
             ? tr('payment.sending')
-            : tr(slipMismatch && asked ? 'payment.confirmMismatchAgain' : 'payment.confirmAmount', {
-                amount: formatBaht(collectAmount(order, payment, undefined), locale),
-              })}
+            : tr(
+                asked && slipDuplicate
+                  ? 'payment.confirmDuplicateAgain'
+                  : asked && slipMismatch
+                    ? 'payment.confirmMismatchAgain'
+                    : 'payment.confirmAmount',
+                { amount: formatBaht(collectAmount(order, payment, undefined), locale) },
+              )}
         </button>
       ) : null}
 

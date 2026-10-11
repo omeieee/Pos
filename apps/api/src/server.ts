@@ -11,6 +11,7 @@ import { createPoolWatchdog } from './pool-watchdog.ts';
 import { sentryOptions } from './redact.ts';
 import { createSlipChecker, installSlipChecker } from './slips/checker.ts';
 import { createTesseractOcr } from './slips/ocr.ts';
+import { createWorkerQrReader } from './slips/qr.ts';
 import { createFsSlipStore } from './slips/store.ts';
 import { registerV1 } from './v1.ts';
 
@@ -79,6 +80,7 @@ if (config.slipOcr) {
       ctx: { db, now: () => new Date(), events },
       slips,
       ocr: createTesseractOcr(config.slipOcr),
+      ...(config.slipQr ? { qr: createWorkerQrReader() } : {}),
       log: app.log,
     }),
   );

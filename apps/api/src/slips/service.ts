@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { insertAudit, ordersRepo, paymentsRepo } from '@sds/db';
 import type { MyOrder } from '@sds/shared';
 import type { Principal, RequestMeta } from '../auth/service.ts';
@@ -41,6 +42,7 @@ export async function attachSlip(
   try {
     order = await claimPayment(ctx, customerId, orderId, meta, {
       key,
+      hash: createHash('sha256').update(bytes).digest('hex'),
       onReplaced: (oldKey) => replaced.add(oldKey),
       read: checker !== null,
     });

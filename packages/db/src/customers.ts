@@ -189,7 +189,14 @@ export async function takeCustomerSlipKeys(db: Db, customerId: string): Promise<
     if (row.key === null) continue;
     await db
       .update(payments)
-      .set({ slipImageKey: null, slipCheck: null, slipAmountSatang: null })
+      .set({
+        slipImageKey: null,
+        slipCheck: null,
+        slipAmountSatang: null,
+        slipImageHash: null,
+        slipRefHash: null,
+        slipQrHash: null,
+      })
       .where(eq(payments.id, row.id));
     keys.push(row.key);
   }

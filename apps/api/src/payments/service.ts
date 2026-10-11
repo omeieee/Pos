@@ -708,14 +708,24 @@ export interface MoveInput {
    * caller can delete that file once the transaction has committed. `read` marks the slip to be
    * read automatically (D-26); a new slip always clears the hint of the old one.
    */
-  slip?: { key: string; onReplaced?: (oldKey: string) => void; read?: boolean } | undefined;
+  slip?:
+    | { key: string; hash: string; onReplaced?: (oldKey: string) => void; read?: boolean }
+    | undefined;
 }
 
 /** A new slip: its key, with the old reading cleared (and a new one asked for when it is on). */
-const slipPatch = (slip: { key: string; read?: boolean }): paymentsRepo.PaymentPatch => ({
+const slipPatch = (slip: {
+  key: string;
+  hash: string;
+  read?: boolean;
+}): paymentsRepo.PaymentPatch => ({
   slipImageKey: slip.key,
   slipCheck: slip.read ? 'pending' : null,
   slipAmountSatang: null,
+  // The picture's hash is kept for the duplicate hint; the reference hash comes with the reading.
+  slipImageHash: slip.hash,
+  slipRefHash: null,
+  slipQrHash: null,
 });
 
 /**
@@ -856,6 +866,21 @@ export async function listOrderPayments(
   if (!order) throw notFound('Order');
   const { rows, refunds, amounts } = await moneyOf(ctx.db, orderId);
   const paid = netPaid(amounts);
+  // Slips that look used before (D-26): a hint for staff, found at read time so that a reference
+  // read a moment after the claim is included.
+  const duplicates: NonNullable<OrderPaymentsResponse['slipDuplicates']> = [];
+  for (const r of rows) {
+    if (r.slipImageKey === null) continue;
+    const earlier = await paymentsRepo.findEarlierSlipUse(ctx.db, r);
+    if (earlier) {
+      duplicates.push({
+        paymentId: r.id,
+        orderNo: earlier.orderNo,
+        paymentStatus: earlier.status,
+        matchedBy: earlier.matchedBy,
+      });
+    }
+  }
   return {
     payments: rows.map(toPaymentDto),
     slipPaymentIds: rows.filter((r) => r.slipImageKey !== null).map((r) => r.id),
@@ -866,10 +891,12 @@ export async function listOrderPayments(
               paymentId: r.id,
               check: r.slipCheck as SlipCheck,
               amountSatang: r.slipAmountSatang === null ? null : satang(r.slipAmountSatang),
+              qrFound: r.slipQrHash !== null,
             },
           ]
         : [],
     ),
+    ...(duplicates.length > 0 ? { slipDuplicates: duplicates } : {}),
     refunds: refunds.map((r) => ({
       id: r.id,
       paymentId: r.paymentId,

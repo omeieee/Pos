@@ -305,7 +305,7 @@ describe('with the reading on', () => {
 
     const staff = await call('GET', `/v1/orders/${order.id}/payments`, staffToken);
     expect(staff.json().slipChecks).toEqual([
-      { paymentId: payment?.id, check: 'mismatch', amountSatang: 1234500 },
+      { paymentId: payment?.id, check: 'mismatch', amountSatang: 1234500, qrFound: false },
     ]);
     // Not in the payment DTO (realtime and sync carry that one).
     expect(JSON.stringify(staff.json().payments)).not.toMatch(/slip/i);

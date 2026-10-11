@@ -26,6 +26,7 @@ describe('loadConfig', () => {
       privacy: { controller: 'omeie', contactEmail: 'omeza25482548@gmail.com' },
       slipDir: '/data/slips',
       slipOcr: null,
+      slipQr: true,
     });
   });
 
@@ -40,6 +41,8 @@ describe('loadConfig', () => {
     expect(
       loadConfig({ ...base, SLIP_OCR: 'tesseract', SLIP_OCR_TIMEOUT_MS: '90000' }).slipOcr,
     ).toEqual({ lang: 'tha+eng', timeoutMs: 90_000 });
+    expect(loadConfig({ ...base, SLIP_QR: 'off' }).slipQr).toBe(false);
+    expect(loadConfig({ ...base, SLIP_QR: 'on' }).slipQr).toBe(true);
     expect(() => loadConfig({ ...base, SLIP_OCR_LANG: 'eng; rm -rf /' })).toThrow(ConfigError);
   });
 

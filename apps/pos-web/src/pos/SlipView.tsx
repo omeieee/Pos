@@ -1,5 +1,5 @@
 import { formatBaht } from '@sds/i18n';
-import type { SlipCheck } from '@sds/shared';
+import type { PaymentStatus, SlipCheck } from '@sds/shared';
 import { useEffect, useState } from 'react';
 import { s } from '../design/style.ts';
 import { useLocale, useServices, useT } from '../ui/hooks.ts';
@@ -11,6 +11,14 @@ const CHIP_TONE: Record<SlipCheck, string> = {
   unreadable: 'g-b-mute',
   pending: 'g-b-mute',
 };
+
+/** What the server says about a slip that was used before (D-26), as a hint: never a decision. */
+export interface SlipDuplicate {
+  orderNo: string;
+  paymentStatus: PaymentStatus;
+  /** What matched; `qr` is the reference inside the slip's own QR. */
+  matchedBy?: 'qr' | 'ref' | 'image' | undefined;
+}
 
 /**
  * The customer's slip for a PromptPay payment, in any status while the file exists (90-day
@@ -24,6 +32,10 @@ const CHIP_TONE: Record<SlipCheck, string> = {
  * a green, amber or grey banner and a small chip. That is a second hint, never a decision: it says
  * so, and the confirm button still needs the bank app. The reading finishes after the claim, with a
  * new revision of the payment, which asks again.
+ *
+ * A slip whose picture or bank reference was already used on an earlier payment gets a strong red
+ * banner above the amount banner (and a chip). It is the same kind of hint: automatic, and the bank
+ * app still decides. It names only that order's number and the status of its payment.
  */
 export function SlipView({
   orderId,
@@ -38,15 +50,20 @@ export function SlipView({
   rev: number;
   /** What this payment charges, to put beside the amount read from the slip. */
   amountSatang: number;
-  /** Tells the payment screen how the reading stands (null: no reading), so it can ask for an extra tap. */
-  onCheck?: (check: SlipCheck | null) => void;
+  /** Tells the payment screen how the reading stands (null: no reading) and whether the slip was used before, so it can ask for an extra tap. */
+  onCheck?: (state: { check: SlipCheck | null; duplicate: boolean }) => void;
   /** In the payment history: say nothing when there is no slip (only a payment with one shows it). */
   quiet?: boolean;
 }) {
   const tr = useT();
   const locale = useLocale();
   const { api } = useServices();
-  const [hint, setHint] = useState<{ check: SlipCheck; amountSatang: number | null } | null>(null);
+  const [hint, setHint] = useState<{
+    check: SlipCheck;
+    amountSatang: number | null;
+    qrFound: boolean | undefined;
+  } | null>(null);
+  const [duplicate, setDuplicate] = useState<SlipDuplicate | null>(null);
   // `unknown`: the list could not be read, so the button is offered as before.
   const [known, setKnown] = useState<'checking' | 'has' | 'missing' | 'unknown'>('checking');
   const [phase, setPhase] = useState<'idle' | 'loading' | 'none' | 'failed'>('idle');
@@ -63,8 +80,24 @@ export function SlipView({
         const has = answer.slipPaymentIds?.includes(paymentId) === true;
         setKnown(has ? 'has' : 'missing');
         const found = has ? answer.slipChecks?.find((c) => c.paymentId === paymentId) : undefined;
-        setHint(found ? { check: found.check, amountSatang: found.amountSatang } : null);
-        onCheck?.(found?.check ?? null);
+        setHint(
+          found
+            ? { check: found.check, amountSatang: found.amountSatang, qrFound: found.qrFound }
+            : null,
+        );
+        const used = has
+          ? answer.slipDuplicates?.find((d) => d.paymentId === paymentId)
+          : undefined;
+        setDuplicate(
+          used
+            ? {
+                orderNo: used.orderNo,
+                paymentStatus: used.paymentStatus,
+                matchedBy: used.matchedBy,
+              }
+            : null,
+        );
+        onCheck?.({ check: found?.check ?? null, duplicate: used !== undefined });
       })
       .catch(() => {
         if (live) setKnown('unknown');
@@ -114,7 +147,36 @@ export function SlipView({
               {tr(`payment.slip.chip.${hint.check}`)}
             </span>
           ) : null}
+          {duplicate ? (
+            <span
+              className="g-badge g-b-bad"
+              data-testid="slip-duplicate-chip"
+              style={s('margin-left:8px')}
+            >
+              {tr('payment.slip.chip.duplicate')}
+            </span>
+          ) : null}
         </p>
+      ) : null}
+      {known === 'has' && duplicate && !quiet ? (
+        <div data-testid="slip-duplicate">
+          <Callout tone="bad" role="alert">
+            <span style={s('display:block;font-weight:700')}>
+              {tr(
+                duplicate.matchedBy === 'qr'
+                  ? 'payment.slip.duplicateQr'
+                  : 'payment.slip.duplicate',
+                {
+                  orderNo: duplicate.orderNo,
+                  status: tr(`payment.status.${duplicate.paymentStatus}`),
+                },
+              )}
+            </span>
+            <span className="g-t-c" style={s('display:block;font-weight:500')}>
+              {tr('payment.slip.check.hint')}
+            </span>
+          </Callout>
+        </div>
       ) : null}
       {known === 'has' && hint && !quiet ? (
         <div data-testid="slip-check" data-check={hint.check}>
@@ -143,6 +205,11 @@ export function SlipView({
             </div>
           )}
         </div>
+      ) : null}
+      {known === 'has' && hint && hint.check !== 'pending' && hint.qrFound === false && !quiet ? (
+        <p className="g-t-c" data-testid="slip-no-qr" style={s('margin:0')}>
+          {tr('payment.slip.noQr')}
+        </p>
       ) : null}
       {url ? (
         <>

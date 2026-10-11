@@ -95,6 +95,8 @@ const envSchema = z
       emptyToUndefined,
       z.coerce.number().int().min(1000).max(300_000).default(60_000),
     ),
+    /** Reads the small QR on a slip (D-26), a duplicate hint only. `off` turns it off; default on whenever the slip reading is on. */
+    SLIP_QR: z.preprocess(emptyToUndefined, z.enum(['on', 'off']).optional()),
     GIT_SHA: z.preprocess(emptyToUndefined, z.string().default('dev')),
   })
   .refine((e) => e.NODE_ENV !== 'production' || !disablesTls(e.DATABASE_URL), {
@@ -126,6 +128,8 @@ export type Config = {
   slipDir: string;
   /** The automatic slip reading (D-26); null when it is off. */
   slipOcr: { lang: string; timeoutMs: number } | null;
+  /** The slip's small QR is read as well (D-26); only when the slip reading is on. */
+  slipQr: boolean;
 };
 
 export class ConfigError extends Error {}
@@ -161,5 +165,6 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
       (e.SLIP_OCR ?? (e.NODE_ENV === 'production' ? 'tesseract' : 'off')) === 'tesseract'
         ? { lang: e.SLIP_OCR_LANG, timeoutMs: e.SLIP_OCR_TIMEOUT_MS }
         : null,
+    slipQr: e.SLIP_QR !== 'off',
   };
 }

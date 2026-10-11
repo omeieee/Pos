@@ -35,6 +35,7 @@ services:
       SLIP_OCR: ${SLIP_OCR:-}
       SLIP_OCR_LANG: ${SLIP_OCR_LANG:-}
       SLIP_OCR_TIMEOUT_MS: ${SLIP_OCR_TIMEOUT_MS:-}
+      SLIP_QR: ${SLIP_QR:-}
       GIT_SHA: ${GIT_SHA:-unknown}
     # Slip images (D-24) live on the VM disk in a named volume, so a redeploy keeps them.
     volumes:

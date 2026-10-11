@@ -172,6 +172,24 @@ export const orderPaymentsResponseSchema = z.object({
         paymentId: z.uuid(),
         check: z.enum(SLIP_CHECKS),
         amountSatang: nonNegativeSatangSchema.nullable(),
+        /** Whether a readable slip QR (D-26) was found on the picture; false is a neutral note, not an alarm. */
+        qrFound: z.boolean().optional(),
+      }),
+    )
+    .optional(),
+  /**
+   * Slips that look like one already used on another payment (D-26): the same picture, or the same
+   * bank reference. A hint for staff, never a decision. It names only the earlier order's number
+   * and the status of its payment. Only on this REST answer; absent when there is none.
+   */
+  slipDuplicates: z
+    .array(
+      z.object({
+        paymentId: z.uuid(),
+        orderNo: z.string(),
+        paymentStatus: z.enum(PAYMENT_STATUSES),
+        /** What matched, strongest first: the reference inside the slip's QR, the printed reference, the picture itself. */
+        matchedBy: z.enum(['qr', 'ref', 'image']).optional(),
       }),
     )
     .optional(),

@@ -391,7 +391,14 @@ export async function clearSlipKeys(
     for (const slip of args.slips) {
       const done = await tx
         .update(payments)
-        .set({ slipImageKey: null, slipCheck: null, slipAmountSatang: null })
+        .set({
+          slipImageKey: null,
+          slipCheck: null,
+          slipAmountSatang: null,
+          slipImageHash: null,
+          slipRefHash: null,
+          slipQrHash: null,
+        })
         .where(and(eq(payments.id, slip.id), eq(payments.slipImageKey, slip.key)))
         .returning({ id: payments.id });
       cleared += done.length;
