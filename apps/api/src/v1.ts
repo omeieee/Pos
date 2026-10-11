@@ -11,6 +11,7 @@ import { registerCustomerRoutes } from './customers/routes.ts';
 import type { EventBus } from './events.ts';
 import { registerCompletionPush } from './line/completion-push.ts';
 import { notifyOrderChange } from './line/order-change-push.ts';
+import { notifyPaymentRejected } from './line/payment-rejected-push.ts';
 import { registerLineRoutes } from './line/routes.ts';
 import { createLineRuntime, type LineRuntime } from './line/runtime.ts';
 import { registerMenuRoutes } from './menu/routes.ts';
@@ -161,7 +162,12 @@ export async function registerV1(app: FastifyInstance, deps: V1Deps): Promise<vo
       );
       // Payments: /v1/orders/:id/payments and /v1/payments/... (no prefix of its own).
       await v1.register((scope) =>
-        registerPaymentRoutes(scope, context.auth, context.guard, slips),
+        registerPaymentRoutes(scope, context.auth, context.guard, slips, (paymentId) =>
+          notifyPaymentRejected(
+            { db: deps.db, runtime: lineRuntime, events: deps.events, now: auth.now },
+            paymentId,
+          ),
+        ),
       );
       // Device and staff management: /v1/devices and /v1/staff (no prefix of its own).
       await v1.register((scope) => registerAdminRoutes(scope, context.auth, context.guard));

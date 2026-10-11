@@ -211,6 +211,6 @@ export async function registerCustomerAppRoutes(
   });
 
   app.get('/orders/:id/qr', reads, async (request) =>
-    myQr(ctx, customerOf(request).customerId, orderIdOf(request)),
+    myQr(ctx, customerOf(request).customerId, orderIdOf(request), meta(request)),
   );
 }

@@ -866,6 +866,107 @@ describe('"โอนแล้ว" and the payment choices', () => {
     expect(view.paymentStatus).toBe('paid');
     expect(view.payment).toMatchObject({ status: 'confirmed' });
     expect(view.actions).toMatchObject({ claim: false, changeMethod: false });
+    expect(view.paymentRejected).toBe(false);
+  });
+
+  describe('staff reject the claim (no money found)', () => {
+    async function rejected() {
+      const token = await customer(TOKEN_A);
+      const o = (await order(token)).json.order;
+      await call('POST', `/v1/app/orders/${o.id}/claim`, token);
+      const staffToken = await h.ownerSession(owner);
+      const res = await call('POST', `/v1/payments/${o.payment?.id}/cancel-claimed`, staffToken, {
+        reason: 'ไม่พบยอดเงินเข้า',
+      });
+      expect(res.statusCode).toBe(200);
+      return { token, o, staffToken, view: () => view(token, o.id) };
+    }
+    const view = async (token: string, id: string) =>
+      (await call('GET', `/v1/app/orders/${id}`, token)).json() as MyOrder;
+
+    test('the order says the payment was not found and offers pay, QR and slip again', async () => {
+      const { view: get } = await rejected();
+      const v = await get();
+      expect(v.paymentRejected).toBe(true);
+      expect(v.paymentStatus).toBe('unpaid');
+      expect(v.actions).toMatchObject({
+        claim: true,
+        showQr: true,
+        attachSlip: true,
+        changeMethod: true,
+      });
+      expect(v.actions.methods.length).toBeGreaterThan(0);
+    });
+
+    test('"โอนแล้ว" again starts a fresh payment and claims it; staff must still confirm', async () => {
+      const { token, o, view: get } = await rejected();
+      const res = await call('POST', `/v1/app/orders/${o.id}/claim`, token);
+      expect(res.statusCode).toBe(200);
+      expect(res.json().payment).toMatchObject({ method: 'promptpay', status: 'claimed' });
+      expect(res.json().payment.id).not.toBe(o.payment?.id);
+      expect(res.json().paymentStatus).toBe('awaiting_confirmation');
+      expect(res.json().paymentRejected).toBe(false);
+      // A retry of the same tap claims nothing more and creates nothing more.
+      expect((await call('POST', `/v1/app/orders/${o.id}/claim`, token)).statusCode).toBe(200);
+      expect(
+        (await h.client.query('select id from payments where order_id = $1', [o.id])).rows,
+      ).toHaveLength(2);
+      expect((await get()).paymentRejected).toBe(false);
+    });
+
+    test('the QR is available again and is a fresh pending payment', async () => {
+      const { token, o, view: get } = await rejected();
+      const qr = await call('GET', `/v1/app/orders/${o.id}/qr`, token);
+      expect(qr.statusCode).toBe(200);
+      expect(qr.json().amountSatang).toBe(TOTAL);
+      const v = await get();
+      expect(v.payment).toMatchObject({ method: 'promptpay', status: 'pending' });
+      expect(v.paymentRejected).toBe(false);
+    });
+
+    test('a slip after the rejection claims the new payment', async () => {
+      const { token, o } = await rejected();
+      const png = Buffer.from(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg==',
+        'base64',
+      );
+      const res = await h.app.inject({
+        method: 'POST',
+        url: `/v1/app/orders/${o.id}/slip`,
+        headers: { authorization: `Bearer ${token}`, 'content-type': 'image/png' },
+        payload: png,
+        remoteAddress: h.nextIp(),
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.json().payment).toMatchObject({ status: 'claimed' });
+    });
+
+    test('staff confirm the new claim: paid, and no rejected notice any more', async () => {
+      const { token, o, staffToken, view: get } = await rejected();
+      const claim = await call('POST', `/v1/app/orders/${o.id}/claim`, token);
+      const ok = await call(
+        'POST',
+        `/v1/payments/${claim.json().payment.id}/confirm`,
+        staffToken,
+        {},
+      );
+      expect(ok.statusCode).toBe(200);
+      const v = await get();
+      expect(v.paymentStatus).toBe('paid');
+      expect(v.paymentRejected).toBe(false);
+    });
+
+    test('a closed order shows no rejected notice and offers nothing', async () => {
+      const { o, staffToken, token } = await rejected();
+      const cancel = await call('POST', `/v1/orders/${o.id}/cancel`, staffToken, {
+        reason: 'ลูกค้ายกเลิก',
+      });
+      expect(cancel.statusCode).toBe(200);
+      const v = (await call('GET', `/v1/app/orders/${o.id}`, token)).json() as MyOrder;
+      expect(v.paymentRejected).toBe(false);
+      expect(v.actions).toMatchObject({ claim: false, showQr: false, attachSlip: false });
+      expect((await call('GET', `/v1/app/orders/${o.id}/qr`, token)).statusCode).toBe(409);
+    });
   });
 });
 

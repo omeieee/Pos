@@ -182,6 +182,53 @@ const CLOSED = new Set(['completed', 'cancelled']);
 /** Only the names of the saved modifiers: prices and costs are not for the customer's view. */
 const modifierNames = z.array(z.object({ nameTh: z.string(), nameEn: z.string().nullable() }));
 
+/**
+ * Staff rejected the customer's claim: nothing is waiting, nothing is confirmed, and the latest
+ * payment is a PromptPay one that had been claimed and was cancelled (`cancel-claimed`). The
+ * payments come in the order they last changed, so the last one is the latest move.
+ */
+function claimRejected(
+  payments: readonly paymentsRepo.PaymentRow[],
+  order: ordersRepo.OrderRow,
+): boolean {
+  if (order.paymentStatus === 'paid' || order.paymentStatus === 'refunded') return false;
+  if (payments.some((p) => p.status === 'pending' || p.status === 'claimed')) return false;
+  const last = payments.at(-1);
+  return (
+    last !== undefined &&
+    last.method === 'promptpay' &&
+    last.status === 'cancelled' &&
+    last.claimedAt !== null
+  );
+}
+
+/**
+ * The PromptPay payment the customer's claim, slip or QR applies to. After a rejected claim there
+ * is none, so a fresh pending one is made (the amount is always what is still due, the id is
+ * derived from the rejected payment so a retried tap makes one, not two). Nothing is confirmed.
+ */
+async function ensureWaitingPromptpay(
+  ctx: CoreContext,
+  customerId: string,
+  order: ordersRepo.OrderRow,
+  meta: RequestMeta,
+): Promise<paymentsRepo.PaymentRow | undefined> {
+  const payments = await paymentsRepo.listPaymentsForOrder(ctx.db, order.id);
+  const waiting = payments.find((p) => p.status === 'pending' || p.status === 'claimed');
+  if (waiting) return waiting.method === 'promptpay' ? waiting : undefined;
+  if (CLOSED.has(order.status) || !claimRejected(payments, order)) return undefined;
+  const rejectedId = payments.at(-1)?.id ?? order.id;
+  await createPayment(
+    ctx,
+    actorOf(customerId),
+    order.id,
+    { method: 'promptpay', clientRequestId: derivedRequestId(`repay:${rejectedId}`) },
+    meta,
+  );
+  const after = await paymentsRepo.listPaymentsForOrder(ctx.db, order.id);
+  return after.find((p) => p.status === 'pending' || p.status === 'claimed');
+}
+
 /** The order as the customer sees it, with what they may do next decided here, not in the app. */
 export async function viewOrder(ctx: CoreContext, order: ordersRepo.OrderRow): Promise<MyOrder> {
   const items = (await ordersRepo.loadOrderItems(ctx.db, [order.id])).get(order.id) ?? [];
@@ -193,6 +240,7 @@ export async function viewOrder(ctx: CoreContext, order: ordersRepo.OrderRow): P
   const closed = CLOSED.has(order.status);
   const settled = payments.some((p) => p.status === 'claimed' || p.status === 'confirmed');
   const canChange = !closed && !settled;
+  const rejected = !closed && claimRejected(payments, order);
   return myOrderSchema.parse({
     id: order.id,
     orderNo: order.orderNo,
@@ -216,6 +264,7 @@ export async function viewOrder(ctx: CoreContext, order: ordersRepo.OrderRow): P
     readyAt: order.readyAt?.toISOString() ?? null,
     completedAt: order.completedAt?.toISOString() ?? null,
     cancelledAt: order.cancelledAt?.toISOString() ?? null,
+    paymentRejected: rejected,
     payment: payment
       ? {
           id: payment.id,
@@ -225,10 +274,12 @@ export async function viewOrder(ctx: CoreContext, order: ordersRepo.OrderRow): P
         }
       : null,
     actions: {
-      claim: !closed && open?.method === 'promptpay' && open.status === 'pending',
+      // After a rejected claim the customer may pay again: a fresh PromptPay payment is made when
+      // they claim, send a slip or open the QR (`ensureWaitingPromptpay`).
+      claim: !closed && ((open?.method === 'promptpay' && open.status === 'pending') || rejected),
       changeMethod: canChange,
-      showQr: !closed && open?.method === 'promptpay',
-      attachSlip: !closed && open?.method === 'promptpay',
+      showQr: !closed && (open?.method === 'promptpay' || rejected),
+      attachSlip: !closed && (open?.method === 'promptpay' || rejected),
       methods: canChange ? await methodsOffered(ctx.db) : [],
     },
   });
@@ -418,9 +469,8 @@ export async function claimPayment(
   slip?: MoveInput['slip'],
 ): Promise<MyOrder> {
   const order = await ownOrder(ctx.db, customerId, orderId);
-  const payments = await paymentsRepo.listPaymentsForOrder(ctx.db, order.id);
-  const waiting = payments.find((p) => p.status === 'pending' || p.status === 'claimed');
-  if (!waiting || waiting.method !== 'promptpay') {
+  const waiting = await ensureWaitingPromptpay(ctx, customerId, order, meta);
+  if (!waiting) {
     throw conflict('NO_PAYMENT_TO_CLAIM', 'There is no PromptPay payment waiting for this order');
   }
   await movePayment(ctx, actorOf(customerId), waiting.id, 'claim', slip ? { slip } : {}, meta);
@@ -436,12 +486,10 @@ export async function myQr(
   ctx: AuthContext,
   customerId: string,
   orderId: string,
+  meta: RequestMeta = { ip: null },
 ): Promise<MyQrResponse> {
   const order = await ownOrder(ctx.db, customerId, orderId);
-  const payments = await paymentsRepo.listPaymentsForOrder(ctx.db, order.id);
-  const waiting = payments.find(
-    (p) => p.method === 'promptpay' && (p.status === 'pending' || p.status === 'claimed'),
-  );
+  const waiting = await ensureWaitingPromptpay(ctx, customerId, order, meta);
   if (!waiting || CLOSED.has(order.status)) {
     throw conflict('QR_NOT_AVAILABLE', 'There is no PromptPay QR for this order');
   }

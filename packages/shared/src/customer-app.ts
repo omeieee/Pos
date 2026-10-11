@@ -158,6 +158,12 @@ export const myOrderSchema = z.object({
   cancelledAt: isoInstant.nullable(),
   /** The payment still open (pending or claimed) or, failing that, the latest one; null for cash. */
   payment: myPaymentSchema.nullable(),
+  /**
+   * Staff checked the bank and found no transfer: the customer's "โอนแล้ว" was rejected and nothing
+   * is waiting. Show "payment not found, pay again or send the slip"; the pay actions below are on
+   * again. Always sent by the server; optional so older fixtures still type-check.
+   */
+  paymentRejected: z.boolean().optional(),
   /** What the customer may do next. The server decides; the app shows. */
   actions: z.object({
     /** "โอนแล้ว": only for a pending PromptPay payment. It makes the payment `claimed`; staff confirm. */

@@ -104,6 +104,7 @@ describe('the real /v1 routes', () => {
     const customer = [...new Set(h.routes.filter((r) => r.customerGuarded).map(key))].sort();
     expect(customer).toEqual([
       'GET /v1/app/checkout',
+      'GET /v1/app/member',
       'GET /v1/app/orders',
       'GET /v1/app/orders/:id',
       'GET /v1/app/orders/:id/qr',
@@ -112,6 +113,7 @@ describe('the real /v1 routes', () => {
       'POST /v1/app/orders/:id/payment',
       'POST /v1/app/orders/:id/slip',
       'POST /v1/app/privacy-ack',
+      'PUT /v1/app/member',
     ]);
     // None of them is also a staff route: one credential kind per route.
     expect(h.routes.filter((r) => r.customerGuarded && r.guarded)).toEqual([]);

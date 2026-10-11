@@ -69,6 +69,8 @@ export async function registerPaymentRoutes(
   ctx: AuthContext,
   guard: GuardFactory,
   slips: SlipStore,
+  /** Called after the commit when staff reject a claim; sends the customer's LINE notice. */
+  onClaimRejected: (paymentId: string) => void = () => undefined,
 ): Promise<void> {
   // Payment answers are live money state: never cached by a browser or a proxy.
   app.addHook('onSend', async (_request, reply) => {
@@ -121,15 +123,19 @@ export async function registerPaymentRoutes(
   app.post(
     '/payments/:id/cancel-claimed',
     { onRequest: guard('payment.cancel_claimed') },
-    async (request) =>
-      movePayment(
+    async (request) => {
+      const result = await movePayment(
         ctx,
         principalOf(request),
         paymentIdOf(request),
         'cancel-claimed',
         parse(paymentReasonInputSchema, bodyOf(request)),
         meta(request),
-      ),
+      );
+      // A retry of a lost response lands here too; the push's per-payment log row refuses a repeat.
+      onClaimRejected(result.payment.id);
+      return result;
+    },
   );
 
   app.post(
