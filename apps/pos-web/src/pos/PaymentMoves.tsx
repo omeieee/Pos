@@ -33,6 +33,7 @@ export function PaymentMoves({
   lead,
   slipMismatch = false,
   slipDuplicate = false,
+  slipRecipientMismatch = false,
   children,
 }: {
   order: OrderDto;
@@ -47,6 +48,8 @@ export function PaymentMoves({
   slipMismatch?: boolean;
   /** The slip was already used on an earlier payment (D-26): confirming takes two taps too. */
   slipDuplicate?: boolean;
+  /** The receiver on the slip does not look like the shop's account (D-26): the same one extra tap. */
+  slipRecipientMismatch?: boolean;
   /** Extra controls (change method) shown with the secondary buttons. */
   children?: React.ReactNode;
 }) {
@@ -58,7 +61,7 @@ export function PaymentMoves({
   const [notFound, setNotFound] = useState(false);
   // On a slip mismatch the first tap on confirm only asks again; a new reading starts over.
   const [asked, setAsked] = useState(false);
-  const needsAsk = slipMismatch || slipDuplicate;
+  const needsAsk = slipMismatch || slipDuplicate || slipRecipientMismatch;
   useEffect(() => {
     if (!needsAsk) setAsked(false);
   }, [needsAsk]);
@@ -116,6 +119,11 @@ export function PaymentMoves({
           {tr('payment.confirmDuplicateWarn')}
         </Callout>
       ) : null}
+      {slipRecipientMismatch && asked ? (
+        <Callout tone="bad" role="alert">
+          {tr('payment.confirmRecipientWarn')}
+        </Callout>
+      ) : null}
       {slipMismatch && asked ? (
         <Callout tone="warn" role="alert">
           {tr('payment.confirmMismatchWarn')}
@@ -171,9 +179,11 @@ export function PaymentMoves({
             : tr(
                 asked && slipDuplicate
                   ? 'payment.confirmDuplicateAgain'
-                  : asked && slipMismatch
-                    ? 'payment.confirmMismatchAgain'
-                    : 'payment.confirmAmount',
+                  : asked && slipRecipientMismatch
+                    ? 'payment.confirmRecipientAgain'
+                    : asked && slipMismatch
+                      ? 'payment.confirmMismatchAgain'
+                      : 'payment.confirmAmount',
                 { amount: formatBaht(collectAmount(order, payment, undefined), locale) },
               )}
         </button>

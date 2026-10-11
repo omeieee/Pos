@@ -25,6 +25,7 @@ export function OpenPayment({
   const role = useAuthState().session?.staff.role;
   const [slipCheck, setSlipCheck] = useState<SlipCheck | null>(null);
   const [slipDuplicate, setSlipDuplicate] = useState(false);
+  const [slipRecipientMismatch, setSlipRecipientMismatch] = useState(false);
   if (!role) return null;
   if (!payment) {
     // The order says a payment is waiting but its row has not arrived yet.
@@ -55,9 +56,10 @@ export function OpenPayment({
           paymentId={payment.id}
           rev={payment.rev}
           amountSatang={payment.amountSatang}
-          onCheck={({ check, duplicate }) => {
+          onCheck={({ check, duplicate, recipientMismatch }) => {
             setSlipCheck(check);
             setSlipDuplicate(duplicate);
+            setSlipRecipientMismatch(recipientMismatch);
           }}
         />
       ) : null}
@@ -68,6 +70,7 @@ export function OpenPayment({
           actions={actions}
           slipMismatch={claimedPromptpay && slipCheck === 'mismatch'}
           slipDuplicate={claimedPromptpay && slipDuplicate}
+          slipRecipientMismatch={claimedPromptpay && slipRecipientMismatch}
         >
           {change}
         </PromptPayPanel>

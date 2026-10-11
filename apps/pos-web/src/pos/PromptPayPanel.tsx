@@ -87,6 +87,7 @@ export function PromptPayPanel({
   actions,
   slipMismatch = false,
   slipDuplicate = false,
+  slipRecipientMismatch = false,
   children,
 }: {
   order: OrderDto;
@@ -96,6 +97,8 @@ export function PromptPayPanel({
   slipMismatch?: boolean;
   /** The slip was already used on an earlier payment: confirming needs one more tap. */
   slipDuplicate?: boolean;
+  /** The receiver on the slip does not look like the shop's account: confirming needs one more tap. */
+  slipRecipientMismatch?: boolean;
   children?: React.ReactNode;
 }) {
   const tr = useT();
@@ -208,6 +211,7 @@ export function PromptPayPanel({
           notFoundLabel="payment.promptpay.notFound"
           slipMismatch={slipMismatch}
           slipDuplicate={slipDuplicate}
+          slipRecipientMismatch={slipRecipientMismatch}
           lead={
             pending ? (
               <button type="button" className="g-btn pay-sub" onClick={() => setCustomerView(true)}>

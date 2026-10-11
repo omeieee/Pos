@@ -7,7 +7,7 @@
  * payment write takes the order lock, so two requests for one order queue up on it and cannot both
  * see "no open payment". The same order everywhere also rules out a deadlock.
  */
-import type { PaymentMethod, PaymentStatus, SlipCheck } from '@sds/shared';
+import type { PaymentMethod, PaymentStatus, SlipCheck, SlipRecipientCheck } from '@sds/shared';
 import { and, asc, count, eq, inArray, isNotNull, lt, ne, or } from 'drizzle-orm';
 import type { Db } from './client.ts';
 import { orders, paymentRefunds, payments } from './schema.ts';
@@ -99,6 +99,8 @@ export interface PaymentPatch {
   slipImageHash?: string | null;
   slipRefHash?: string | null;
   slipQrHash?: string | null;
+  /** Whether the receiver on the slip looks like the shop's PromptPay ID (D-26); a new slip resets it. */
+  slipRecipientCheck?: SlipRecipientCheck | null;
 }
 
 export async function findPaymentById(db: Db, id: string): Promise<PaymentRow | undefined> {

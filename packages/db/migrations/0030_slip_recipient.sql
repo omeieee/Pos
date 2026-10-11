@@ -1,0 +1,2 @@
+ALTER TABLE "payments" ADD COLUMN "slip_recipient_check" text;--> statement-breakpoint
+ALTER TABLE "payments" ADD CONSTRAINT "payments_slip_recipient_check" CHECK (slip_recipient_check is null or slip_recipient_check in ('match', 'mismatch', 'unknown'));

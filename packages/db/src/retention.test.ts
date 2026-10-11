@@ -620,17 +620,17 @@ describe('slip images', () => {
   test('clearing the slip also clears the duplicate-hint hashes (D-26)', async () => {
     const id = await payment({ status: 'cancelled', updatedDaysAgo: 120, key: KEY(10) });
     await q(
-      "update payments set slip_image_hash = 'a', slip_ref_hash = 'b', slip_qr_hash = 'c' where id = $1",
+      "update payments set slip_image_hash = 'a', slip_ref_hash = 'b', slip_qr_hash = 'c', slip_recipient_check = 'mismatch' where id = $1",
       [id],
     );
     await retention.clearSlipKeys(db, { slips: [{ id, key: KEY(10) }], now: NOW });
     expect(
       (
-        await q<{ i: string | null; r: string | null; q: string | null }>(
-          'select slip_image_hash i, slip_ref_hash r, slip_qr_hash q from payments where id = $1',
+        await q<{ i: string | null; r: string | null; q: string | null; c: string | null }>(
+          'select slip_image_hash i, slip_ref_hash r, slip_qr_hash q, slip_recipient_check c from payments where id = $1',
           [id],
         )
       )[0],
-    ).toEqual({ i: null, r: null, q: null });
+    ).toEqual({ i: null, r: null, q: null, c: null });
   });
 });

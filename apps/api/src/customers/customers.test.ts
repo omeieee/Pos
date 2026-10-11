@@ -106,8 +106,8 @@ describe('POST /v1/customers/{id}/anonymize', () => {
     const key = 'k'.repeat(32);
     await slipStore.put(key, Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]));
     await h.client.query(
-      `insert into payments (order_id, method, status, amount_satang, client_request_id, slip_image_key, slip_image_hash, slip_ref_hash, slip_qr_hash)
-       values ($1, 'promptpay', 'claimed', 5000, gen_random_uuid(), $2, 'aa', 'bb', 'cc')`,
+      `insert into payments (order_id, method, status, amount_satang, client_request_id, slip_image_key, slip_image_hash, slip_ref_hash, slip_qr_hash, slip_recipient_check)
+       values ($1, 'promptpay', 'claimed', 5000, gen_random_uuid(), $2, 'aa', 'bb', 'cc', 'mismatch')`,
       [orderId, key],
     );
     const res = await anonymize(await admin(), id);
@@ -115,12 +115,18 @@ describe('POST /v1/customers/{id}/anonymize', () => {
     expect(
       (
         await h.client.query(
-          'select slip_image_key, slip_image_hash, slip_ref_hash, slip_qr_hash from payments where order_id = $1',
+          'select slip_image_key, slip_image_hash, slip_ref_hash, slip_qr_hash, slip_recipient_check from payments where order_id = $1',
           [orderId],
         )
       ).rows,
     ).toEqual([
-      { slip_image_key: null, slip_image_hash: null, slip_ref_hash: null, slip_qr_hash: null },
+      {
+        slip_image_key: null,
+        slip_image_hash: null,
+        slip_ref_hash: null,
+        slip_qr_hash: null,
+        slip_recipient_check: null,
+      },
     ]);
     await expect(slipStore.get(key)).resolves.toBeNull();
   });

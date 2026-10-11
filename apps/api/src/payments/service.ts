@@ -56,6 +56,7 @@ import {
   paymentsSettingsSchema,
   planAdjustment,
   type SlipCheck,
+  type SlipRecipientCheck,
   satang,
   type TransitionError,
 } from '@sds/shared';
@@ -726,6 +727,7 @@ const slipPatch = (slip: {
   slipImageHash: slip.hash,
   slipRefHash: null,
   slipQrHash: null,
+  slipRecipientCheck: null,
 });
 
 /**
@@ -892,6 +894,9 @@ export async function listOrderPayments(
               check: r.slipCheck as SlipCheck,
               amountSatang: r.slipAmountSatang === null ? null : satang(r.slipAmountSatang),
               qrFound: r.slipQrHash !== null,
+              ...(r.slipRecipientCheck !== null
+                ? { recipientCheck: r.slipRecipientCheck as SlipRecipientCheck }
+                : {}),
             },
           ]
         : [],

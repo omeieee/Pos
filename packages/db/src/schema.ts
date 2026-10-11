@@ -22,6 +22,7 @@ import {
   PHOTO_MAX_BYTES,
   SESSION_KINDS,
   SLIP_CHECKS,
+  SLIP_RECIPIENT_CHECKS,
   STAFF_ROLES,
 } from '@sds/shared';
 import { type SQL, sql } from 'drizzle-orm';
@@ -649,6 +650,12 @@ export const payments = pgTable(
      * readable QR was found. Not comparable with `slipRefHash` (another input). Cleared with the slip.
      */
     slipQrHash: text('slip_qr_hash'),
+    /**
+     * Whether the receiver printed on the slip looks like the shop's PromptPay ID (D-26): `match`,
+     * `mismatch` or `unknown`; null when not read (no ID set, or the reading is off). Only the word is
+     * kept, never the text or any digits. A hint for staff. Cleared with the slip.
+     */
+    slipRecipientCheck: text('slip_recipient_check'),
     referenceNote: text('reference_note'),
     claimedAt: ts('claimed_at'),
     confirmedByStaffId: uuid('confirmed_by_staff_id').references(() => staff.id),
@@ -678,6 +685,10 @@ export const payments = pgTable(
     index('payments_slip_qr_hash_idx').on(t.slipQrHash),
     check('payments_method', oneOf('method', PAYMENT_METHODS)),
     check('payments_status', oneOf('status', PAYMENT_STATUSES)),
+    check(
+      'payments_slip_recipient_check',
+      sql`slip_recipient_check is null or ${oneOf('slip_recipient_check', SLIP_RECIPIENT_CHECKS)}`,
+    ),
     check('payments_slip_check', sql`slip_check is null or ${oneOf('slip_check', SLIP_CHECKS)}`),
     check('payments_amount_nonneg', sql`amount_satang >= 0`),
     check(

@@ -1,5 +1,5 @@
 import { formatBaht } from '@sds/i18n';
-import type { PaymentStatus, SlipCheck } from '@sds/shared';
+import type { PaymentStatus, SlipCheck, SlipRecipientCheck } from '@sds/shared';
 import { useEffect, useState } from 'react';
 import { s } from '../design/style.ts';
 import { useLocale, useServices, useT } from '../ui/hooks.ts';
@@ -51,7 +51,11 @@ export function SlipView({
   /** What this payment charges, to put beside the amount read from the slip. */
   amountSatang: number;
   /** Tells the payment screen how the reading stands (null: no reading) and whether the slip was used before, so it can ask for an extra tap. */
-  onCheck?: (state: { check: SlipCheck | null; duplicate: boolean }) => void;
+  onCheck?: (state: {
+    check: SlipCheck | null;
+    duplicate: boolean;
+    recipientMismatch: boolean;
+  }) => void;
   /** In the payment history: say nothing when there is no slip (only a payment with one shows it). */
   quiet?: boolean;
 }) {
@@ -62,6 +66,7 @@ export function SlipView({
     check: SlipCheck;
     amountSatang: number | null;
     qrFound: boolean | undefined;
+    recipient: SlipRecipientCheck | undefined;
   } | null>(null);
   const [duplicate, setDuplicate] = useState<SlipDuplicate | null>(null);
   // `unknown`: the list could not be read, so the button is offered as before.
@@ -82,7 +87,12 @@ export function SlipView({
         const found = has ? answer.slipChecks?.find((c) => c.paymentId === paymentId) : undefined;
         setHint(
           found
-            ? { check: found.check, amountSatang: found.amountSatang, qrFound: found.qrFound }
+            ? {
+                check: found.check,
+                amountSatang: found.amountSatang,
+                qrFound: found.qrFound,
+                recipient: found.recipientCheck,
+              }
             : null,
         );
         const used = has
@@ -97,7 +107,11 @@ export function SlipView({
               }
             : null,
         );
-        onCheck?.({ check: found?.check ?? null, duplicate: used !== undefined });
+        onCheck?.({
+          check: found?.check ?? null,
+          duplicate: used !== undefined,
+          recipientMismatch: found?.recipientCheck === 'mismatch',
+        });
       })
       .catch(() => {
         if (live) setKnown('unknown');
@@ -147,6 +161,15 @@ export function SlipView({
               {tr(`payment.slip.chip.${hint.check}`)}
             </span>
           ) : null}
+          {hint?.recipient === 'match' || hint?.recipient === 'mismatch' ? (
+            <span
+              className={`g-badge ${hint.recipient === 'match' ? 'g-b-ok' : 'g-b-bad'}`}
+              data-testid="slip-recipient-chip"
+              style={s('margin-left:8px')}
+            >
+              {tr(`payment.slip.recipient.chip.${hint.recipient}`)}
+            </span>
+          ) : null}
           {duplicate ? (
             <span
               className="g-badge g-b-bad"
@@ -177,6 +200,23 @@ export function SlipView({
             </span>
           </Callout>
         </div>
+      ) : null}
+      {known === 'has' && hint?.recipient === 'mismatch' && !quiet ? (
+        <div data-testid="slip-recipient" data-recipient="mismatch">
+          <Callout tone="bad" role="alert">
+            <span style={s('display:block;font-weight:700')}>
+              {tr('payment.slip.recipient.mismatch')}
+            </span>
+            <span className="g-t-c" style={s('display:block;font-weight:500')}>
+              {tr('payment.slip.check.hint')}
+            </span>
+          </Callout>
+        </div>
+      ) : null}
+      {known === 'has' && hint?.recipient === 'unknown' && !quiet ? (
+        <p className="g-t-c" data-testid="slip-recipient" role="status" style={s('margin:0')}>
+          {tr('payment.slip.recipient.unknown')}
+        </p>
       ) : null}
       {known === 'has' && hint && !quiet ? (
         <div data-testid="slip-check" data-check={hint.check}>

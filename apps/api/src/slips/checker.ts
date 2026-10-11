@@ -1,7 +1,15 @@
 import { createHash } from 'node:crypto';
 import { paymentsRepo } from '@sds/db';
-import { compareSlipAmount, extractSlipAmount, extractSlipRef, type SlipCheck } from '@sds/shared';
+import {
+  checkSlipRecipient,
+  compareSlipAmount,
+  extractSlipAmount,
+  extractSlipRef,
+  type SlipCheck,
+  type SlipRecipientCheck,
+} from '@sds/shared';
 import { toPaymentDto } from '../payments/dto.ts';
+import { currentPromptpayId } from '../settings/service.ts';
 import { type CoreContext, withTransaction } from '../tx.ts';
 import { imageSize } from './image.ts';
 import type { SlipOcr } from './ocr.ts';
@@ -12,7 +20,8 @@ import type { SlipStore } from './store.ts';
  * The automatic reading of a slip (D-26). It looks for the amount on the picture and compares it
  * with what the payment charges. The answer is only a hint on the payment (`slip_check`): it never
  * confirms or rejects money (CLAUDE.md rule 2), never fails an upload, and keeps only the amount
- * and the verdict, plus hashes of the bank reference and of the reference inside the slip's small
+ * and the verdict, the word `match`/`mismatch`/`unknown` for whether the receiver on the slip looks
+ * like the shop's PromptPay ID (read from settings now, never kept), plus hashes of the bank reference and of the reference inside the slip's small
  * QR (for the duplicate hint; never the references themselves). The OCR text, which holds names and account numbers, is dropped at once.
  */
 export interface SlipChecker {
@@ -55,11 +64,12 @@ export function createSlipChecker(args: {
     amount: number | null;
     refHash: string | null;
     qrHash: string | null;
+    recipient: SlipRecipientCheck | null;
   }> {
     const bytes = await slips.get(key);
     const size = bytes ? imageSize(bytes) : null;
     if (!bytes || !size || size.width * size.height > MAX_OCR_PIXELS) {
-      return { check: 'unreadable', amount: null, refHash: null, qrHash: null };
+      return { check: 'unreadable', amount: null, refHash: null, qrHash: null, recipient: null };
     }
     // The small QR first: it is cheap, it works on screenshots and re-photos, and it still counts
     // when the text cannot be read. A failure here only means "no QR key"; it never fails the check.
@@ -78,21 +88,30 @@ export function createSlipChecker(args: {
     } catch (error) {
       // The class of the failure only: the message of a reader could echo what it read.
       args.log?.warn({ reason: error instanceof Error ? error.message : 'OCR_FAILED' }, 'slip OCR');
-      return { check: 'unreadable', amount: null, refHash: null, qrHash };
+      return { check: 'unreadable', amount: null, refHash: null, qrHash, recipient: null };
     }
     const amount = extractSlipAmount(text);
     // Only the hash of the normalised reference leaves this function: two slips of one transfer
     // share it, and it shows nothing if the database is read.
     const ref = extractSlipRef(text);
     const refHash = ref ? sha256(ref) : null;
-    return { check: compareSlipAmount(amount, expected), amount, refHash, qrHash };
+    // The receiver: compared with the PromptPay ID in force now. Only the word is kept; a missing ID
+    // or a failed settings read just means no answer (it must never fail the amount check).
+    let recipient: SlipRecipientCheck | null = null;
+    try {
+      const id = await currentPromptpayId(ctx.db);
+      if (id) recipient = checkSlipRecipient(text, id);
+    } catch {
+      args.log?.warn({}, 'slip recipient');
+    }
+    return { check: compareSlipAmount(amount, expected), amount, refHash, qrHash, recipient };
   }
 
   async function read(paymentId: string): Promise<void> {
     const row = await paymentsRepo.findPaymentById(ctx.db, paymentId);
     if (row?.slipCheck !== 'pending' || !row.slipImageKey) return;
     const key = row.slipImageKey;
-    const { check, amount, refHash, qrHash } = await evaluate(key, row.amountSatang);
+    const { check, amount, refHash, qrHash, recipient } = await evaluate(key, row.amountSatang);
     await withTransaction(ctx, async (tx, emit) => {
       const locked = await paymentsRepo.lockPaymentById(tx, paymentId);
       // A newer slip, or a purge, came in while the picture was being read: this answer is stale.
@@ -102,6 +121,7 @@ export function createSlipChecker(args: {
         slipAmountSatang: amount,
         slipRefHash: refHash,
         slipQrHash: qrHash,
+        slipRecipientCheck: recipient,
       });
       // The payment's status is never touched. Devices get the new rev and ask for the hint.
       if (updated) {

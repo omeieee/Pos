@@ -375,6 +375,13 @@ export const th = {
   'payment.slip.chip.duplicate': 'สลิปซ้ำ',
   'payment.slip.duplicateQr': 'รหัสอ้างอิงในคิวอาร์สลิปตรงกับสลิปเดิม ออเดอร์ {orderNo} (สถานะ {status})',
   'payment.slip.noQr': 'ไม่พบคิวอาร์บนสลิป (ไม่ใช่เรื่องผิดปกติ ตรวจจากแอปธนาคารตามปกติ)',
+  'payment.slip.recipient.mismatch': 'ผู้รับบนสลิปดูไม่ตรงกับบัญชีร้าน — อาจโอนให้คนอื่น ตรวจในแอปธนาคารของร้าน',
+  'payment.slip.recipient.unknown': 'อ่านผู้รับบนสลิปไม่ชัด ตรวจผู้รับและยอดเข้าในแอปธนาคารของร้าน',
+  'payment.slip.recipient.chip.match': 'ผู้รับตรงกับบัญชีร้าน (ตัวช่วยอัตโนมัติ)',
+  'payment.slip.recipient.chip.mismatch': 'ผู้รับไม่ตรง',
+  'payment.confirmRecipientAgain': 'ผู้รับบนสลิปไม่ตรง กดอีกครั้งเพื่อยืนยันรับเงิน {amount}',
+  'payment.confirmRecipientWarn':
+    'ผู้รับบนสลิปดูไม่ตรงกับบัญชีร้าน อาจโอนให้คนอื่น ตรวจยอดเข้าในแอปธนาคารของร้านให้แน่ใจ แล้วกดปุ่มยืนยันอีกครั้ง',
   'payment.confirmMismatchAgain': 'ยอดสลิปไม่ตรง กดอีกครั้งเพื่อยืนยันรับเงิน {amount}',
   'payment.confirmMismatchWarn':
     'ยอดบนสลิปไม่ตรงกับออเดอร์ ตรวจยอดเข้าในแอปธนาคารให้แน่ใจ แล้วกดปุ่มยืนยันอีกครั้ง',

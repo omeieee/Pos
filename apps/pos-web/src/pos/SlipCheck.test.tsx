@@ -51,6 +51,7 @@ async function open(
     matchedBy?: 'qr' | 'ref' | 'image';
   },
   qrFound?: boolean,
+  recipientCheck?: 'match' | 'mismatch' | 'unknown',
 ) {
   const confirm = vi.fn(async () => ({
     payment: confirmedPayment,
@@ -67,6 +68,7 @@ async function open(
               check,
               amountSatang: amountSatang === null ? null : satang(amountSatang),
               ...(qrFound === undefined ? {} : { qrFound }),
+              ...(recipientCheck === undefined ? {} : { recipientCheck }),
             },
           ],
         }
@@ -256,6 +258,89 @@ describe('a slip that was used before (an automatic hint)', () => {
       .join(' ');
     expect(text).toContain(th['payment.confirmDuplicateWarn']);
     expect(text).toContain(th['payment.confirmMismatchWarn']);
+    fireEvent.click(confirmButton());
+    await waitFor(() => expect(confirm).toHaveBeenCalledTimes(1));
+  });
+});
+
+describe('the receiver on the slip (an automatic hint)', () => {
+  const alerts = () =>
+    screen
+      .getAllByRole('alert')
+      .map((a) => a.textContent)
+      .join(' ');
+
+  test('a receiver that does not match is a red banner that says the money may have gone to someone else', async () => {
+    await open('match', 7500, undefined, true, 'mismatch');
+    const banner = await screen.findByTestId('slip-recipient');
+    expect(banner.getAttribute('data-recipient')).toBe('mismatch');
+    expect(banner.textContent).toContain(
+      'ผู้รับบนสลิปดูไม่ตรงกับบัญชีร้าน — อาจโอนให้คนอื่น ตรวจในแอปธนาคารของร้าน',
+    );
+    expect(banner.textContent).toContain(th['payment.slip.check.hint']);
+    expect((await screen.findByTestId('slip-recipient-chip')).textContent).toContain(
+      th['payment.slip.recipient.chip.mismatch'],
+    );
+    // The fake-slip warning and the picture button are still there.
+    expect(screen.getByRole('button', { name: th['payment.slip.view'] })).toBeTruthy();
+  });
+
+  test('an unknown receiver is a small neutral note, not an alarm', async () => {
+    await open('match', 7500, undefined, true, 'unknown');
+    const note = await screen.findByTestId('slip-recipient');
+    expect(note.textContent).toContain(th['payment.slip.recipient.unknown']);
+    expect(note.getAttribute('role')).toBe('status');
+    expect(screen.queryByTestId('slip-recipient-chip')).toBeNull();
+  });
+
+  test('a matching receiver is a small green chip that says it is automatic, with no banner', async () => {
+    await open('match', 7500, undefined, true, 'match');
+    const chip = await screen.findByTestId('slip-recipient-chip');
+    expect(chip.textContent).toContain(th['payment.slip.recipient.chip.match']);
+    expect(chip.className).toContain('g-b-ok');
+    expect(screen.queryByTestId('slip-recipient')).toBeNull();
+  });
+
+  test('no receiver reading: nothing about the receiver', async () => {
+    await open('match', 7500, undefined, true);
+    await screen.findByTestId('slip-check');
+    expect(screen.queryByTestId('slip-recipient')).toBeNull();
+    expect(screen.queryByTestId('slip-recipient-chip')).toBeNull();
+  });
+
+  test.each(['match', 'unknown'] as const)('with %s one tap confirms, as before', async (value) => {
+    const { confirm } = await open('match', 7500, undefined, true, value);
+    await screen.findByTestId('slip-check');
+    fireEvent.click(confirmButton());
+    await waitFor(() => expect(confirm).toHaveBeenCalledTimes(1));
+  });
+
+  test('on a mismatch the first tap only asks again (even with a matching amount), the second confirms', async () => {
+    const { confirm } = await open('match', 7500, undefined, true, 'mismatch');
+    await screen.findByTestId('slip-recipient');
+    fireEvent.click(confirmButton());
+    expect(confirm).not.toHaveBeenCalled();
+    expect(alerts()).toContain(th['payment.confirmRecipientWarn']);
+    expect(confirmButton().textContent).toContain('ผู้รับบนสลิปไม่ตรง');
+    fireEvent.click(confirmButton());
+    await waitFor(() => expect(confirm).toHaveBeenCalledTimes(1));
+  });
+
+  test('with a duplicate and an amount mismatch too, every warning shows and one extra tap still confirms', async () => {
+    const { confirm } = await open(
+      'mismatch',
+      6000,
+      { orderNo: 'L-012', paymentStatus: 'claimed' },
+      true,
+      'mismatch',
+    );
+    await screen.findByTestId('slip-recipient');
+    fireEvent.click(confirmButton());
+    expect(confirm).not.toHaveBeenCalled();
+    const text = alerts();
+    expect(text).toContain(th['payment.confirmDuplicateWarn']);
+    expect(text).toContain(th['payment.confirmMismatchWarn']);
+    expect(text).toContain(th['payment.confirmRecipientWarn']);
     fireEvent.click(confirmButton());
     await waitFor(() => expect(confirm).toHaveBeenCalledTimes(1));
   });

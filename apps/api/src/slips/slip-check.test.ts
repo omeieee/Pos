@@ -38,6 +38,7 @@ let h: Harness;
 let menu: Menu;
 let store: SlipStore;
 let staffToken: string;
+let ownerId: string;
 let checker: SlipChecker;
 /** What the fake reader does for the next picture. */
 let reading: (image: Buffer) => Promise<string> = async () => '';
@@ -62,6 +63,7 @@ beforeAll(async () => {
   h = await createHarness({ line: runtime, slips: store });
   menu = await h.newMenu();
   const owner = await h.newOwner();
+  ownerId = owner.staffId;
   h.clock.set('2028-02-01T08:00:00.000Z');
   staffToken = await h.ownerSession(owner);
   await h.client.query(
@@ -139,10 +141,11 @@ const row = async (orderId: string) =>
       amount_satang: string;
       slip_check: string | null;
       slip_amount_satang: string | null;
+      slip_recipient_check: string | null;
       slip_image_key: string | null;
       rev: string;
     }>(
-      'select id, status, amount_satang, slip_check, slip_amount_satang, slip_image_key, rev from payments where order_id = $1',
+      'select id, status, amount_satang, slip_check, slip_amount_satang, slip_recipient_check, slip_image_key, rev from payments where order_id = $1',
       [orderId],
     )
   ).rows[0];
@@ -305,7 +308,13 @@ describe('with the reading on', () => {
 
     const staff = await call('GET', `/v1/orders/${order.id}/payments`, staffToken);
     expect(staff.json().slipChecks).toEqual([
-      { paymentId: payment?.id, check: 'mismatch', amountSatang: 1234500, qrFound: false },
+      {
+        paymentId: payment?.id,
+        check: 'mismatch',
+        amountSatang: 1234500,
+        qrFound: false,
+        recipientCheck: 'unknown',
+      },
     ]);
     // Not in the payment DTO (realtime and sync carry that one).
     expect(JSON.stringify(staff.json().payments)).not.toMatch(/slip/i);
@@ -334,6 +343,96 @@ describe('with the reading on', () => {
   });
 });
 
+/** A slip that names the receiver; the shop's (fake) PromptPay ID in the settings ends in 4321. */
+const slipTo = (receiver: string, satang = 1234500) =>
+  `โอนเงินสำเร็จ
+จาก
+นาย ผู้ส่ง ทดสอบ
+xxx-x-x7777-x
+ไปยัง
+นาย ผู้รับ ทดสอบ
+${receiver}
+${slipText(satang)}`;
+
+describe('the receiver on the slip (D-26)', () => {
+  const start = async () => {
+    const token = await customer();
+    return { token, order: await place(token) };
+  };
+  const run = async (text: string, placed?: Awaited<ReturnType<typeof start>>) => {
+    installSlipChecker(checker);
+    reading = async () => text;
+    const { token, order } = placed ?? (await start());
+    await upload(token, order.id, picture());
+    await checker.idle();
+    return { token, order, payment: await row(order.id) };
+  };
+
+  test('the own tail of the shop is a match; staff see it, the customer never does', async () => {
+    const { token, order, payment } = await run(slipTo('xxx-xxx-4321'));
+    expect(payment).toMatchObject({ slip_recipient_check: 'match', status: 'claimed' });
+    const staff = await call('GET', `/v1/orders/${order.id}/payments`, staffToken);
+    expect(staff.json().slipChecks[0].recipientCheck).toBe('match');
+    const mine = await call('GET', `/v1/app/orders/${order.id}`, token);
+    expect(mine.body).not.toMatch(/recipientCheck|slipRecipient/i);
+    expect(JSON.stringify(staff.json().payments)).not.toMatch(/recipientCheck|slipRecipient/i);
+  });
+
+  test('another receiver with the same amount is a mismatch, still only claimed', async () => {
+    const { payment } = await run(slipTo('xxx-xxx-8765', 99900));
+    expect(payment).toMatchObject({ slip_recipient_check: 'mismatch', status: 'claimed' });
+  });
+
+  test('a hidden or missing receiver is unknown', async () => {
+    expect((await run(slipTo('xxx-xxx-xxxx'))).payment?.slip_recipient_check).toBe('unknown');
+    expect((await run(slipText(1234500))).payment?.slip_recipient_check).toBe('unknown');
+  });
+
+  test('the ID is read from the settings at check time, and no digits are kept', async () => {
+    await h.client.query("update settings set value = $1::jsonb where key = 'promptpay'", [
+      JSON.stringify({ idType: 'phone', idValue: '0891118765' }),
+    ]);
+    try {
+      const { order, payment } = await run(slipTo('xxx-xxx-8765'));
+      expect(payment?.slip_recipient_check).toBe('match');
+      const dump = JSON.stringify([
+        (await h.client.query('select * from payments where order_id = $1', [order.id])).rows,
+        (await h.client.query('select * from audit_log')).rows,
+      ]);
+      // (The masked target of the payment itself holds the tail of the ID; the slip's text must not.)
+      expect(dump).not.toContain('xxx-xxx');
+      expect(dump).not.toContain('ผู้รับ ทดสอบ');
+    } finally {
+      await h.client.query("update settings set value = $1::jsonb where key = 'promptpay'", [
+        JSON.stringify({ idType: 'phone', idValue: '0899994321' }),
+      ]);
+    }
+  });
+
+  test('without a PromptPay ID in the settings there is no recipient check, and the amount still reads', async () => {
+    const placed = await start();
+    await h.client.query("delete from settings where key = 'promptpay'");
+    try {
+      const { payment } = await run(slipTo('xxx-xxx-4321'), placed);
+      expect(payment).toMatchObject({ slip_recipient_check: null, slip_amount_satang: 1234500 });
+    } finally {
+      await h.client.query(
+        "insert into settings (key, value, updated_by) values ('promptpay', $1::jsonb, $2)",
+        [JSON.stringify({ idType: 'phone', idValue: '0899994321' }), ownerId],
+      );
+    }
+  });
+
+  test('an unreadable picture has no recipient check, and a new slip clears the old one', async () => {
+    const { token, order, payment } = await run(slipTo('xxx-xxx-4321'));
+    expect(payment?.slip_recipient_check).toBe('match');
+    // The new slip is not read (reading off): the old check must not stay.
+    installSlipChecker(null);
+    await upload(token, order.id, picture(1170, 2532, 9));
+    expect((await row(order.id))?.slip_recipient_check).toBeNull();
+  });
+});
+
 describe('with the reading off', () => {
   test('a slip gets no hint at all, and an old hint is cleared by a new slip', async () => {
     const token = await customer();
@@ -342,11 +441,15 @@ describe('with the reading off', () => {
     expect(await row(order.id)).toMatchObject({ slip_check: null, slip_amount_satang: null });
 
     await h.client.query(
-      "update payments set slip_check = 'mismatch', slip_amount_satang = 100 where order_id = $1",
+      "update payments set slip_check = 'mismatch', slip_amount_satang = 100, slip_recipient_check = 'match' where order_id = $1",
       [order.id],
     );
     await upload(token, order.id, picture(1170, 2532, 5));
-    expect(await row(order.id)).toMatchObject({ slip_check: null, slip_amount_satang: null });
+    expect(await row(order.id)).toMatchObject({
+      slip_check: null,
+      slip_amount_satang: null,
+      slip_recipient_check: null,
+    });
   });
 });
 

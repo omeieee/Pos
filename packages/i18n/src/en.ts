@@ -393,6 +393,15 @@ export const en = {
   'payment.slip.duplicateQr':
     'The reference inside the slip QR matches an earlier slip: order {orderNo} (status: {status})',
   'payment.slip.noQr': 'No QR found on the slip (not unusual; check the bank app as usual)',
+  'payment.slip.recipient.mismatch':
+    "The receiver on the slip does not look like the shop's account: it may have been sent to someone else. Check the shop's bank app.",
+  'payment.slip.recipient.unknown':
+    "Could not read the receiver on the slip clearly. Check the receiver and the incoming amount in the shop's bank app.",
+  'payment.slip.recipient.chip.match': "Receiver matches the shop's account (automatic hint)",
+  'payment.slip.recipient.chip.mismatch': 'Receiver differs',
+  'payment.confirmRecipientAgain': 'Slip receiver differs. Tap again to confirm {amount} received',
+  'payment.confirmRecipientWarn':
+    "The receiver on the slip does not look like the shop's account: it may have been sent to someone else. Check the incoming transfer in the shop's bank app, then tap confirm again.",
   'payment.confirmMismatchAgain': 'Slip amount differs. Tap again to confirm {amount} received',
   'payment.confirmMismatchWarn':
     'The amount on the slip does not match the order. Check the bank app, then tap confirm again.',

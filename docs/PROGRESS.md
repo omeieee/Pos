@@ -32,6 +32,9 @@ Newest entries first. Add entries with `/checkpoint`. Each entry covers what cha
 
 ---
 
+## 2026-10-11 · P4 · Slip receiver check hint (0030)
+- **Done:** OCR reads the receiver block of the slip and compares it with the PromptPay ID from settings; stores only match/mismatch/unknown (`slip_recipient_check`); staff banner + shared extra tap; customer sees nothing. Conservative: unknown unless at least 4 informative visible digits; mismatch needs 2 conflicting digits. D-26 updated. Verified: biome clean, build 12/12, shared 1024, db 246, api 1163, pos-web 1782, liff-web 74, i18n 22. Not verified: real slips (many banks print the account, not the proxy, so expect unknown), real Postgres, devices. Open: optional setting for the shop bank account number (sensitive).
+
 ## 2026-10-11 · P4 · Duplicate-slip hint (image hash, OCR ref, slip QR)
 - **Done:** owner reused one slip on a new order and it went through. Now a hint only (rule 2): SHA-256 of image, OCR ref hash (0028), slip mini-QR decoded locally (jsqr/jpeg-js/pngjs in a worker thread; `slip_qr_hash`, 0029); staff get a red banner + extra tap; customer sees nothing new. `SLIP_QR=off` / `SLIP_OCR=off` switch it off. D-26 updated.
 - **Verified:** biome clean, build 12/12, shared 971, db 246, api 1157, pos-web 1774 (OfflinePromptPay test failed once in the full run, passed twice alone), liff-web 74, i18n 22.

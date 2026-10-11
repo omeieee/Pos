@@ -273,6 +273,7 @@ export const SYNC_POLICY = {
     'slipImageHash',
     'slipRefHash',
     'slipQrHash',
+    'slipRecipientCheck',
     'originalStaffId',
     'clientRequestId',
     'requestHash',

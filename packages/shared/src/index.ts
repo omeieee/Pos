@@ -26,5 +26,6 @@ export * from './schemas.ts';
 export * from './settings.ts';
 export * from './slip-amount.ts';
 export * from './slip-qr.ts';
+export * from './slip-recipient.ts';
 export * from './slip-ref.ts';
 export * from './state-machine.ts';

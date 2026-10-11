@@ -398,6 +398,7 @@ export async function clearSlipKeys(
           slipImageHash: null,
           slipRefHash: null,
           slipQrHash: null,
+          slipRecipientCheck: null,
         })
         .where(and(eq(payments.id, slip.id), eq(payments.slipImageKey, slip.key)))
         .returning({ id: payments.id });
