@@ -7,10 +7,16 @@
  * payment write takes the order lock, so two requests for one order queue up on it and cannot both
  * see "no open payment". The same order everywhere also rules out a deadlock.
  */
-import type { PaymentMethod, PaymentStatus, SlipCheck, SlipRecipientCheck } from '@sds/shared';
-import { and, asc, count, eq, inArray, isNotNull, lt, ne, or } from 'drizzle-orm';
+import type {
+  PaymentMethod,
+  PaymentStatus,
+  SlipCheck,
+  SlipRecipientCheck,
+  SlipVerifyVerdict,
+} from '@sds/shared';
+import { and, asc, count, eq, inArray, isNotNull, lt, ne, or, sql } from 'drizzle-orm';
 import type { Db } from './client.ts';
-import { orders, paymentRefunds, payments } from './schema.ts';
+import { orders, paymentRefunds, payments, slipVerifyDaily } from './schema.ts';
 
 export type PaymentRow = typeof payments.$inferSelect;
 
@@ -101,6 +107,12 @@ export interface PaymentPatch {
   slipQrHash?: string | null;
   /** Whether the receiver on the slip looks like the shop's PromptPay ID (D-26); a new slip resets it. */
   slipRecipientCheck?: SlipRecipientCheck | null;
+  /** The bank check by Slip2Go (D-27): verdict, result code, reference id, attempts, when. A new slip resets them. */
+  slipVerify?: SlipVerifyVerdict | null;
+  slipVerifyCode?: string | null;
+  slipVerifyRef?: string | null;
+  slipVerifyAttempts?: number;
+  slipVerifiedAt?: Date | null;
 }
 
 export async function findPaymentById(db: Db, id: string): Promise<PaymentRow | undefined> {
@@ -166,15 +178,65 @@ export async function updatePaymentIfVersion(
   return row;
 }
 
-/** Ids of payments whose slip is still waiting to be read, oldest change first (the sweep job). */
-export async function listPendingSlipChecks(db: Db, limit: number): Promise<string[]> {
+/**
+ * Ids of payments whose slip is still waiting to be read, oldest change first (the sweep job).
+ * `ocr` picks rows waiting for the amount reading (`slip_check`), `verify` rows waiting for the
+ * bank check (`slip_verify`); each kind is switched on by its own setting, so a leftover
+ * `pending` of a kind that is off is never picked.
+ */
+export async function listPendingSlipChecks(
+  db: Db,
+  limit: number,
+  kinds: { ocr: boolean; verify: boolean } = { ocr: true, verify: false },
+): Promise<string[]> {
+  const waiting = [
+    kinds.ocr ? eq(payments.slipCheck, 'pending') : undefined,
+    kinds.verify ? eq(payments.slipVerify, 'pending') : undefined,
+  ].filter((c) => c !== undefined);
+  if (waiting.length === 0) return [];
   const rows = await db
     .select({ id: payments.id })
     .from(payments)
-    .where(and(eq(payments.slipCheck, 'pending'), isNotNull(payments.slipImageKey)))
+    .where(and(or(...waiting), isNotNull(payments.slipImageKey)))
     .orderBy(asc(payments.rev))
     .limit(limit);
   return rows.map((r) => r.id);
+}
+
+// ---------- Slip2Go daily usage (D-27) ----------
+
+/** How many Slip2Go calls were made on this business date. */
+export async function slipVerifyCallsOn(db: Db, businessDate: string): Promise<number> {
+  const [row] = await db
+    .select({ n: slipVerifyDaily.n })
+    .from(slipVerifyDaily)
+    .where(and(eq(slipVerifyDaily.businessDate, businessDate), eq(slipVerifyDaily.kind, 'calls')));
+  return row?.n ?? 0;
+}
+
+/** Counts one Slip2Go call on this business date. */
+export async function recordSlipVerifyCall(db: Db, businessDate: string): Promise<void> {
+  await db
+    .insert(slipVerifyDaily)
+    .values({ businessDate, kind: 'calls' })
+    .onConflictDoUpdate({
+      target: [slipVerifyDaily.businessDate, slipVerifyDaily.kind],
+      set: { n: sql`${slipVerifyDaily.n} + 1` },
+    });
+}
+
+/** True for the first caller of this alert on this business date, false after (the key is the gate). */
+export async function claimSlipVerifyAlert(
+  db: Db,
+  businessDate: string,
+  alert: 'account' | 'cap',
+): Promise<boolean> {
+  const rows = await db
+    .insert(slipVerifyDaily)
+    .values({ businessDate, kind: `alert_${alert}` })
+    .onConflictDoNothing()
+    .returning({ n: slipVerifyDaily.n });
+  return rows.length > 0;
 }
 
 /**

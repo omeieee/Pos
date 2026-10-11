@@ -23,6 +23,7 @@ import {
   SESSION_KINDS,
   SLIP_CHECKS,
   SLIP_RECIPIENT_CHECKS,
+  SLIP_VERIFY_VERDICTS,
   STAFF_ROLES,
 } from '@sds/shared';
 import { type SQL, sql } from 'drizzle-orm';
@@ -38,6 +39,7 @@ import {
   pgSequence,
   pgTable,
   primaryKey,
+  smallint,
   text,
   timestamp,
   uniqueIndex,
@@ -656,6 +658,17 @@ export const payments = pgTable(
      * kept, never the text or any digits. A hint for staff. Cleared with the slip.
      */
     slipRecipientCheck: text('slip_recipient_check'),
+    /**
+     * The bank check of the slip by Slip2Go (D-27): the verdict (null: no slip, or the verifier is
+     * off), Slip2Go's 6-digit result code and its `referenceId` (support only), how many attempts
+     * were made (transient failures retry up to 3) and when the verdict landed. Never names,
+     * accounts, the QR text or the raw answer. A new slip resets all of it; cleared with the slip.
+     */
+    slipVerify: text('slip_verify'),
+    slipVerifyCode: text('slip_verify_code'),
+    slipVerifyRef: text('slip_verify_ref'),
+    slipVerifyAttempts: smallint('slip_verify_attempts').notNull().default(0),
+    slipVerifiedAt: ts('slip_verified_at'),
     referenceNote: text('reference_note'),
     claimedAt: ts('claimed_at'),
     confirmedByStaffId: uuid('confirmed_by_staff_id').references(() => staff.id),
@@ -690,6 +703,10 @@ export const payments = pgTable(
       sql`slip_recipient_check is null or ${oneOf('slip_recipient_check', SLIP_RECIPIENT_CHECKS)}`,
     ),
     check('payments_slip_check', sql`slip_check is null or ${oneOf('slip_check', SLIP_CHECKS)}`),
+    check(
+      'payments_slip_verify',
+      sql`slip_verify is null or ${oneOf('slip_verify', SLIP_VERIFY_VERDICTS)}`,
+    ),
     check('payments_amount_nonneg', sql`amount_satang >= 0`),
     check(
       'payments_cash_change',
@@ -821,6 +838,25 @@ export const lineButtonReplies = pgTable(
   (t) => [
     primaryKey({ columns: [t.customerId, t.button, t.businessDate] }),
     index('line_button_replies_business_date_idx').on(t.businessDate),
+  ],
+);
+
+/**
+ * What Slip2Go cost or said today (D-27), one row per business date and kind: `calls` counts the
+ * calls made (the daily cap counts here, because a new slip resets the payment's own columns);
+ * `alert_account` and `alert_cap` are the owner alerts, sent once a day (the primary key is the
+ * gate). Numbers only, no personal data.
+ */
+export const slipVerifyDaily = pgTable(
+  'slip_verify_daily',
+  {
+    businessDate: date('business_date', { mode: 'string' }).notNull(),
+    kind: text('kind').notNull(),
+    n: integer('n').notNull().default(1),
+  },
+  (t) => [
+    primaryKey({ columns: [t.businessDate, t.kind] }),
+    check('slip_verify_daily_kind', oneOf('kind', ['calls', 'alert_account', 'alert_cap'])),
   ],
 );
 

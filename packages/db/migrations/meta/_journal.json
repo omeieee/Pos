@@ -218,6 +218,13 @@
       "when": 1791722834026,
       "tag": "0030_slip_recipient",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1791760611043,
+      "tag": "0031_slip_verify",
+      "breakpoints": true
     }
   ]
 }
