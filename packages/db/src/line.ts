@@ -183,6 +183,58 @@ export async function upsertLiffCustomer(db: Db, lineUserId: string): Promise<Li
   return row;
 }
 
+/** How long a saved LINE name and picture are kept before LINE is asked again (owner: rarely). */
+export const LINE_PROFILE_MAX_AGE_MS = 7 * 86_400_000;
+
+export interface LineProfile {
+  displayName: string | null;
+  pictureUrl: string | null;
+}
+
+/**
+ * Saves the LINE display name and picture LINE just gave for a verified user, on a live customer.
+ * Written only when nothing was saved yet or the saved copy is older than a week, so a customer who
+ * opens the app all day causes no write (and no sync revision). A blank name and a picture that is
+ * not an https address are dropped.
+ */
+export async function saveLineProfile(
+  db: Db,
+  lineUserId: string,
+  profile: { displayName?: string | null; pictureUrl?: string | null },
+  at: Date,
+): Promise<void> {
+  const displayName = profile.displayName?.trim().slice(0, 100) || null;
+  const pictureUrl =
+    profile.pictureUrl && /^https:\/\//.test(profile.pictureUrl) && profile.pictureUrl.length <= 500
+      ? profile.pictureUrl
+      : null;
+  if (displayName === null && pictureUrl === null) return;
+  const stale = new Date(at.getTime() - LINE_PROFILE_MAX_AGE_MS).toISOString();
+  await db
+    .update(customers)
+    .set({ displayName, pictureUrl, lineProfileAt: at })
+    .where(
+      and(
+        eq(customers.lineUserId, lineUserId),
+        isNull(customers.anonymizedAt),
+        or(
+          isNull(customers.lineProfileAt),
+          sql`${customers.lineProfileAt} < ${stale}::timestamptz`,
+        ),
+      ),
+    );
+}
+
+/** The saved LINE name and picture of a live customer (nulls when none, or for an unknown id). */
+export async function getLineProfile(db: Db, customerId: string): Promise<LineProfile> {
+  const [row] = await db
+    .select({ displayName: customers.displayName, pictureUrl: customers.pictureUrl })
+    .from(customers)
+    .where(and(eq(customers.id, customerId), isNull(customers.anonymizedAt)))
+    .limit(1);
+  return row ?? { displayName: null, pictureUrl: null };
+}
+
 /** A live customer by id, with the LINE user id it must still hold (an erased one holds none). */
 export async function findLiveCustomer(
   db: Db,

@@ -14,6 +14,7 @@ import { PAYMENT_STATUSES } from './enums.ts';
 import { orderDtoSchema } from './orders.ts';
 import { REFUND_METHODS } from './payment-adjustment.ts';
 import { nonNegativeSatangSchema, paymentMethodSchema } from './schemas.ts';
+import { SLIP_CHECKS } from './slip-amount.ts';
 
 const isoInstant = z.iso.datetime();
 const version = z.number().int().min(1);
@@ -160,6 +161,20 @@ export const orderPaymentsResponseSchema = z.object({
    * Only a list of ids, and only on this REST answer: a slip is never in realtime frames or sync.
    */
   slipPaymentIds: z.array(z.uuid()).optional(),
+  /**
+   * What the automatic reading of each slip said (D-26): a hint for staff, never a confirmation.
+   * `amountSatang` is the amount read off the slip, null while pending or when it was unreadable.
+   * Only on this REST answer, like the ids above; a payment with a slip but no entry has no hint.
+   */
+  slipChecks: z
+    .array(
+      z.object({
+        paymentId: z.uuid(),
+        check: z.enum(SLIP_CHECKS),
+        amountSatang: nonNegativeSatangSchema.nullable(),
+      }),
+    )
+    .optional(),
 });
 export type OrderPaymentsResponse = z.infer<typeof orderPaymentsResponseSchema>;
 

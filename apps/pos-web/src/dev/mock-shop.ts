@@ -13,6 +13,7 @@ import {
   type CatalogItem,
   type CategoryDto,
   createOrderInputSchema,
+  type DayTotals,
   DEFAULT_DELIVERY_SETTINGS,
   type GroupDto,
   type ItemDto,
@@ -20,6 +21,7 @@ import {
   type OptionDto,
   type OrderDto,
   orderIdParamSchema,
+  ordersSummaryQuerySchema,
   type PricingError,
   priceOrder,
   type RealtimeFrame,
@@ -428,6 +430,32 @@ export function createMockShop(options: MockShopOptions = {}) {
     return { status: 200, body: { recipients: rows } };
   }
 
+  /** Like `GET /v1/orders/summary`: not cancelled orders per business date, revenue only when paid. */
+  function summarizeMonth(query: URLSearchParams): MockAnswer {
+    const parsed = ordersSummaryQuerySchema.safeParse(Object.fromEntries(query));
+    if (!parsed.success) return { status: 400, body: errorBody('VALIDATION_ERROR') };
+    const days = new Map<string, DayTotals>();
+    for (const order of orders.values()) {
+      if (order.status === 'cancelled' || !order.businessDate.startsWith(`${parsed.data.month}-`)) {
+        continue;
+      }
+      const day = days.get(order.businessDate) ?? {
+        date: order.businessDate,
+        orderCount: 0,
+        paidCount: 0,
+        paidSatang: satang(0),
+      };
+      day.orderCount += 1;
+      if (order.paymentStatus === 'paid') {
+        day.paidCount += 1;
+        day.paidSatang = satang(day.paidSatang + order.totalSatang);
+      }
+      days.set(order.businessDate, day);
+    }
+    const sorted = [...days.values()].sort((a, b) => a.date.localeCompare(b.date));
+    return { status: 200, body: { month: parsed.data.month, days: sorted } };
+  }
+
   function createOrder(
     body: unknown,
     caller: MockCaller = { role: 'owner', stepUpFresh: true },
@@ -503,6 +531,11 @@ export function createMockShop(options: MockShopOptions = {}) {
               input.data.customerId,
             )
           : (input.data.customerId ?? null),
+      // A LINE order shows a made-up LINE name, so the kitchen's name row can be tried in the mock.
+      line:
+        input.data.channel === 'line'
+          ? { displayName: `${input.data.recipientName ?? 'LINE'} (LINE)`, pictureUrl: null }
+          : null,
       status: initialOrderStatus(input.data.channel),
       paymentStatus: 'unpaid',
       subtotalSatang: priced.totals.subtotal,
@@ -684,6 +717,7 @@ export function createMockShop(options: MockShopOptions = {}) {
     const settled = settings.handle(method, path, body, caller);
     if (settled) return settled;
     if (method === 'POST' && path === '/v1/orders') return createOrder(body, caller);
+    if (method === 'GET' && path === '/v1/orders/summary') return summarizeMonth(query);
     const one = /^\/v1\/orders\/([^/]+)$/.exec(path);
     if (method === 'GET' && one) {
       const params = orderIdParamSchema.safeParse({ id: one[1] });

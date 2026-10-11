@@ -27,13 +27,16 @@
 		Strict-Transport-Security "max-age=31536000"
 		X-Content-Type-Options nosniff
 		Referrer-Policy no-referrer
-		# JSON API only: nothing to render, embed or cache (/healthz, /readyz and
-		# every /v1 response). ">" sets the field after the proxy has written its
-		# headers, so an upstream value can never weaken these two.
-		>Cache-Control "no-store"
+		# JSON API only: nothing to render or embed (/healthz, /readyz and every /v1
+		# response). ">" sets the field after the proxy has written its headers, so an
+		# upstream value can never weaken these two.
 		>Content-Security-Policy "default-src 'none'; frame-ancestors 'none'"
 		-Server
 	}
+	# Nothing is cached, except a menu photo: its URL carries the version (D-21), so the API's
+	# own "public, immutable" stays. Menu photos are not personal data.
+	@notphoto not path_regexp ^/v1/menu/items/[0-9a-fA-F-]{36}/photo$
+	header @notphoto >Cache-Control "no-store"
 	# WebSocket upgrades pass through reverse_proxy unchanged.
 	reverse_proxy api:3000
 	log {

@@ -151,6 +151,8 @@ export function OrderView({
   const [error, setError] = useState<string | null>(null);
   const [changing, setChanging] = useState(false);
   const [slipSent, setSlipSent] = useState(false);
+  /** Counts the slips sent in this visit, so a picture on show is dropped when it is replaced. */
+  const [slipStamp, setSlipStamp] = useState(0);
   const tel = telHref(shopPhone);
 
   async function act(run: () => Promise<MyOrder>): Promise<boolean> {
@@ -269,9 +271,13 @@ export function OrderView({
                   busy={busy}
                   onClaim={() => void act(() => api.claim(order.id))}
                   slipSent={slipSent}
+                  slipStamp={slipStamp}
                   onSlip={(file) =>
                     void act(() => api.attachSlip(order.id, file)).then((ok) => {
-                      if (ok) setSlipSent(true);
+                      if (ok) {
+                        setSlipSent(true);
+                        setSlipStamp((n) => n + 1);
+                      }
                     })
                   }
                 />
@@ -409,6 +415,71 @@ function downloadReceipt(order: MyOrder, locale: Locale) {
 }
 
 /**
+ * The slip this customer sent, on request. It is fetched with the session header (an `<img>` cannot
+ * send one), shown from a `blob:` link and never stored. Only the picture they sent: nothing the
+ * shop's system read from it.
+ */
+function SentSlip({ orderId, stamp }: { orderId: string; stamp: number }) {
+  const tr = useT();
+  const { api } = useApp();
+  const [src, setSrc] = useState<string | null>(null);
+  const [phase, setPhase] = useState<'idle' | 'loading' | 'failed'>('idle');
+
+  // A new slip (or another order) makes the old picture on show stale.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `stamp` is the trigger
+  useEffect(() => {
+    setSrc(null);
+    setPhase('idle');
+  }, [orderId, stamp]);
+  useEffect(() => {
+    return () => {
+      if (src) URL.revokeObjectURL(src);
+    };
+  }, [src]);
+
+  async function open() {
+    setPhase('loading');
+    try {
+      setSrc(URL.createObjectURL(await api.slip(orderId)));
+      setPhase('idle');
+    } catch {
+      setPhase('failed');
+    }
+  }
+
+  return (
+    <div style={s('display:flex;flex-direction:column;gap:8px')}>
+      {src ? (
+        <>
+          <img
+            src={src}
+            alt={tr('liff.slip.alt')}
+            style={s('max-width:100%;max-height:60vh;object-fit:contain;border-radius:12px')}
+          />
+          <button type="button" className="g-btn g-btn-sm" onClick={() => setSrc(null)}>
+            {tr('liff.slip.hide')}
+          </button>
+        </>
+      ) : (
+        <button
+          type="button"
+          className="g-btn g-btn-sm"
+          disabled={phase === 'loading'}
+          onClick={() => void open()}
+        >
+          {tr('liff.slip.view')}
+        </button>
+      )}
+      {phase === 'failed' ? (
+        <p className="g-t-c" role="alert" style={s('margin:0')}>
+          {tr('liff.slip.loadFailed')}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+/**
  * The PromptPay step: the QR for this order's exact total, the "โอนแล้ว" button (which only tells
  * the shop; staff confirm the money by hand) and the note that says so.
  */
@@ -416,12 +487,14 @@ function PromptPayPanel({
   order,
   busy,
   slipSent,
+  slipStamp,
   onClaim,
   onSlip,
 }: {
   order: MyOrder;
   busy: boolean;
   slipSent: boolean;
+  slipStamp: number;
   onClaim: () => void;
   onSlip: (file: File) => void;
 }) {
@@ -645,11 +718,12 @@ function PromptPayPanel({
                     }}
                   />
                   <Gi n="image" size="sm" />
-                  {tr('liff.qr.attachSlip')}
+                  {tr(order.hasSlip ? 'liff.slip.replace' : 'liff.qr.attachSlip')}
                 </label>
               ) : null}
             </div>
           ) : null}
+          {order.hasSlip ? <SentSlip orderId={order.id} stamp={slipStamp} /> : null}
           {saved === 'downloaded' ? (
             <p className="g-t-c" role="status" style={s('margin:0;padding:0 6px')}>
               {tr('liff.qr.saved')}

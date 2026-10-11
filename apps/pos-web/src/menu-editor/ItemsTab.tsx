@@ -1,5 +1,5 @@
 import { formatBaht } from '@sds/i18n';
-import type { ItemDto } from '@sds/shared';
+import { type ItemDto, itemPhotoPath } from '@sds/shared';
 import { useState } from 'react';
 import { Gi } from '../design/icons.tsx';
 import { s } from '../design/style.ts';
@@ -29,11 +29,12 @@ function ItemRow({
   const rowBusy = ctx.pending.includes(rowKey(item.id));
   const listBusy = ctx.pending.includes(reorderKey('items', item.categoryId));
   const cost = ctx.costs?.items[item.id];
+  const photo = itemPhotoPath(item);
   const channels = item.channels.map((c) => tr(`orders.channel.${c}`)).join(' · ');
 
   return (
     <li className={`g-row merow${archived ? ' merow--archived' : ''}`}>
-      <Thumb id={item.id} src={item.photoUrl ? apiUrl(item.photoUrl) : null} />
+      <Thumb id={item.id} src={photo ? apiUrl(photo) : null} />
       <span className="merow__main">
         <span className="merow__name">{name}</span>
         <span className="merow__meta">

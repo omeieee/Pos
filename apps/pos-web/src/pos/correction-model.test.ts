@@ -8,6 +8,7 @@ import {
   CORRECTION_CHOICES,
   canCorrectOrder,
   defaultPaymentAction,
+  defaultReverseKind,
   draftFromOrder,
   hasActivePayment,
   hasClaimedPayment,
@@ -169,6 +170,13 @@ describe('adjusting a paid order', () => {
     expect(defaultPaymentAction(order())).toBeNull();
     expect(defaultPaymentAction(order({ paymentStatus: 'partially_paid' }))).toBeNull();
     expect(hasClaimedPayment(order({ paymentStatus: 'awaiting_confirmation' }))).toBe(true);
+  });
+
+  test('a payment row: claimed preselects void, confirmed (or anything else) nothing', () => {
+    expect(defaultReverseKind('claimed')).toBe('void');
+    expect(defaultReverseKind('confirmed')).toBeNull();
+    expect(defaultReverseKind('pending')).toBeNull();
+    expect(defaultReverseKind('voided')).toBeNull();
   });
 
   test('adjust is offered first', () => {

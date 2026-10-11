@@ -93,7 +93,11 @@ export function createApi(options: ApiOptions) {
     return body;
   }
 
-  async function authed<T>(path: string, init: RequestInit = {}, retried = false): Promise<T> {
+  async function authedResponse(
+    path: string,
+    init: RequestInit = {},
+    retried = false,
+  ): Promise<Response> {
     if (!session) await signIn();
     const response = await send(path, {
       ...init,
@@ -105,10 +109,14 @@ export function createApi(options: ApiOptions) {
     });
     if (response.status === 401 && !retried) {
       session = null;
-      return authed<T>(path, init, true);
+      return authedResponse(path, init, true);
     }
     if (!response.ok) throw await failure(response);
-    return (await response.json()) as T;
+    return response;
+  }
+
+  async function authed<T>(path: string, init: RequestInit = {}): Promise<T> {
+    return (await (await authedResponse(path, init)).json()) as T;
   }
 
   const post = <T>(path: string, body?: unknown) =>
@@ -147,6 +155,9 @@ export function createApi(options: ApiOptions) {
         body: file,
         headers: { 'content-type': file.type },
       }),
+    /** The customer's own slip picture. It needs the session header, so it is fetched, not linked. */
+    slip: async (id: string): Promise<Blob> =>
+      (await authedResponse(`/v1/app/orders/${id}/slip`)).blob(),
     /** A fresh link every time: it lasts five minutes. `url` is relative to the API origin. */
     qr: (id: string) => authed<MyQrResponse>(`/v1/app/orders/${id}/qr`),
     /** Where an `<img>` loads the QR picture from. */

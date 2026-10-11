@@ -445,6 +445,18 @@ describe('the payment history', () => {
     expect(screen.getByRole('region', { name: th['payment.history.title'] })).toBeTruthy();
   });
 
+  test('the history sits inside the pane that scrolls with the payment panel', async () => {
+    const env = await setup({
+      payments: [paymentOf({ status: 'cancelled', method: 'promptpay' }, 100)],
+    });
+    renderScreen(<PaymentPanel orderId={ORDER} />, env.services);
+    await loaded();
+    const pane = screen.getByTestId('pay-pane');
+    const history = screen.getByRole('region', { name: th['payment.history.title'] });
+    expect(pane.contains(history)).toBe(true);
+    expect(pane.contains(pane.querySelector('fieldset'))).toBe(true);
+  });
+
   test('shows a void reason', async () => {
     const env = await setup({
       payments: [paymentOf({ status: 'voided', reason: 'ทอนผิด' })],

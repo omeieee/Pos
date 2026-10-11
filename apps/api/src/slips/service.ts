@@ -4,6 +4,7 @@ import type { Principal, RequestMeta } from '../auth/service.ts';
 import { claimPayment } from '../customer-app/service.ts';
 import { ApiError, notFound } from '../errors.ts';
 import type { CoreContext } from '../tx.ts';
+import { activeSlipChecker } from './checker.ts';
 import { MAX_SLIP_BYTES, type SlipMime, sniffSlip } from './image.ts';
 import { newSlipKey, type SlipStore } from './store.ts';
 
@@ -14,6 +15,10 @@ import { newSlipKey, type SlipStore } from './store.ts';
  * The file is stored first under a random key, then the claim and the key are written in ONE
  * transaction (`claimPayment`, the same function as the plain "โอนแล้ว"). If that fails the new
  * file is deleted; if it replaced an earlier slip, the old file is deleted after the commit.
+ *
+ * When the automatic reading is on (D-26) the payment is marked `pending` in that same transaction
+ * and the reading is queued after the commit. It runs in the background: it can neither delay the
+ * answer nor make the upload fail.
  */
 export async function attachSlip(
   ctx: CoreContext,
@@ -31,17 +36,20 @@ export async function attachSlip(
   const key = newSlipKey();
   await slips.put(key, bytes);
   const replaced = new Set<string>();
+  const checker = activeSlipChecker();
   let order: MyOrder;
   try {
     order = await claimPayment(ctx, customerId, orderId, meta, {
       key,
       onReplaced: (oldKey) => replaced.add(oldKey),
+      read: checker !== null,
     });
   } catch (error) {
     await slips.delete(key).catch(() => undefined);
     throw error;
   }
   for (const oldKey of replaced) await removeFile(slips, oldKey);
+  if (checker && order.payment) checker.enqueue(order.payment.id);
   return order;
 }
 
@@ -94,6 +102,32 @@ export async function readSlip(
     entityId: payment.id,
     ip: meta.ip,
   });
+  return { bytes, contentType };
+}
+
+/**
+ * The customer's own slip for an order: the picture they sent for the payment that is waiting (or,
+ * failing that, the latest that has one). Somebody else's order is the same 404 as no slip. It is
+ * theirs to look at again, so there is no audit row (staff views are audited: they see others'
+ * slips). The automatic reading is not part of this answer, in any form.
+ */
+export async function readOwnSlip(
+  ctx: CoreContext,
+  slips: SlipStore,
+  customerId: string,
+  orderId: string,
+): Promise<{ bytes: Buffer; contentType: SlipMime }> {
+  if (!(await ordersRepo.findOrderForCustomer(ctx.db, customerId, orderId))) {
+    throw notFound('Order');
+  }
+  const payments = await paymentsRepo.listPaymentsForOrder(ctx.db, orderId);
+  const held =
+    payments.find((p) => p.slipImageKey && (p.status === 'pending' || p.status === 'claimed')) ??
+    [...payments].reverse().find((p) => p.slipImageKey);
+  if (!held?.slipImageKey) throw slipNotFound();
+  const bytes = await slips.get(held.slipImageKey);
+  const contentType = bytes ? sniffSlip(bytes) : null;
+  if (!bytes || !contentType) throw slipNotFound();
   return { bytes, contentType };
 }
 

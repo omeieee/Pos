@@ -1,4 +1,5 @@
 import type { OrderDto, StaffRole } from '@sds/shared';
+import { useState } from 'react';
 import { errorText } from '../api/errors.ts';
 import { clockTime } from '../design/format.ts';
 import { Gi } from '../design/icons.tsx';
@@ -6,15 +7,7 @@ import { s } from '../design/style.ts';
 import { useLocale, useServices, useStoreState, useT } from '../ui/hooks.ts';
 import { deliveryLabel } from './delivery-model.ts';
 import { elapsedText } from './elapsed-text.ts';
-import {
-  isFresh,
-  kitchenMoves,
-  timerText,
-  waitLevel,
-  waitMinutes,
-  waitProgress,
-  waitSeconds,
-} from './kitchen-model.ts';
+import { isFresh, isStale, kitchenMoves, waitLevel, waitMinutes } from './kitchen-model.ts';
 import { MemberLine } from './MemberLine.tsx';
 import { localName } from './names.ts';
 
@@ -26,30 +19,60 @@ function payText(tr: ReturnType<typeof useT>, order: OrderDto): string {
 }
 
 /**
- * How long the ticket has waited, as the design's timer badge: a clock and "mm:ss" while it is
- * fine, and a red badge with a warning icon and the words "overdue" / "very late" once it is long
- * (colour is never the only sign). A screen reader hears the minutes in words instead.
+ * How long the ticket has waited, as plain minutes ("12 นาที") in big type. It is calm while the
+ * wait is fine, amber after the warning minutes and red only once the order is genuinely late
+ * (with a warning icon, so colour is never the only sign). A stale order shows no minutes at all,
+ * only that it was left from an earlier day. A screen reader hears the wait in words.
  */
-function Timer({ order, now }: { order: OrderDto; now: number }) {
+function Wait({ order, now }: { order: OrderDto; now: number }) {
   const tr = useT();
-  const seconds = waitSeconds(order, now);
-  const level = waitLevel(waitMinutes(order, now));
-  const tone =
-    level === 'ok' ? (order.status === 'preparing' ? 'g-b-info' : 'g-b-mute') : 'g-b-bad';
-  return (
-    <span className={`g-badge ${tone} g-num`} data-level={level}>
-      <Gi n={level === 'ok' ? 'clock' : 'warn'} />
-      <span aria-hidden="true">
-        {timerText(seconds)}
-        {level === 'ok' ? '' : ` · ${tr(`kitchen.level.${level}`)}`}
+  const minutes = waitMinutes(order, now);
+  const level = waitLevel(minutes);
+  if (isStale(order, now)) {
+    return (
+      <span className="kb-wait kb-wait-stale" data-level="stale">
+        {tr('kitchen.stale')}
       </span>
+    );
+  }
+  return (
+    <span className="kb-wait g-num" data-level={level}>
+      {level === 'ok' ? null : <Gi n="warn" />}
+      <span aria-hidden="true">{tr('duration.minutes', { count: minutes })}</span>
       <span className="visually-hidden">
         {tr(order.status === 'ready' ? 'kitchen.readyWait' : 'kitchen.waited', {
-          time: elapsedText(tr, Math.floor(seconds / 60)),
+          time: elapsedText(tr, minutes),
         })}
         {level === 'ok' ? '' : ` · ${tr(`kitchen.level.${level}`)}`}
       </span>
     </span>
+  );
+}
+
+/** The LINE name next to a small round picture (when LINE gave one and it loads). */
+function LineWho({ line }: { line: NonNullable<OrderDto['line']> }) {
+  const tr = useT();
+  const [broken, setBroken] = useState(false);
+  if (!line.displayName && !line.pictureUrl) return null;
+  return (
+    <div className="kb-line" data-testid="line-name">
+      {line.pictureUrl && !broken ? (
+        <img
+          className="kb-pic"
+          src={line.pictureUrl}
+          alt=""
+          width={36}
+          height={36}
+          referrerPolicy="no-referrer"
+          loading="lazy"
+          onError={() => setBroken(true)}
+        />
+      ) : (
+        <Gi n="user" />
+      )}
+      <span className="visually-hidden">{tr('kitchen.lineName')}: </span>
+      {line.displayName ? <span>{line.displayName}</span> : null}
+    </div>
   );
 }
 
@@ -74,7 +97,7 @@ function Moves({ order, role }: { order: OrderDto; role: StaffRole }) {
         <button
           key={move.to}
           type="button"
-          className={`g-btn g-btn-lg g-btn-block ${move.to === 'ready' ? 'g-btn-ok' : 'g-btn-p'}`}
+          className={`g-btn g-btn-lg g-btn-block kb-go ${move.to === 'ready' ? 'kb-go-done' : 'kb-go-start'}`}
           disabled={pending}
           aria-busy={pending}
           onClick={() => void orderMoves.transition(order, move.to)}
@@ -97,10 +120,12 @@ function Moves({ order, role }: { order: OrderDto; role: StaffRole }) {
 }
 
 /**
- * One order to make, as a big-type ticket (design "Kitchen board"): the number and how it is served,
- * the timer, where it goes, every dish with its quantity in a box, its choices and note, the order's
- * note, the payment as plain words, and the moves. No price, no total, no payment action: this view
- * never reads them.
+ * One order to make, as a ticket that reads in two seconds from across the kitchen: the order
+ * number and the wait in huge type, where it goes, every dish with its quantity very large, its
+ * choices and notes smaller but legible, the order's note, one quiet line for the channel and the
+ * payment (words, never an action), and the one big move. The column gives the card its one state
+ * colour (an edge in blue, amber or green); red is kept for an order that is genuinely late. No
+ * price, no total: this view never reads them.
  */
 export function KitchenTicket({
   order,
@@ -115,65 +140,53 @@ export function KitchenTicket({
 }) {
   const tr = useT();
   const locale = useLocale();
-  const minutes = waitMinutes(order, now);
-  const level = waitLevel(minutes);
+  const stale = isStale(order, now);
+  const level = stale ? 'ok' : waitLevel(waitMinutes(order, now));
   const to = deliveryLabel(order);
   const delivery =
     order.fulfillment === 'room_delivery' || order.fulfillment === 'entrance_delivery';
-  const ready = order.status === 'ready';
   const started =
     order.status === 'preparing' && order.acceptedAt
       ? tr('kitchen.startedAt', { time: clockTime(Date.parse(order.acceptedAt)) })
       : null;
-  const info = [
-    tr(`orders.channel.${order.channel}`),
-    started,
-    ready ? null : payText(tr, order),
-  ].filter(Boolean);
+  const paid = order.paymentStatus === 'paid';
+  const state =
+    order.status === 'preparing' ? 'cooking' : order.status === 'ready' ? 'ready' : 'new';
   return (
     <li>
       <article
-        className={`g-glass g-rise kb-ticket${isFresh(order, now) ? ' kb-new' : ''}${level === 'late' ? ' kb-late' : ''}`}
+        className={`g-glass g-rise kb-ticket kb-st-${state}${isFresh(order, now) ? ' kb-new' : ''}${level === 'late' ? ' kb-late' : ''}${stale ? ' kb-stale' : ''}`}
         data-level={level}
         aria-labelledby={`kt-${order.id}`}
         style={s(`--d:${delay}s`)}
       >
-        <div style={s('display:flex;align-items:center;gap:10px')}>
-          <h3 id={`kt-${order.id}`} className="g-t-1 g-num kb-no" style={s('flex-grow:1;margin:0')}>
+        <div className="kb-top">
+          <h3 id={`kt-${order.id}`} className="g-num kb-no">
             {order.orderNo}
           </h3>
-          <span className={`g-badge ${delivery ? 'g-b-info' : 'g-b-mute'}`}>
-            <Gi n={delivery ? 'building' : 'store'} />
-            {tr(`pos.orderEntry.fulfilment.${order.fulfillment}`)}
+          <Wait order={order} now={now} />
+        </div>
+        <div className="kb-where">
+          <Gi n={delivery ? 'building' : 'store'} />
+          <span>
+            {to || order.roomNo ? (
+              <>
+                {to ? <span>{to.headline}</span> : null}
+                {order.roomNo ? (
+                  <span> {tr('order.detail.room', { room: order.roomNo })}</span>
+                ) : null}
+              </>
+            ) : (
+              tr(`pos.orderEntry.fulfilment.${order.fulfillment}`)
+            )}
           </span>
         </div>
-        <div className="g-t-s" style={s('display:flex;align-items:center;gap:8px;flex-wrap:wrap')}>
-          <Timer order={order} now={now} />
-          {ready ? (
-            <span className={`g-badge ${order.paymentStatus === 'paid' ? 'g-b-ok' : 'g-b-warn'}`}>
-              <Gi n={order.paymentStatus === 'paid' ? 'check' : 'pending'} />
-              {payText(tr, order)}
-            </span>
-          ) : null}
-          <span>{info.join(' · ')}</span>
-        </div>
-        {to || order.roomNo ? (
-          <div style={s('display:flex;flex-direction:column;gap:2px')}>
-            <div className="kb-where">
-              {to ? <span>{to.headline}</span> : null}
-              {order.roomNo ? <span>{tr('order.detail.room', { room: order.roomNo })}</span> : null}
-            </div>
-            {to?.note ? <div className="kb-opt">{to.note}</div> : null}
-          </div>
-        ) : null}
+        {to?.note ? <div className="kb-opt">{to.note}</div> : null}
+        {order.line ? <LineWho line={order.line} /> : null}
         <MemberLine member={order.member} />
-        <ul
-          style={s(
-            'list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px',
-          )}
-        >
+        <ul className="kb-items">
           {order.items.map((item) => (
-            <li key={item.id} style={s('display:flex;gap:12px;align-items:flex-start')}>
+            <li key={item.id} className="kb-item">
               <div className="kb-q g-num">
                 {item.qty}
                 <span className="visually-hidden">×</span>
@@ -190,17 +203,25 @@ export function KitchenTicket({
             </li>
           ))}
         </ul>
-        {order.status === 'preparing' ? (
-          <div className="kb-bar" aria-hidden="true">
-            <div style={{ width: `${Math.round(waitProgress(waitSeconds(order, now)) * 100)}%` }} />
-          </div>
-        ) : null}
         {order.note ? (
           <div className="kb-note">
             <Gi n="note" size="sm" />
             <span>{order.note}</span>
           </div>
         ) : null}
+        <div className="kb-meta">
+          <span>{tr(`orders.channel.${order.channel}`)}</span>
+          <span className={`kb-pay${paid ? ' kb-paid' : ''}`}>
+            <Gi n={paid ? 'check' : 'pending'} size="sm" />
+            {payText(tr, order)}
+          </span>
+          {started ? <span>{started}</span> : null}
+          {to || order.roomNo ? (
+            <span className="visually-hidden">
+              {tr(`pos.orderEntry.fulfilment.${order.fulfillment}`)}
+            </span>
+          ) : null}
+        </div>
         <Moves order={order} role={role} />
       </article>
     </li>

@@ -76,6 +76,37 @@ describe('rejected PromptPay payment', () => {
   });
 });
 
+describe('the slip the customer already sent', () => {
+  const claimed = {
+    paymentStatus: 'awaiting_confirmation' as const,
+    payment: {
+      id: ID,
+      method: 'promptpay' as const,
+      status: 'claimed' as const,
+      amountSatang: 5000,
+    },
+  };
+
+  test('can be looked at again and replaced', () => {
+    const html = render(order({ ...claimed, hasSlip: true }), null);
+    expect(html).toContain('ดูสลิปที่ส่งแล้ว');
+    expect(html).toContain('ส่งสลิปใหม่แทนอันเดิม');
+    expect(html).not.toContain('แนบสลิป');
+  });
+
+  test('without a slip on file there is nothing to look at, and the plain attach button shows', () => {
+    const html = render(order({ ...claimed, hasSlip: false }), null);
+    expect(html).not.toContain('ดูสลิปที่ส่งแล้ว');
+    expect(html).toContain('แนบสลิป');
+    expect(render(order({ ...claimed }), null)).not.toContain('ดูสลิปที่ส่งแล้ว');
+  });
+
+  test('the page never mentions the automatic reading', () => {
+    const html = render(order({ ...claimed, hasSlip: true }), null);
+    expect(html).not.toMatch(/ยอดบนสลิป|อ่านยอด|OCR|slipCheck/);
+  });
+});
+
 describe('waiting label for an unconfirmed PromptPay transfer', () => {
   const base = { paymentStatus: 'awaiting_confirmation' as const, paymentRejected: false };
   const pp = { method: 'promptpay' } as MyOrder['payment'];

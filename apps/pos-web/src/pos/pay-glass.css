@@ -119,6 +119,17 @@
   min-height: 0;
 }
 
+/* The right pane of the tablet/laptop payment screen scrolls as a whole (panel + history), so a long
+   history never squeezes the step bar or pushes the QR and confirm out of reach. Direct children
+   never shrink below their content. */
+.pay-pane {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+.pay-pane > * {
+  flex-shrink: 0;
+}
+
 /* A secondary action beside the big confirm: 44px, quiet type. */
 .g-btn.pay-sub {
   flex: none;

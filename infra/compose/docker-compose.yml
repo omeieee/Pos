@@ -32,6 +32,9 @@ services:
       PRIVACY_CONTROLLER_NAME: ${PRIVACY_CONTROLLER_NAME:-}
       PRIVACY_CONTACT_EMAIL: ${PRIVACY_CONTACT_EMAIL:-}
       SLIP_DIR: /data/slips
+      SLIP_OCR: ${SLIP_OCR:-}
+      SLIP_OCR_LANG: ${SLIP_OCR_LANG:-}
+      SLIP_OCR_TIMEOUT_MS: ${SLIP_OCR_TIMEOUT_MS:-}
       GIT_SHA: ${GIT_SHA:-unknown}
     # Slip images (D-24) live on the VM disk in a named volume, so a redeploy keeps them.
     volumes:
@@ -41,8 +44,9 @@ services:
       - "3000"
     networks:
       - edge
-    # The image's CMD caps the V8 heap at 384 MB (apps/api/Dockerfile).
-    mem_limit: 512m
+    # The image's CMD caps the V8 heap at 384 MB (apps/api/Dockerfile). The extra room is for the
+    # Tesseract slip reader (one at a time); set SLIP_OCR=off in .env if memory gets tight.
+    mem_limit: 768m
     security_opt:
       - no-new-privileges:true
     healthcheck:

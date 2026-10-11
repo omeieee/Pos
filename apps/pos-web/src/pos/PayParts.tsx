@@ -216,7 +216,8 @@ export function PayFrame({
   return (
     <section
       aria-labelledby="pay-title"
-      className="pay-page"
+      className={phone ? 'pay-page' : 'pay-page g-scroll pay-pane'}
+      data-testid="pay-pane"
       style={s(
         `flex:1 1 0;min-width:0;display:flex;flex-direction:column;gap:16px;${phone ? '' : 'min-height:0;'}`,
       )}
@@ -245,10 +246,10 @@ export function PayFrame({
       {/* A call for another order is still running: the server calls here would be refused, so
           the controls are off (a disabled fieldset disables every button inside it). */}
       <fieldset
-        className={phone ? 'g-glass2' : 'g-glass2 g-scroll'}
+        className="g-glass2"
         disabled={disabled}
         style={s(
-          `flex:${phone ? 'none' : '1 1 0'};min-width:0;min-height:${phone ? 'auto' : '0'};margin:0;border-radius:${phone ? 28 : 32}px;padding:${dims.pad}px;display:flex;flex-direction:column`,
+          `flex:${phone ? 'none' : '1 0 auto'};min-width:0;min-height:auto;margin:0;border-radius:${phone ? 28 : 32}px;padding:${dims.pad}px;display:flex;flex-direction:column`,
         )}
       >
         {children}

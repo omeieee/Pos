@@ -13,6 +13,12 @@ RUN pnpm --filter @sds/api build
 FROM node:24-slim AS runtime
 ENV NODE_ENV=production
 WORKDIR /app
+# Tesseract reads the amount on transfer slips (D-26), on this machine only: a slip shows a name and
+# an account number, so it never goes to a cloud service. Thai for the labels, English for digits.
+# Adds roughly 70-100 MB to the image and about 200 MB of memory while one slip is being read.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-tha tesseract-ocr-eng \
+  && rm -rf /var/lib/apt/lists/*
 # The bundle inlines every dependency, so dist/ (server.js, migrate.js, migrations/) is all we need.
 COPY --from=build --chown=node:node /repo/apps/api/dist ./dist
 ARG GIT_SHA=dev

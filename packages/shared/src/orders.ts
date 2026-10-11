@@ -57,6 +57,15 @@ export const orderDtoSchema = z.object({
    * customer gave none; absent from an older server.
    */
   member: memberProfileSchema.nullable().optional(),
+  /**
+   * The customer's LINE display name and picture as they were when a LINE order was placed (owner,
+   * 2026-10-12), so the kitchen can tell who it is for. Personal data (PDPA). Null for any other
+   * order; absent from an older server.
+   */
+  line: z
+    .object({ displayName: z.string().nullable(), pictureUrl: z.string().nullable() })
+    .nullable()
+    .optional(),
   status: z.enum(ORDER_STATUSES),
   paymentStatus: z.enum(ORDER_PAYMENT_STATUSES),
   subtotalSatang: nonNegativeSatangSchema,
@@ -196,3 +205,31 @@ export const voidOrderInputSchema = z.strictObject({
   paymentAction: pastOrderPaymentActionSchema.optional(),
 });
 export type VoidOrderInput = z.infer<typeof voidOrderInputSchema>;
+
+// ---------- Month overview ----------
+
+/** A calendar month, `YYYY-MM`. */
+export const orderMonthSchema = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/);
+
+export const ordersSummaryQuerySchema = z.object({ month: orderMonthSchema });
+export type OrdersSummaryQuery = z.infer<typeof ordersSummaryQuerySchema>;
+
+/**
+ * One business date of the month overview. `orderCount` is every order that was not cancelled;
+ * `paidCount` and `paidSatang` are only those whose payment is fully confirmed (`paid`). Unpaid,
+ * awaiting and part-paid orders count as orders but add no revenue.
+ */
+export const dayTotalsSchema = z.object({
+  date: isoDateSchema,
+  orderCount: z.number().int().min(0),
+  paidCount: z.number().int().min(0),
+  paidSatang: nonNegativeSatangSchema,
+});
+export type DayTotals = z.infer<typeof dayTotalsSchema>;
+
+/** Only business dates that have at least one order appear, oldest first. */
+export const ordersSummaryResponseSchema = z.object({
+  month: orderMonthSchema,
+  days: z.array(dayTotalsSchema),
+});
+export type OrdersSummaryResponse = z.infer<typeof ordersSummaryResponseSchema>;

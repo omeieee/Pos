@@ -1,5 +1,6 @@
 import type { PGlite } from '@electric-sql/pglite';
 import { satang } from '@sds/shared';
+import { eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 import * as repo from './orders.ts';
 import { createPgliteDb, type PgliteDb } from './pglite.ts';
@@ -10,6 +11,7 @@ import {
   menuItems,
   modifierGroups,
   modifierOptions,
+  orders,
   settings,
 } from './schema.ts';
 import { getSettingValue } from './settings.ts';
@@ -322,3 +324,39 @@ async function anyMenuItem(): Promise<string> {
     .returning();
   return item?.id ?? '';
 }
+
+describe('summarizeMonth', () => {
+  test('per business date: orders that are not cancelled, and paid revenue only', async () => {
+    const at = (businessDate: string, over: Partial<repo.NewOrder> = {}) =>
+      repo.insertOrder(db, newOrder({ businessDate, ...over }));
+    // 2031-02 is its own month: nothing else in this file uses it.
+    const paid = async (businessDate: string, totalSatang: number) => {
+      const row = await at(businessDate, { totalSatang, subtotalSatang: totalSatang });
+      await db
+        .update(orders)
+        .set({ paymentStatus: 'paid' })
+        .where(eq(orders.id, row?.id ?? ''));
+    };
+    await paid('2031-02-01', 5000);
+    await paid('2031-02-01', 7000);
+    await at('2031-02-01'); // unpaid: counted, no revenue
+    await at('2031-02-01', { status: 'cancelled' }); // not counted at all
+    await at('2031-02-28', { status: 'cancelled' }); // a day with only a cancelled order
+    await paid('2031-02-27', 100);
+    await at('2031-01-31'); // neighbouring months stay out
+    await at('2031-03-01');
+
+    expect(await repo.summarizeMonth(db, '2031-02')).toEqual([
+      { date: '2031-02-01', orderCount: 3, paidCount: 2, paidSatang: 12000 },
+      { date: '2031-02-27', orderCount: 1, paidCount: 1, paidSatang: 100 },
+    ]);
+    expect(await repo.summarizeMonth(db, '2031-12')).toEqual([]);
+  });
+
+  test('December ends at the year boundary', async () => {
+    await repo.insertOrder(db, newOrder({ businessDate: '2032-12-31' }));
+    await repo.insertOrder(db, newOrder({ businessDate: '2033-01-01' }));
+    const days = await repo.summarizeMonth(db, '2032-12');
+    expect(days.map((d) => d.date)).toEqual(['2032-12-31']);
+  });
+});

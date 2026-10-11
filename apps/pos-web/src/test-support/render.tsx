@@ -117,6 +117,7 @@ export function createFakeApi(
     create: vi.fn<Orders['create']>(overrides.orders?.create ?? unexpected('orders.create')),
     get: vi.fn<Orders['get']>(overrides.orders?.get ?? unexpected('orders.get')),
     list: vi.fn<Orders['list']>(overrides.orders?.list ?? unexpected('orders.list')),
+    summary: vi.fn<Orders['summary']>(overrides.orders?.summary ?? unexpected('orders.summary')),
     patch: vi.fn<Orders['patch']>(overrides.orders?.patch ?? unexpected('orders.patch')),
     transition: vi.fn<Orders['transition']>(
       overrides.orders?.transition ?? unexpected('orders.transition'),

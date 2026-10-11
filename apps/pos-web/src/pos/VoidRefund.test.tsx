@@ -56,6 +56,8 @@ const enterPin = (pin: string) => {
 async function fillAndSubmit(reason = 'ทอนผิด', confirm = th['payment.void.confirmVoid']) {
   fireEvent.click(screen.getByRole('button', { name: th['payment.void.button'] }));
   const dialog = screen.getByRole('dialog');
+  // A confirmed payment has nothing preselected: staff choose the void on purpose.
+  fireEvent.click(within(dialog).getByRole('radio', { name: th['payment.void.kind.void'] }));
   fireEvent.change(within(dialog).getByLabelText(th['payment.void.reason']), {
     target: { value: reason },
   });
@@ -82,14 +84,25 @@ describe('the void dialog', () => {
     fireEvent.click(screen.getByRole('button', { name: th['payment.void.button'] }));
     const dialog = screen.getByRole('dialog');
     expect(within(dialog).getByText(th['payment.void.audited'])).toBeTruthy();
+    // Confirmed payment: neither choice is preselected, so the button stays off until one is picked.
+    const radios = within(dialog).getAllByRole('radio') as HTMLInputElement[];
+    expect(radios.map((r) => r.checked)).toEqual([false, false]);
     const go = within(dialog).getByRole('button', {
+      name: th['payment.void.confirmChoose'],
+    }) as HTMLButtonElement;
+    fireEvent.change(within(dialog).getByLabelText(th['payment.void.reason']), {
+      target: { value: 'ทอนผิด' },
+    });
+    expect(go.disabled).toBe(true);
+    fireEvent.click(within(dialog).getByRole('radio', { name: th['payment.void.kind.void'] }));
+    const voidGo = within(dialog).getByRole('button', {
       name: th['payment.void.confirmVoid'],
     }) as HTMLButtonElement;
-    expect(go.disabled).toBe(true);
+    expect(voidGo.disabled).toBe(false);
     fireEvent.change(within(dialog).getByLabelText(th['payment.void.reason']), {
       target: { value: '   ' },
     });
-    expect(go.disabled).toBe(true);
+    expect(voidGo.disabled).toBe(true);
     expect(env.api.payments.void).not.toHaveBeenCalled();
   });
 

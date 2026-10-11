@@ -77,6 +77,24 @@ const envSchema = z
     ),
     /** Where transfer slip images are kept (D-24): a directory on a volume, never in the image. */
     SLIP_DIR: z.preprocess(emptyToUndefined, z.string().min(1).default('/data/slips')),
+    /**
+     * Reads the amount on a slip with Tesseract on this machine (D-26), as a hint for staff only.
+     * Default: on in production (the image has it), off elsewhere. `off` leaves slips unread.
+     */
+    SLIP_OCR: z.preprocess(emptyToUndefined, z.enum(['tesseract', 'off']).optional()),
+    /** Tesseract languages. `tha+eng` reads the Thai labels; `eng` is lighter if the box is slow. */
+    SLIP_OCR_LANG: z.preprocess(
+      emptyToUndefined,
+      z
+        .string()
+        .regex(/^[a-z]{3}(\+[a-z]{3})*$/)
+        .default('tha+eng'),
+    ),
+    /** The reader is killed after this long (the shop's server is small: the first tries are slow). */
+    SLIP_OCR_TIMEOUT_MS: z.preprocess(
+      emptyToUndefined,
+      z.coerce.number().int().min(1000).max(300_000).default(60_000),
+    ),
     GIT_SHA: z.preprocess(emptyToUndefined, z.string().default('dev')),
   })
   .refine((e) => e.NODE_ENV !== 'production' || !disablesTls(e.DATABASE_URL), {
@@ -106,6 +124,8 @@ export type Config = {
   privacy: { controller: string; contactEmail: string };
   /** Directory of the slip image files. */
   slipDir: string;
+  /** The automatic slip reading (D-26); null when it is off. */
+  slipOcr: { lang: string; timeoutMs: number } | null;
 };
 
 export class ConfigError extends Error {}
@@ -137,5 +157,9 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     },
     privacy: { controller: e.PRIVACY_CONTROLLER_NAME, contactEmail: e.PRIVACY_CONTACT_EMAIL },
     slipDir: e.SLIP_DIR,
+    slipOcr:
+      (e.SLIP_OCR ?? (e.NODE_ENV === 'production' ? 'tesseract' : 'off')) === 'tesseract'
+        ? { lang: e.SLIP_OCR_LANG, timeoutMs: e.SLIP_OCR_TIMEOUT_MS }
+        : null,
   };
 }

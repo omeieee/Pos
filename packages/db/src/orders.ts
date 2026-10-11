@@ -18,7 +18,7 @@ import {
   type PricedModifier,
   satang,
 } from '@sds/shared';
-import { and, asc, desc, eq, inArray, isNotNull, isNull, ne, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, ne, sql } from 'drizzle-orm';
 import type { Db } from './client.ts';
 import {
   customers,
@@ -69,6 +69,9 @@ export interface NewOrder {
   memberNickname?: string | null;
   memberBuilding?: string | null;
   memberPhone?: string | null;
+  /** The LINE name and picture at placement (owner, 2026-10-12); null for a non-LINE order. */
+  lineDisplayName?: string | null;
+  linePictureUrl?: string | null;
   status: OrderStatus;
   subtotalSatang: number;
   discountSatang: number;
@@ -149,6 +152,39 @@ export async function listOrders(
     .from(orders)
     .where(and(...conditions))
     .orderBy(asc(orders.placedAt), asc(orders.id));
+}
+
+/**
+ * Per business date of one month (`YYYY-MM`): orders that were not cancelled, and the ones fully
+ * `paid` with their total. Unpaid, awaiting and part-paid orders are counted but add no revenue;
+ * cancelled orders are left out of both. Days with no such order are not returned.
+ */
+export async function summarizeMonth(
+  db: Db,
+  month: string,
+): Promise<{ date: string; orderCount: number; paidCount: number; paidSatang: number }[]> {
+  const [year, mon] = month.split('-').map(Number) as [number, number];
+  const first = `${month}-01`;
+  const next = mon === 12 ? `${year + 1}-01-01` : `${year}-${String(mon + 1).padStart(2, '0')}-01`;
+  const paid = sql`${orders.paymentStatus} = 'paid'`;
+  return db
+    .select({
+      date: orders.businessDate,
+      orderCount: sql<number>`count(*)`.mapWith(Number),
+      paidCount: sql<number>`count(*) filter (where ${paid})`.mapWith(Number),
+      paidSatang:
+        sql<number>`coalesce(sum(${orders.totalSatang}) filter (where ${paid}), 0)`.mapWith(Number),
+    })
+    .from(orders)
+    .where(
+      and(
+        ne(orders.status, 'cancelled'),
+        gte(orders.businessDate, first),
+        lt(orders.businessDate, next),
+      ),
+    )
+    .groupBy(orders.businessDate)
+    .orderBy(asc(orders.businessDate));
 }
 
 export async function loadOrderItems(

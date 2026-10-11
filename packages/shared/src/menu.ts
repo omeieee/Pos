@@ -69,6 +69,16 @@ export function menuPhotoPath(itemId: string, photoVersion: number): string {
   return `/v1/menu/items/${itemId}/photo?v=${photoVersion}`;
 }
 
+/** An item's photo path from whichever field it carries: the DTO has `photoUrl`, the sync feed only `photoVersion`. */
+export function itemPhotoPath(item: {
+  id: string;
+  photoVersion?: number | null | undefined;
+  photoUrl?: string | null | undefined;
+}): string | null {
+  if (item.photoUrl) return item.photoUrl;
+  return item.photoVersion ? menuPhotoPath(item.id, item.photoVersion) : null;
+}
+
 /** The query of `GET /v1/menu/items/:id/photo`. A wrong or stale `v` is a 404, never a 400. */
 export const photoQuerySchema = z.object({ v: z.coerce.number().int().min(1).max(2_147_483_647) });
 

@@ -94,7 +94,13 @@ export function PaymentHistory({ payments }: { payments: readonly PaymentDto[] }
               ) : null}
               {at ? <span className="g-t-c">{formatDate(at, locale, 'dateTime')}</span> : null}
               {p.method === 'promptpay' ? (
-                <SlipView orderId={p.orderId} paymentId={p.id} rev={p.rev} quiet />
+                <SlipView
+                  orderId={p.orderId}
+                  paymentId={p.id}
+                  rev={p.rev}
+                  amountSatang={p.amountSatang}
+                  quiet
+                />
               ) : null}
             </li>
           );

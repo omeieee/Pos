@@ -157,6 +157,8 @@ export async function anonymizeOrderSnapshotsBatch(
             isNotNull(orders.memberNickname),
             isNotNull(orders.memberBuilding),
             isNotNull(orders.memberPhone),
+            isNotNull(orders.lineDisplayName),
+            isNotNull(orders.linePictureUrl),
           ),
         ),
       )
@@ -173,6 +175,8 @@ export async function anonymizeOrderSnapshotsBatch(
         memberNickname: null,
         memberBuilding: null,
         memberPhone: null,
+        lineDisplayName: null,
+        linePictureUrl: null,
       })
       .where(inArray(orders.id, due))
       .returning({ id: orders.id });
@@ -387,7 +391,7 @@ export async function clearSlipKeys(
     for (const slip of args.slips) {
       const done = await tx
         .update(payments)
-        .set({ slipImageKey: null })
+        .set({ slipImageKey: null, slipCheck: null, slipAmountSatang: null })
         .where(and(eq(payments.id, slip.id), eq(payments.slipImageKey, slip.key)))
         .returning({ id: payments.id });
       cleared += done.length;

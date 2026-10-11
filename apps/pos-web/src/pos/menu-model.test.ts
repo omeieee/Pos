@@ -70,6 +70,17 @@ describe('buildMenu (the POS menu from the entity store)', () => {
     expect(item?.groups[0]).toMatchObject({ required: true, minSelect: 1, maxSelect: 1 });
   });
 
+  test('a dish with a photo shows it (from photoVersion, as the sync feed carries no URL), else its image link', () => {
+    const { store } = menu();
+    const keep = { categoryId: MENU.catNoodle };
+    store.apply(itemFrame(MENU.tomYum, 960, { ...keep, photoVersion: 7 }));
+    expect(findItem(buildMenu(store.getState()), MENU.tomYum)?.imageUrl).toBe(
+      `/v1/menu/items/${MENU.tomYum}/photo?v=7`,
+    );
+    store.apply(itemFrame(MENU.tomYum, 961, { ...keep, photoVersion: null }));
+    expect(findItem(buildMenu(store.getState()), MENU.tomYum)?.imageUrl).toBeNull();
+  });
+
   test('a sold-out toggle on one option reaches the menu without a new group frame', () => {
     const { store } = menu();
     store.apply(optionFrame(MENU.thin, MENU.gNoodle, 950, { isAvailable: false }));

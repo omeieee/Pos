@@ -7,8 +7,8 @@
  * payment write takes the order lock, so two requests for one order queue up on it and cannot both
  * see "no open payment". The same order everywhere also rules out a deadlock.
  */
-import type { PaymentMethod, PaymentStatus } from '@sds/shared';
-import { and, asc, count, eq, inArray } from 'drizzle-orm';
+import type { PaymentMethod, PaymentStatus, SlipCheck } from '@sds/shared';
+import { and, asc, count, eq, inArray, isNotNull } from 'drizzle-orm';
 import type { Db } from './client.ts';
 import { paymentRefunds, payments } from './schema.ts';
 
@@ -92,6 +92,9 @@ export interface PaymentPatch {
   estCustomerShareSatang?: number;
   /** The stored slip image (a random key); null clears it. */
   slipImageKey?: string | null;
+  /** What the automatic reading of the slip found (D-26); a new slip resets both. */
+  slipCheck?: SlipCheck | null;
+  slipAmountSatang?: number | null;
 }
 
 export async function findPaymentById(db: Db, id: string): Promise<PaymentRow | undefined> {
@@ -155,6 +158,17 @@ export async function updatePaymentIfVersion(
     .where(and(eq(payments.id, id), eq(payments.version, expectedVersion)))
     .returning();
   return row;
+}
+
+/** Ids of payments whose slip is still waiting to be read, oldest change first (the sweep job). */
+export async function listPendingSlipChecks(db: Db, limit: number): Promise<string[]> {
+  const rows = await db
+    .select({ id: payments.id })
+    .from(payments)
+    .where(and(eq(payments.slipCheck, 'pending'), isNotNull(payments.slipImageKey)))
+    .orderBy(asc(payments.rev))
+    .limit(limit);
+  return rows.map((r) => r.id);
 }
 
 // ---------- Partial refunds (D-25) ----------

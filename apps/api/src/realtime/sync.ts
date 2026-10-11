@@ -36,7 +36,7 @@ import type { FastifyBaseLogger } from 'fastify';
 import type { AuthContext, Principal } from '../auth/service.ts';
 import { currentBusinessDate } from '../orders/business-day.ts';
 import { parse } from '../validate.ts';
-import { familiesFor, frameFromEntry, mayReceive } from './frames.ts';
+import { familiesFor, frameForRole, frameFromEntry, mayReceive } from './frames.ts';
 
 /** How long a bounded chain waits for its next page. A page is a few queries; this is generous. */
 const CHAIN_TTL_MS = 2 * 60_000;
@@ -91,7 +91,7 @@ export function createCatchUp(ctx: AuthContext): CatchUp {
         );
         continue;
       }
-      if (mayReceive(principal.role, frame)) changes.push(frame);
+      if (mayReceive(principal.role, frame)) changes.push(frameForRole(principal.role, frame));
     }
     const last = batch.entries[batch.entries.length - 1];
     if (window) {

@@ -1,5 +1,5 @@
 import { type Locale, type MessageKey, type MessageParams, t } from '@sds/i18n';
-import { createContext, useContext } from 'react';
+import { createContext, useCallback, useContext } from 'react';
 import type { Api } from '../api/client.ts';
 import { ApiFailure } from '../api/client.ts';
 import type { Platform } from '../platform/liff.ts';
@@ -58,7 +58,9 @@ export function useLocale() {
 
 export function useT() {
   const { locale } = useApp();
-  return (key: MessageKey, params?: MessageParams) => t(locale, key, params);
+  // Stable per locale: screens list `tr` in effect dependencies, and a new function on every render
+  // made the member page refetch (and reset the form) on each keystroke.
+  return useCallback((key: MessageKey, params?: MessageParams) => t(locale, key, params), [locale]);
 }
 
 const KNOWN: Record<string, MessageKey> = {

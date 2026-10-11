@@ -231,7 +231,7 @@ describe('the tickets', () => {
     expect(text).not.toContain('50.00');
   });
 
-  test('show how long each has waited as mm:ss, with a word as well as a colour once it is past 8 minutes', async () => {
+  test('show how long each has waited as minutes, with a warning icon as well as a colour once it is past 8 minutes', async () => {
     await mount({
       orders: [
         ticket(1, { placedAt: ago(4) }),
@@ -243,12 +243,62 @@ describe('the tickets', () => {
     expect(ticketOf('L-001').dataset.level).toBe('ok');
     expect(ticketOf('L-002').dataset.level).toBe('warn');
     expect(ticketOf('L-003').dataset.level).toBe('late');
-    expect(within(ticketOf('L-001')).getByText('04:00')).toBeTruthy();
-    expect(within(ticketOf('L-001')).queryByText(new RegExp(th['kitchen.level.warn']))).toBeNull();
-    expect(within(ticketOf('L-002')).getByText(`08:00 · ${th['kitchen.level.warn']}`)).toBeTruthy();
-    expect(within(ticketOf('L-003')).getByText(`25:00 · ${th['kitchen.level.late']}`)).toBeTruthy();
-    // A screen reader hears the minutes in words.
-    expect(within(ticketOf('L-003')).getByText(/รอมาแล้ว 25 นาที/)).toBeTruthy();
+    expect(within(ticketOf('L-001')).getByText(tr('duration.minutes', { count: 4 }))).toBeTruthy();
+    expect(within(ticketOf('L-002')).getByText(tr('duration.minutes', { count: 8 }))).toBeTruthy();
+    expect(within(ticketOf('L-003')).getByText(tr('duration.minutes', { count: 25 }))).toBeTruthy();
+    // Only a ticket past the warning minutes carries the warning icon; a ticket that is fine has none.
+    expect(ticketOf('L-001').querySelector('.kb-wait svg')).toBeNull();
+    expect(ticketOf('L-002').querySelector('.kb-wait svg')).not.toBeNull();
+    // A screen reader hears the minutes in words, and the level.
+    expect(
+      within(ticketOf('L-003')).getByText(
+        new RegExp(`รอมาแล้ว 25 นาที · ${th['kitchen.level.late']}`),
+      ),
+    ).toBeTruthy();
+  });
+
+  test('an order left from an earlier day shows no minutes, only that it was left, and sits last', async () => {
+    await mount({
+      orders: [
+        ticket(1, { placedAt: ago(60 * 40) }),
+        ticket(2, { placedAt: ago(3) }),
+        ticket(3, { placedAt: ago(5) }),
+      ],
+    });
+    await waitFor(() => ticketOf('L-001'));
+    expect(numbersIn('new')).toEqual(['L-003', 'L-002', 'L-001']);
+    const stale = ticketOf('L-001');
+    expect(within(stale).getByText(th['kitchen.stale'])).toBeTruthy();
+    expect(stale.textContent).not.toMatch(/\d+ นาที|\d+:\d\d/);
+    expect(stale.className).not.toContain('kb-late');
+  });
+
+  test('a LINE order shows the customer name from LINE and a small picture; one without a name shows none', async () => {
+    await mount({
+      orders: [
+        ticket(1, {
+          line: { displayName: 'Tee Test', pictureUrl: 'https://profile.line-scdn.net/p' },
+        }),
+        ticket(2, { placedAt: ago(2), line: null }),
+      ],
+    });
+    await waitFor(() => ticketOf('L-001'));
+    const who = within(ticketOf('L-001')).getByTestId('line-name');
+    expect(who.textContent).toContain('Tee Test');
+    expect(who.querySelector('img')?.getAttribute('src')).toBe('https://profile.line-scdn.net/p');
+    expect(within(ticketOf('L-002')).queryByTestId('line-name')).toBeNull();
+  });
+
+  test('never shows a phone number, even if the server sent one', async () => {
+    await mount({
+      orders: [
+        ticket(1, {
+          member: { fullName: null, nickname: 'Tee', building: 'B1', phone: '0812345678' },
+        }),
+      ],
+    });
+    await waitFor(() => ticketOf('L-001'));
+    expect(ticketOf('L-001').textContent).not.toContain('0812345678');
   });
 
   test('a new ticket glows during its first minute; a late one has a ring', async () => {

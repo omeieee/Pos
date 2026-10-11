@@ -4,8 +4,11 @@ import {
   createOrderInputSchema,
   issueReceiptInputSchema,
   listOrdersQuerySchema,
+  type OrderDto,
   orderIdParamSchema,
+  ordersSummaryQuerySchema,
   patchOrderInputSchema,
+  redactOrderForRole,
   transitionOrderInputSchema,
   voidOrderInputSchema,
 } from '@sds/shared';
@@ -17,7 +20,14 @@ import { parse } from '../validate.ts';
 import type { OrderChangeNotice } from './change-notice.ts';
 import { correctOrder, voidOrder } from './correction.ts';
 import { issueReceipt } from './receipt.ts';
-import { createOrder, getOrder, listOrdersForDay, patchOrder, transitionOrder } from './service.ts';
+import {
+  createOrder,
+  getOrder,
+  listOrdersForDay,
+  patchOrder,
+  summarizeOrdersForMonth,
+  transitionOrder,
+} from './service.ts';
 
 const idOf = (request: FastifyRequest) => parse(orderIdParamSchema, request.params).id;
 
@@ -52,22 +62,38 @@ export async function registerOrderRoutes(
     return reply.status(replay ? 200 : 201).send(order);
   });
 
-  app.get('/', { onRequest: guard() }, async (request) =>
-    listOrdersForDay(ctx, parse(listOrdersQuerySchema, request.query)),
+  // Every read and move below answers the order as the caller's role may read it (the kitchen gets
+  // no member phone number).
+  const forRole = (request: FastifyRequest, order: OrderDto) =>
+    redactOrderForRole(principalOf(request).role, order);
+
+  app.get('/', { onRequest: guard() }, async (request) => {
+    const list = await listOrdersForDay(ctx, parse(listOrdersQuerySchema, request.query));
+    return { ...list, orders: list.orders.map((order) => forRole(request, order)) };
+  });
+
+  // Same read permission as the list, which already carries every order total.
+  app.get('/summary', { onRequest: guard() }, async (request) =>
+    summarizeOrdersForMonth(ctx, parse(ordersSummaryQuerySchema, request.query)),
   );
 
-  app.get('/:id', { onRequest: guard() }, async (request) => getOrder(ctx, idOf(request)));
+  app.get('/:id', { onRequest: guard() }, async (request) =>
+    forRole(request, await getOrder(ctx, idOf(request))),
+  );
 
   app.patch('/:id', { onRequest: guard('order.create') }, async (request) =>
     patchOrder(ctx, idOf(request), parse(patchOrderInputSchema, request.body)),
   );
 
   app.post('/:id/transition', { onRequest: guard() }, async (request) =>
-    transitionOrder(
-      ctx,
-      principalOf(request),
-      idOf(request),
-      parse(transitionOrderInputSchema, request.body),
+    forRole(
+      request,
+      await transitionOrder(
+        ctx,
+        principalOf(request),
+        idOf(request),
+        parse(transitionOrderInputSchema, request.body),
+      ),
     ),
   );
 
@@ -135,6 +161,12 @@ export async function registerOrderRoutes(
 
   app.post('/:id/cancel', { onRequest: guard() }, async (request) => {
     const input = parse(cancelOrderInputSchema, request.body);
-    return transitionOrder(ctx, principalOf(request), idOf(request), { ...input, to: 'cancelled' });
+    return forRole(
+      request,
+      await transitionOrder(ctx, principalOf(request), idOf(request), {
+        ...input,
+        to: 'cancelled',
+      }),
+    );
   });
 }

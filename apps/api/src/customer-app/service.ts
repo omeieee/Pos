@@ -36,6 +36,7 @@ import {
 import { z } from 'zod';
 import type { AuthContext, RequestMeta } from '../auth/service.ts';
 import { ApiError, conflict, notFound } from '../errors.ts';
+import type { LiffIdentity } from '../line/liff-verify.ts';
 import { createOrder } from '../orders/service.ts';
 import {
   type CustomerActor,
@@ -77,9 +78,11 @@ export function derivedRequestId(seed: string): string {
 
 export async function openSession(
   ctx: AuthContext,
-  lineUserId: string,
+  who: LiffIdentity,
 ): Promise<CustomerSessionResponse> {
-  const customer = await lineRepo.upsertLiffCustomer(ctx.db, lineUserId);
+  const customer = await lineRepo.upsertLiffCustomer(ctx.db, who.userId);
+  // The name and picture LINE returned with the token, kept at most weekly (owner, 2026-10-12).
+  await lineRepo.saveLineProfile(ctx.db, who.userId, who, ctx.now());
   const expires = Math.floor(ctx.now().getTime() / 1000) + CUSTOMER_SESSION_SECONDS;
   return {
     token: signCustomerToken(ctx.keys.customerSessionKey, customer.id, expires),
@@ -265,6 +268,7 @@ export async function viewOrder(ctx: CoreContext, order: ordersRepo.OrderRow): P
     completedAt: order.completedAt?.toISOString() ?? null,
     cancelledAt: order.cancelledAt?.toISOString() ?? null,
     paymentRejected: rejected,
+    hasSlip: payment?.slipImageKey != null,
     payment: payment
       ? {
           id: payment.id,

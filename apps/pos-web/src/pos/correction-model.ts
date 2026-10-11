@@ -9,6 +9,7 @@ import {
   type CorrectOrderInput,
   hasPermission,
   type OrderDto,
+  type PaymentStatus,
   type StaffRole,
 } from '@sds/shared';
 import type { MenuItemView } from './menu-model.ts';
@@ -48,6 +49,13 @@ export const hasClaimedPayment = (order: OrderDto): boolean =>
  */
 export const defaultPaymentAction = (order: OrderDto): CorrectionPaymentAction | null =>
   hasClaimedPayment(order) ? 'void' : null;
+
+/**
+ * The same rule for one payment row (the void / refund dialog): a claimed payment preselects
+ * "void" (reject the claim); a confirmed one preselects nothing, so staff must choose on purpose.
+ */
+export const defaultReverseKind = (status: PaymentStatus): 'void' | null =>
+  status === 'claimed' ? 'void' : null;
 
 /** The choices, "adjust" first. A claimed payment cannot be adjusted (confirm or cancel it first). */
 export const CORRECTION_CHOICES: readonly CorrectionPaymentAction[] = ['adjust', 'void', 'refund'];

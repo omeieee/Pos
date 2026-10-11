@@ -24,15 +24,31 @@ const readySince = (o: Pick<OrderDto, 'placedAt' | 'readyAt'>) => o.readyAt ?? o
 const byReady = (a: OrderDto, b: OrderDto) =>
   readySince(a).localeCompare(readySince(b)) || a.orderNo.localeCompare(b.orderNo);
 
-/** The open orders of the store, split for the kitchen. The input is not changed. */
-export function kitchenQueue(orders: Iterable<OrderDto>): KitchenQueue {
+/**
+ * After this many minutes an open order is not something the kitchen is waiting on any more (it is
+ * left from an earlier day, or forgotten). It is shown last, quietly, with no minutes.
+ */
+export const STALE_MINUTES = 180;
+export const isStale = (order: Pick<OrderDto, 'status' | 'placedAt' | 'readyAt'>, nowMs: number) =>
+  waitMinutes(order, nowMs) >= STALE_MINUTES;
+
+/**
+ * The open orders of the store, split for the kitchen. The input is not changed. With `nowMs`, a
+ * stale order (see `STALE_MINUTES`) goes to the end of its list, so today's tickets come first.
+ */
+export function kitchenQueue(orders: Iterable<OrderDto>, nowMs?: number): KitchenQueue {
   const toMake: OrderDto[] = [];
   const ready: OrderDto[] = [];
   for (const order of orders) {
     if (order.status === 'new' || order.status === 'preparing') toMake.push(order);
     else if (order.status === 'ready') ready.push(order);
   }
-  return { toMake: toMake.sort(byPlaced), ready: ready.sort(byReady) };
+  const staleLast = (a: OrderDto, b: OrderDto) =>
+    nowMs === undefined ? 0 : Number(isStale(a, nowMs)) - Number(isStale(b, nowMs));
+  return {
+    toMake: toMake.sort((a, b) => staleLast(a, b) || byPlaced(a, b)),
+    ready: ready.sort((a, b) => staleLast(a, b) || byReady(a, b)),
+  };
 }
 
 /** Whole minutes an order has waited: to be made since placed, ready since it became ready. */

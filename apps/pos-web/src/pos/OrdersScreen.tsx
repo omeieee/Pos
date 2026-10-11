@@ -19,6 +19,7 @@ import { SyncPill } from '../ui/SyncPill.tsx';
 import { deliveryLabel } from './delivery-model.ts';
 import { elapsedText } from './elapsed-text.ts';
 import { MemberLine } from './MemberLine.tsx';
+import { MonthOverview } from './MonthOverview.tsx';
 import { localName } from './names.ts';
 import { OrderCorrectionActions } from './OrderCorrection.tsx';
 import {
@@ -124,14 +125,26 @@ function DayPicker({
   day,
   today,
   onPick,
+  onOpenMonth,
 }: {
   day: string;
   today: string;
   onPick: (day: string | null) => void;
+  onOpenMonth: () => void;
 }) {
   const tr = useT();
   return (
     <div style={s('display:flex;align-items:center;gap:8px;flex:none')}>
+      <button
+        type="button"
+        className="g-btn g-btn-icon"
+        style={s('width:46px;height:46px;padding:0;flex:none')}
+        aria-label={tr('orders.month.open')}
+        title={tr('orders.month.open')}
+        onClick={onOpenMonth}
+      >
+        <Gi n="grid" />
+      </button>
       <label
         className="g-field"
         style={s(
@@ -321,6 +334,7 @@ function OrdersTable({
   day,
   today,
   onPickDay,
+  onOpenMonth,
 }: {
   layout: Layout;
   todays: OrderDto[];
@@ -330,6 +344,7 @@ function OrdersTable({
   day: string;
   today: string;
   onPickDay: (day: string | null) => void;
+  onOpenMonth: () => void;
 }) {
   const tr = useT();
   const locale = useLocale();
@@ -390,7 +405,7 @@ function OrdersTable({
             onChange={(event) => setQuery(event.target.value)}
           />
         </label>
-        <DayPicker day={day} today={today} onPick={onPickDay} />
+        <DayPicker day={day} today={today} onPick={onPickDay} onOpenMonth={onOpenMonth} />
         {layout === 'rail' ? <SyncPill /> : null}
       </PageHeader>
 
@@ -629,6 +644,7 @@ function OrdersPhone({
   day,
   today,
   onPickDay,
+  onOpenMonth,
 }: {
   todays: OrderDto[];
   now: number;
@@ -637,6 +653,7 @@ function OrdersPhone({
   day: string;
   today: string;
   onPickDay: (day: string | null) => void;
+  onOpenMonth: () => void;
 }) {
   const tr = useT();
   const locale = useLocale();
@@ -684,7 +701,7 @@ function OrdersPhone({
         <SyncPill compact />
       </div>
 
-      <DayPicker day={day} today={today} onPick={onPickDay} />
+      <DayPicker day={day} today={today} onPick={onPickDay} onOpenMonth={onOpenMonth} />
 
       {searching ? (
         <label className="g-field" style={s('flex:none')}>
@@ -812,12 +829,24 @@ export function OrdersScreen() {
   const layout = useLayout();
   // null: today. A date: that business day, so any past order can be found and opened.
   const [pickedDay, setPickedDay] = useState<string | null>(null);
+  const [monthOpen, setMonthOpen] = useState(false);
   const today = currentBusinessDay(state.settings, now);
   const day = pickedDay ?? today;
   const { load, retry } = useLoadOrders(pickedDay ?? undefined);
 
   const todays = ordersForDay(state.orders.values(), day);
-  const dayPick = { day, today, onPickDay: setPickedDay };
+  const dayPick = { day, today, onPickDay: setPickedDay, onOpenMonth: () => setMonthOpen(true) };
+
+  if (monthOpen) {
+    return (
+      <MonthOverview
+        today={today}
+        day={day}
+        onPick={setPickedDay}
+        onClose={() => setMonthOpen(false)}
+      />
+    );
+  }
 
   return layout === 'phone' ? (
     <OrdersPhone key={day} todays={todays} now={now} load={load} retry={retry} {...dayPick} />

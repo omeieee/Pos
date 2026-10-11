@@ -3,8 +3,10 @@ import { orderDto, uuid } from '../test-support/frames.ts';
 import {
   handedOverToday,
   isFresh,
+  isStale,
   kitchenMoves,
   kitchenQueue,
+  STALE_MINUTES,
   timerText,
   WAIT_LATE_MINUTES,
   WAIT_WARN_MINUTES,
@@ -44,6 +46,31 @@ describe('the kitchen queue', () => {
       at(8, { status: 'new', placedAt: same }),
     ]);
     expect(queue.toMake.map((o) => o.orderNo)).toEqual(['S-008', 'S-009']);
+  });
+
+  test('an order left from an earlier day goes to the end of its column, so today never hides behind it', () => {
+    const queue = kitchenQueue(
+      [
+        at(1, { status: 'new', placedAt: minutesAgo(STALE_MINUTES + 5) }),
+        at(2, { status: 'new', placedAt: minutesAgo(4) }),
+        at(3, { status: 'new', placedAt: minutesAgo(2) }),
+        at(4, {
+          status: 'ready',
+          placedAt: minutesAgo(600),
+          readyAt: minutesAgo(STALE_MINUTES + 1),
+        }),
+        at(5, { status: 'ready', placedAt: minutesAgo(9), readyAt: minutesAgo(1) }),
+      ],
+      NOW,
+    );
+    expect(queue.toMake.map((o) => o.orderNo)).toEqual(['S-002', 'S-003', 'S-001']);
+    expect(queue.ready.map((o) => o.orderNo)).toEqual(['S-005', 'S-004']);
+  });
+
+  test('isStale is true once the wait passes the limit, and not before', () => {
+    const wait = (m: number) => at(1, { status: 'new', placedAt: minutesAgo(m) });
+    expect(isStale(wait(STALE_MINUTES - 1), NOW)).toBe(false);
+    expect(isStale(wait(STALE_MINUTES), NOW)).toBe(true);
   });
 
   test('is empty when nothing is open', () => {

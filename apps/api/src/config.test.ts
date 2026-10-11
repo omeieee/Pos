@@ -25,7 +25,22 @@ describe('loadConfig', () => {
       },
       privacy: { controller: 'omeie', contactEmail: 'omeza25482548@gmail.com' },
       slipDir: '/data/slips',
+      slipOcr: null,
     });
+  });
+
+  test('the slip reading is on in production, off elsewhere, and SLIP_OCR decides', () => {
+    const prod = { ...base, NODE_ENV: 'production' };
+    expect(loadConfig(prod).slipOcr).toEqual({ lang: 'tha+eng', timeoutMs: 60_000 });
+    expect(loadConfig({ ...prod, SLIP_OCR: 'off' }).slipOcr).toBeNull();
+    expect(loadConfig({ ...base, SLIP_OCR: 'tesseract', SLIP_OCR_LANG: 'eng' }).slipOcr).toEqual({
+      lang: 'eng',
+      timeoutMs: 60_000,
+    });
+    expect(
+      loadConfig({ ...base, SLIP_OCR: 'tesseract', SLIP_OCR_TIMEOUT_MS: '90000' }).slipOcr,
+    ).toEqual({ lang: 'tha+eng', timeoutMs: 90_000 });
+    expect(() => loadConfig({ ...base, SLIP_OCR_LANG: 'eng; rm -rf /' })).toThrow(ConfigError);
   });
 
   test('the slip directory comes from SLIP_DIR, empty means the default', () => {

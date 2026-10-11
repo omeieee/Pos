@@ -20,28 +20,52 @@ import { useLoadOrders } from './use-load-orders.ts';
  * colour is a token of the dark scope; the glow stops for people who asked for less motion.
  */
 const BOARD_CSS = `
-@keyframes kb-glow{0%,100%{box-shadow:0 0 0 0 rgba(255,138,120,0),var(--sh1),inset 0 1px 0 rgba(255,255,255,.12)}50%{box-shadow:0 0 0 6px rgba(255,138,120,.18),var(--sh1),inset 0 1px 0 rgba(255,255,255,.12)}}
-.kb-ticket{padding:16px;display:flex;flex-direction:column;gap:10px}
-.kb-new{animation:kb-glow 2.4s ease-in-out infinite!important;border-color:rgba(255,138,120,.55)!important}
-.kb-late{border-color:var(--chili)!important;box-shadow:0 0 0 2px var(--chili),var(--sh1)!important}
-.kb-q{min-width:46px;height:46px;border-radius:15px;display:grid;place-items:center;font-size:22px;font-weight:700;background:rgba(255,255,255,.12);flex:none}
-.kb-nm{font-size:20px;font-weight:600;line-height:1.4;overflow-wrap:anywhere}
-.kb-opt{font-size:15px;color:var(--ink2);line-height:1.5}
-.kb-item-note{color:var(--amber-ink);font-weight:600}
-.kb-where{display:flex;flex-wrap:wrap;gap:4px 10px;font-size:18px;font-weight:700;line-height:1.4}
-.kb-note{display:flex;gap:8px;align-items:center;padding:9px 12px;border-radius:14px;background:var(--amber-soft);color:var(--amber-ink);font-size:15px;font-weight:600}
-.kb-bar{height:6px;border-radius:3px;background:rgba(255,255,255,.1);overflow:hidden}
-.kb-bar>div{height:100%;border-radius:3px;background:linear-gradient(90deg,#f5a524,#ff8a78)}
+@keyframes kb-glow{0%,100%{box-shadow:0 0 0 0 rgba(110,160,255,0),var(--sh1)}50%{box-shadow:0 0 0 7px rgba(110,160,255,.28),var(--sh1)}}
+.kb-ticket{padding:18px 18px 18px 26px;display:flex;flex-direction:column;gap:12px;position:relative;overflow:hidden}
+.kb-ticket::before{content:"";position:absolute;left:0;top:0;bottom:0;width:10px;background:var(--kb-accent,var(--ink3))}
+.kb-st-new{--kb-accent:var(--sky)}
+.kb-st-cooking{--kb-accent:var(--amber)}
+.kb-st-ready{--kb-accent:var(--jade)}
+.kb-new{animation:kb-glow 2.4s ease-in-out infinite!important}
+.kb-late{box-shadow:0 0 0 3px var(--chili),var(--sh1)!important}
+.kb-stale{opacity:.62}
+.kb-top{display:flex;align-items:baseline;gap:12px;justify-content:space-between}
+.kb-no{margin:0;font-size:56px;line-height:1.05;font-weight:800;letter-spacing:-.01em}
+.kb-wait{display:inline-flex;align-items:center;gap:6px;font-size:30px;line-height:1.1;font-weight:800;color:var(--ink2);white-space:nowrap}
+.kb-wait[data-level="warn"]{color:var(--amber-ink)}
+.kb-wait[data-level="late"]{color:var(--chili-ink)}
+.kb-wait-stale{font-size:17px;font-weight:600;color:var(--ink3);white-space:normal;text-align:right}
+.kb-where{display:flex;gap:10px;align-items:center;font-size:28px;font-weight:800;line-height:1.25;color:var(--ink)}
+.kb-line{display:flex;gap:10px;align-items:center;font-size:22px;font-weight:600;line-height:1.3;color:var(--ink)}
+.kb-pic{width:36px;height:36px;border-radius:50%;object-fit:cover;flex:none}
+.kb-items{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:14px}
+.kb-item{display:flex;gap:14px;align-items:flex-start}
+.kb-q{min-width:58px;height:58px;border-radius:18px;display:grid;place-items:center;font-size:36px;font-weight:800;background:rgba(255,255,255,.16);flex:none}
+.kb-nm{font-size:32px;font-weight:800;line-height:1.2;overflow-wrap:anywhere}
+.kb-opt{font-size:20px;color:var(--ink2);line-height:1.4;margin-top:2px}
+.kb-item-note{color:var(--amber-ink);font-weight:700}
+.kb-note{display:flex;gap:8px;align-items:center;padding:10px 14px;border-radius:14px;background:var(--amber-soft);color:var(--amber-ink);font-size:20px;font-weight:700}
+.kb-meta{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:15px;line-height:1.4;color:var(--ink3)}
+.kb-pay{display:inline-flex;gap:4px;align-items:center}
+.kb-st-ready .kb-pay:not(.kb-paid){color:var(--amber-ink);font-weight:700}
+.kb-go{min-height:76px;font-size:28px;font-weight:800;border-radius:22px;color:#fff;border:0}
+.kb-go-start{background:var(--sky)!important}
+.kb-go-done{background:var(--jade)!important}
+.kb-colhead{font-size:30px;font-weight:800;line-height:1.2}
+.kb-col-new .kb-colhead{color:var(--sky-ink)}
+.kb-col-cooking .kb-colhead{color:var(--amber-ink)}
+.kb-col-ready .kb-colhead{color:var(--jade-ink)}
 .g-dk .g-sw:not(:checked){background:rgba(255,255,255,.28)}
 .kb-snap{scrollbar-width:none;-webkit-overflow-scrolling:touch}
 .kb-snap::-webkit-scrollbar{display:none}
+@media (max-width:600px){.kb-no{font-size:48px}.kb-nm{font-size:28px}.kb-wait{font-size:26px}}
 @media (prefers-reduced-motion:reduce){.kb-new{animation:none!important}}
 `;
 
 type ColumnId = 'new' | 'cooking' | 'ready';
 
 const COLUMN: Record<ColumnId, { tone: string; icon: GiName }> = {
-  new: { tone: 'g-b-bad', icon: 'dot' },
+  new: { tone: 'g-b-info', icon: 'dot' },
   cooking: { tone: 'g-b-warn', icon: 'flame' },
   ready: { tone: 'g-b-ok', icon: 'check' },
 };
@@ -66,7 +90,7 @@ function Column({
   return (
     <section
       ref={setRef}
-      className="g-sunk g-scroll"
+      className={`g-sunk g-scroll kb-col-${id}`}
       aria-labelledby={`kb-col-${id}`}
       style={s(
         `display:flex;flex-direction:column;gap:12px;padding:14px;min-height:0;min-width:0;${
@@ -75,7 +99,7 @@ function Column({
       )}
     >
       <div style={s('display:flex;align-items:center;gap:10px;padding:2px 4px')}>
-        <h2 id={`kb-col-${id}`} className="g-t-2" style={s('flex-grow:1;margin:0')}>
+        <h2 id={`kb-col-${id}`} className="kb-colhead" style={s('flex-grow:1;margin:0')}>
           {tr(`kitchen.col.${id}`)}
         </h2>
         <span className={`g-badge ${tone}`}>
@@ -115,7 +139,7 @@ export function KitchenScreen() {
   useKitchenDisplay();
 
   if (!role) return null;
-  const queue = kitchenQueue(state.orders.values());
+  const queue = kitchenQueue(state.orders.values(), now);
   const fresh: OrderDto[] = queue.toMake.filter((o) => o.status === 'new');
   const cooking: OrderDto[] = queue.toMake.filter((o) => o.status === 'preparing');
   const counts = [fresh.length, cooking.length, queue.ready.length];

@@ -856,6 +856,53 @@ describe('GET /v1/orders', () => {
   );
 });
 
+describe('GET /v1/orders/summary', () => {
+  const summary = (token: string, month: string) => get(token, `/v1/orders/summary?month=${month}`);
+
+  test('needs a session; every role can read', async () => {
+    expect(
+      (await h.app.inject({ method: 'GET', url: '/v1/orders/summary?month=2029-03' })).statusCode,
+    ).toBe(401);
+    for (const role of ['cashier', 'manager', 'kitchen'] as const) {
+      expect((await summary(await sign(role), '2029-03')).statusCode, role).toBe(200);
+    }
+  });
+
+  test('counts orders per business day; revenue is paid orders only, cancelled are left out', async () => {
+    h.clock.set('2029-03-10T03:00:00.000Z');
+    const cashier = await sign('cashier');
+    const paid = await place(cashier);
+    const unpaid = await place(cashier);
+    const cancelled = await place(cashier);
+    h.clock.set('2029-03-11T05:00:00.000Z'); // noon on the next day; a new session for the new clock
+    const later = await sign('cashier');
+    await place(later);
+    await h.client.query("update orders set payment_status = 'paid' where id = $1", [paid.id]);
+    await h.client.query("update orders set status = 'cancelled' where id = $1", [cancelled.id]);
+
+    const res = await summary(later, '2029-03');
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({
+      month: '2029-03',
+      days: [
+        { date: '2029-03-10', orderCount: 2, paidCount: 1, paidSatang: paid.totalSatang },
+        { date: '2029-03-11', orderCount: 1, paidCount: 0, paidSatang: 0 },
+      ],
+    });
+    expect(unpaid.totalSatang).toBeGreaterThan(0);
+    expect((await summary(later, '2029-04')).json()).toEqual({ month: '2029-04', days: [] });
+  });
+
+  test.each(['', '?month=2029-3', '?month=2029-13', '?month=2029-03-01', '?day=2029-03-01'])(
+    'rejects the query %s',
+    async (query) => {
+      const res = await get(await sign('cashier'), `/v1/orders/summary${query}`);
+      expect(res.statusCode).toBe(400);
+      expect(res.json()).toMatchObject({ code: 'VALIDATION_ERROR' });
+    },
+  );
+});
+
 describe('GET /v1/orders/{id}', () => {
   test('returns one order; unknown is 404; a malformed id is 400', async () => {
     newDay();

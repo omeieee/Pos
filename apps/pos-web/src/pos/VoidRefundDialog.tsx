@@ -3,6 +3,7 @@ import { useRef, useState } from 'react';
 import { errorText } from '../api/errors.ts';
 import { s } from '../design/style.ts';
 import { useActivityHold, useServices, useStoreState, useT } from '../ui/hooks.ts';
+import { defaultReverseKind } from './correction-model.ts';
 import { Callout, PayModal, SheetBody, SheetTitle, TextRow } from './PayParts.tsx';
 import { flowFor } from './payment-store.ts';
 
@@ -26,7 +27,8 @@ export function VoidRefundDialog({
   const { payments } = useServices();
   const flow = useStoreState(payments);
   const tr = useT();
-  const [kind, setKind] = useState<Kind>('void');
+  // A claimed payment starts on "void"; a confirmed one on nothing (staff must choose).
+  const [kind, setKind] = useState<Kind | null>(() => defaultReverseKind(payment.status));
   const [reason, setReason] = useState('');
   const inFlight = useRef(false);
   const sending = flow.orderId === order.id && flow.phase === 'sending';
@@ -39,7 +41,7 @@ export function VoidRefundDialog({
 
   async function submit() {
     const text = reason.trim();
-    if (text === '' || inFlight.current) return;
+    if (text === '' || kind === null || inFlight.current) return;
     inFlight.current = true;
     try {
       const outcome =
@@ -97,13 +99,19 @@ export function VoidRefundDialog({
         <button
           type="button"
           className="g-btn g-btn-p g-btn-lg g-btn-block"
-          disabled={sending || reason.trim() === ''}
+          disabled={sending || kind === null || reason.trim() === ''}
           aria-busy={sending}
           onClick={() => void submit()}
         >
           {sending
             ? tr('payment.sending')
-            : tr(kind === 'void' ? 'payment.void.confirmVoid' : 'payment.void.confirmRefund')}
+            : tr(
+                kind === null
+                  ? 'payment.void.confirmChoose'
+                  : kind === 'void'
+                    ? 'payment.void.confirmVoid'
+                    : 'payment.void.confirmRefund',
+              )}
         </button>
         <button type="button" className="g-btn g-btn-block" onClick={onClose}>
           {tr('common.cancel')}

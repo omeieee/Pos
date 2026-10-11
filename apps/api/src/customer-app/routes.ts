@@ -8,10 +8,10 @@ import {
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { AuthContext } from '../auth/service.ts';
 import { ApiError } from '../errors.ts';
-import { LiffUnavailableError } from '../line/liff-verify.ts';
+import { type LiffIdentity, LiffUnavailableError } from '../line/liff-verify.ts';
 import type { LineRuntime } from '../line/runtime.ts';
 import { MAX_SLIP_BYTES, SLIP_CONTENT_TYPES } from '../slips/image.ts';
-import { attachSlip } from '../slips/service.ts';
+import { attachSlip, readOwnSlip } from '../slips/service.ts';
 import type { SlipStore } from '../slips/store.ts';
 import { parse } from '../validate.ts';
 import {
@@ -42,7 +42,8 @@ const orderIdOf = (request: FastifyRequest) => parse(orderIdParamSchema, request
  *   in the session. A staff session does not work here and a customer session does not work on
  *   the staff routes. Limits: per address, and per customer on top (a per-customer ceiling that a
  *   shared mobile address cannot use up for everyone).
- * - `POST /orders/:id/slip` takes the slip picture as the body and claims the payment with it.
+ * - `POST /orders/:id/slip` takes the slip picture as the body and claims the payment with it;
+ *   `GET /orders/:id/slip` gives the customer their own picture back (never the automatic reading).
  * - Answers are personal data (names, buildings) and money state: never cached.
  */
 export async function registerCustomerAppRoutes(
@@ -94,7 +95,7 @@ export async function registerCustomerAppRoutes(
           'The customer app is not set up on this server',
         );
       }
-      let who: { userId: string } | null;
+      let who: LiffIdentity | null;
       try {
         who = await runtime.liffVerifier.verify(credential);
       } catch (error) {
@@ -122,7 +123,7 @@ export async function registerCustomerAppRoutes(
         throw new ApiError(401, 'LIFF_TOKEN_INVALID', 'Sign in with LINE again');
       }
       runtime.liffHealth.accepted();
-      return openSession(ctx, who.userId);
+      return openSession(ctx, who);
     },
   );
 
@@ -209,6 +210,26 @@ export async function registerCustomerAppRoutes(
       },
     );
   });
+
+  // The customer's own picture, for the order they placed. A bank app screen: never cached or sniffed.
+  app.get(
+    '/orders/:id/slip',
+    { onRequest: [byAddress, guard, byCustomer(30)] },
+    async (request, reply) => {
+      const { bytes, contentType } = await readOwnSlip(
+        ctx,
+        slips,
+        customerOf(request).customerId,
+        orderIdOf(request),
+      );
+      return reply
+        .header('content-type', contentType)
+        .header('x-content-type-options', 'nosniff')
+        .header('content-security-policy', "default-src 'none'; sandbox")
+        .header('referrer-policy', 'no-referrer')
+        .send(bytes);
+    },
+  );
 
   app.get('/orders/:id/qr', reads, async (request) =>
     myQr(ctx, customerOf(request).customerId, orderIdOf(request), meta(request)),

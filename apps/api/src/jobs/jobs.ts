@@ -1,4 +1,5 @@
 import { type LineJobDeps, retryLineEvents } from '../line/retry.ts';
+import { activeSlipChecker } from '../slips/checker.ts';
 import {
   anonymizeOrders,
   expireEmptyLineCustomers,
@@ -28,6 +29,13 @@ export const JOBS: readonly JobDefinition[] = [
     name: 'line-events-retry',
     cron: '*/5 * * * *',
     run: async (deps) => ({ ...(await retryLineEvents(deps)) }),
+  },
+  // Slips still waiting for the automatic amount reading (D-26): after a restart, or a full queue.
+  // Without a reader (SLIP_OCR=off) there is nothing to do.
+  {
+    name: 'slip-check-sweep',
+    cron: '* * * * *',
+    run: async () => ({ read: (await activeSlipChecker()?.sweep()) ?? 0 }),
   },
   // Retention (owner decisions 2026-10-03), nightly, staggered. Each is idempotent and bounded.
   { name: 'retention-line-events', cron: '30 3 * * *', run: purgeLineEvents },

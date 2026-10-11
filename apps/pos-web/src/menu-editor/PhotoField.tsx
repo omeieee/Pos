@@ -1,3 +1,4 @@
+import { itemPhotoPath } from '@sds/shared';
 import { type ChangeEvent, useId, useState } from 'react';
 import { Gi } from '../design/icons.tsx';
 import { s } from '../design/style.ts';
@@ -30,7 +31,8 @@ export function PhotoField({
   const [error, setError] = useState<string | null>(null);
   const working = ctx.pending.includes(rowKey(itemId));
   if (!item) return null;
-  const hasPhoto = Boolean(item.photoUrl);
+  const photo = itemPhotoPath(item);
+  const hasPhoto = Boolean(photo);
 
   async function pick(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -55,7 +57,7 @@ export function PhotoField({
     <fieldset className="gset mephoto">
       <legend>{tr('menuEditor.photo.title')}</legend>
       <div style={s('display:flex;align-items:center;gap:16px;flex-wrap:wrap')}>
-        {item.photoUrl ? (
+        {photo ? (
           <span
             className="g-tile mthumb g-tg-sand"
             style={s('width:96px;height:96px;border-radius:24px')}
@@ -63,7 +65,7 @@ export function PhotoField({
             <span className="g-ph" style={s('border-radius:24px')}>
               <img
                 className="g-photo"
-                src={apiUrl(item.photoUrl)}
+                src={apiUrl(photo)}
                 alt={tr('menuEditor.photo.alt', { name: item.nameTh })}
                 width="96"
                 height="96"

@@ -164,6 +164,8 @@ export const myOrderSchema = z.object({
    * again. Always sent by the server; optional so older fixtures still type-check.
    */
   paymentRejected: z.boolean().optional(),
+  /** The customer has sent a slip for the waiting payment: the app offers "view" and "replace". */
+  hasSlip: z.boolean().optional(),
   /** What the customer may do next. The server decides; the app shows. */
   actions: z.object({
     /** "โอนแล้ว": only for a pending PromptPay payment. It makes the payment `claimed`; staff confirm. */

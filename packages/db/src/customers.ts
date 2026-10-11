@@ -187,7 +187,10 @@ export async function takeCustomerSlipKeys(db: Db, customerId: string): Promise<
   const keys: string[] = [];
   for (const row of held) {
     if (row.key === null) continue;
-    await db.update(payments).set({ slipImageKey: null }).where(eq(payments.id, row.id));
+    await db
+      .update(payments)
+      .set({ slipImageKey: null, slipCheck: null, slipAmountSatang: null })
+      .where(eq(payments.id, row.id));
     keys.push(row.key);
   }
   return keys;
@@ -217,6 +220,7 @@ export async function anonymizeCustomer(db: Db, id: string, at: Date): Promise<A
       lineUserId: null,
       displayName: null,
       pictureUrl: null,
+      lineProfileAt: null,
       nickname: null,
       phone: null,
       fullName: null,
@@ -239,6 +243,8 @@ export async function anonymizeCustomer(db: Db, id: string, at: Date): Promise<A
       memberNickname: null,
       memberBuilding: null,
       memberPhone: null,
+      lineDisplayName: null,
+      linePictureUrl: null,
     })
     .where(
       and(
@@ -249,6 +255,8 @@ export async function anonymizeCustomer(db: Db, id: string, at: Date): Promise<A
           isNotNull(orders.memberNickname),
           isNotNull(orders.memberBuilding),
           isNotNull(orders.memberPhone),
+          isNotNull(orders.lineDisplayName),
+          isNotNull(orders.linePictureUrl),
           and(
             isNotNull(orders.recipientName),
             sql`${orders.recipientName} <> ${ANONYMIZED_RECIPIENT_NAME}`,

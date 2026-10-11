@@ -9,6 +9,8 @@ import { alertOnAttempt, superviseJobs } from './jobs/supervisor.ts';
 import { createLineRuntime } from './line/runtime.ts';
 import { createPoolWatchdog } from './pool-watchdog.ts';
 import { sentryOptions } from './redact.ts';
+import { createSlipChecker, installSlipChecker } from './slips/checker.ts';
+import { createTesseractOcr } from './slips/ocr.ts';
 import { createFsSlipStore } from './slips/store.ts';
 import { registerV1 } from './v1.ts';
 
@@ -70,6 +72,17 @@ events.subscribe((event) => {
 if (reportAlert) forwardAlerts(events, reportAlert);
 const line = createLineRuntime(config.line, { privacy: config.privacy });
 const slips = createFsSlipStore(config.slipDir);
+// The automatic reading of slips (D-26): Tesseract on this machine, one picture at a time.
+if (config.slipOcr) {
+  installSlipChecker(
+    createSlipChecker({
+      ctx: { db, now: () => new Date(), events },
+      slips,
+      ocr: createTesseractOcr(config.slipOcr),
+      log: app.log,
+    }),
+  );
+}
 await registerV1(app, { db, authSecretKey: config.authSecretKey, events, line, slips });
 
 // 0.0.0.0 so Caddy can reach the container over the Docker network.

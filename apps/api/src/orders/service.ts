@@ -3,7 +3,7 @@
  * trigger does it) and publishes its events only after the commit. Status changes go through the
  * state machine in `@sds/shared`; the server prices every order from the menu.
  */
-import { customersRepo, type Db, insertAudit, ordersRepo } from '@sds/db';
+import { customersRepo, type Db, insertAudit, lineRepo, ordersRepo } from '@sds/db';
 import {
   allowedFulfillments,
   businessDate,
@@ -16,11 +16,14 @@ import {
   ORDER_NO_PREFIX,
   type OrderDto,
   type OrderStatus,
+  type OrdersSummaryQuery,
+  type OrdersSummaryResponse,
   orderMachine,
   type PatchOrderInput,
   type PricingError,
   priceOrder,
   recipientKey,
+  satang,
   type TransitionError,
   type TransitionOrderInput,
 } from '@sds/shared';
@@ -184,6 +187,10 @@ export async function createOrder(
         profile = mergeMember(profile, member);
         await customersRepo.saveMemberProfile(tx, customerId, profile);
       }
+      // A LINE order carries the customer's LINE name and picture as they are now (owner,
+      // 2026-10-12), so the kitchen can tell who it is for. Other customers hold none.
+      const lineProfile =
+        customerId === null ? null : await lineRepo.getLineProfile(tx, customerId);
       const status = initialOrderStatus(input.channel);
       const row = await ordersRepo.insertOrder(tx, {
         orderNo: `${ORDER_NO_PREFIX[input.channel]}-${String(seq).padStart(3, '0')}`,
@@ -199,6 +206,8 @@ export async function createOrder(
         memberNickname: profile?.nickname ?? null,
         memberBuilding: profile?.building ?? null,
         memberPhone: profile?.phone ?? null,
+        lineDisplayName: lineProfile?.displayName ?? null,
+        linePictureUrl: lineProfile?.pictureUrl ?? null,
         status,
         subtotalSatang: priced.totals.subtotal,
         discountSatang: priced.totals.discount,
@@ -279,6 +288,22 @@ export async function listOrdersForDay(
     rows.map((r) => r.id),
   );
   return { day, orders: rows.map((row) => toOrderDto(row, items.get(row.id) ?? [])) };
+}
+
+/**
+ * The month overview: per business date, orders that were not cancelled and the paid revenue.
+ * Read-only; the dates are already business dates (the cutoff was applied when each order was
+ * placed), so no time zone arithmetic happens here.
+ */
+export async function summarizeOrdersForMonth(
+  ctx: CoreContext,
+  query: OrdersSummaryQuery,
+): Promise<OrdersSummaryResponse> {
+  const days = await ordersRepo.summarizeMonth(ctx.db, query.month);
+  return {
+    month: query.month,
+    days: days.map((day) => ({ ...day, paidSatang: satang(day.paidSatang) })),
+  };
 }
 
 export async function getOrder(ctx: CoreContext, id: string): Promise<OrderDto> {

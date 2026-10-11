@@ -32,6 +32,10 @@ export function toOrderDto(
             phone: order.memberPhone,
           }
         : null,
+    line:
+      order.lineDisplayName || order.linePictureUrl
+        ? { displayName: order.lineDisplayName, pictureUrl: order.linePictureUrl }
+        : null,
     status: order.status,
     paymentStatus: order.paymentStatus,
     subtotalSatang: order.subtotalSatang,

@@ -67,6 +67,17 @@ describe('ID token', () => {
     expect(form.get('id_token')).toBe(TOKEN);
   });
 
+  test('the name and picture LINE returns with the token are handed on; without them only the id', async () => {
+    const named = fake([
+      idToken({ name: 'Tee Test', picture: 'https://profile.line-scdn.net/test/p' }),
+    ]);
+    expect(await named.verifier.verify({ idToken: TOKEN })).toEqual({
+      userId: USER,
+      displayName: 'Tee Test',
+      pictureUrl: 'https://profile.line-scdn.net/test/p',
+    });
+  });
+
   test('a token for another channel, an expired one or another issuer is refused', async () => {
     expect(
       await fake([idToken({ aud: '999999999' })]).verifier.verify({ idToken: TOKEN }),
@@ -108,7 +119,7 @@ describe('access token', () => {
     status: 200,
     body: { client_id: CHANNEL, expires_in: 1000, scope: 'profile', ...over },
   });
-  const profile = { status: 200, body: { userId: USER, displayName: 'must never be read' } };
+  const profile = { status: 200, body: { userId: USER } };
 
   test('verifies it for our channel, then reads the user id from the profile', async () => {
     const { verifier, calls } = fake([verified(), profile]);
@@ -116,6 +127,25 @@ describe('access token', () => {
     expect(calls[0]?.url).toContain('/oauth2/v2.1/verify?access_token=');
     expect(calls[1]?.url).toBe('https://api.line.me/v2/profile');
     expect(calls[1]?.auth).toBe(`Bearer ${TOKEN}`);
+  });
+
+  test('the display name and picture of the same profile call are handed on', async () => {
+    const { verifier } = fake([
+      verified(),
+      {
+        status: 200,
+        body: {
+          userId: USER,
+          displayName: 'Tee Test',
+          pictureUrl: 'https://profile.line-scdn.net/p',
+        },
+      },
+    ]);
+    expect(await verifier.verify({ accessToken: TOKEN })).toEqual({
+      userId: USER,
+      displayName: 'Tee Test',
+      pictureUrl: 'https://profile.line-scdn.net/p',
+    });
   });
 
   test('a token issued to another channel never reaches the profile call', async () => {

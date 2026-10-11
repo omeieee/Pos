@@ -9,10 +9,12 @@
 import {
   availableOptions,
   isOrderable,
+  itemPhotoPath,
   type MenuChannel,
   menuChannelFor,
   type OrderChannel,
 } from '@sds/shared';
+import { apiUrl } from '../platform/config.ts';
 import type { EntityState } from '../realtime/entity-store.ts';
 import { groupsWithOptions } from '../realtime/selectors.ts';
 
@@ -98,6 +100,7 @@ export function buildMenu(
           })),
       });
     }
+    const photo = itemPhotoPath(item);
     const list = itemsByCategory.get(item.categoryId) ?? [];
     list.push({
       id: item.id,
@@ -105,7 +108,8 @@ export function buildMenu(
       nameTh: item.nameTh,
       nameEn: item.nameEn,
       priceSatang: item.channelPrices[menuChannel] ?? item.priceSatang,
-      imageUrl: item.imageUrl,
+      // The shop's own photo (D-21) wins; the sync feed carries its version, not a URL.
+      imageUrl: photo ? apiUrl(photo) : item.imageUrl,
       orderable,
       soldOut: !orderable,
       groups: views,

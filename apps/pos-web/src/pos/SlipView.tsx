@@ -1,6 +1,16 @@
+import { formatBaht } from '@sds/i18n';
+import type { SlipCheck } from '@sds/shared';
 import { useEffect, useState } from 'react';
 import { s } from '../design/style.ts';
-import { useServices, useT } from '../ui/hooks.ts';
+import { useLocale, useServices, useT } from '../ui/hooks.ts';
+import { Callout } from './PayParts.tsx';
+
+const CHIP_TONE: Record<SlipCheck, string> = {
+  match: 'g-b-ok',
+  mismatch: 'g-b-warn',
+  unreadable: 'g-b-mute',
+  pending: 'g-b-mute',
+};
 
 /**
  * The customer's slip for a PromptPay payment, in any status while the file exists (90-day
@@ -9,21 +19,34 @@ import { useServices, useT } from '../ui/hooks.ts';
  * comes with the claim, which is a new revision). Staff open the picture on request; it comes with
  * the session header, lives in a blob URL for as long as it is shown and is never stored. It is only
  * a hint: the money is confirmed from the bank app (rule 2).
+ *
+ * The server also reads the amount off the picture (D-26) and the answer comes with the same list:
+ * a green, amber or grey banner and a small chip. That is a second hint, never a decision: it says
+ * so, and the confirm button still needs the bank app. The reading finishes after the claim, with a
+ * new revision of the payment, which asks again.
  */
 export function SlipView({
   orderId,
   paymentId,
   rev,
+  amountSatang,
+  onCheck,
   quiet = false,
 }: {
   orderId: string;
   paymentId: string;
   rev: number;
+  /** What this payment charges, to put beside the amount read from the slip. */
+  amountSatang: number;
+  /** Tells the payment screen how the reading stands (null: no reading), so it can ask for an extra tap. */
+  onCheck?: (check: SlipCheck | null) => void;
   /** In the payment history: say nothing when there is no slip (only a payment with one shows it). */
   quiet?: boolean;
 }) {
   const tr = useT();
+  const locale = useLocale();
   const { api } = useServices();
+  const [hint, setHint] = useState<{ check: SlipCheck; amountSatang: number | null } | null>(null);
   // `unknown`: the list could not be read, so the button is offered as before.
   const [known, setKnown] = useState<'checking' | 'has' | 'missing' | 'unknown'>('checking');
   const [phase, setPhase] = useState<'idle' | 'loading' | 'none' | 'failed'>('idle');
@@ -36,7 +59,12 @@ export function SlipView({
     api.payments
       .list(orderId)
       .then((answer) => {
-        if (live) setKnown(answer.slipPaymentIds?.includes(paymentId) ? 'has' : 'missing');
+        if (!live) return;
+        const has = answer.slipPaymentIds?.includes(paymentId) === true;
+        setKnown(has ? 'has' : 'missing');
+        const found = has ? answer.slipChecks?.find((c) => c.paymentId === paymentId) : undefined;
+        setHint(found ? { check: found.check, amountSatang: found.amountSatang } : null);
+        onCheck?.(found?.check ?? null);
       })
       .catch(() => {
         if (live) setKnown('unknown');
@@ -77,7 +105,44 @@ export function SlipView({
       {known === 'has' ? (
         <p className="g-t-c" data-testid="slip-has" style={s('margin:0;font-weight:600')}>
           {tr('payment.slip.has')}
+          {hint ? (
+            <span
+              className={`g-badge ${CHIP_TONE[hint.check]}`}
+              data-testid="slip-chip"
+              style={s('margin-left:8px')}
+            >
+              {tr(`payment.slip.chip.${hint.check}`)}
+            </span>
+          ) : null}
         </p>
+      ) : null}
+      {known === 'has' && hint && !quiet ? (
+        <div data-testid="slip-check" data-check={hint.check}>
+          {hint.check === 'match' || hint.check === 'mismatch' ? (
+            <Callout tone={hint.check === 'match' ? 'ok' : 'warn'} role="status">
+              <span style={s('display:block')}>
+                {hint.check === 'match'
+                  ? tr('payment.slip.check.match', { amount: formatBaht(amountSatang, locale) })
+                  : tr('payment.slip.check.mismatch', {
+                      slip: formatBaht(hint.amountSatang ?? 0, locale),
+                      expected: formatBaht(amountSatang, locale),
+                    })}
+              </span>
+              <span className="g-t-c" style={s('display:block;font-weight:500')}>
+                {tr('payment.slip.check.hint')}
+              </span>
+            </Callout>
+          ) : (
+            <div className="g-sunk" role="status" style={s('padding:10px 12px;border-radius:14px')}>
+              <span className="g-t-s" style={s('display:block;font-weight:600')}>
+                {tr(`payment.slip.check.${hint.check}`)}
+              </span>
+              <span className="g-t-c" style={s('display:block')}>
+                {tr('payment.slip.check.hint')}
+              </span>
+            </div>
+          )}
+        </div>
       ) : null}
       {url ? (
         <>

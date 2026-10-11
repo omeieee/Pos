@@ -21,6 +21,7 @@ import {
   type Permission,
   paymentUpsertedFrameSchema,
   type RealtimeFrame,
+  redactOrderForRole,
   type StaffRole,
   type SyncChange,
   settingsUpdatedFrameSchema,
@@ -57,6 +58,17 @@ export const FRAME_PERMISSION: Record<FrameType, Permission | null> = {
 export function mayReceive(role: StaffRole, frame: { type: FrameType }): boolean {
   const needed = FRAME_PERMISSION[frame.type];
   return needed === null || hasPermission(role, needed);
+}
+
+/**
+ * The frame as one role may read it: an order loses the member phone number for a role that cannot
+ * take orders (the kitchen). The same frame is returned untouched for everyone else.
+ */
+export function frameForRole<F extends { type: FrameType }>(role: StaffRole, frame: F): F {
+  if (frame.type !== 'order.upserted') return frame;
+  const order = frame as unknown as Extract<RealtimeFrame, { type: 'order.upserted' }>;
+  const data = redactOrderForRole(role, order.data);
+  return data === order.data ? frame : ({ ...order, data } as unknown as F);
 }
 
 /** The families of rows a role may read in a catch-up; the same rules as `mayReceive`. */

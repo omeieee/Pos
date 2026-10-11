@@ -110,6 +110,7 @@ A customer cannot scan a QR that is on their own screen. The flow therefore:
 
 ### 2.5 Manual confirmation: risks and optional helpers
 - **Fake slips are common.** Staff must confirm from the bank app's incoming-transfer notification, never from the slip image alone.
+- **Amount hint (D-26):** the API reads the amount on the slip with Tesseract on the VM and shows staff a green, amber or grey banner. It is only a hint (it can be wrong or fooled by an edited picture): it never confirms or rejects a payment, the text is never stored, and nothing is sent to a cloud service.
 - Optional (setting, off by default): add a few random satang to the amount (e.g. ฿75.03) so several orders at the same price can be told apart in the bank app.
 - Optional (P9): read the mini QR printed on Thai bank slips to catch a slip that has been reused for another order. This works offline and costs nothing. It is not full verification.
 

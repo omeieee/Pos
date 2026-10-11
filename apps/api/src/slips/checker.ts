@@ -1,0 +1,136 @@
+import { paymentsRepo } from '@sds/db';
+import { compareSlipAmount, extractSlipAmount, type SlipCheck } from '@sds/shared';
+import { toPaymentDto } from '../payments/dto.ts';
+import { type CoreContext, withTransaction } from '../tx.ts';
+import { imageSize } from './image.ts';
+import type { SlipOcr } from './ocr.ts';
+import type { SlipStore } from './store.ts';
+
+/**
+ * The automatic reading of a slip (D-26). It looks for the amount on the picture and compares it
+ * with what the payment charges. The answer is only a hint on the payment (`slip_check`): it never
+ * confirms or rejects money (CLAUDE.md rule 2), never fails an upload, and keeps only the amount
+ * and the verdict. The OCR text, which holds names and account numbers, is dropped at once.
+ */
+export interface SlipChecker {
+  /** Reads the slip of this payment soon, one at a time. Never throws. */
+  enqueue(paymentId: string): void;
+  /** Reads the payments still marked pending (after a restart, or a full queue). Returns how many were read. */
+  sweep(limit?: number): Promise<number>;
+  /** Resolves when everything queued so far is done (tests, shutdown). */
+  idle(): Promise<void>;
+}
+
+/** More pixels than this are not decoded: a phone screenshot is about 3 million. */
+export const MAX_OCR_PIXELS = 16_000_000;
+/** Beyond this many waiting, the rest is left to the sweep. */
+const MAX_QUEUED = 50;
+const SWEEP_LIMIT = 5;
+
+export function createSlipChecker(args: {
+  ctx: CoreContext;
+  slips: SlipStore;
+  ocr: SlipOcr;
+  /** Counts and ids only: never the text. */
+  log?: { warn(obj: Record<string, unknown>, msg: string): void };
+}): SlipChecker {
+  const { ctx, slips, ocr } = args;
+  const waiting = new Set<string>();
+  /** A new slip arrived for a payment that is being read: read it again when this one ends. */
+  const again = new Set<string>();
+  let tail: Promise<void> = Promise.resolve();
+
+  async function evaluate(
+    key: string,
+    expected: number,
+  ): Promise<{ check: Exclude<SlipCheck, 'pending'>; amount: number | null }> {
+    const bytes = await slips.get(key);
+    const size = bytes ? imageSize(bytes) : null;
+    if (!bytes || !size || size.width * size.height > MAX_OCR_PIXELS) {
+      return { check: 'unreadable', amount: null };
+    }
+    let text: string;
+    try {
+      text = await ocr.read(bytes);
+    } catch (error) {
+      // The class of the failure only: the message of a reader could echo what it read.
+      args.log?.warn({ reason: error instanceof Error ? error.message : 'OCR_FAILED' }, 'slip OCR');
+      return { check: 'unreadable', amount: null };
+    }
+    const amount = extractSlipAmount(text);
+    return { check: compareSlipAmount(amount, expected), amount };
+  }
+
+  async function read(paymentId: string): Promise<void> {
+    const row = await paymentsRepo.findPaymentById(ctx.db, paymentId);
+    if (row?.slipCheck !== 'pending' || !row.slipImageKey) return;
+    const key = row.slipImageKey;
+    const { check, amount } = await evaluate(key, row.amountSatang);
+    await withTransaction(ctx, async (tx, emit) => {
+      const locked = await paymentsRepo.lockPaymentById(tx, paymentId);
+      // A newer slip, or a purge, came in while the picture was being read: this answer is stale.
+      if (locked?.slipImageKey !== key || locked.slipCheck !== 'pending') return;
+      const updated = await paymentsRepo.updatePaymentIfVersion(tx, locked.id, locked.version, {
+        slipCheck: check,
+        slipAmountSatang: amount,
+      });
+      // The payment's status is never touched. Devices get the new rev and ask for the hint.
+      if (updated) {
+        emit({
+          type: 'payment.upserted',
+          id: updated.id,
+          rev: updated.rev,
+          data: toPaymentDto(updated),
+        });
+      }
+    });
+  }
+
+  function schedule(paymentId: string): Promise<void> {
+    waiting.add(paymentId);
+    const run = tail.then(() =>
+      read(paymentId)
+        .catch(async () => {
+          // The database or the file store failed: leave it pending for the next sweep.
+          args.log?.warn({}, 'slip check failed');
+        })
+        .finally(() => {
+          waiting.delete(paymentId);
+          if (again.delete(paymentId)) void schedule(paymentId);
+        }),
+    );
+    tail = run;
+    return run;
+  }
+
+  return {
+    enqueue(paymentId) {
+      if (waiting.has(paymentId)) again.add(paymentId);
+      else if (waiting.size < MAX_QUEUED) void schedule(paymentId);
+    },
+    async sweep(limit = SWEEP_LIMIT) {
+      const ids = (await paymentsRepo.listPendingSlipChecks(ctx.db, limit)).filter(
+        (id) => !waiting.has(id),
+      );
+      await Promise.all(ids.map(schedule));
+      return ids.length;
+    },
+    idle: async () => {
+      // A read can queue another (a newer slip): wait until the tail stops moving.
+      for (let seen = tail; ; seen = tail) {
+        await seen;
+        if (seen === tail) return;
+      }
+    },
+  };
+}
+
+// One checker per process, installed by `server.ts` (the picture can arrive through the customer
+// app or a LINE chat, and neither should have to carry the reader around). Without one - tests,
+// or SLIP_OCR=off - a slip simply gets no hint.
+let installed: SlipChecker | null = null;
+
+export const installSlipChecker = (checker: SlipChecker | null): void => {
+  installed = checker;
+};
+export const activeSlipChecker = (): SlipChecker | null => installed;

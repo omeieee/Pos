@@ -33,6 +33,7 @@ This is the **single source of truth for technology and design choices**. Other 
 | D-21 | Menu photos are stored in Postgres and served by the API (no object storage, no new secret) | **Accepted** | 2026-10-02 |
 | D-23 | Co-owners and staff by e-mail invite: single-use invite link, any role, owners only | **Accepted** | 2026-10-04 |
 | D-24 | Transfer slip images are files on the Oracle VM disk behind a `SlipStore` seam, deleted 90 days after the payment ends | **Accepted** (owner delegated the choice) | 2026-10-11 |
+| D-26 | The amount on a slip is read by Tesseract on the VM, as a hint for staff only; the text is never stored | **Accepted** (owner decision) | 2026-10-11 |
 
 ---
 
@@ -226,3 +227,15 @@ This is the **single source of truth for technology and design choices**. Other 
 - **Customer notice:** after an owner void or an edit that changes the items or the total, a LINE order gets one text push (order number, what happened, new total, refund or amount due) through the quota-aware sender, counted as `essential`; template `order_void`, or `order_edit:<version>` so each edit is its own message. Exhausted quota or policy `off`: skipped, no error.
 - **Member profile retention:** nightly job `retention-member-profiles` clears full name, nickname, phone and member building of customers with no order for 24 months (730 days); the customer, LINE id and history stay; audit row with counts only.
 - **Revisit if:** the owner wants partial refunds of co-pay money, or receipts for orders with a top-up (a receipt picks one confirmed payment today).
+
+## D-26 · Reading the amount on a slip with local Tesseract — Accepted (owner decision, 2026-10-11)
+- **Decision:** after a slip is stored (D-24), the API reads the amount on the picture with **Tesseract OCR running inside the api container on the VM** (`tesseract-ocr`, `-tha`, `-eng`; `tha+eng`, one thread, `nice`, one picture at a time, killed after 60 s). The result is a **hint for staff, never a decision**: it does not confirm, reject or block a payment (rule 2). The payment stays `claimed` until staff confirm from the bank app.
+- **What is kept:** `payments.slip_amount_satang` (the amount read, or null) and `payments.slip_check` = `pending` | `match` | `mismatch` | `unreadable` (null: no slip, or the reading is off), compared with **this payment's** amount (a top-up payment charges only the difference). **The OCR text is never stored or logged** (it holds names and account numbers); the reader's output is parsed and dropped. A new slip resets both fields; the 90-day purge and a customer erasure clear them with the key.
+- **How it runs:** in the API process, after the claim commits, through a one-at-a-time queue, plus a per-minute sweep job (`slip-check-sweep`) for a restart or a full queue. It never delays or fails the upload. Pictures whose header size is unknown or above 16 million pixels are not read (`unreadable`), so a small file cannot make the 1 GB server decode a huge picture. When the result lands the payment gets a new `rev` (so devices ask again), but the hint is not in the payment DTO, realtime frames or sync: staff get it from `GET /v1/orders/:id/payments` (`slipChecks`), like the slip ids (D-24).
+- **Staff screen:** a banner (green match, amber mismatch, grey unreadable) that says it is automatic and the bank app still decides, a small chip, and on a mismatch the confirm button needs a second explicit tap. The fake-slip warning stays.
+- **Customer app:** the customer can look at the slip they sent (`GET /v1/app/orders/:id/slip`, own order only, no-store, rate limited, no audit row) and replace it. The reading is never shown to them.
+- **Why local Tesseract:** free, no new service, secret or quota, and a slip never leaves the shop's server (PDPA: a bank name, account number and the customer's name).
+- **Why not Gemini or another cloud model (incl. Antigravity):** it would send every customer's bank details to a third party, and needs a key and a quota. The shop's own server keeps the picture.
+- **Switches:** `SLIP_OCR` (`off`, or on; default on in production only), `SLIP_OCR_LANG` (`eng` is lighter), `SLIP_OCR_TIMEOUT_MS`.
+- **Risks:** accuracy on real Thai bank slips is **not measured yet** (no real slips were available); the VM is an E2.1.Micro (1 GB, 1/8 CPU), so one reading may take tens of seconds and the container's 512 MB limit must be checked (Node heap 384 MB plus Tesseract). Both are measured after deploy; the switch lets the shop turn it off.
+- **Revisit if:** accuracy is poor (try `eng` only, or a pre-resize step), the reading is too slow or kills the container, or the shop moves to a bigger VM.

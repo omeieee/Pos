@@ -66,6 +66,8 @@ import {
   orderDtoSchema,
   orderIdParamSchema,
   orderPaymentsResponseSchema,
+  ordersSummaryQuerySchema,
+  ordersSummaryResponseSchema,
   outboxRecoveryInputSchema,
   outboxRecoveryResponseSchema,
   ownerLoginInputSchema,
@@ -470,6 +472,18 @@ export function createApiClient(options: ApiClientOptions) {
           path: '/v1/orders',
           query: checked(listOrdersQuerySchema, query),
           schema: listOrdersResponseSchema,
+          session: true,
+          device: 'optional',
+        })
+      ).data,
+
+    /** Per business date of a month (`YYYY-MM`): orders and paid revenue, for the month overview. */
+    summary: async (query: z.input<typeof ordersSummaryQuerySchema>) =>
+      (
+        await get({
+          path: '/v1/orders/summary',
+          query: checked(ordersSummaryQuerySchema, query),
+          schema: ordersSummaryResponseSchema,
           session: true,
           device: 'optional',
         })

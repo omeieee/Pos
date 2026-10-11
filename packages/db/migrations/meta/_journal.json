@@ -183,6 +183,20 @@
       "when": 1791676585921,
       "tag": "0025_payment_refunds",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1791715672642,
+      "tag": "0026_line_profile",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1791716968963,
+      "tag": "0027_slip_check",
+      "breakpoints": true
     }
   ]
 }

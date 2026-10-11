@@ -55,6 +55,7 @@ import {
   paymentMachine,
   paymentsSettingsSchema,
   planAdjustment,
+  type SlipCheck,
   satang,
   type TransitionError,
 } from '@sds/shared';
@@ -704,10 +705,18 @@ export interface MoveInput {
    * Claim only: the customer's slip image, already stored under `key`. It is written in the same
    * transaction as the claim (or, on a payment that is already claimed, replaces the old slip).
    * `onReplaced` is called inside the transaction with the key of the slip it replaced, so the
-   * caller can delete that file once the transaction has committed.
+   * caller can delete that file once the transaction has committed. `read` marks the slip to be
+   * read automatically (D-26); a new slip always clears the hint of the old one.
    */
-  slip?: { key: string; onReplaced?: (oldKey: string) => void } | undefined;
+  slip?: { key: string; onReplaced?: (oldKey: string) => void; read?: boolean } | undefined;
 }
+
+/** A new slip: its key, with the old reading cleared (and a new one asked for when it is on). */
+const slipPatch = (slip: { key: string; read?: boolean }): paymentsRepo.PaymentPatch => ({
+  slipImageKey: slip.key,
+  slipCheck: slip.read ? 'pending' : null,
+  slipAmountSatang: null,
+});
 
 /**
  * Claim never confirms (rule 2): it only records "โอนแล้ว". Void and refund need the manager
@@ -738,7 +747,7 @@ export async function movePayment(
       // A second slip on a claim that is already made replaces the first; nothing else changes.
       if (input.slip && moveName === 'claim') {
         const swapped = await paymentsRepo.updatePaymentIfVersion(tx, row.id, row.version, {
-          slipImageKey: input.slip.key,
+          ...slipPatch(input.slip),
         });
         if (!swapped) throw versionConflict(row.version); // cannot happen under the row lock
         if (row.slipImageKey) input.slip.onReplaced?.(row.slipImageKey);
@@ -793,7 +802,7 @@ export async function movePayment(
         ? {
             status: 'claimed',
             claimedAt: now,
-            ...(input.slip && moveName === 'claim' ? { slipImageKey: input.slip.key } : {}),
+            ...(input.slip && moveName === 'claim' ? slipPatch(input.slip) : {}),
           }
         : spec.to === 'confirmed'
           ? {
@@ -850,6 +859,17 @@ export async function listOrderPayments(
   return {
     payments: rows.map(toPaymentDto),
     slipPaymentIds: rows.filter((r) => r.slipImageKey !== null).map((r) => r.id),
+    slipChecks: rows.flatMap((r) =>
+      r.slipImageKey !== null && r.slipCheck !== null
+        ? [
+            {
+              paymentId: r.id,
+              check: r.slipCheck as SlipCheck,
+              amountSatang: r.slipAmountSatang === null ? null : satang(r.slipAmountSatang),
+            },
+          ]
+        : [],
+    ),
     refunds: refunds.map((r) => ({
       id: r.id,
       paymentId: r.paymentId,

@@ -180,6 +180,53 @@ describe('the customer API client', () => {
     expect(slip?.auth).toBe('Bearer tok-1');
   });
 
+  test('reads back the slip as a picture, with the session token, and signs in again on a 401', async () => {
+    let tokens = 0;
+    const calls: { url: string; auth: string | null }[] = [];
+    const fetcher = (async (url: string | URL | Request, init?: RequestInit) => {
+      const auth = new Headers(init?.headers).get('authorization');
+      calls.push({ url: String(url), auth });
+      if (String(url).endsWith('/session')) {
+        return new Response(
+          JSON.stringify({
+            token: `tok-${++tokens}`,
+            expiresAt: 'x',
+            privacyAcknowledged: true,
+            privacyVersion: 'v',
+          }),
+        );
+      }
+      return auth === 'Bearer tok-2'
+        ? new Response(new Blob(['picture'], { type: 'image/png' }), { status: 200 })
+        : new Response('{}', { status: 401 });
+    }) as typeof fetch;
+    const api = createApi({
+      baseUrl: 'https://api.example.test',
+      credential: () => ({ idToken: 'x' }),
+      fetch: fetcher,
+    });
+    const blob = await api.slip('order-1');
+    expect(await blob.text()).toBe('picture');
+    expect(calls.filter((c) => c.url.endsWith('/orders/order-1/slip'))).toHaveLength(2);
+  });
+
+  test('a missing slip is a failure with the API code', async () => {
+    const { fetcher } = server((call) =>
+      call.url.endsWith('/session')
+        ? session('tok-1')
+        : { status: 404, body: { code: 'SLIP_NOT_FOUND' } },
+    );
+    const api = createApi({
+      baseUrl: 'https://api.example.test',
+      credential: () => ({ idToken: 'x' }),
+      fetch: fetcher,
+    });
+    await expect(api.slip('order-1')).rejects.toMatchObject({
+      code: 'SLIP_NOT_FOUND',
+      status: 404,
+    });
+  });
+
   test('reads and saves the member profile with only the fields given', async () => {
     const member = { fullName: 'ก', nickname: null, building: null, phone: null };
     const { calls, fetcher } = server((call) =>

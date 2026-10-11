@@ -1,7 +1,7 @@
 import type { MessageKey } from '@sds/i18n';
 import { formatBaht, formatDate } from '@sds/i18n';
 import type { OrderDto, PaymentDto } from '@sds/shared';
-import { type ReactNode, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { errorText } from '../api/errors.ts';
 import { Gi } from '../design/icons.tsx';
 import { s } from '../design/style.ts';
@@ -31,6 +31,7 @@ export function PaymentMoves({
   showClaim,
   notFoundLabel,
   lead,
+  slipMismatch = false,
   children,
 }: {
   order: OrderDto;
@@ -41,6 +42,8 @@ export function PaymentMoves({
   notFoundLabel: MessageKey;
   /** A first secondary control (the customer view of PromptPay). */
   lead?: ReactNode;
+  /** The amount on the customer's slip differs from this payment (D-26): confirming takes two taps. */
+  slipMismatch?: boolean;
   /** Extra controls (change method) shown with the secondary buttons. */
   children?: React.ReactNode;
 }) {
@@ -50,6 +53,11 @@ export function PaymentMoves({
   const locale = useLocale();
   const [reference, setReference] = useState('');
   const [notFound, setNotFound] = useState(false);
+  // On a slip mismatch the first tap on confirm only asks again; a new reading starts over.
+  const [asked, setAsked] = useState(false);
+  useEffect(() => {
+    if (!slipMismatch) setAsked(false);
+  }, [slipMismatch]);
 
   const mine = flow.orderId === order.id;
   const moveAction = (MOVE_ACTIONS as readonly string[]).includes(flow.action ?? '');
@@ -61,6 +69,10 @@ export function PaymentMoves({
   useActivityHold(reference !== '');
 
   function confirm() {
+    if (slipMismatch && !asked) {
+      setAsked(true);
+      return;
+    }
     const note = reference.trim();
     void payments.confirm(order.id, payment.id, note === '' ? {} : { referenceNote: note });
   }
@@ -93,6 +105,12 @@ export function PaymentMoves({
             {tr('payment.confirmHint')}
           </p>
         </>
+      ) : null}
+
+      {slipMismatch && asked ? (
+        <Callout tone="warn" role="alert">
+          {tr('payment.confirmMismatchWarn')}
+        </Callout>
       ) : null}
 
       {unsure ? (
@@ -141,7 +159,7 @@ export function PaymentMoves({
           <Gi n="check" />
           {sending
             ? tr('payment.sending')
-            : tr('payment.confirmAmount', {
+            : tr(slipMismatch && asked ? 'payment.confirmMismatchAgain' : 'payment.confirmAmount', {
                 amount: formatBaht(collectAmount(order, payment, undefined), locale),
               })}
         </button>

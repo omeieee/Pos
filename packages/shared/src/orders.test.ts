@@ -3,6 +3,8 @@ import {
   cancelOrderInputSchema,
   listOrdersQuerySchema,
   orderDtoSchema,
+  ordersSummaryQuerySchema,
+  ordersSummaryResponseSchema,
   patchOrderInputSchema,
   transitionOrderInputSchema,
 } from './orders.ts';
@@ -159,5 +161,28 @@ describe('orderDtoSchema', () => {
 
   test('has no cost fields: kitchen devices must not see what a bowl costs', () => {
     expect(Object.keys(orderDtoSchema.shape).join()).not.toMatch(/cost/i);
+  });
+});
+
+describe('ordersSummaryQuerySchema', () => {
+  test('takes one calendar month as YYYY-MM and nothing else', () => {
+    expect(ordersSummaryQuerySchema.parse({ month: '2026-10' })).toEqual({ month: '2026-10' });
+    for (const month of ['2026-13', '2026-00', '2026-1', '2026-10-01', '10/2026', '']) {
+      expect(ordersSummaryQuerySchema.safeParse({ month }).success).toBe(false);
+    }
+    expect(ordersSummaryQuerySchema.safeParse({}).success).toBe(false);
+  });
+
+  test('the response keeps money as whole satang', () => {
+    const day = { date: '2026-10-01', orderCount: 3, paidCount: 2, paidSatang: 12500 };
+    expect(ordersSummaryResponseSchema.parse({ month: '2026-10', days: [day] }).days[0]).toEqual(
+      day,
+    );
+    expect(
+      ordersSummaryResponseSchema.safeParse({
+        month: '2026-10',
+        days: [{ ...day, paidSatang: 12.5 }],
+      }).success,
+    ).toBe(false);
   });
 });

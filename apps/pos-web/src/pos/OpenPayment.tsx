@@ -1,4 +1,5 @@
-import type { OrderDto, PaymentDto } from '@sds/shared';
+import type { OrderDto, PaymentDto, SlipCheck } from '@sds/shared';
+import { useState } from 'react';
 import { s } from '../design/style.ts';
 import { useAuthState, useT } from '../ui/hooks.ts';
 import { ChangeMethod } from './ChangeMethod.tsx';
@@ -22,6 +23,7 @@ export function OpenPayment({
 }) {
   const tr = useT();
   const role = useAuthState().session?.staff.role;
+  const [slipCheck, setSlipCheck] = useState<SlipCheck | null>(null);
   if (!role) return null;
   if (!payment) {
     // The order says a payment is waiting but its row has not arrived yet.
@@ -42,10 +44,26 @@ export function OpenPayment({
         {tr('payment.change.claimedFirst')}
       </p>
     ) : null;
+  const claimedPromptpay = payment.status === 'claimed' && payment.method === 'promptpay';
   return (
     <>
+      {claimedPromptpay ? (
+        // Above the panel, so the banner is in view before the confirm button.
+        <SlipView
+          orderId={order.id}
+          paymentId={payment.id}
+          rev={payment.rev}
+          amountSatang={payment.amountSatang}
+          onCheck={setSlipCheck}
+        />
+      ) : null}
       {payment.method === 'promptpay' ? (
-        <PromptPayPanel order={order} payment={payment} actions={actions}>
+        <PromptPayPanel
+          order={order}
+          payment={payment}
+          actions={actions}
+          slipMismatch={claimedPromptpay && slipCheck === 'mismatch'}
+        >
           {change}
         </PromptPayPanel>
       ) : payment.method === 'gov_copay' ? (
@@ -65,9 +83,6 @@ export function OpenPayment({
         </PaymentMoves>
       )}
       {claimedHint}
-      {payment.status === 'claimed' && payment.method === 'promptpay' ? (
-        <SlipView orderId={order.id} paymentId={payment.id} rev={payment.rev} />
-      ) : null}
     </>
   );
 }

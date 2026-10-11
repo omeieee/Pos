@@ -31,7 +31,7 @@ import type { FastifyBaseLogger } from 'fastify';
 import { type AuthContext, type Principal, peekSession } from '../auth/service.ts';
 import { ApiError } from '../errors.ts';
 import type { AppEvent } from '../events.ts';
-import { frameFromEvent, mayReceive } from './frames.ts';
+import { frameForRole, frameFromEvent, mayReceive } from './frames.ts';
 
 /** What the hub needs of a socket (the `ws` WebSocket has all of it). */
 export interface WsLike {
@@ -351,7 +351,9 @@ export function createHub(
         conn.principal &&
         mayReceive(conn.principal.role, built.frame)
       ) {
-        send(conn, text);
+        // A role that may not see a field gets its own copy of the frame without it.
+        const own = frameForRole(conn.principal.role, built.frame);
+        send(conn, own === built.frame ? text : JSON.stringify(own));
       }
     }
   }

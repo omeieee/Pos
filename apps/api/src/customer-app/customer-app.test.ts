@@ -63,12 +63,14 @@ let owner: OwnerFixture;
 let lineDown = false;
 let ctx: AuthContext;
 
+/** What LINE says about a token's owner, set by a test (made-up names only). */
+const PROFILES: Record<string, { displayName: string; pictureUrl: string }> = {};
 const verifier: LiffVerifier = {
   async verify(credential) {
     if (lineDown) throw new LiffUnavailableError();
     const token = 'idToken' in credential ? credential.idToken : credential.accessToken;
     const userId = TOKENS[token];
-    return userId ? { userId } : null;
+    return userId ? { userId, ...PROFILES[token] } : null;
   },
 };
 
@@ -1020,6 +1022,40 @@ const staffOrder = async (id: string) => {
   const staff = await h.ownerSession(owner);
   return (await call('GET', `/v1/orders/${id}`, staff)).json();
 };
+
+describe('the LINE name on an order (owner, 2026-10-12)', () => {
+  test('the name and picture LINE gives at sign-in are saved, copied onto the next order, and shown to staff', async () => {
+    PROFILES[TOKEN_A] = { displayName: 'Tee Test', pictureUrl: 'https://profile.line-scdn.net/p' };
+    const token = await customer(TOKEN_A);
+    const { res, json } = await order(token);
+    expect(res.statusCode).toBe(201);
+    expect((await staffOrder(json.order.id)).line).toEqual({
+      displayName: 'Tee Test',
+      pictureUrl: 'https://profile.line-scdn.net/p',
+    });
+    // The customer's own view does not echo it.
+    expect(JSON.stringify(json.order)).not.toContain('Tee Test');
+  });
+
+  test('a customer LINE gave no name for has an order with none', async () => {
+    delete PROFILES[TOKEN_B];
+    const token = await customer(TOKEN_B);
+    const { json } = await order(token);
+    expect((await staffOrder(json.order.id)).line).toBeNull();
+  });
+
+  test('erasing the customer clears it from the order', async () => {
+    PROFILES[TOKEN_C] = { displayName: 'Tee Test', pictureUrl: 'https://profile.line-scdn.net/p' };
+    const token = await customer(TOKEN_C);
+    const { json } = await order(token);
+    const row = await h.client.query<{ customer_id: string }>(
+      'select customer_id from orders where id = $1',
+      [json.order.id],
+    );
+    await customersRepo.anonymizeCustomer(h.db, row.rows[0]?.customer_id as string, h.clock.now());
+    expect((await staffOrder(json.order.id)).line).toBeNull();
+  });
+});
 
 describe('the member profile (owner, 2026-10-11)', () => {
   test('none of it is required to order, and the order then carries no member', async () => {

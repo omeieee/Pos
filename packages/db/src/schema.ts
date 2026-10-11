@@ -21,6 +21,7 @@ import {
   PHOTO_CONTENT_TYPES,
   PHOTO_MAX_BYTES,
   SESSION_KINDS,
+  SLIP_CHECKS,
   STAFF_ROLES,
 } from '@sds/shared';
 import { type SQL, sql } from 'drizzle-orm';
@@ -267,8 +268,14 @@ export const customers = pgTable(
   {
     id: id(),
     lineUserId: text('line_user_id'),
+    /**
+     * The LINE display name and picture (owner, 2026-10-12), read from LINE when the customer opens
+     * the app and refreshed at most weekly (`line_profile_at`). Personal data (PDPA): cleared by
+     * `anonymizeCustomer`.
+     */
     displayName: text('display_name'),
     pictureUrl: text('picture_url'),
+    lineProfileAt: ts('line_profile_at'),
     nickname: text('nickname'),
     phone: text('phone'),
     roomNo: text('room_no'),
@@ -472,6 +479,13 @@ export const orders = pgTable(
     memberNickname: text('member_nickname'),
     memberBuilding: text('member_building'),
     memberPhone: text('member_phone'),
+    /**
+     * The customer's LINE display name and picture as they were at placement (owner, 2026-10-12),
+     * so the kitchen can tell who a LINE order is for. Personal data (PDPA): cleared and retained
+     * exactly like the member snapshot above.
+     */
+    lineDisplayName: text('line_display_name'),
+    linePictureUrl: text('line_picture_url'),
     status: text('status').notNull(),
     paymentStatus: text('payment_status').notNull().default('unpaid'),
     subtotalSatang: money('subtotal_satang').notNull(),
@@ -616,6 +630,13 @@ export const payments = pgTable(
     estCustomerShareSatang: money('est_customer_share_satang'),
     slipImageKey: text('slip_image_key'),
     slipRef: text('slip_ref'),
+    /**
+     * What the automatic reading of the slip found (D-26): a hint for staff, never a confirmation.
+     * The amount read off the slip (null while pending or unreadable) and where the check stands
+     * (null: no slip, or the check is off). The OCR text itself is never stored.
+     */
+    slipAmountSatang: money('slip_amount_satang'),
+    slipCheck: text('slip_check'),
     referenceNote: text('reference_note'),
     claimedAt: ts('claimed_at'),
     confirmedByStaffId: uuid('confirmed_by_staff_id').references(() => staff.id),
@@ -642,6 +663,7 @@ export const payments = pgTable(
     index('payments_rev_idx').on(t.rev),
     check('payments_method', oneOf('method', PAYMENT_METHODS)),
     check('payments_status', oneOf('status', PAYMENT_STATUSES)),
+    check('payments_slip_check', sql`slip_check is null or ${oneOf('slip_check', SLIP_CHECKS)}`),
     check('payments_amount_nonneg', sql`amount_satang >= 0`),
     check(
       'payments_cash_change',

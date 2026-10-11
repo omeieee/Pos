@@ -57,6 +57,8 @@ const orderColumns = {
   memberNickname: orders.memberNickname,
   memberBuilding: orders.memberBuilding,
   memberPhone: orders.memberPhone,
+  lineDisplayName: orders.lineDisplayName,
+  linePictureUrl: orders.linePictureUrl,
   status: orders.status,
   paymentStatus: orders.paymentStatus,
   subtotalSatang: orders.subtotalSatang,
@@ -266,6 +268,8 @@ export const SYNC_POLICY = {
     'qrPayload',
     'slipImageKey',
     'slipRef',
+    'slipAmountSatang',
+    'slipCheck',
     'originalStaffId',
     'clientRequestId',
     'requestHash',
@@ -298,6 +302,7 @@ export const SYNC_POLICY = {
   customers: policy(customers, customerColumns, [
     'lineUserId',
     'pictureUrl',
+    'lineProfileAt',
     'phone',
     'note',
     // The member profile reaches staff on the order snapshot, not through the customer feed.
