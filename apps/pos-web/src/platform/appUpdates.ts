@@ -48,6 +48,8 @@ export interface AppUpdates extends ReadableStore<UpdateState> {
 }
 
 const HOUR_MS = 60 * 60 * 1000;
+/** A new version found this soon after the app opened is applied at once (nobody is mid-order yet). */
+const LAUNCH_WINDOW_MS = 60 * 1000;
 
 export function createAppUpdates(deps: {
   host: ServiceWorkerHost;
@@ -64,6 +66,7 @@ export function createAppUpdates(deps: {
   let activate: ((reload: boolean) => Promise<void>) | null = null;
   let registration: RegistrationLike | undefined;
   let applying: Promise<void> | null = null;
+  const startedAt = Date.now();
 
   function check() {
     // Offline or a transient failure: the next check tries again.
@@ -89,7 +92,12 @@ export function createAppUpdates(deps: {
       if (!registered) {
         registered = true;
         activate = deps.host.register({
-          onNeedRefresh: () => state.setState({ needRefresh: true }),
+          onNeedRefresh() {
+            state.setState({ needRefresh: true });
+            // Just opened (a Home Screen app that was not fully closed keeps its old shell
+            // otherwise): take the new version now, if nothing is in progress.
+            if (Date.now() - startedAt < LAUNCH_WINDOW_MS && !deps.isBusy()) void apply();
+          },
           onRegistered(found) {
             registration = found;
           },

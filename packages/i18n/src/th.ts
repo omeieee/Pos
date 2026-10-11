@@ -253,6 +253,11 @@ export const th = {
   'orders.paidToday': 'รับเงินแล้ววันนี้',
   'orders.paidTodaySub': '{count} ออเดอร์ · เฉลี่ย {average}',
   'orders.paidChart': 'กราฟยอดขายรายชั่วโมง',
+  'orders.day.label': 'เลือกวันที่ดูออเดอร์',
+  'orders.day.today': 'วันนี้',
+  'orders.day.past': 'ออเดอร์ย้อนหลังของ {date} · เปิดออเดอร์เพื่อแก้ไขหรือยกเลิก (เจ้าของร้าน)',
+  'orders.day.pastTitle': 'ออเดอร์ย้อนหลัง',
+  'orders.day.empty': 'ไม่มีออเดอร์ในวันที่เลือก',
 
   // Connection status
   'net.online': 'ซิงก์แล้ว',
@@ -338,7 +343,7 @@ export const th = {
   'payment.slip.view': 'ดูสลิปที่ลูกค้าแนบ',
   'payment.slip.alt': 'สลิปที่ลูกค้าแนบ',
   'payment.slip.warning': 'สลิปปลอมมีมาก ให้ตรวจยอดเข้าในแอปธนาคารก่อนกดยืนยัน',
-  'payment.slip.none': 'ลูกค้ายังไม่ได้แนบสลิป',
+  'payment.slip.none': 'สลิปถูกลบแล้ว (เกิน 90 วัน) หรือไม่พบไฟล์สลิป',
   'payment.slip.failed': 'เปิดสลิปไม่สำเร็จ ลองใหม่อีกครั้ง',
   'payment.slip.has': 'มีสลิป',
   'payment.slip.missing': 'ลูกค้ายังไม่แนบสลิป',
@@ -1408,6 +1413,11 @@ export const th = {
   'liff.member.note':
     'กรอกหรือไม่ก็ได้ ไม่มีผลต่อการสั่ง ร้านใช้ระบุว่าออเดอร์เป็นของใคร ขอดู แก้ไข หรือลบได้โดยพิมพ์ในแชท LINE ของร้าน',
   'liff.member.privacy': 'อ่านประกาศความเป็นส่วนตัว',
+  'liff.member.page': 'ข้อมูลสมาชิก',
+  'liff.member.save': 'บันทึก',
+  'liff.member.saving': 'กำลังบันทึก…',
+  'liff.member.saved': 'บันทึกข้อมูลสมาชิกแล้ว',
+  'liff.member.link': 'กรอกข้อมูลสมาชิก',
   'liff.method.title.promptpay': 'พร้อมเพย์',
   'liff.method.title.cash': 'เงินสดตอนรับของ',
   'liff.method.title.gov_copay': 'ไทยช่วยไทย พลัส',

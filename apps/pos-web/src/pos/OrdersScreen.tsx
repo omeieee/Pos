@@ -116,16 +116,70 @@ function Notices({ load, retry }: { load: 'loading' | 'ok' | 'error'; retry: () 
   );
 }
 
+/**
+ * Which business day to look at: the date box (any past day, so an old order can be found, opened
+ * and corrected by the owner) and a quick way back to today. The day is a business date.
+ */
+function DayPicker({
+  day,
+  today,
+  onPick,
+}: {
+  day: string;
+  today: string;
+  onPick: (day: string | null) => void;
+}) {
+  const tr = useT();
+  return (
+    <div style={s('display:flex;align-items:center;gap:8px;flex:none')}>
+      <label
+        className="g-field"
+        style={s(
+          'height:46px;border-radius:999px;background:var(--glass);border-color:var(--line)',
+        )}
+      >
+        <Gi n="clock" size="sm" />
+        <input
+          type="date"
+          aria-label={tr('orders.day.label')}
+          value={day}
+          max={today}
+          onChange={(event) => {
+            const value = event.target.value;
+            if (value) onPick(value >= today ? null : value);
+          }}
+        />
+      </label>
+      {day === today ? null : (
+        <button type="button" className="g-btn" onClick={() => onPick(null)}>
+          {tr('orders.day.today')}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function PastDayNote({ day }: { day: string }) {
+  const tr = useT();
+  const locale = useLocale();
+  return (
+    <p className="g-t-s" role="status" style={s('margin:0')}>
+      {tr('orders.day.past', { date: weekdayDate(Date.parse(`${day}T12:00:00+07:00`), locale) })}
+    </p>
+  );
+}
+
 function emptyText(
   tr: Tr,
   load: 'loading' | 'ok' | 'error',
   anyToday: boolean,
   query: string,
+  isToday = true,
 ): { text: string; status: boolean } {
   if (!anyToday) {
     return load === 'loading'
       ? { text: tr('orders.loading'), status: true }
-      : { text: tr('orders.empty'), status: false };
+      : { text: tr(isToday ? 'orders.empty' : 'orders.day.empty'), status: false };
   }
   return { text: tr(query.trim() === '' ? 'orders.emptyFilter' : 'orders.noMatch'), status: false };
 }
@@ -264,12 +318,18 @@ function OrdersTable({
   now,
   load,
   retry,
+  day,
+  today,
+  onPickDay,
 }: {
   layout: Layout;
   todays: OrderDto[];
   now: number;
   load: 'loading' | 'ok' | 'error';
   retry: () => void;
+  day: string;
+  today: string;
+  onPickDay: (day: string | null) => void;
 }) {
   const tr = useT();
   const locale = useLocale();
@@ -296,7 +356,8 @@ function OrdersTable({
       <span className="g-t-c g-num">{n}</span>
     );
   };
-  const empty = rows.length === 0 ? emptyText(tr, load, todays.length > 0, query) : null;
+  const isToday = day === today;
+  const empty = rows.length === 0 ? emptyText(tr, load, todays.length > 0, query, isToday) : null;
 
   return (
     <section
@@ -329,8 +390,11 @@ function OrdersTable({
             onChange={(event) => setQuery(event.target.value)}
           />
         </label>
+        <DayPicker day={day} today={today} onPick={onPickDay} />
         {layout === 'rail' ? <SyncPill /> : null}
       </PageHeader>
+
+      {isToday ? null : <PastDayNote day={day} />}
 
       <Notices load={load} retry={retry} />
 
@@ -562,11 +626,17 @@ function OrdersPhone({
   now,
   load,
   retry,
+  day,
+  today,
+  onPickDay,
 }: {
   todays: OrderDto[];
   now: number;
   load: 'loading' | 'ok' | 'error';
   retry: () => void;
+  day: string;
+  today: string;
+  onPickDay: (day: string | null) => void;
 }) {
   const tr = useT();
   const locale = useLocale();
@@ -581,7 +651,8 @@ function OrdersPhone({
     .sort(byNewest);
   const toPay = todays.filter((o) => matchesPhoneFilter(o, 'pay')).length;
   const paid = paidToday(todays);
-  const empty = rows.length === 0 ? emptyText(tr, load, todays.length > 0, query) : null;
+  const isToday = day === today;
+  const empty = rows.length === 0 ? emptyText(tr, load, todays.length > 0, query, isToday) : null;
   const subtitle = [weekdayDate(now, locale), hours ? tr('orders.hoursLine', { hours }) : null]
     .filter(Boolean)
     .join(' · ');
@@ -596,7 +667,7 @@ function OrdersPhone({
       <div style={s('display:flex;align-items:center;gap:12px;flex:none')}>
         <div style={s('flex-grow:1;min-width:0')}>
           <h1 id="orders-title" className="g-t-1" style={s('margin:0')}>
-            {tr('orders.title')}
+            {tr(isToday ? 'orders.title' : 'orders.day.pastTitle')}
           </h1>
           <div className="g-t-c">{subtitle}</div>
         </div>
@@ -612,6 +683,8 @@ function OrdersPhone({
         </button>
         <SyncPill compact />
       </div>
+
+      <DayPicker day={day} today={today} onPick={onPickDay} />
 
       {searching ? (
         <label className="g-field" style={s('flex:none')}>
@@ -636,7 +709,9 @@ function OrdersPhone({
           'flex:1;min-height:0;margin:0 -20px;padding:0 20px 24px;display:flex;flex-direction:column;gap:14px',
         )}
       >
-        {canSeeSales ? (
+        {isToday ? null : <PastDayNote day={day} />}
+
+        {canSeeSales && isToday ? (
           <div
             className="g-glass2 g-rise"
             style={s(
@@ -735,14 +810,26 @@ export function OrdersScreen() {
   const state = useEntities();
   const now = useNow(30_000);
   const layout = useLayout();
-  const { load, retry } = useLoadOrders();
+  // null: today. A date: that business day, so any past order can be found and opened.
+  const [pickedDay, setPickedDay] = useState<string | null>(null);
+  const today = currentBusinessDay(state.settings, now);
+  const day = pickedDay ?? today;
+  const { load, retry } = useLoadOrders(pickedDay ?? undefined);
 
-  const day = currentBusinessDay(state.settings, now);
   const todays = ordersForDay(state.orders.values(), day);
+  const dayPick = { day, today, onPickDay: setPickedDay };
 
   return layout === 'phone' ? (
-    <OrdersPhone todays={todays} now={now} load={load} retry={retry} />
+    <OrdersPhone key={day} todays={todays} now={now} load={load} retry={retry} {...dayPick} />
   ) : (
-    <OrdersTable layout={layout} todays={todays} now={now} load={load} retry={retry} />
+    <OrdersTable
+      key={day}
+      layout={layout}
+      todays={todays}
+      now={now}
+      load={load}
+      retry={retry}
+      {...dayPick}
+    />
   );
 }

@@ -8,7 +8,7 @@ export type OrdersLoad = 'loading' | 'ok' | 'error';
  * shows them without waiting for the first sync, and puts them into the entity store. Realtime
  * keeps them live after that. A failure leaves whatever the store already has.
  */
-export function useLoadOrders(): { load: OrdersLoad; retry: () => void } {
+export function useLoadOrders(day?: string): { load: OrdersLoad; retry: () => void } {
   const { api, entities } = useServices();
   const [load, setLoad] = useState<OrdersLoad>('loading');
   const [attempt, setAttempt] = useState(0);
@@ -18,7 +18,8 @@ export function useLoadOrders(): { load: OrdersLoad; retry: () => void } {
   useEffect(() => {
     let live = true;
     setLoad('loading');
-    api.orders.list().then(
+    // No day: the server's current business day. A day: that business date, any status.
+    api.orders.list(day ? { day } : {}).then(
       (listed) => {
         if (!live) return;
         entities.applyMany(
@@ -38,7 +39,7 @@ export function useLoadOrders(): { load: OrdersLoad; retry: () => void } {
     return () => {
       live = false;
     };
-  }, [api, entities, attempt]);
+  }, [api, entities, attempt, day]);
 
   const retry = useCallback(() => setAttempt((n) => n + 1), []);
   return { load, retry };

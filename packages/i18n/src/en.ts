@@ -263,6 +263,11 @@ export const en = {
   'orders.paidToday': 'Received today',
   'orders.paidTodaySub': '{count} orders · average {average}',
   'orders.paidChart': 'Hourly sales chart',
+  'orders.day.label': 'Choose the day to look at',
+  'orders.day.today': 'Today',
+  'orders.day.past': 'Past orders of {date} · open an order to edit or void it (owner)',
+  'orders.day.pastTitle': 'Past orders',
+  'orders.day.empty': 'No orders on the chosen day',
 
   'net.online': 'Synced',
   'net.connecting': 'Connecting…',
@@ -353,7 +358,7 @@ export const en = {
   'payment.slip.alt': "The customer's slip",
   'payment.slip.warning':
     'Fake slips are common. Check the money in the bank app before you confirm.',
-  'payment.slip.none': 'The customer has not attached a slip.',
+  'payment.slip.none': 'The slip was deleted (older than 90 days) or the file was not found.',
   'payment.slip.failed': 'Could not open the slip. Try again.',
   'payment.slip.has': 'Slip attached',
   'payment.slip.missing': 'The customer has not attached a slip yet',
@@ -1531,6 +1536,11 @@ export const en = {
   'liff.member.note':
     'Fill in any or none; ordering does not depend on it. The shop uses it to tell whose order it is. Ask to see, fix or delete it by typing in the shop LINE chat.',
   'liff.member.privacy': 'Read the privacy notice',
+  'liff.member.page': 'Member details',
+  'liff.member.save': 'Save',
+  'liff.member.saving': 'Saving…',
+  'liff.member.saved': 'Member details saved.',
+  'liff.member.link': 'Fill in member details',
   'liff.method.title.promptpay': 'PromptPay',
   'liff.method.title.cash': 'Cash on collection',
   'liff.method.title.gov_copay': 'Thai Chuay Thai Plus',

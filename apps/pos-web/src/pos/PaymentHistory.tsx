@@ -3,6 +3,7 @@ import type { PaymentDto, PaymentStatus } from '@sds/shared';
 import { Gi, type GiName } from '../design/icons.tsx';
 import { s } from '../design/style.ts';
 import { useLocale, useT } from '../ui/hooks.ts';
+import { SlipView } from './SlipView.tsx';
 
 const STATUS: Record<
   PaymentStatus,
@@ -92,6 +93,9 @@ export function PaymentHistory({ payments }: { payments: readonly PaymentDto[] }
                 <span className="g-t-c">{tr('payment.history.reason', { reason: p.reason })}</span>
               ) : null}
               {at ? <span className="g-t-c">{formatDate(at, locale, 'dateTime')}</span> : null}
+              {p.method === 'promptpay' ? (
+                <SlipView orderId={p.orderId} paymentId={p.id} rev={p.rev} quiet />
+              ) : null}
             </li>
           );
         })}

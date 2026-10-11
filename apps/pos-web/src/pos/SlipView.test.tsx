@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import {
   fixClock,
@@ -97,5 +97,49 @@ describe('claimed PromptPay: the slip', () => {
     });
     await waitFor(() => expect(screen.getByTestId('slip-has')).toBeTruthy());
     expect(screen.queryByTestId('slip-missing')).toBeNull();
+  });
+});
+
+describe('the slip of a payment that is no longer claimed', () => {
+  const confirmed = paymentOf({
+    method: 'promptpay',
+    status: 'confirmed',
+    confirmedAt: '2030-10-15T04:59:00.000Z',
+  });
+
+  async function openPaid(slipPaymentIds: string[], slip?: () => Promise<Blob>) {
+    const env = await setup({
+      order: orderOf({ paymentStatus: 'paid' }),
+      payments: [confirmed],
+      api: {
+        list: vi.fn(async () => ({ payments: [confirmed], slipPaymentIds })),
+        ...(slip ? { slip } : {}),
+      },
+    });
+    renderScreen(<PaymentPanel orderId={ORDER} />, env.services);
+    await loaded();
+    return env;
+  }
+
+  test('a confirmed PromptPay payment with a slip still offers it, from the history', async () => {
+    await openPaid([PAYMENT]);
+    expect(await screen.findByTestId('slip-has')).toBeTruthy();
+    expect(screen.getByRole('button', { name: th['payment.slip.view'] })).toBeTruthy();
+  });
+
+  test('no slip: the history says nothing about one', async () => {
+    await openPaid([]);
+    await waitFor(() => expect(screen.queryByTestId('slip-has')).toBeNull());
+    expect(screen.queryByTestId('slip-missing')).toBeNull();
+    expect(screen.queryByRole('button', { name: th['payment.slip.view'] })).toBeNull();
+  });
+
+  test('a slip deleted after 90 days is said plainly', async () => {
+    await openPaid([PAYMENT], async () => {
+      throw Object.assign(new Error('gone'), { code: 'SLIP_NOT_FOUND' });
+    });
+    fireEvent.click(await screen.findByRole('button', { name: th['payment.slip.view'] }));
+    expect(await screen.findByText(th['payment.slip.none'])).toBeTruthy();
+    expect(th['payment.slip.none']).toContain('90');
   });
 });

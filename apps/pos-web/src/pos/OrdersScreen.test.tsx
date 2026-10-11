@@ -429,6 +429,34 @@ describe('loading the orders', () => {
     expect(env.entities.getState().orders.has(uuid(5))).toBe(true);
   });
 
+  test('choosing an earlier day loads that day (any status) and its orders can be opened; "today" goes back', async () => {
+    const old = today(7, {
+      status: 'completed',
+      paymentStatus: 'paid',
+      businessDate: '2030-10-10',
+      placedAt: '2030-10-10T04:50:00Z',
+    });
+    const list = vi.fn(async (query?: { day?: string | undefined }) =>
+      query?.day === '2030-10-10'
+        ? { day: '2030-10-10', orders: [old] }
+        : { day: '2030-10-15', orders: [today(5, { status: 'preparing' })] },
+    );
+    const env = createTestServices({ orders: { list } });
+    renderScreen(<OrdersScreen />, env.services);
+    await waitFor(() => expect(pick('S-005')).toBeTruthy());
+
+    fireEvent.change(screen.getByLabelText(th['orders.day.label']), {
+      target: { value: '2030-10-10' },
+    });
+    await waitFor(() => expect(pick('S-007')).toBeTruthy());
+    expect(list).toHaveBeenLastCalledWith({ day: '2030-10-10' });
+    expect(screen.queryByRole('button', { name: /S-005/ })).toBeNull();
+    expect(screen.getByText(/^ออเดอร์ย้อนหลังของ/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: th['orders.day.today'] }));
+    await waitFor(() => expect(pick('S-005')).toBeTruthy());
+  });
+
   test('a failed load says the list may be incomplete and can be tried again', async () => {
     let calls = 0;
     const env = createTestServices({

@@ -43,6 +43,28 @@ describe('app updates (service worker)', () => {
     expect(env.updates.getState().needRefresh).toBe(true);
   });
 
+  test('a version found right after the app opened is applied at once, unless busy', async () => {
+    const env = setup();
+    env.updates.start();
+    env.newVersionFound();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(env.applyUpdate).toHaveBeenCalledWith(true);
+
+    const busy = setup({ busy: () => true });
+    busy.updates.start();
+    busy.newVersionFound();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(busy.applyUpdate).not.toHaveBeenCalled();
+  });
+
+  test('a version found long after opening waits for the person or the background', async () => {
+    const env = setup();
+    env.updates.start();
+    await vi.advanceTimersByTimeAsync(2 * 60 * 1000);
+    env.newVersionFound();
+    expect(env.applyUpdate).not.toHaveBeenCalled();
+  });
+
   test('start() registers once', () => {
     const registerSpy = vi.fn(() => async () => undefined);
     const updates = createAppUpdates({

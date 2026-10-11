@@ -3,7 +3,8 @@ import { s } from '../design/style.ts';
 import { useServices, useT } from '../ui/hooks.ts';
 
 /**
- * The customer's slip for a claimed payment. The payment list answer says which payments have a
+ * The customer's slip for a PromptPay payment, in any status while the file exists (90-day
+ * retention; after that the server answers "not found", which is said plainly). The payment list answer says which payments have a
  * picture, so the button shows only then; it is asked again whenever the payment changes (a slip
  * comes with the claim, which is a new revision). Staff open the picture on request; it comes with
  * the session header, lives in a blob URL for as long as it is shown and is never stored. It is only
@@ -13,10 +14,13 @@ export function SlipView({
   orderId,
   paymentId,
   rev,
+  quiet = false,
 }: {
   orderId: string;
   paymentId: string;
   rev: number;
+  /** In the payment history: say nothing when there is no slip (only a payment with one shows it). */
+  quiet?: boolean;
 }) {
   const tr = useT();
   const { api } = useServices();
@@ -60,6 +64,7 @@ export function SlipView({
 
   if (known === 'checking') return null;
   if (known === 'missing') {
+    if (quiet) return null;
     return (
       <p className="g-t-c" role="status" data-testid="slip-missing" style={s('margin:0')}>
         {tr('payment.slip.missing')}
