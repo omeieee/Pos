@@ -31,9 +31,7 @@ export function PaymentMoves({
   showClaim,
   notFoundLabel,
   lead,
-  slipMismatch = false,
-  slipDuplicate = false,
-  slipRecipientMismatch = false,
+  bankCheckRequired = false,
   children,
 }: {
   order: OrderDto;
@@ -44,12 +42,12 @@ export function PaymentMoves({
   notFoundLabel: MessageKey;
   /** A first secondary control (the customer view of PromptPay). */
   lead?: ReactNode;
-  /** The amount on the customer's slip differs from this payment (D-26): confirming takes two taps. */
-  slipMismatch?: boolean;
-  /** The slip was already used on an earlier payment (D-26): confirming takes two taps too. */
-  slipDuplicate?: boolean;
-  /** The receiver on the slip does not look like the shop's account (D-26): the same one extra tap. */
-  slipRecipientMismatch?: boolean;
+  /**
+   * The slip is not fully verified (D-26: receiver or amount not a match, or a duplicate): confirm
+   * stays off until staff tick "I checked the incoming transfer in the shop's bank app". The tick
+   * only gates this button and goes to the server for the audit row; the server never blocks on it.
+   */
+  bankCheckRequired?: boolean;
   /** Extra controls (change method) shown with the secondary buttons. */
   children?: React.ReactNode;
 }) {
@@ -59,12 +57,14 @@ export function PaymentMoves({
   const locale = useLocale();
   const [reference, setReference] = useState('');
   const [notFound, setNotFound] = useState(false);
-  // On a slip mismatch the first tap on confirm only asks again; a new reading starts over.
-  const [asked, setAsked] = useState(false);
-  const needsAsk = slipMismatch || slipDuplicate || slipRecipientMismatch;
+  // The tick starts over whenever the payment, its revision (a new slip or reading) or the need
+  // changes: staff attest to what is on screen now.
+  const [attested, setAttested] = useState(false);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: these are the triggers of the reset
   useEffect(() => {
-    if (!needsAsk) setAsked(false);
-  }, [needsAsk]);
+    setAttested(false);
+  }, [payment.id, payment.rev, bankCheckRequired]);
+  const mayConfirm = !bankCheckRequired || attested;
 
   const mine = flow.orderId === order.id;
   const moveAction = (MOVE_ACTIONS as readonly string[]).includes(flow.action ?? '');
@@ -76,12 +76,12 @@ export function PaymentMoves({
   useActivityHold(reference !== '');
 
   function confirm() {
-    if (needsAsk && !asked) {
-      setAsked(true);
-      return;
-    }
+    if (!mayConfirm) return;
     const note = reference.trim();
-    void payments.confirm(order.id, payment.id, note === '' ? {} : { referenceNote: note });
+    void payments.confirm(order.id, payment.id, {
+      ...(note === '' ? {} : { referenceNote: note }),
+      ...(bankCheckRequired ? { attestedBankCheck: true as const } : {}),
+    });
   }
 
   return (
@@ -114,20 +114,29 @@ export function PaymentMoves({
         </>
       ) : null}
 
-      {slipDuplicate && asked ? (
-        <Callout tone="bad" role="alert">
-          {tr('payment.confirmDuplicateWarn')}
-        </Callout>
-      ) : null}
-      {slipRecipientMismatch && asked ? (
-        <Callout tone="bad" role="alert">
-          {tr('payment.confirmRecipientWarn')}
-        </Callout>
-      ) : null}
-      {slipMismatch && asked ? (
-        <Callout tone="warn" role="alert">
-          {tr('payment.confirmMismatchWarn')}
-        </Callout>
+      {actions.confirm && bankCheckRequired ? (
+        <div style={s('display:flex;flex-direction:column;gap:8px')}>
+          <Callout tone="warn" role="status">
+            {tr('payment.bankCheck.hint')}
+          </Callout>
+          <label
+            className="g-sunk"
+            style={s(
+              'display:flex;gap:12px;align-items:center;min-height:52px;padding:10px 14px;border-radius:14px;cursor:pointer',
+            )}
+          >
+            <input
+              type="checkbox"
+              checked={attested}
+              disabled={sending}
+              onChange={(event) => setAttested(event.target.checked)}
+              style={s('width:26px;height:26px;flex:none')}
+            />
+            <span className="g-t-s" style={s('font-weight:600')}>
+              {tr('payment.bankCheck.label')}
+            </span>
+          </label>
+        </div>
       ) : null}
 
       {unsure ? (
@@ -169,23 +178,16 @@ export function PaymentMoves({
         <button
           type="button"
           className="g-btn g-btn-ok g-btn-lg g-btn-block"
-          disabled={sending}
+          disabled={sending || !mayConfirm}
           aria-busy={sending}
           onClick={confirm}
         >
           <Gi n="check" />
           {sending
             ? tr('payment.sending')
-            : tr(
-                asked && slipDuplicate
-                  ? 'payment.confirmDuplicateAgain'
-                  : asked && slipRecipientMismatch
-                    ? 'payment.confirmRecipientAgain'
-                    : asked && slipMismatch
-                      ? 'payment.confirmMismatchAgain'
-                      : 'payment.confirmAmount',
-                { amount: formatBaht(collectAmount(order, payment, undefined), locale) },
-              )}
+            : tr('payment.confirmAmount', {
+                amount: formatBaht(collectAmount(order, payment, undefined), locale),
+              })}
         </button>
       ) : null}
 

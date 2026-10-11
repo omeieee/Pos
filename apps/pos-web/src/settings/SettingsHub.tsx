@@ -17,6 +17,7 @@ const CHIP: Record<SectionId | 'menu', { icon: GiName; color: string }> = {
   'line-ordering': { icon: 'chat', color: '#1b7a43' },
   payments: { icon: 'cash', color: '#1b7a43' },
   promptpay: { icon: 'qr', color: '#2457b8' },
+  'bank-account': { icon: 'bank', color: '#2457b8' },
   receipt: { icon: 'receipt2', color: '#7a5af5' },
   'gov-copay': { icon: 'bank', color: '#c7691a' },
   devices: { icon: 'monitor', color: '#3a3330' },
@@ -37,7 +38,7 @@ const GROUPS: readonly {
   {
     id: 'payments',
     titleKey: 'settings.group.payments',
-    rows: ['payments', 'promptpay', 'receipt', 'gov-copay'],
+    rows: ['payments', 'promptpay', 'bank-account', 'receipt', 'gov-copay'],
   },
   { id: 'people', titleKey: 'settings.group.people', rows: ['devices', 'staff'] },
 ];

@@ -337,6 +337,10 @@ export const en = {
     'Face-to-face hand-over at the entrance only: not for delivery platform orders',
   'payment.copay.reason.outsideWindow': 'Outside the scheme’s dates and hours',
   'payment.confirmAmount': 'Confirm {amount} received',
+  'payment.bankCheck.label':
+    "I checked the incoming transfer in the shop's bank app (amount, time, reference)",
+  'payment.bankCheck.hint':
+    "This slip is not fully verified (receiver, amount or duplicate). A slip does not prove the money arrived. Tick only after you see the transfer in the shop's bank app.",
   'payment.sending': 'Saving…',
   'payment.loading': 'Loading the payment…',
   'payment.nothingToPay': 'This order has nothing to pay',
@@ -399,15 +403,6 @@ export const en = {
     "Could not read the receiver on the slip clearly. Check the receiver and the incoming amount in the shop's bank app.",
   'payment.slip.recipient.chip.match': "Receiver matches the shop's account (automatic hint)",
   'payment.slip.recipient.chip.mismatch': 'Receiver differs',
-  'payment.confirmRecipientAgain': 'Slip receiver differs. Tap again to confirm {amount} received',
-  'payment.confirmRecipientWarn':
-    "The receiver on the slip does not look like the shop's account: it may have been sent to someone else. Check the incoming transfer in the shop's bank app, then tap confirm again.",
-  'payment.confirmMismatchAgain': 'Slip amount differs. Tap again to confirm {amount} received',
-  'payment.confirmMismatchWarn':
-    'The amount on the slip does not match the order. Check the bank app, then tap confirm again.',
-  'payment.confirmDuplicateAgain': 'Duplicate slip. Tap again to confirm {amount} received',
-  'payment.confirmDuplicateWarn':
-    'This slip matches one already used on another order. Check in the bank app that this is new money, then tap confirm again.',
   'payment.promptpay.customer.close': 'Back to staff view (hold 1 second)',
   'payment.promptpay.customer.scanAny': 'Scan with any bank app',
   'payment.promptpay.customer.amountIncluded': 'The amount is already in the QR. Do not type it.',
@@ -453,6 +448,33 @@ export const en = {
   'payment.receipt.print': 'Print',
   'payment.receipt.issuing': 'Issuing the receipt…',
   'receipt.taxId': 'Tax ID {taxId}',
+  'settings.bankAccount.title': 'Receiving bank account',
+  'settings.bankAccount.desc':
+    'The bank account customers transfer to; used only to compare the receiver on slips (owner only)',
+  'settings.bankAccount.shown': 'Saved account: {masked}',
+  'settings.bankAccount.shownBank': 'Saved account: {bank} {masked}',
+  'settings.bankAccount.configuredOnly': 'A receiving account is saved',
+  'settings.bankAccount.none':
+    'No account number saved (optional). A slip that shows the receiver as an account number cannot be compared.',
+  'settings.bankAccount.bank': 'Bank (optional)',
+  'settings.bankAccount.bankNone': 'Not set',
+  'settings.bankAccount.number': 'Account number (10 to 15 digits)',
+  'settings.bankAccount.numberHint':
+    'Digits only; hyphens and spaces are fine. Leave empty to keep the saved number.',
+  'settings.bankAccount.error.accountNumber': 'It must be 10 to 15 digits.',
+  'settings.bankAccount.privacy':
+    'Only part of the number is shown. It is used only to compare slips and does not prove that money arrived: always check the bank app.',
+  'settings.bankAccount.ownerOnly':
+    'Only the owner can change this, and must confirm their identity again before saving.',
+  'settings.bankAccount.clear': 'Remove account number',
+  'settings.bankAccount.bankName.002': 'Bangkok Bank',
+  'settings.bankAccount.bankName.004': 'Kasikornbank',
+  'settings.bankAccount.bankName.006': 'Krungthai Bank',
+  'settings.bankAccount.bankName.011': 'TTB',
+  'settings.bankAccount.bankName.014': 'SCB',
+  'settings.bankAccount.bankName.025': 'Krungsri',
+  'settings.bankAccount.bankName.030': 'GSB',
+  'settings.bankAccount.bankName.034': 'BAAC',
   'settings.receipt.title': 'Receipts',
   'settings.receipt.desc': 'The tax ID and address printed on receipts (owner only)',
   'settings.receipt.taxId': 'Tax ID (13 digits)',

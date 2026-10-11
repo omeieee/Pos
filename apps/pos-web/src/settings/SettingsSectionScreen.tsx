@@ -2,6 +2,7 @@ import { Gi } from '../design/icons.tsx';
 import { s } from '../design/style.ts';
 import { useAuthState, useT } from '../ui/hooks.ts';
 import { Callout } from '../ui/Notice.tsx';
+import { BankAccountForm } from './BankAccountForm.tsx';
 import { CopayForm } from './CopayForm.tsx';
 import { DeliveryForm } from './DeliveryForm.tsx';
 import { DevicesScreen } from './DevicesScreen.tsx';
@@ -71,6 +72,12 @@ function SectionBody({ def, editable }: { def: SectionDef; editable: boolean }) 
       return (
         <SettingSection name="promptpay" editable={editable}>
           {(p) => <PromptpayForm {...p} />}
+        </SettingSection>
+      );
+    case 'bank-account':
+      return (
+        <SettingSection name="bankAccount" editable={editable}>
+          {(p) => <BankAccountForm {...p} />}
         </SettingSection>
       );
     case 'receipt':

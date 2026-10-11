@@ -59,6 +59,7 @@ describe('access', () => {
     'promptpay',
     'gov-copay',
     'receipt',
+    'bank-account',
   ];
 
   test('nobody without a session', async () => {
@@ -1156,6 +1157,169 @@ describe('receipt settings: the shop tax ID and address', () => {
       expect(res.json()).toMatchObject({ code: 'VALIDATION_ERROR' });
     }
     expect((await call('GET', '/v1/settings/receipt', token)).json().version).toBe(0);
+  });
+});
+
+describe('shop receiving bank account (fake numbers only)', () => {
+  const NUMBER = '5550123456';
+  const OTHER = '7770987654321';
+  const everything = async () =>
+    JSON.stringify([(await h.client.query('select * from audit_log')).rows, h.alerts]);
+
+  test('nothing is saved by default: version 0, not configured', async () => {
+    await clearSettings();
+    const res = await call('GET', '/v1/settings/bank-account', await staffToken('manager'));
+    expect(res.json()).toEqual({
+      value: { bankCode: null, accountMasked: null, configured: false },
+      version: 0,
+      rev: 0,
+      updatedAt: null,
+    });
+  });
+
+  test('owner only, and only after a fresh step-up', async () => {
+    await clearSettings();
+    const body = { expectedVersion: 0, accountNumber: NUMBER };
+    const manager = await staffToken('manager');
+    await call('POST', '/v1/auth/step-up', manager, { pin: '4821' });
+    expect((await call('PATCH', '/v1/settings/bank-account', manager, body)).statusCode).toBe(403);
+
+    h.clock.advanceSeconds(90);
+    const signedInOnly = await h.ownerSession(owner);
+    const noStepUp = await call('PATCH', '/v1/settings/bank-account', signedInOnly, body);
+    expect(noStepUp.statusCode).toBe(403);
+    expect(noStepUp.json()).toMatchObject({ code: 'STEP_UP_REQUIRED' });
+    expect((await call('GET', '/v1/settings/bank-account', signedInOnly)).json().version).toBe(0);
+  });
+
+  test('the owner saves: masked answer, masked audit row, owner alerted, nothing broadcast', async () => {
+    await clearSettings();
+    const token = await ownerStepped();
+    const alertsBefore = h.alerts.length;
+    const eventsBefore = h.events.length;
+    const res = await call('PATCH', '/v1/settings/bank-account', token, {
+      expectedVersion: 0,
+      bankCode: '014',
+      accountNumber: NUMBER,
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({
+      version: 1,
+      value: { bankCode: '014', accountMasked: '******3456', configured: true },
+    });
+    expect(res.body).not.toContain(NUMBER);
+
+    const audit = (await h.auditRows('bank_account')).find(
+      (a) => a.action === 'settings.bank_account_change',
+    );
+    expect(audit).toMatchObject({
+      actorType: 'staff',
+      actorId: owner.staffId,
+      entity: 'settings',
+      before: { bankCode: null, accountMasked: null },
+      after: { bankCode: '014', accountMasked: '******3456' },
+    });
+    expect(h.alerts.slice(alertsBefore)).toEqual([
+      expect.objectContaining({
+        kind: 'settings.bank_account_changed',
+        severity: 'warn',
+        staffId: owner.staffId,
+      }),
+    ]);
+    expect(h.events.slice(eventsBefore).some((e) => e.type === 'settings.updated')).toBe(false);
+    expect(await everything()).not.toContain(NUMBER);
+  });
+
+  test('the full number never comes back: not to the owner, not to anyone else', async () => {
+    await clearSettings();
+    const token = await ownerStepped();
+    await call('PATCH', '/v1/settings/bank-account', token, {
+      expectedVersion: 0,
+      accountNumber: NUMBER,
+    });
+    const asOwner = await call('GET', '/v1/settings/bank-account', token);
+    expect(asOwner.json().value).toEqual({
+      bankCode: null,
+      accountMasked: '******3456',
+      configured: true,
+    });
+    for (const role of ['manager', 'cashier'] as const) {
+      const res = await call('GET', '/v1/settings/bank-account', await staffToken(role));
+      // Other roles learn only that an account is set.
+      expect(res.json().value, role).toEqual({
+        bankCode: null,
+        accountMasked: null,
+        configured: true,
+      });
+      expect(res.body).not.toContain(NUMBER);
+      expect(res.body).not.toContain('3456');
+    }
+    expect(
+      (await call('GET', '/v1/settings/bank-account', await staffToken('kitchen'))).statusCode,
+    ).toBe(403);
+    // Not on the sync feed either.
+    const sync = await call('GET', '/v1/sync?since=0&limit=500', token);
+    expect(sync.body).not.toContain(NUMBER);
+    expect(sync.body).not.toContain('bank_account');
+  });
+
+  test('a later change needs the current version, can clear it, and a no-op writes nothing', async () => {
+    await clearSettings();
+    const t1 = await ownerStepped();
+    await call('PATCH', '/v1/settings/bank-account', t1, {
+      expectedVersion: 0,
+      accountNumber: NUMBER,
+    });
+    const t2 = await ownerStepped();
+    const stale = await call('PATCH', '/v1/settings/bank-account', t2, {
+      expectedVersion: 0,
+      accountNumber: OTHER,
+    });
+    expect(stale.statusCode).toBe(409);
+    expect(stale.json()).toMatchObject({ code: 'VERSION_CONFLICT' });
+
+    const rows = (await h.auditRows('bank_account')).length;
+    const same = await call('PATCH', '/v1/settings/bank-account', t2, {
+      expectedVersion: 1,
+      accountNumber: NUMBER,
+    });
+    expect(same.json().version).toBe(1);
+    expect((await h.auditRows('bank_account')).length).toBe(rows);
+
+    const changed = await call('PATCH', '/v1/settings/bank-account', t2, {
+      expectedVersion: 1,
+      accountNumber: OTHER,
+    });
+    expect(changed.json()).toMatchObject({ version: 2, value: { accountMasked: '*********4321' } });
+    const cleared = await call('PATCH', '/v1/settings/bank-account', t2, {
+      expectedVersion: 2,
+      accountNumber: null,
+      bankCode: null,
+    });
+    expect(cleared.json()).toMatchObject({
+      version: 3,
+      value: { bankCode: null, accountMasked: null, configured: false },
+    });
+    expect(await everything()).not.toContain(NUMBER);
+    expect(await everything()).not.toContain(OTHER);
+  });
+
+  test('a bad number, an unknown bank or an unknown field is refused, and nothing is saved', async () => {
+    await clearSettings();
+    const token = await ownerStepped();
+    for (const body of [
+      { expectedVersion: 0, accountNumber: '123456789' },
+      { expectedVersion: 0, accountNumber: '123-4-56789-0' },
+      { expectedVersion: 0, accountNumber: '1234567890123456' },
+      { expectedVersion: 0, bankCode: '999' },
+      { expectedVersion: 0 },
+      { expectedVersion: 0, accountNumber: NUMBER, name: 'x' },
+    ]) {
+      const res = await call('PATCH', '/v1/settings/bank-account', token, body);
+      expect(res.statusCode, JSON.stringify(body)).toBe(400);
+      expect(res.json()).toMatchObject({ code: 'VALIDATION_ERROR' });
+    }
+    expect((await call('GET', '/v1/settings/bank-account', token)).json().version).toBe(0);
   });
 });
 

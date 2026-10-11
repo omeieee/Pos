@@ -362,6 +362,40 @@ describe('creating a payment is audited', () => {
     expect(await auditActions(id)).toEqual(['payment.confirm']);
   });
 
+  test('confirm records "I checked the bank app" in the audit row, and never blocks on it', async () => {
+    const attested = await place(await sign('cashier'));
+    const cashier = await sign('cashier');
+    const withTick = await startPayment(cashier, attested.id, 'promptpay');
+    await move(cashier, withTick.id, 'claim');
+    const ok = await move(cashier, withTick.id, 'confirm', {
+      referenceNote: 'ref 1',
+      attestedBankCheck: true,
+    });
+    expect(ok.statusCode).toBe(200);
+    const row = (await h.auditRows(withTick.id)).find((a) => a.action === 'payment.confirm');
+    expect(row?.after).toEqual({
+      status: 'confirmed',
+      referenceNote: 'ref 1',
+      attestedBankCheck: true,
+    });
+
+    // Without the flag the confirm still goes through (rule 2: staff authority), and the row says nothing.
+    const plain = await place(cashier);
+    const untick = await startPayment(cashier, plain.id, 'promptpay');
+    await move(cashier, untick.id, 'claim');
+    expect((await move(cashier, untick.id, 'confirm')).statusCode).toBe(200);
+    const plainRow = (await h.auditRows(untick.id)).find((a) => a.action === 'payment.confirm');
+    expect(plainRow?.after).toEqual({ status: 'confirmed' });
+
+    // Only `true` is accepted.
+    const third = await place(cashier);
+    const bad = await startPayment(cashier, third.id, 'promptpay');
+    await move(cashier, bad.id, 'claim');
+    expect((await move(cashier, bad.id, 'confirm', { attestedBankCheck: false })).statusCode).toBe(
+      400,
+    );
+  });
+
   test('a method change audits the new payment too', async () => {
     const cashier = await sign('cashier');
     const order = await place(cashier);

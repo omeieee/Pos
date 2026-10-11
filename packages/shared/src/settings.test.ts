@@ -1,6 +1,10 @@
 import { describe, expect, test } from 'vitest';
 import { govCopaySchemeSchema } from './gov-copay.ts';
 import {
+  bankAccountPatchInputSchema,
+  bankAccountSettingsSchema,
+  bankAccountViewSchema,
+  DEFAULT_BANK_ACCOUNT,
   DEFAULT_DELIVERY_SETTINGS,
   DEFAULT_LINE_ORDERING,
   deliveryPatchInputSchema,
@@ -9,6 +13,7 @@ import {
   lineOrderingOpenAt,
   lineOrderingPatchInputSchema,
   lineOrderingSchema,
+  maskBankAccount,
   maskPromptpayId,
   numberingPatchInputSchema,
   openingHoursPatchInputSchema,
@@ -373,5 +378,76 @@ describe('LINE ordering switch', () => {
       false,
     );
     expect(lineOrderingPatchInputSchema.safeParse({ mode: 'open' }).success).toBe(false);
+  });
+});
+
+describe('shop receiving bank account (fake numbers only)', () => {
+  test('digits only, 10 to 15 of them; the bank code is optional and from a small list', () => {
+    expect(bankAccountSettingsSchema.parse({ accountNumber: '1234567890' })).toEqual({
+      bankCode: null,
+      accountNumber: '1234567890',
+    });
+    expect(
+      bankAccountSettingsSchema.parse({ bankCode: '004', accountNumber: '123456789012345' }),
+    ).toEqual({
+      bankCode: '004',
+      accountNumber: '123456789012345',
+    });
+    for (const bad of [
+      '123456789',
+      '1234567890123456',
+      '123-4-56789-0',
+      '12345 67890',
+      'abcdefghij',
+      '',
+    ]) {
+      expect(bankAccountSettingsSchema.safeParse({ accountNumber: bad }).success, bad).toBe(false);
+    }
+    expect(
+      bankAccountSettingsSchema.safeParse({ bankCode: '999', accountNumber: '1234567890' }).success,
+    ).toBe(false);
+  });
+  test('the default is nothing saved', () => {
+    expect(bankAccountSettingsSchema.parse({})).toEqual(DEFAULT_BANK_ACCOUNT);
+    expect(DEFAULT_BANK_ACCOUNT).toEqual({ bankCode: null, accountNumber: null });
+  });
+  test('a patch carries the version and at least one field; null clears', () => {
+    expect(bankAccountPatchInputSchema.safeParse({ expectedVersion: 0 }).success).toBe(false);
+    expect(
+      bankAccountPatchInputSchema.safeParse({ expectedVersion: 1, accountNumber: null }).success,
+    ).toBe(true);
+    expect(
+      bankAccountPatchInputSchema.safeParse({ expectedVersion: 1, bankCode: null }).success,
+    ).toBe(true);
+    expect(
+      bankAccountPatchInputSchema.safeParse({ expectedVersion: 1, accountNumber: '12' }).success,
+    ).toBe(false);
+    expect(
+      bankAccountPatchInputSchema.safeParse({
+        expectedVersion: 1,
+        extra: 1,
+        accountNumber: '1234567890',
+      }).success,
+    ).toBe(false);
+  });
+  test('the masked form keeps only the last four digits', () => {
+    expect(maskBankAccount('1234567890')).toBe('******7890');
+    expect(maskBankAccount('123456789012345')).toBe('***********2345');
+  });
+  test('the view never has room for the full number', () => {
+    const view = bankAccountViewSchema.parse({
+      bankCode: '014',
+      accountMasked: '******7890',
+      configured: true,
+    });
+    expect(Object.keys(view).sort()).toEqual(['accountMasked', 'bankCode', 'configured']);
+    expect(
+      bankAccountViewSchema.parse({
+        bankCode: '014',
+        accountMasked: '******7890',
+        configured: true,
+        accountNumber: '1234567890',
+      }),
+    ).not.toHaveProperty('accountNumber');
   });
 });

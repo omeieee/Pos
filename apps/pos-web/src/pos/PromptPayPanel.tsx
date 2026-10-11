@@ -85,20 +85,14 @@ export function PromptPayPanel({
   order,
   payment,
   actions,
-  slipMismatch = false,
-  slipDuplicate = false,
-  slipRecipientMismatch = false,
+  bankCheckRequired = false,
   children,
 }: {
   order: OrderDto;
   payment: PaymentDto;
   actions: PaymentActions;
-  /** The amount read off the customer's slip differs: confirming needs one more tap. */
-  slipMismatch?: boolean;
-  /** The slip was already used on an earlier payment: confirming needs one more tap. */
-  slipDuplicate?: boolean;
-  /** The receiver on the slip does not look like the shop's account: confirming needs one more tap. */
-  slipRecipientMismatch?: boolean;
+  /** The slip is not fully verified (D-26): confirming needs the "I checked the bank app" tick. */
+  bankCheckRequired?: boolean;
   children?: React.ReactNode;
 }) {
   const tr = useT();
@@ -209,9 +203,7 @@ export function PromptPayPanel({
           referenceLabel="payment.reference"
           showClaim
           notFoundLabel="payment.promptpay.notFound"
-          slipMismatch={slipMismatch}
-          slipDuplicate={slipDuplicate}
-          slipRecipientMismatch={slipRecipientMismatch}
+          bankCheckRequired={bankCheckRequired}
           lead={
             pending ? (
               <button type="button" className="g-btn pay-sub" onClick={() => setCustomerView(true)}>

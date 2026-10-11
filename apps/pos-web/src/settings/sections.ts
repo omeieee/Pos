@@ -17,6 +17,7 @@ export const SECTION_IDS = [
   'delivery',
   'line-ordering',
   'promptpay',
+  'bank-account',
   'receipt',
   'gov-copay',
   'devices',
@@ -91,6 +92,14 @@ export const SECTIONS: readonly SectionDef[] = [
     descKey: 'settings.promptpay.desc',
     view: 'settings.view',
     edit: 'settings.promptpay',
+    stepUpToOpen: false,
+  },
+  {
+    id: 'bank-account',
+    titleKey: 'settings.bankAccount.title',
+    descKey: 'settings.bankAccount.desc',
+    view: 'settings.bank_account',
+    edit: 'settings.bank_account',
     stepUpToOpen: false,
   },
   {

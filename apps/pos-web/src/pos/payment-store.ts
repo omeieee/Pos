@@ -139,7 +139,7 @@ export interface PaymentStore extends ReadableStore<PaymentFlowState> {
   confirm(
     orderId: string,
     paymentId: string,
-    input: { referenceNote?: string },
+    input: { referenceNote?: string; attestedBankCheck?: true },
   ): Promise<PaymentOutcome>;
   cancelClaimed(orderId: string, paymentId: string, reason: string): Promise<PaymentOutcome>;
   voidPayment(orderId: string, paymentId: string, reason: string): Promise<PaymentOutcome>;
@@ -354,10 +354,10 @@ export function createPaymentStore(deps: PaymentDeps): PaymentStore {
         null,
         null,
         move(() =>
-          deps.api.payments.confirm(
-            paymentId,
-            input.referenceNote ? { referenceNote: input.referenceNote } : {},
-          ),
+          deps.api.payments.confirm(paymentId, {
+            ...(input.referenceNote ? { referenceNote: input.referenceNote } : {}),
+            ...(input.attestedBankCheck ? { attestedBankCheck: true as const } : {}),
+          }),
         ),
       ),
 

@@ -35,6 +35,7 @@ describe('the hub', () => {
       '#/settings/line-ordering',
       '#/settings/payments',
       '#/settings/promptpay',
+      '#/settings/bank-account',
       '#/settings/receipt',
       '#/settings/gov-copay',
       '#/settings/devices',

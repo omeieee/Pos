@@ -11,9 +11,15 @@
  * - `mismatch` needs the same kind of evidence the other way: at least {@link MIN_INFORMATIVE}
  *   informative visible digits and at least {@link MIN_CONFLICTS} of them in conflict, so one misread
  *   digit cannot flag a genuine slip.
- * - everything else is `unknown`: no receiver block, a hidden number, a bank account number (a
- *   different thing from a phone or ID, so it cannot be compared), a shape that does not fit, or two
- *   numbers that disagree.
+ * - everything else is `unknown`: no receiver block, a hidden number, a number whose shape does not
+ *   fit, or two numbers that disagree.
+ *
+ * Banks also print the receiver as a masked BANK ACCOUNT (`xxx-x-x1234-x`, `123-4-56789-0`). That is
+ * compared only with the shop's receiving account number (an optional setting), by the same rules
+ * (the first {@link ACCOUNT_SKIP} digits are branch digits and carry little). The two kinds are never
+ * crossed: a number that fits the PromptPay ID's shape is judged only against the ID, an account-
+ * shaped one only against the account, and a number that could be either (an unseparated masked
+ * 10 or 13 digit string, a phone-shaped group) is never judged against the account.
  * Only the receiver's block is read. The sender's masked number (after จาก / From / ผู้โอน) is never
  * compared. The receiver's NAME is not compared. Nothing of the text is returned: only the word.
  */
@@ -25,6 +31,11 @@ export type SlipRecipientCheck = (typeof SLIP_RECIPIENT_CHECKS)[number];
 export interface SlipRecipientTarget {
   idType: 'phone' | 'national_id' | 'ewallet';
   idValue: string;
+}
+
+/** The shop's receiving bank account number, as settings hold it (10 to 15 digits). */
+export interface SlipRecipientAccount {
+  accountNumber: string;
 }
 
 /** Visible digits (past the common leading ones) needed before the answer is more than `unknown`. */
@@ -48,6 +59,12 @@ const SHAPES: Record<
   national_id: { length: 13, groups: [1, 4, 5, 2, 1], skip: 1 },
   ewallet: { length: 15, groups: null, skip: 3 },
 };
+
+/** The leading digits of an account number (branch and type) that are too common to count. */
+export const ACCOUNT_SKIP = 3;
+const ACCOUNT_DIGITS = /^[0-9]{10,15}$/;
+/** Groupings of a phone or a national ID: a number grouped like this is never an account. */
+const PROXY_GROUPS: readonly string[] = ['3,3,4', '1,4,5,2,1'];
 
 const THAI_DIGITS = '๐๑๒๓๔๕๖๗๘๙';
 const toAsciiDigits = (text: string): string =>
@@ -95,17 +112,33 @@ function shapeOf(raw: string, idType: SlipRecipientTarget['idType']): string | n
   return groups.map((group) => group.length).join() === shape.groups.join() ? compact : null;
 }
 
+/**
+ * The number as `0-9` and `?` per position when it can be a bank account of this many digits:
+ * grouped by hyphens or spaces into at least three groups (not a phone's or an ID's grouping), or
+ * a masked unseparated string of a length no phone or national ID has. Otherwise null.
+ */
+function accountShapeOf(raw: string, length: number): string | null {
+  if (raw.startsWith('+')) return null;
+  const groups = raw.split(SEPARATORS).filter((group) => group !== '');
+  const compact = groups.join('').replace(MASK, '?');
+  if (compact.length !== length) return null;
+  if (groups.length === 1) {
+    return compact.includes('?') && length !== 10 && length !== 13 ? compact : null;
+  }
+  if (groups.length < 3) return null;
+  return PROXY_GROUPS.includes(groups.map((group) => group.length).join()) ? null : compact;
+}
+
 type Verdict = 'match' | 'mismatch' | 'undetermined';
 
-function judge(compact: string, target: SlipRecipientTarget): Verdict {
-  const skip = SHAPES[target.idType].skip;
+function judge(compact: string, value: string, skip: number): Verdict {
   let informative = 0;
   let conflicts = 0;
   for (let i = 0; i < compact.length; i += 1) {
     const digit = compact[i];
     if (digit === undefined || digit === '?') continue;
     if (i >= skip) informative += 1;
-    if (digit !== target.idValue[i]) conflicts += 1;
+    if (digit !== value[i]) conflicts += 1;
   }
   if (informative < MIN_INFORMATIVE) return 'undetermined';
   if (conflicts === 0) return 'match';
@@ -143,12 +176,30 @@ function receiverNumbers(text: string): string[] {
   return found;
 }
 
-/** Whether the receiver on the slip is the shop's PromptPay ID (see the file comment for the rules). */
-export function checkSlipRecipient(text: string, target: SlipRecipientTarget): SlipRecipientCheck {
+/**
+ * Whether the receiver on the slip is the shop's PromptPay ID or its receiving bank account (see the
+ * file comment for the rules). Either may be missing; with neither, the answer is `unknown`.
+ */
+export function checkSlipRecipient(
+  text: string,
+  target: SlipRecipientTarget | null,
+  account: SlipRecipientAccount | null = null,
+): SlipRecipientCheck {
+  const accountNumber =
+    account !== null && ACCOUNT_DIGITS.test(account.accountNumber) ? account.accountNumber : null;
   const verdicts: Verdict[] = [];
   for (const raw of receiverNumbers(text)) {
-    const compact = shapeOf(raw, target.idType);
-    if (compact !== null) verdicts.push(judge(compact, target));
+    const compact = target ? shapeOf(raw, target.idType) : null;
+    if (target && compact !== null) {
+      verdicts.push(judge(compact, target.idValue, SHAPES[target.idType].skip));
+      continue;
+    }
+    if (accountNumber !== null) {
+      const accountCompact = accountShapeOf(raw, accountNumber.length);
+      if (accountCompact !== null) {
+        verdicts.push(judge(accountCompact, accountNumber, ACCOUNT_SKIP));
+      }
+    }
   }
   if (verdicts.length === 0) return 'unknown';
   if (verdicts.every((verdict) => verdict === 'match')) return 'match';

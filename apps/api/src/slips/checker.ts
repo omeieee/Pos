@@ -9,7 +9,7 @@ import {
   type SlipRecipientCheck,
 } from '@sds/shared';
 import { toPaymentDto } from '../payments/dto.ts';
-import { currentPromptpayId } from '../settings/service.ts';
+import { currentBankAccountNumber, currentPromptpayId } from '../settings/service.ts';
 import { type CoreContext, withTransaction } from '../tx.ts';
 import { imageSize } from './image.ts';
 import type { SlipOcr } from './ocr.ts';
@@ -21,7 +21,7 @@ import type { SlipStore } from './store.ts';
  * with what the payment charges. The answer is only a hint on the payment (`slip_check`): it never
  * confirms or rejects money (CLAUDE.md rule 2), never fails an upload, and keeps only the amount
  * and the verdict, the word `match`/`mismatch`/`unknown` for whether the receiver on the slip looks
- * like the shop's PromptPay ID (read from settings now, never kept), plus hashes of the bank reference and of the reference inside the slip's small
+ * like the shop's PromptPay ID or receiving account (read from settings now, never kept), plus hashes of the bank reference and of the reference inside the slip's small
  * QR (for the duplicate hint; never the references themselves). The OCR text, which holds names and account numbers, is dropped at once.
  */
 export interface SlipChecker {
@@ -95,12 +95,16 @@ export function createSlipChecker(args: {
     // share it, and it shows nothing if the database is read.
     const ref = extractSlipRef(text);
     const refHash = ref ? sha256(ref) : null;
-    // The receiver: compared with the PromptPay ID in force now. Only the word is kept; a missing ID
-    // or a failed settings read just means no answer (it must never fail the amount check).
+    // The receiver: compared with the PromptPay ID and the receiving bank account in force now.
+    // Only the word is kept; nothing set, or a failed settings read, just means no answer (it must
+    // never fail the amount check).
     let recipient: SlipRecipientCheck | null = null;
     try {
       const id = await currentPromptpayId(ctx.db);
-      if (id) recipient = checkSlipRecipient(text, id);
+      const accountNumber = await currentBankAccountNumber(ctx.db);
+      if (id || accountNumber) {
+        recipient = checkSlipRecipient(text, id, accountNumber ? { accountNumber } : null);
+      }
     } catch {
       args.log?.warn({}, 'slip recipient');
     }

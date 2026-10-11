@@ -24,6 +24,8 @@ export const PERMISSIONS = [
   'settings.gov_copay',
   /** The shop's tax ID and address printed on receipts. */
   'settings.receipt',
+  /** The shop's receiving bank account number, used only to check slip receivers (D-26). */
+  'settings.bank_account',
   'staff.manage',
   'device.manage',
   'data.export',
@@ -67,6 +69,7 @@ export const STEP_UP_PERMISSIONS: ReadonlySet<Permission> = new Set<Permission>(
   'settings.promptpay',
   'settings.gov_copay',
   'settings.receipt',
+  'settings.bank_account',
   'payment.void_refund',
   'order.edit_past',
   'staff.manage',

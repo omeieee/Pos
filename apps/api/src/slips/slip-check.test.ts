@@ -423,6 +423,70 @@ describe('the receiver on the slip (D-26)', () => {
     }
   });
 
+  describe('with the shop receiving account set (fake number)', () => {
+    const setAccount = (accountNumber: string | null) =>
+      h.client.query(
+        `insert into settings (key, value, updated_by) values ('bank_account', $1::jsonb, $2)
+         on conflict (key) do update set value = excluded.value`,
+        [JSON.stringify({ bankCode: '014', accountNumber }), ownerId],
+      );
+    afterEach(async () => {
+      await h.client.query("delete from settings where key = 'bank_account'");
+    });
+
+    test('an account-shaped receiver is compared with the account, read at check time', async () => {
+      await setAccount('1234567890');
+      expect((await run(slipTo('xxx-x-x6789-x'))).payment?.slip_recipient_check).toBe('match');
+      expect((await run(slipTo('xxx-x-x1111-x', 99900))).payment?.slip_recipient_check).toBe(
+        'mismatch',
+      );
+      // The PromptPay phone shape still goes against the PromptPay ID.
+      expect((await run(slipTo('xxx-xxx-4321'))).payment?.slip_recipient_check).toBe('match');
+      expect((await run(slipTo('xxx-xxx-8765', 99900))).payment?.slip_recipient_check).toBe(
+        'mismatch',
+      );
+    });
+
+    test('without the account an account-shaped receiver stays unknown', async () => {
+      expect((await run(slipTo('xxx-x-x6789-x'))).payment?.slip_recipient_check).toBe('unknown');
+    });
+
+    test('the account alone is enough when no PromptPay ID is saved', async () => {
+      await setAccount('1234567890');
+      const placed = await start();
+      await h.client.query("delete from settings where key = 'promptpay'");
+      try {
+        const { payment } = await run(slipTo('xxx-x-x6789-x'), placed);
+        expect(payment?.slip_recipient_check).toBe('match');
+      } finally {
+        await h.client.query(
+          "insert into settings (key, value, updated_by) values ('promptpay', $1::jsonb, $2)",
+          [JSON.stringify({ idType: 'phone', idValue: '0899994321' }), ownerId],
+        );
+      }
+    });
+
+    test('a damaged account row only means no account answer: the amount still reads', async () => {
+      await h.client.query(
+        "insert into settings (key, value, updated_by) values ('bank_account', '{\"accountNumber\": 5}'::jsonb, $1)",
+        [ownerId],
+      );
+      const { payment } = await run(slipTo('xxx-xxx-4321'));
+      expect(payment).toMatchObject({ slip_amount_satang: 1234500, slip_recipient_check: 'match' });
+    });
+
+    test('no account digits are kept anywhere after a check', async () => {
+      await setAccount('1234567890');
+      const { order } = await run(slipTo('xxx-x-x6789-x'));
+      const dump = JSON.stringify([
+        (await h.client.query('select * from payments where order_id = $1', [order.id])).rows,
+        (await h.client.query('select * from audit_log')).rows,
+      ]);
+      expect(dump).not.toContain('1234567890');
+      expect(dump).not.toContain('x6789');
+    });
+  });
+
   test('an unreadable picture has no recipient check, and a new slip clears the old one', async () => {
     const { token, order, payment } = await run(slipTo('xxx-xxx-4321'));
     expect(payment?.slip_recipient_check).toBe('match');

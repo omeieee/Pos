@@ -20,6 +20,8 @@ import {
   authMeResponseSchema,
   authStaffListResponseSchema,
   availabilityInputSchema,
+  bankAccountPatchInputSchema,
+  bankAccountViewSchema,
   businessDaySettingsSchema,
   cancelOrderInputSchema,
   categoryDtoSchema,
@@ -914,6 +916,12 @@ export function createApiClient(options: ApiClientOptions) {
     promptpayMasked,
     /** The tax ID and address printed on receipts. Owner only to change, with a step-up. */
     receipt: settingsResource('receipt', receiptSettingsSchema, receiptPatchInputSchema),
+    /** The receiving bank account, masked view only. Owner only to change, with a step-up. */
+    bankAccount: settingsResource(
+      'bank-account',
+      bankAccountViewSchema,
+      bankAccountPatchInputSchema,
+    ),
     /** The ไทยช่วยไทย scheme (`scheme` null: none saved yet). Owner only, with a step-up. */
     govCopay: {
       read: async () =>

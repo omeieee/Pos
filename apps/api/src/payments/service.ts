@@ -702,6 +702,8 @@ export interface MoveInput {
   expectedVersion?: number | undefined;
   reason?: string | undefined;
   referenceNote?: string | undefined;
+  /** Confirm only: staff ticked "I checked the bank app" (D-26). Audited, never a gate. */
+  attestedBankCheck?: true | undefined;
   /**
    * Claim only: the customer's slip image, already stored under `key`. It is written in the same
    * transaction as the claim (or, on a payment that is already claimed, replaces the old slip).
@@ -841,6 +843,9 @@ export async function movePayment(
           : {
               status: spec.to,
               ...(input.referenceNote ? { referenceNote: input.referenceNote } : {}),
+              ...(spec.to === 'confirmed' && input.attestedBankCheck
+                ? { attestedBankCheck: true }
+                : {}),
             },
       );
     }

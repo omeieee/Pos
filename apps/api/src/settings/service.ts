@@ -25,9 +25,13 @@ import {
   updateGovCopayRowIfVersion,
   updateSettingRowIfVersion,
 } from '@sds/db';
-import type { Permission } from '@sds/shared';
 import {
+  type BankAccountSettings,
+  type BankAccountView,
+  bankAccountPatchInputSchema,
+  bankAccountSettingsSchema,
   businessDaySettingsSchema,
+  DEFAULT_BANK_ACCOUNT,
   DEFAULT_CUTOFF_MINUTES,
   DEFAULT_DELIVERY_SETTINGS,
   DEFAULT_LINE_ORDERING,
@@ -42,15 +46,18 @@ import {
   govCopayDtoSchema,
   govCopayPatchInputSchema,
   govCopaySchemeSchema,
+  hasPermission,
   lineOrderingOpenAt,
   lineOrderingPatchInputSchema,
   lineOrderingSchema,
+  maskBankAccount,
   maskPromptpayId,
   numberingPatchInputSchema,
   type OpeningHours,
   openingHoursPatchInputSchema,
   openingHoursSchema,
   type PaymentsSettings,
+  type Permission,
   type PromptpaySettings,
   paymentsPatchInputSchema,
   paymentsSettingsSchema,
@@ -60,6 +67,7 @@ import {
   receiptPatchInputSchema,
   receiptSettingsSchema,
   SHOP_TIME_ZONE,
+  type StaffRole,
   shopPatchInputSchema,
   shopSettingsSchema,
 } from '@sds/shared';
@@ -90,6 +98,11 @@ interface Resource {
   promptpay?: true;
   /** The receipt tax ID and address: own audit action and owner alert; never put on the realtime feed. */
   receipt?: true;
+  /**
+   * The shop's receiving bank account (D-26): own audit action and owner alert, never on the
+   * realtime feed, and GET answers only a masked view (the full number leaves the server nowhere).
+   */
+  bankAccount?: true;
   /** The change also answers PUT (a whole-value replacement) besides PATCH. Same handler. */
   put?: true;
 }
@@ -170,6 +183,17 @@ export const RESOURCES: readonly Resource[] = [
     editPermission: 'settings.receipt',
     receipt: true,
   },
+  {
+    // The account slips are compared with (2026-10-11): owner only, step-up, audit, alert. Only the
+    // masked form is ever returned, and only to the owner; nobody else learns more than "set".
+    route: 'bank-account',
+    key: 'bank_account',
+    schema: bankAccountSettingsSchema,
+    defaults: DEFAULT_BANK_ACCOUNT,
+    patch: bankAccountPatchInputSchema,
+    editPermission: 'settings.bank_account',
+    bankAccount: true,
+  },
 ];
 
 export interface SettingResponse {
@@ -179,24 +203,54 @@ export interface SettingResponse {
   updatedAt: string | null;
 }
 
-function toResponse(resource: Resource, row: SettingRow | undefined): SettingResponse {
-  if (!row) return { value: resource.defaults, version: 0, rev: 0, updatedAt: null };
+/** The bank account as GET shows it: masked for the owner, only "set or not" for everyone else. */
+export function bankAccountView(value: BankAccountSettings, role: StaffRole): BankAccountView {
+  const owner = hasPermission(role, 'settings.bank_account');
   return {
-    value: resource.schema.parse(row.value),
+    bankCode: owner ? value.bankCode : null,
+    accountMasked: owner && value.accountNumber ? maskBankAccount(value.accountNumber) : null,
+    configured: value.accountNumber !== null,
+  };
+}
+
+function toResponse(
+  resource: Resource,
+  row: SettingRow | undefined,
+  role: StaffRole,
+): SettingResponse {
+  const shown = (value: unknown) =>
+    resource.bankAccount ? bankAccountView(value as BankAccountSettings, role) : value;
+  if (!row) return { value: shown(resource.defaults), version: 0, rev: 0, updatedAt: null };
+  return {
+    value: shown(resource.schema.parse(row.value)),
     version: row.version,
     rev: row.rev,
     updatedAt: row.updatedAt.toISOString(),
   };
 }
 
-export async function readSetting(ctx: AuthContext, resource: Resource): Promise<SettingResponse> {
-  return toResponse(resource, await getSettingRow(ctx.db, resource.key));
+export async function readSetting(
+  ctx: AuthContext,
+  resource: Resource,
+  role: StaffRole,
+): Promise<SettingResponse> {
+  return toResponse(resource, await getSettingRow(ctx.db, resource.key), role);
 }
 
 /** The PromptPay ID the QR must use right now, read from settings every time (rule 3). */
 export async function currentPromptpayId(db: Db): Promise<PromptpaySettings | null> {
   const row = await getSettingRow(db, 'promptpay');
   return row ? promptpaySettingsSchema.parse(row.value) : null;
+}
+
+/**
+ * The shop's receiving account number, read at slip-check time (D-26). Never returned by a route.
+ * A missing or damaged row is just "no account": it must not break the PromptPay comparison.
+ */
+export async function currentBankAccountNumber(db: Db): Promise<string | null> {
+  const row = await getSettingRow(db, 'bank_account');
+  const parsed = row ? bankAccountSettingsSchema.safeParse(row.value) : null;
+  return parsed?.success ? parsed.data.accountNumber : null;
 }
 
 /**
@@ -256,6 +310,12 @@ function changes(before: unknown, after: unknown) {
   return { before: beforeOut, after: afterOut };
 }
 
+/** For the audit row: the bank code and the last digits, never the number. */
+const maskedBankAccount = (value: BankAccountSettings | null) => ({
+  bankCode: value?.bankCode ?? null,
+  accountMasked: value?.accountNumber ? maskBankAccount(value.accountNumber) : null,
+});
+
 const maskedPromptpay = (value: PromptpaySettings | null) =>
   value ? { idType: value.idType, idMasked: maskPromptpayId(value.idValue) } : null;
 
@@ -280,7 +340,7 @@ export async function patchSetting(
 
     const current = row ? resource.schema.parse(row.value) : resource.defaults;
     const next = parse(resource.schema, { ...((current as object | null) ?? {}), ...given });
-    if (row && same(current, next)) return toResponse(resource, row); // nothing to change
+    if (row && same(current, next)) return toResponse(resource, row, actor.role); // nothing to change
 
     const saved = row
       ? await updateSettingRowIfVersion(tx, resource.key, version, next, actor.staffId)
@@ -292,15 +352,20 @@ export async function patchSetting(
     const openPromptpay = resource.promptpay
       ? await paymentsRepo.countOpenByMethod(tx, 'promptpay')
       : 0;
-    const view = resource.promptpay
+    const view = resource.bankAccount
       ? {
-          before: maskedPromptpay(current as PromptpaySettings | null),
-          after: {
-            ...maskedPromptpay(next as PromptpaySettings),
-            openPromptpayPayments: openPromptpay,
-          },
+          before: maskedBankAccount(current as BankAccountSettings),
+          after: maskedBankAccount(next as BankAccountSettings),
         }
-      : changes(current, next);
+      : resource.promptpay
+        ? {
+            before: maskedPromptpay(current as PromptpaySettings | null),
+            after: {
+              ...maskedPromptpay(next as PromptpaySettings),
+              openPromptpayPayments: openPromptpay,
+            },
+          }
+        : changes(current, next);
     await insertAudit(tx, {
       actorType: 'staff',
       actorId: actor.staffId,
@@ -309,7 +374,9 @@ export async function patchSetting(
         ? 'settings.promptpay_change'
         : resource.receipt
           ? 'settings.receipt_change'
-          : 'settings.update',
+          : resource.bankAccount
+            ? 'settings.bank_account_change'
+            : 'settings.update',
       entity: 'settings',
       entityId: resource.key,
       before: view.before,
@@ -325,14 +392,17 @@ export async function patchSetting(
         }),
       );
     }
-    if (resource.receipt) {
+    if (resource.receipt || resource.bankAccount) {
+      // The tax ID, the address and the account number never ride the realtime feed.
       emit(
-        securityAlert(ctx, 'settings.receipt_changed', 'warn', {
-          staffId: actor.staffId,
-          deviceId: actor.deviceId,
-        }),
+        securityAlert(
+          ctx,
+          resource.bankAccount ? 'settings.bank_account_changed' : 'settings.receipt_changed',
+          'warn',
+          { staffId: actor.staffId, deviceId: actor.deviceId },
+        ),
       );
-      return toResponse(resource, saved);
+      return toResponse(resource, saved, actor.role);
     }
     emit({
       type: 'settings.updated',
@@ -343,7 +413,7 @@ export async function patchSetting(
       // that needs it reads GET /v1/settings/promptpay, which needs `settings.view`.
       data: resource.promptpay ? maskedPromptpay(next as PromptpaySettings) : next,
     });
-    return toResponse(resource, saved);
+    return toResponse(resource, saved, actor.role);
   });
 }
 

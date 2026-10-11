@@ -1,4 +1,4 @@
-import type { OrderDto, PaymentDto, SlipCheck } from '@sds/shared';
+import type { OrderDto, PaymentDto } from '@sds/shared';
 import { useState } from 'react';
 import { s } from '../design/style.ts';
 import { useAuthState, useT } from '../ui/hooks.ts';
@@ -8,6 +8,7 @@ import { PaymentMoves } from './PaymentMoves.tsx';
 import { PromptPayPanel } from './PromptPayPanel.tsx';
 import { type PayMethod, paymentActions } from './payment-model.ts';
 import { SlipView } from './SlipView.tsx';
+import { NO_SLIP, type SlipFacts, slipNeedsBankCheck } from './slip-gate.ts';
 
 /** The screen of a payment that is waiting (pending or claimed), by method. */
 export function OpenPayment({
@@ -23,9 +24,7 @@ export function OpenPayment({
 }) {
   const tr = useT();
   const role = useAuthState().session?.staff.role;
-  const [slipCheck, setSlipCheck] = useState<SlipCheck | null>(null);
-  const [slipDuplicate, setSlipDuplicate] = useState(false);
-  const [slipRecipientMismatch, setSlipRecipientMismatch] = useState(false);
+  const [slip, setSlip] = useState<SlipFacts>(NO_SLIP);
   if (!role) return null;
   if (!payment) {
     // The order says a payment is waiting but its row has not arrived yet.
@@ -56,11 +55,7 @@ export function OpenPayment({
           paymentId={payment.id}
           rev={payment.rev}
           amountSatang={payment.amountSatang}
-          onCheck={({ check, duplicate, recipientMismatch }) => {
-            setSlipCheck(check);
-            setSlipDuplicate(duplicate);
-            setSlipRecipientMismatch(recipientMismatch);
-          }}
+          onCheck={setSlip}
         />
       ) : null}
       {payment.method === 'promptpay' ? (
@@ -68,9 +63,7 @@ export function OpenPayment({
           order={order}
           payment={payment}
           actions={actions}
-          slipMismatch={claimedPromptpay && slipCheck === 'mismatch'}
-          slipDuplicate={claimedPromptpay && slipDuplicate}
-          slipRecipientMismatch={claimedPromptpay && slipRecipientMismatch}
+          bankCheckRequired={claimedPromptpay && slipNeedsBankCheck(slip)}
         >
           {change}
         </PromptPayPanel>

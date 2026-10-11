@@ -35,6 +35,7 @@ const DEFAULT_READS = {
   payments: { cash: true, promptpay: true, platform: true, other: false },
   deliveryList: DEFAULT_DELIVERY_SETTINGS,
   receipt: DEFAULT_RECEIPT_SETTINGS,
+  bankAccount: { bankCode: null, accountMasked: null, configured: false },
   promptpayMasked: { idType: 'phone', idMasked: '******1234' },
   govCopay: { scheme: null },
 } as const;

@@ -85,6 +85,11 @@ export const confirmPaymentInputSchema = z.strictObject({
   expectedVersion: version.optional(),
   /** The ถุงเงิน or bank reference staff saw. */
   referenceNote: note.optional(),
+  /**
+   * Staff ticked "I checked the incoming transfer in the shop's bank app" (D-26). Sent only when
+   * true. The server writes it to the audit row and never blocks on it (rule 2).
+   */
+  attestedBankCheck: z.literal(true).optional(),
 });
 export type ConfirmPaymentInput = z.infer<typeof confirmPaymentInputSchema>;
 

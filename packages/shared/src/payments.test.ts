@@ -131,6 +131,10 @@ describe('transition inputs', () => {
     expect(claimPaymentInputSchema.safeParse({ amountSatang: 1 }).success).toBe(false);
     expect(confirmPaymentInputSchema.safeParse({ referenceNote: 'ถุงเงิน 8841' }).success).toBe(true);
     expect(confirmPaymentInputSchema.safeParse({ amountSatang: 1 }).success).toBe(false);
+    // Staff ticked "I checked the bank app" (D-26): recorded in the audit row, never a gate.
+    expect(confirmPaymentInputSchema.safeParse({ attestedBankCheck: true }).success).toBe(true);
+    expect(confirmPaymentInputSchema.safeParse({ attestedBankCheck: false }).success).toBe(false);
+    expect(confirmPaymentInputSchema.safeParse({ attestedBankCheck: 'yes' }).success).toBe(false);
   });
 
   test('cancel-claimed, void and refund need a reason', () => {

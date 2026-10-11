@@ -14,6 +14,8 @@
  * - `reset()` (sign-out) bumps an epoch: an answer that belongs to an earlier epoch changes nothing.
  */
 import type {
+  BankAccountPatchInput,
+  BankAccountView,
   BusinessDaySettings,
   DeliveryPatchInput,
   DeliverySettings,
@@ -51,6 +53,8 @@ export interface SettingsResources {
   promptpay: { value: PromptpayMasked | null; input: PromptpayPatchInput };
   /** The tax ID and address on receipts. Owner only, step-up first. */
   receipt: { value: ReceiptSettings; input: ReceiptPatchInput };
+  /** The receiving bank account, masked view only. Owner only, step-up first. */
+  bankAccount: { value: BankAccountView; input: BankAccountPatchInput };
   /** The saved scheme, or null when none was ever saved. Owner only. */
   copay: { value: GovCopayDto | null; input: GovCopayPatchInput };
 }
@@ -124,6 +128,7 @@ const initial = (): SettingsState => ({
     lineOrdering: emptySlot(),
     promptpay: emptySlot(),
     receipt: emptySlot(),
+    bankAccount: emptySlot(),
     copay: emptySlot(),
   },
   pending: [],
@@ -167,6 +172,7 @@ export function createSettingsStore(deps: SettingsDeps): SettingsStore {
     // Owner only, and the step-up comes first.
     promptpay: resource(s.promptpayMasked, true),
     receipt: resource(s.receipt, true),
+    bankAccount: resource(s.bankAccount, true),
     // The scheme answers `{ scheme }`; its version is the row's (0: none saved yet).
     copay: resource(
       {

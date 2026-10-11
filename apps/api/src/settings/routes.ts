@@ -6,7 +6,7 @@ import { patchGovCopay, patchSetting, RESOURCES, readGovCopay, readSetting } fro
 const meta = (request: FastifyRequest) => ({ ip: request.ip ?? null });
 
 /**
- * Mounted at /v1/settings: shop, opening-hours, numbering, payments, delivery, promptpay, gov-copay.
+ * Mounted at /v1/settings: shop, opening-hours, numbering, payments, delivery, promptpay, receipt, bank-account, gov-copay.
  * Reading needs `settings.view` (cashiers need the PromptPay ID for the QR, and the scheme for
  * the method list). Changing needs `settings.edit` (managers and the owner), except the PromptPay
  * ID (`settings.promptpay`) and the co-pay scheme (`settings.gov_copay`): owner only, with a
@@ -22,8 +22,8 @@ export async function registerSettingsRoutes(
   });
 
   for (const resource of RESOURCES) {
-    app.get(`/${resource.route}`, { onRequest: guard('settings.view') }, async () =>
-      readSetting(ctx, resource),
+    app.get(`/${resource.route}`, { onRequest: guard('settings.view') }, async (request) =>
+      readSetting(ctx, resource, principalOf(request).role),
     );
     const change = async (request: FastifyRequest) =>
       patchSetting(ctx, principalOf(request), resource, request.body, meta(request));

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { s } from '../design/style.ts';
 import { useLocale, useServices, useT } from '../ui/hooks.ts';
 import { Callout } from './PayParts.tsx';
+import type { SlipFacts } from './slip-gate.ts';
 
 const CHIP_TONE: Record<SlipCheck, string> = {
   match: 'g-b-ok',
@@ -50,12 +51,13 @@ export function SlipView({
   rev: number;
   /** What this payment charges, to put beside the amount read from the slip. */
   amountSatang: number;
-  /** Tells the payment screen how the reading stands (null: no reading) and whether the slip was used before, so it can ask for an extra tap. */
-  onCheck?: (state: {
-    check: SlipCheck | null;
-    duplicate: boolean;
-    recipientMismatch: boolean;
-  }) => void;
+  /**
+   * Tells the payment screen what is known about the slip (whether there is one, the amount and
+   * receiver readings, whether it was used before), so it can ask for the "I checked the bank app"
+   * tick. When the list cannot be read the slip is reported as present and unverified: the screen
+   * then asks for the tick (fail closed).
+   */
+  onCheck?: (facts: SlipFacts) => void;
   /** In the payment history: say nothing when there is no slip (only a payment with one shows it). */
   quiet?: boolean;
 }) {
@@ -108,13 +110,16 @@ export function SlipView({
             : null,
         );
         onCheck?.({
+          hasSlip: has,
           check: found?.check ?? null,
+          recipient: found?.recipientCheck ?? null,
           duplicate: used !== undefined,
-          recipientMismatch: found?.recipientCheck === 'mismatch',
         });
       })
       .catch(() => {
-        if (live) setKnown('unknown');
+        if (!live) return;
+        setKnown('unknown');
+        onCheck?.({ hasSlip: true, check: null, recipient: null, duplicate: false });
       });
     return () => {
       live = false;

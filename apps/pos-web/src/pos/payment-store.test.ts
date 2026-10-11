@@ -247,6 +247,15 @@ describe('moving a payment', () => {
     expect(api.payments.confirm).toHaveBeenCalledWith(PAYMENT, {});
   });
 
+  test('the "I checked the bank app" tick travels with the confirm, and only when given', async () => {
+    const { store, api } = setup();
+    await store.confirm(ORDER, PAYMENT, { referenceNote: 'A1', attestedBankCheck: true });
+    expect(api.payments.confirm).toHaveBeenCalledWith(PAYMENT, {
+      referenceNote: 'A1',
+      attestedBankCheck: true,
+    });
+  });
+
   test('nothing is shown as paid until the server answers', async () => {
     const gate = deferred<Awaited<ReturnType<PaymentDeps['api']['payments']['confirm']>>>();
     const { store, api, entities } = setup();

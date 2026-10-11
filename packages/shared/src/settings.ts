@@ -326,6 +326,63 @@ export function maskPromptpayId(value: string): string {
   return `${'*'.repeat(value.length - keep)}${value.slice(value.length - keep)}`;
 }
 
+// ---------- Shop receiving bank account (D-26) ----------
+
+/**
+ * Bank codes the owner can name (Bank of Thailand 3-digit codes). Informational: it tells staff
+ * which bank app to open. A small fixed list on purpose.
+ */
+export const THAI_BANK_CODES = [
+  '002', // Bangkok Bank
+  '004', // Kasikornbank
+  '006', // Krungthai
+  '011', // TTB
+  '014', // SCB
+  '025', // Krungsri
+  '030', // GSB
+  '034', // BAAC
+] as const;
+export const bankCodeSchema = z.enum(THAI_BANK_CODES);
+export type BankCode = z.infer<typeof bankCodeSchema>;
+
+const bankAccountNumber = z
+  .string()
+  .regex(/^[0-9]{10,15}$/, 'a bank account number of 10 to 15 digits');
+
+/**
+ * The account the shop's customers transfer to, as stored. Used only to compare the receiver printed
+ * on a slip (a hint, never a decision). Never leaves the server in full: GET answers the masked view.
+ */
+export const bankAccountSettingsSchema = z.object({
+  bankCode: bankCodeSchema.nullable().default(null),
+  accountNumber: bankAccountNumber.nullable().default(null),
+});
+export type BankAccountSettings = z.infer<typeof bankAccountSettingsSchema>;
+export const DEFAULT_BANK_ACCOUNT: BankAccountSettings = { bankCode: null, accountNumber: null };
+
+export const bankAccountPatchInputSchema = z
+  .strictObject({
+    expectedVersion,
+    bankCode: bankCodeSchema.nullable().optional(),
+    accountNumber: bankAccountNumber.nullable().optional(),
+  })
+  .refine(needsAField, needsAFieldMessage);
+export type BankAccountPatchInput = z.infer<typeof bankAccountPatchInputSchema>;
+
+/** For audit rows and screens: only the last four digits survive. */
+export function maskBankAccount(value: string): string {
+  const keep = Math.min(4, Math.max(0, value.length - 2));
+  return `${'*'.repeat(value.length - keep)}${value.slice(value.length - keep)}`;
+}
+
+/** What GET answers: never the number. Roles without `settings.bank_account` get only `configured`. */
+export const bankAccountViewSchema = z.object({
+  bankCode: bankCodeSchema.nullable(),
+  accountMasked: z.string().min(1).max(20).nullable(),
+  configured: z.boolean(),
+});
+export type BankAccountView = z.infer<typeof bankAccountViewSchema>;
+
 // ---------- Government co-pay scheme ----------
 
 /** The scheme row: the fields `govCopaySchemeSchema` knows, plus what screens show. */
