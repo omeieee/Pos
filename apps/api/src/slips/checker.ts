@@ -15,6 +15,7 @@ import {
 import { securityAlert } from '../auth/service.ts';
 import { currentBusinessDate } from '../orders/business-day.ts';
 import { toPaymentDto } from '../payments/dto.ts';
+import { autoConfirmClaimedPayment } from '../payments/service.ts';
 import {
   currentBankAccount,
   currentBankAccountNumber,
@@ -102,6 +103,11 @@ export function createSlipChecker(args: {
   verifier?: SlipVerifier;
   /** Calls to the verifier per business date; above it a slip is left to the staff tick. */
   dailyCap?: number;
+  /**
+   * D-27: confirm a PromptPay payment by itself on a valid bank check, up to this amount in satang.
+   * Null or absent: never (the default). Needs the verifier.
+   */
+  autoConfirm?: { maxSatang: number } | null;
   /** Counts and ids only: never the text. */
   log?: { warn(obj: Record<string, unknown>, msg: string): void };
 }): SlipChecker {
@@ -273,7 +279,7 @@ export function createSlipChecker(args: {
     const done = await evaluate(row, key, wantOcr, wantVerify);
     await withTransaction(ctx, async (tx, emit) => {
       // Lock order, always: the order row, then the payment (see `payments/service.ts`).
-      await ordersRepo.lockOrderById(tx, row.orderId);
+      const order = await ordersRepo.lockOrderById(tx, row.orderId);
       const locked = await paymentsRepo.lockPaymentById(tx, paymentId);
       // The owner hears about the account once a day, even when this answer turns out stale.
       if (done.verify?.alert) {
@@ -336,13 +342,36 @@ export function createSlipChecker(args: {
           patch.slipVerifiedAt = ctx.now();
         }
       }
+      // The one case where the status moves (D-27): a valid answer to a full call, every other
+      // condition re-checked under the locks inside `autoConfirmClaimedPayment`.
+      const outcome = done.verify;
+      if (
+        args.autoConfirm &&
+        verifyFresh &&
+        order &&
+        outcome?.kind === 'final' &&
+        outcome.called &&
+        outcome.verdict === 'valid' &&
+        outcome.code === '200200'
+      ) {
+        const confirmed = await autoConfirmClaimedPayment(ctx, tx, emit, {
+          order,
+          payment: locked,
+          patch,
+          referenceId: outcome.ref,
+          code: outcome.code,
+          maxSatang: args.autoConfirm.maxSatang,
+        });
+        // It wrote the payment and emitted its events itself; the plain write below is for the rest.
+        if (confirmed) return;
+      }
       const updated = await paymentsRepo.updatePaymentIfVersion(
         tx,
         locked.id,
         locked.version,
         patch,
       );
-      // The payment's status is never touched here. Devices get the new rev and ask for the hint.
+      // Without the case above the status is never touched. Devices get the new rev and ask for the hint.
       if (updated) {
         emit({
           type: 'payment.upserted',

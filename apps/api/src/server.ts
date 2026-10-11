@@ -88,7 +88,11 @@ if (config.slipOcr || verifier) {
       ...(config.slipOcr ? { ocr: createTesseractOcr(config.slipOcr) } : {}),
       ...(config.slipQr ? { qr: createWorkerQrReader() } : {}),
       ...(verifier && config.slipVerifier
-        ? { verifier, dailyCap: config.slipVerifier.dailyCap }
+        ? {
+            verifier,
+            dailyCap: config.slipVerifier.dailyCap,
+            autoConfirm: config.slipAutoconfirm,
+          }
         : {}),
       log: app.log,
     }),
