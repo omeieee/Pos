@@ -227,7 +227,7 @@ export function PayFrame({
         )}
       >
         <div style={s('flex-grow:1;min-width:0')}>
-          <h2 id="pay-title" className="g-t-1" style={s('margin:0')}>
+          <h2 id="pay-title" tabIndex={-1} className="g-t-1" style={s('margin:0')}>
             {title}
           </h2>
           <div className="g-t-s">{tr('payment.staffConfirms')}</div>

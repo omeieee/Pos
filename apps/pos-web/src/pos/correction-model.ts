@@ -4,10 +4,11 @@
  * sold price and the server recomputes every total, so the screen shows only what the server sent.
  */
 import {
+  type AdjustRefundInput,
+  type CorrectionPaymentAction,
   type CorrectOrderInput,
   hasPermission,
   type OrderDto,
-  type PastOrderPaymentAction,
   type StaffRole,
 } from '@sds/shared';
 import type { MenuItemView } from './menu-model.ts';
@@ -36,6 +37,20 @@ const ACTIVE_PAYMENT: readonly OrderDto['paymentStatus'][] = [
 
 export const hasActivePayment = (order: OrderDto): boolean =>
   order.status !== 'cancelled' && ACTIVE_PAYMENT.includes(order.paymentStatus);
+
+/** The customer's claim is waiting for staff: the money is not confirmed yet. */
+export const hasClaimedPayment = (order: OrderDto): boolean =>
+  order.status !== 'cancelled' && order.paymentStatus === 'awaiting_confirmation';
+
+/**
+ * What is preselected for the payment. A claimed payment has no confirmed money, so cancelling it
+ * ("void") is preselected. A confirmed one preselects nothing: the owner must choose on purpose.
+ */
+export const defaultPaymentAction = (order: OrderDto): CorrectionPaymentAction | null =>
+  hasClaimedPayment(order) ? 'void' : null;
+
+/** The choices, "adjust" first. A claimed payment cannot be adjusted (confirm or cancel it first). */
+export const CORRECTION_CHOICES: readonly CorrectionPaymentAction[] = ['adjust', 'void', 'refund'];
 
 /** The actions are the owner's: the shared permission decides, and a voided order has nothing to change. */
 export const canCorrectOrder = (
@@ -106,7 +121,9 @@ export interface CorrectionDraft {
   lines: readonly DraftLine[];
   note: string;
   reason: string;
-  paymentAction: PastOrderPaymentAction | null;
+  paymentAction: CorrectionPaymentAction | null;
+  /** How the difference goes back, once the server has said the total is lower. Only with "adjust". */
+  refund?: { method: AdjustRefundInput['method'] | null; referenceNote: string } | undefined;
 }
 
 /** Whether something differs from the saved order (otherwise the server answers NOTHING_TO_CHANGE). */
@@ -143,6 +160,16 @@ export function buildCorrection(order: OrderDto, draft: CorrectionDraft): Correc
       : {}),
     ...(draft.paymentAction && hasActivePayment(order)
       ? { paymentAction: draft.paymentAction }
+      : {}),
+    ...(draft.paymentAction === 'adjust' && hasActivePayment(order) && draft.refund?.method
+      ? {
+          refund: {
+            method: draft.refund.method,
+            ...(draft.refund.referenceNote.trim() !== ''
+              ? { referenceNote: draft.refund.referenceNote.trim() }
+              : {}),
+          },
+        }
       : {}),
   };
 }

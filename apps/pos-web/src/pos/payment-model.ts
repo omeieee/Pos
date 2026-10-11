@@ -39,6 +39,36 @@ export function paymentsOf(state: Pick<EntityState, 'payments'>, orderId: string
     .sort((a, b) => a.rev - b.rev || a.id.localeCompare(b.id));
 }
 
+/**
+ * What a payment charges. A started payment says so itself (`amountSatang`); before one exists the
+ * server's `dueSatang` (order total minus net paid) is shown. Both are server figures: only when
+ * the server has not answered yet (`dueSatang` undefined) is the amount unknown, and the result is
+ * null: show a loading state, offer nothing that needs the amount. The one exception is an order
+ * known to have no payments yet (`paymentStatus` unpaid, or no status at all for an order that only
+ * exists on this device): its due is its total, with no arithmetic. The server charges the real
+ * amount whatever is shown.
+ */
+export function collectAmount(
+  order: Pick<OrderDto, 'totalSatang'> & { paymentStatus?: OrderDto['paymentStatus'] },
+  payment: Pick<PaymentDto, 'amountSatang'>,
+  dueSatang?: number | null,
+): Satang;
+export function collectAmount(
+  order: Pick<OrderDto, 'totalSatang'> & { paymentStatus?: OrderDto['paymentStatus'] },
+  payment: Pick<PaymentDto, 'amountSatang'> | undefined,
+  dueSatang: number | null | undefined,
+): Satang | null;
+export function collectAmount(
+  order: Pick<OrderDto, 'totalSatang'> & { paymentStatus?: OrderDto['paymentStatus'] },
+  payment: Pick<PaymentDto, 'amountSatang'> | undefined,
+  dueSatang?: number | null,
+): Satang | null {
+  if (payment) return payment.amountSatang as Satang;
+  if (dueSatang != null) return dueSatang as Satang;
+  const noPayments = order.paymentStatus === undefined || order.paymentStatus === 'unpaid';
+  return noPayments ? (order.totalSatang as Satang) : null;
+}
+
 /** The payment that was received (the latest confirmed one). */
 export function confirmedPayment(payments: readonly PaymentDto[]): PaymentDto | undefined {
   return [...payments].reverse().find((p) => p.status === 'confirmed');

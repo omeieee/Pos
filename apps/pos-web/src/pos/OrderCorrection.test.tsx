@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { catalogs } from '@sds/i18n';
+import { catalogs, formatBaht } from '@sds/i18n';
 import { type OrderDto, type StaffRole, satang } from '@sds/shared';
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
@@ -7,7 +7,7 @@ import { ApiClientError } from '../api/errors.ts';
 import { orderDto, uuid } from '../test-support/frames.ts';
 import { createTestAuth, createTestServices, renderScreen } from '../test-support/render.tsx';
 import { MemberLine } from './MemberLine.tsx';
-import { OrderCorrectionActions } from './OrderCorrection.tsx';
+import { newRefunds, OrderCorrectionActions } from './OrderCorrection.tsx';
 
 const th = catalogs.th;
 const ID = uuid(900);
@@ -56,7 +56,7 @@ async function setup(
   }
   const env = createTestServices({ auth, ...orders });
   env.entities.apply({ type: 'order.upserted', id: order.id, rev: order.rev, data: order });
-  env.payments.refresh = vi.fn(async () => undefined);
+  if (!orders.payments?.list) env.payments.refresh = vi.fn(async () => undefined);
   renderScreen(<OrderCorrectionActions order={order} />, env.services);
   return { ...env, auth };
 }
@@ -171,6 +171,108 @@ describe('the edit sheet', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: th['order.fix.save'] }));
     await waitFor(() => expect(auth.getState().stepUpOpen).toBe(true));
     expect(correct).not.toHaveBeenCalled();
+  });
+});
+
+describe('what the owner hands back after an adjusted payment', () => {
+  const refundRow = (n: number, amountSatang: number, method: 'cash' | 'promptpay') => ({
+    id: uuid(700 + n),
+    paymentId: uuid(600 + n),
+    amountSatang: satang(amountSatang),
+    method,
+    referenceNote: null,
+    reason: 'แก้ไขออเดอร์',
+    refundedAt: '2030-10-15T05:00:00.000Z',
+  });
+  const ledgerAnswer = (refunds: ReturnType<typeof refundRow>[]) => ({
+    payments: [],
+    refunds,
+    netPaidSatang: satang(10000),
+    dueSatang: satang(0),
+  });
+
+  /** Opens the edit sheet, adjusts the payment down, picks the refund method and saves. */
+  async function adjustDown(list: ReturnType<typeof vi.fn>) {
+    const answer = pastOrder({ version: 10, rev: 41, totalSatang: satang(10000) });
+    let calls = 0;
+    const correct = vi.fn(async () => {
+      calls += 1;
+      if (calls === 1) throw new ApiClientError('REFUND_DETAILS_REQUIRED', { status: 409 });
+      return answer;
+    });
+    const env = await setup('owner', pastOrder(), {
+      orders: { correct, get: async () => answer },
+      payments: { list },
+    } as never);
+    await env.payments.refresh(ID);
+    fireEvent.click(button(th['order.fix.edit']));
+    const dialog = screen.getByRole('dialog');
+    fireEvent.click(
+      within(dialog).getByRole('button', {
+        name: th['order.fix.remove'].replace('{name}', 'ก๋วยเตี๋ยวไก่'),
+      }),
+    );
+    fireEvent.change(within(dialog).getByLabelText(th['order.fix.reason']), {
+      target: { value: 'ลบจาน' },
+    });
+    fireEvent.click(within(dialog).getByRole('radio', { name: th['payment.void.kind.adjust'] }));
+    fireEvent.click(within(dialog).getByRole('checkbox', { name: th['order.fix.understand'] }));
+    fireEvent.click(within(dialog).getByRole('button', { name: th['order.fix.save'] }));
+    await within(dialog).findByTestId('refund-choice');
+    fireEvent.click(within(dialog).getByRole('radio', { name: th['order.fix.refund.cash'] }));
+    fireEvent.click(within(dialog).getByRole('button', { name: th['order.fix.save'] }));
+  }
+
+  test('a refund spread over two payments lists each new row with its own amount and method', async () => {
+    const old = refundRow(1, 1111, 'cash');
+    const list = vi
+      .fn()
+      .mockResolvedValueOnce(ledgerAnswer([old]))
+      .mockResolvedValue(
+        ledgerAnswer([old, refundRow(2, 3000, 'cash'), refundRow(3, 2000, 'promptpay')]),
+      );
+    await adjustDown(list);
+    const done = await screen.findByRole('status');
+    const text = done.textContent ?? '';
+    expect(text).toContain(
+      th['order.fix.done.refund']
+        .replace('{amount}', formatBaht(3000, 'th'))
+        .replace('{method}', th['payment.method.cash']),
+    );
+    expect(text).toContain(
+      th['order.fix.done.refund']
+        .replace('{amount}', formatBaht(2000, 'th'))
+        .replace('{method}', th['payment.method.promptpay']),
+    );
+    // The older refund is not listed, and nothing is added up.
+    expect(text).not.toContain(formatBaht(1111, 'th'));
+    expect(text).not.toContain(formatBaht(5000, 'th'));
+  });
+
+  test('a ledger that did not change shows no number, only where to look', async () => {
+    const list = vi.fn().mockResolvedValue(ledgerAnswer([refundRow(1, 1111, 'cash')]));
+    await adjustDown(list);
+    const done = await screen.findByRole('status');
+    expect(done.textContent).toBe(th['order.fix.done.refundNoAmount']);
+  });
+
+  test('a failed ledger refresh shows no number either', async () => {
+    const list = vi
+      .fn()
+      .mockResolvedValueOnce(ledgerAnswer([refundRow(1, 1111, 'cash')]))
+      .mockRejectedValue(new ApiClientError('NETWORK', { status: 0 }));
+    await adjustDown(list);
+    const done = await screen.findByRole('status');
+    expect(done.textContent).toBe(th['order.fix.done.refundNoAmount']);
+  });
+
+  test('newRefunds: rows by id, and nothing can be told without a ledger from before', () => {
+    const a = refundRow(1, 100, 'cash');
+    const b = refundRow(2, 200, 'promptpay');
+    expect(newRefunds([a], [a, b])).toEqual([b]);
+    expect(newRefunds([a], [a])).toEqual([]);
+    expect(newRefunds(undefined, [a, b])).toBeNull();
+    expect(newRefunds([a], undefined)).toBeNull();
   });
 });
 

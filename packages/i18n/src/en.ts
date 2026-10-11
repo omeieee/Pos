@@ -170,7 +170,40 @@ export const en = {
   'order.fix.keep': 'Do not change',
   'order.fix.sending': 'Sending…',
   'order.fix.error.voided': 'This order is already voided, so it cannot be edited.',
-  'error.paymentActionRequired': 'This order has a payment. Choose to void or refund it first.',
+  'order.fix.adjust.explain':
+    'Adjust: the money already received stays. If the new total is lower, only the difference is returned. If it is higher, only the difference is collected on the payment page. The system works out the amount when you save.',
+  'order.fix.adjust.claimedFirst':
+    'A transfer claim is waiting. Confirm or cancel the claim on the payment page before you can adjust.',
+  'order.fix.adjust.refundTitle':
+    'The new total is lower than what was received, so the difference goes back to the customer. Choose how (the system works out the amount, do not type it).',
+  'order.fix.adjust.refundHint':
+    'If the system finds the new total lower than what was received, you will be asked how to return the difference before saving.',
+  'order.fix.refund.method': 'Return the difference by',
+  'order.fix.refund.cash': 'Cash',
+  'order.fix.refund.promptpay': 'PromptPay transfer',
+  'order.fix.refund.reference': 'Transfer reference or note (optional)',
+  'order.fix.done.title': 'The change is saved',
+  'order.fix.done.refund': 'Give the customer {amount} back ({method})',
+  'order.fix.done.refundNoAmount':
+    'The refund of the difference is recorded. See the amount under money received and returned.',
+  'order.fix.done.collect':
+    'The new total is higher than what was received. Collect {amount} more on the usual payment page.',
+  'order.fix.done.collectNoAmount':
+    'The new total is higher than what was received. Collect the difference on the usual payment page.',
+  'order.fix.done.goPay': 'Go to payment',
+  'order.fix.done.close': 'Close',
+  'error.adjustClaimOpen':
+    'A transfer claim is not confirmed yet. Confirm or cancel it on the payment page and then adjust, or choose to void the payment instead.',
+  'error.adjustTotalZero':
+    'The new total is zero, so it cannot be adjusted. Void the whole order or refund everything instead.',
+  'error.adjustMethodNotAdjustable':
+    'The money was received by a method that cannot be partly returned (co-pay, platform or other). Choose to void or refund the payment in full, then collect the new total again.',
+  'error.refundDetailsRequired':
+    'The new total is lower than what was received. Choose how to return the difference before saving.',
+  'error.refundNotNeeded':
+    'The new total is not lower than what was received, so nothing is returned. Save again.',
+  'error.paymentActionRequired':
+    'This order has a payment. Choose to adjust, void or refund it first.',
   'error.nothingToChange': 'Nothing was changed.',
   'error.discountExceedsSubtotal':
     'The discount would be larger than the lines after this change, so it cannot be saved.',
@@ -382,6 +415,7 @@ export const en = {
   'payment.void.kindLabel': 'What to do',
   'payment.void.kind.void': 'Cancel the record (entered by mistake)',
   'payment.void.kind.refund': 'Refund the customer',
+  'payment.void.kind.adjust': 'Adjust (keep the money received)',
   'payment.void.reason': 'Reason (required)',
   'payment.void.reasonPlaceholder': 'e.g. wrong change given',
   'payment.void.audited':
@@ -391,6 +425,10 @@ export const en = {
   'payment.paid.title': 'Payment received',
   'payment.paid.detail': '{method} · {time}',
   'payment.history.title': 'Payment history',
+  'payment.ledger.title': 'Money received and returned',
+  'payment.ledger.netPaid': 'Net received',
+  'payment.ledger.refund': 'Refund ({method})',
+  'payment.ledger.due': 'Still to collect',
   'payment.history.empty': 'No payments yet',
   'payment.history.cash': 'Received {tendered} · change {change}',
   'payment.history.reason': 'Reason: {reason}',
@@ -1301,7 +1339,7 @@ export const en = {
     'Tap "Order" in the menu below to order. We deliver to the building entrance only.',
   'lineBot.privacy.title': 'Privacy notice',
   'lineBot.privacy.summary':
-    'The shop keeps your LINE user ID, display name, the recipient name and building, your orders, and the slip picture if you send one (kept 90 days), to prepare, deliver and take payment for them and to keep the shop accounts. Data controller: {controller}. To see, correct or delete your data, write to {contact}.',
+    'The shop keeps your LINE user ID, display name, your orders, and the slip picture if you send one (kept 90 days), to prepare, deliver and take payment for them and to keep the shop accounts. If you fill in your member profile (full name, nickname, phone, building), the shop uses it to tell who an order belongs to and to contact you about it. Every field is optional; leave it empty or clear it any time. The profile is kept until you ask to erase it, or 24 months after your last order. Names and buildings on orders are erased 30 days after an order is done. Data controller: {controller}. To see, correct or delete your data, write to {contact}.',
   'lineBot.privacy.readNotice': 'Read the full notice',
   'lineBot.privacy.ackButton': 'I understand',
   'lineBot.privacy.acked': 'Thank you. Your acknowledgement of the privacy notice is saved.',
@@ -1323,6 +1361,11 @@ export const en = {
   'lineBot.ready.title': 'Your food is ready · {orderNo}',
   'lineBot.ready.body': 'Order {orderNo} is ready at the entrance of building {building}',
   'lineBot.ready.altText': 'Your food is ready, order {orderNo}',
+  'lineBot.orderChange.voided': 'The shop has cancelled order {orderNo}.',
+  'lineBot.orderChange.edited':
+    'The shop has changed the items of order {orderNo}. New total {total}',
+  'lineBot.orderChange.refund': 'The shop has refunded {amount}',
+  'lineBot.orderChange.due': 'Amount to pay: {amount}. You can pay the shop directly.',
   'lineBot.receipt.title': 'Electronic receipt',
   'lineBot.receipt.total': 'Amount paid',
   'lineBot.receipt.method': 'Paid by {method}',
@@ -1402,7 +1445,7 @@ export const en = {
     'An order can have up to 50 items. Please reduce the quantity or split it.',
   'liff.privacy.title': 'Privacy notice',
   'liff.privacy.body':
-    'The shop keeps your LINE user ID, the recipient name and building, notes, your orders and the slip picture if you attach one (kept 90 days), to prepare, deliver and take payment for them and to keep the shop accounts. Names and buildings are erased 30 days after an order is done. To see, correct or delete your data, write in the shop chat on LINE.',
+    'The shop keeps your LINE user ID, the recipient name and building, notes, your orders and the slip picture if you attach one (kept 90 days), to prepare, deliver and take payment for them and to keep the shop accounts.\n\nMember profile: if you fill it in, the shop keeps your full name, nickname, phone number and building (typed by you) to tell who you are and which orders are yours, and to contact you about an order. Every field is optional; you can leave it empty or clear it yourself. The profile is kept until you ask to erase it, or until 24 months after your last order, when it is cleared.\n\nNames and buildings attached to an order are erased 30 days after the order is done. To see, correct or delete your data, write in the shop chat on LINE.',
   'liff.privacy.accept': 'I understand, start ordering',
   'liff.menu.title': 'Menu',
   'liff.menu.empty': 'Nothing to order yet.',

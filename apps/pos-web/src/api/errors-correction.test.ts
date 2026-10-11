@@ -38,3 +38,23 @@ describe('errors of the owner correction and void', () => {
     }
   });
 });
+
+describe('errors of the partial adjustment', () => {
+  const CODES = {
+    ADJUST_CLAIM_OPEN: 'error.adjustClaimOpen',
+    ADJUST_TOTAL_ZERO: 'error.adjustTotalZero',
+    ADJUST_METHOD_NOT_ADJUSTABLE: 'error.adjustMethodNotAdjustable',
+    REFUND_DETAILS_REQUIRED: 'error.refundDetailsRequired',
+    REFUND_NOT_NEEDED: 'error.refundNotNeeded',
+  } as const;
+
+  test.each(Object.entries(CODES))('%s has its own Thai and English message', (code, key) => {
+    expect(say(code, 'correction')).toBe(th[key as keyof typeof th]);
+    expect(en[key as keyof typeof en]).not.toBe(th[key as keyof typeof th]);
+  });
+
+  test('the two that need an action say what to do', () => {
+    expect(th['error.adjustClaimOpen']).toContain('หน้าชำระเงิน');
+    expect(th['error.adjustMethodNotAdjustable']).toContain('คืนเงินทั้งหมด');
+  });
+});

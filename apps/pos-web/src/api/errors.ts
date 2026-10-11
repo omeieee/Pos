@@ -57,6 +57,11 @@ export const API_ERROR_KEYS = {
   NOTHING_TO_CHANGE: 'error.nothingToChange',
   DISCOUNT_EXCEEDS_SUBTOTAL: 'error.discountExceedsSubtotal',
   UNKNOWN_ORDER_ITEM: 'error.unknownOrderItem',
+  ADJUST_CLAIM_OPEN: 'error.adjustClaimOpen',
+  ADJUST_TOTAL_ZERO: 'error.adjustTotalZero',
+  ADJUST_METHOD_NOT_ADJUSTABLE: 'error.adjustMethodNotAdjustable',
+  REFUND_DETAILS_REQUIRED: 'error.refundDetailsRequired',
+  REFUND_NOT_NEEDED: 'error.refundNotNeeded',
   // Pricing: sent inside ORDER_INVALID (`details.errors`), see `lineErrors`
   UNKNOWN_ITEM: 'error.unknownItem',
   ITEM_UNAVAILABLE: 'error.itemUnavailable',

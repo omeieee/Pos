@@ -6,7 +6,13 @@ import { s } from '../design/style.ts';
 import { useEntities, useLocale, useT } from '../ui/hooks.ts';
 import { PaymentMoves } from './PaymentMoves.tsx';
 import { Callout, PaySteps, usePayDims } from './PayParts.tsx';
-import { copayEstimate, govCopayScheme, type PaymentActions } from './payment-model.ts';
+import {
+  collectAmount,
+  copayEstimate,
+  govCopayScheme,
+  type PaymentActions,
+} from './payment-model.ts';
+import { useLedger } from './use-ledger.ts';
 import './pay-glass.css';
 
 /**
@@ -36,9 +42,19 @@ export function GovCopaySteps({
   const dims = usePayDims();
   const phone = dims.layout === 'phone';
   const scheme = govCopayScheme(useEntities().settings);
-  const estimate = copayEstimate(order.totalSatang, payment, scheme);
+  // The amount for ถุงเงิน is this payment's own (total minus what was already paid).
+  const dueOrNull = collectAmount(order, payment, useLedger(order.id)?.dueSatang);
+  if (dueOrNull === null) {
+    return (
+      <p className="g-t-s" role="status" data-testid="copay-loading" style={s('margin:0')}>
+        {tr('payment.loading')}
+      </p>
+    );
+  }
+  const due = dueOrNull;
+  const estimate = copayEstimate(due, payment, scheme);
   const money = (value: number) => formatBaht(value, locale);
-  const amount = money(order.totalSatang);
+  const amount = money(due);
   const started = payment !== undefined;
 
   return (

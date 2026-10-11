@@ -21,10 +21,12 @@ import { OfflinePromptPay } from './OfflinePromptPay.tsx';
 import { OpenPayment } from './OpenPayment.tsx';
 import type { QueuedPayment } from './outbox-model.ts';
 import { PaymentHistory } from './PaymentHistory.tsx';
+import { PaymentLedger } from './PaymentLedger.tsx';
 import { Callout, PayFrame, usePayDims } from './PayParts.tsx';
 import { PromptPayStart } from './PromptPayPanel.tsx';
 import {
   COPAY_TICK_MS,
+  collectAmount,
   confirmedPayment,
   methodOptions,
   openPayment,
@@ -89,6 +91,16 @@ function PaymentPanelBody({ orderId }: { orderId: string }) {
     };
   }, [flow, orderId]);
 
+  // Refunds are not on the realtime feed: read them again whenever the order itself changes (an
+  // owner's correction, a payment that moved it). The first load above covers rev 0 of this view.
+  const orderRev = order?.rev;
+  const seenRev = useRef(orderRev);
+  useEffect(() => {
+    if (orderRev === undefined || seenRev.current === orderRev) return;
+    seenRev.current = orderRev;
+    void flow.refresh(orderId);
+  }, [flow, orderId, orderRev]);
+
   const list = paymentsOf(entities, orderId);
   const maxRev = list.reduce((most, p) => Math.max(most, p.rev), 0);
   const mine = flowState.orderId === orderId;
@@ -146,6 +158,10 @@ function PaymentPanelBody({ orderId }: { orderId: string }) {
     : (options.find((o) => o.enabled)?.method ?? null);
   const money = (value: number) => formatBaht(value, locale);
   const received = confirmedPayment(list);
+  const ledger = flowState.ledger[orderId];
+  // Once paid nothing is due: show the order total then, the server's amount while collecting.
+  const charged =
+    phase === 'paid' ? order.totalSatang : collectAmount(order, waiting, ledger?.dueSatang);
   const remember = (method: PayMethod) => {
     attempted.current = method;
   };
@@ -165,7 +181,7 @@ function PaymentPanelBody({ orderId }: { orderId: string }) {
       title={title}
       notes={showSwitch ? <MethodNotes options={options} choice={switchChoice} /> : null}
       amountLabel={tr('payment.amountDue')}
-      amountText={money(order.totalSatang)}
+      amountText={charged === null ? '—' : money(charged)}
       switcher={
         showSwitch ? (
           <MethodTiles
@@ -187,9 +203,14 @@ function PaymentPanelBody({ orderId }: { orderId: string }) {
         ) : null
       }
       disabled={lost.busyElsewhere}
-      after={<PaymentHistory payments={pastPayments} />}
+      after={
+        <>
+          <PaymentLedger orderId={orderId} />
+          <PaymentHistory payments={pastPayments} />
+        </>
+      }
     >
-      {!loaded ? (
+      {!loaded || (charged === null && (phase === 'choose' || phase === 'open')) ? (
         <p className="g-t-s" role="status" style={s('margin:0')}>
           {tr('payment.loading')}
         </p>

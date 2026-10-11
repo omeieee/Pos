@@ -5,9 +5,12 @@ import {
   addableItems,
   addMenuLine,
   buildCorrection,
+  CORRECTION_CHOICES,
   canCorrectOrder,
+  defaultPaymentAction,
   draftFromOrder,
   hasActivePayment,
+  hasClaimedPayment,
   removeLine,
   setLineQty,
 } from './correction-model.ts';
@@ -149,5 +152,53 @@ describe('the correction request', () => {
         paymentAction: 'refund',
       }),
     ).not.toHaveProperty('paymentAction');
+  });
+});
+
+describe('adjusting a paid order', () => {
+  const changed = (over: Partial<Parameters<typeof buildCorrection>[1]> = {}) => ({
+    lines: draftFromOrder(order()).map((l, i) => (i === 0 ? { ...l, qty: 1 } : l)),
+    note: '',
+    reason: 'ลดจาน',
+    paymentAction: 'adjust' as const,
+    ...over,
+  });
+
+  test('a claimed payment preselects void, a confirmed one nothing', () => {
+    expect(defaultPaymentAction(order({ paymentStatus: 'awaiting_confirmation' }))).toBe('void');
+    expect(defaultPaymentAction(order())).toBeNull();
+    expect(defaultPaymentAction(order({ paymentStatus: 'partially_paid' }))).toBeNull();
+    expect(hasClaimedPayment(order({ paymentStatus: 'awaiting_confirmation' }))).toBe(true);
+  });
+
+  test('adjust is offered first', () => {
+    expect(CORRECTION_CHOICES).toEqual(['adjust', 'void', 'refund']);
+  });
+
+  test('adjust alone sends no refund and never an amount', () => {
+    const input = buildCorrection(order(), changed());
+    expect(input?.paymentAction).toBe('adjust');
+    expect(input).not.toHaveProperty('refund');
+  });
+
+  test('a refund method goes with adjust only, trimmed, without an empty note', () => {
+    const withRefund = buildCorrection(
+      order(),
+      changed({ refund: { method: 'cash', referenceNote: '  ' } }),
+    );
+    expect(withRefund?.refund).toEqual({ method: 'cash' });
+    const noted = buildCorrection(
+      order(),
+      changed({ refund: { method: 'promptpay', referenceNote: ' r1 ' } }),
+    );
+    expect(noted?.refund).toEqual({ method: 'promptpay', referenceNote: 'r1' });
+    const other = buildCorrection(
+      order(),
+      changed({ paymentAction: 'void', refund: { method: 'cash', referenceNote: '' } }),
+    );
+    expect(other).not.toHaveProperty('refund');
+    expect(
+      buildCorrection(order(), changed({ refund: { method: null, referenceNote: '' } })),
+    ).not.toHaveProperty('refund');
   });
 });

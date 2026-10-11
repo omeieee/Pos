@@ -7,7 +7,7 @@ import { Gi } from '../design/icons.tsx';
 import { s } from '../design/style.ts';
 import { useActivityHold, useLocale, useServices, useStoreState, useT } from '../ui/hooks.ts';
 import { Callout, PayModal, SheetBody, SheetTitle, TextRow } from './PayParts.tsx';
-import type { PaymentActions } from './payment-model.ts';
+import { collectAmount, type PaymentActions } from './payment-model.ts';
 import { flowFor } from './payment-store.ts';
 
 const MOVE_ACTIONS = ['claim', 'confirm', 'cancelClaimed'] as const;
@@ -141,7 +141,9 @@ export function PaymentMoves({
           <Gi n="check" />
           {sending
             ? tr('payment.sending')
-            : tr('payment.confirmAmount', { amount: formatBaht(order.totalSatang, locale) })}
+            : tr('payment.confirmAmount', {
+                amount: formatBaht(collectAmount(order, payment, undefined), locale),
+              })}
         </button>
       ) : null}
 

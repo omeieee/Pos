@@ -11,6 +11,7 @@ import {
 } from '../test-support/frames.ts';
 import {
   cashView,
+  collectAmount,
   confirmedPayment,
   copayEstimate,
   copayVerdict,
@@ -49,6 +50,33 @@ describe('the payments of an order', () => {
     expect(openPayment([pay(1, { status: 'confirmed' }), pay(2, { status: 'voided' })])).toBe(
       undefined,
     );
+  });
+});
+
+describe('the amount a payment collects', () => {
+  const partly = { totalSatang: satang(15000), paymentStatus: 'partially_paid' } as const;
+
+  test('a payment already started says its own amount', () => {
+    expect(collectAmount(partly, { amountSatang: satang(4000) }, undefined)).toBe(4000);
+  });
+
+  test('the server due wins once the ledger has loaded', () => {
+    expect(collectAmount(partly, undefined, 5000)).toBe(5000);
+    expect(collectAmount(partly, undefined, 0)).toBe(0);
+  });
+
+  test('a part-paid order has no amount until the ledger loads', () => {
+    expect(collectAmount(partly, undefined, undefined)).toBeNull();
+    expect(
+      collectAmount({ ...partly, paymentStatus: 'awaiting_confirmation' }, undefined, null),
+    ).toBeNull();
+  });
+
+  test('an order with no payments yet, or only on this device, is due its total', () => {
+    expect(
+      collectAmount({ totalSatang: satang(15000), paymentStatus: 'unpaid' }, undefined, undefined),
+    ).toBe(15000);
+    expect(collectAmount({ totalSatang: satang(15000) }, undefined, undefined)).toBe(15000);
   });
 });
 

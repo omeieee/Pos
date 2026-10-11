@@ -8,8 +8,15 @@ import { useActivityHold, useLocale, useServices, useStoreState, useT } from '..
 import type { EnqueueResult } from './outbox-store.ts';
 import { saveErrorText } from './outbox-text.ts';
 import { Callout, usePayDims } from './PayParts.tsx';
-import { cashView, keyToTender, type PayMethod, quickTenders } from './payment-model.ts';
+import {
+  cashView,
+  collectAmount,
+  keyToTender,
+  type PayMethod,
+  quickTenders,
+} from './payment-model.ts';
 import { flowFor } from './payment-store.ts';
+import { useLedger } from './use-ledger.ts';
 import './pay-glass.css';
 
 const DIGIT_KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '00', '0'] as const;
@@ -76,8 +83,18 @@ export function CashPanel({
   const sending = mine.sending !== null || saving;
   const unsure = attempt !== null;
   const locked = sending || (sentCash !== null && tender !== null);
-  const view = cashView(order.totalSatang, tender);
-  const chips = quickTenders(order.totalSatang);
+  // What this payment charges: the server's amount still due (order total minus net paid).
+  const dueOrNull = collectAmount(order, undefined, useLedger(order.id)?.dueSatang);
+  if (dueOrNull === null) {
+    return (
+      <p className="g-t-s" role="status" data-testid="cash-loading" style={s('margin:0')}>
+        {tr('payment.loading')}
+      </p>
+    );
+  }
+  const due = dueOrNull;
+  const view = cashView(due, tender);
+  const chips = quickTenders(due);
   const failure = !sending && mine.refused?.action === action ? mine.refused.error : null;
 
   async function confirm() {
@@ -106,12 +123,12 @@ export function CashPanel({
       ? tr('outbox.cash.confirm')
       : view.change !== null && view.change > 0
         ? tr('payment.cash.confirmWithChange', {
-            amount: money(order.totalSatang),
+            amount: money(due),
             change: money(view.change),
           })
-        : tr('payment.confirmAmount', { amount: money(order.totalSatang) });
+        : tr('payment.confirmAmount', { amount: money(due) });
   // Nothing handed over yet counts as the whole total still due, as in the design.
-  const owed = tender === null ? order.totalSatang : view.shortBy;
+  const owed = tender === null ? due : view.shortBy;
   const short = owed !== null;
 
   return (

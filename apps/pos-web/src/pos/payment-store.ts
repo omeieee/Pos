@@ -33,6 +33,7 @@ import type {
   ChangePaymentMethodResult,
   OrderDto,
   PaymentDto,
+  PaymentRefundDto,
   PaymentResult,
   RealtimeFrame,
 } from '@sds/shared';
@@ -62,7 +63,16 @@ export interface UnsureAttempt {
   input: NewPaymentInput | ChangePaymentInput | null;
 }
 
+/** What the server last said about an order's money beyond its payment rows (never computed here). */
+export interface OrderLedger {
+  refunds: readonly PaymentRefundDto[];
+  netPaidSatang: number | null;
+  dueSatang: number | null;
+}
+
 export interface PaymentFlowState {
+  /** What the server said about each order's refunds, net paid and amount still due. */
+  ledger: Readonly<Record<string, OrderLedger>>;
   /** The order the running or last action belongs to. */
   orderId: string | null;
   phase: 'idle' | 'sending' | 'unsure';
@@ -175,6 +185,7 @@ export const framesOf = (result: PaymentResult | ChangePaymentMethodResult): Rea
 ];
 
 const initial = (): PaymentFlowState => ({
+  ledger: {},
   orderId: null,
   phase: 'idle',
   action: null,
@@ -218,6 +229,19 @@ export function createPaymentStore(deps: PaymentDeps): PaymentStore {
       deps.api.orders.get(orderId),
     ]);
     if (epoch !== startedIn) return;
+    if (payments.status === 'fulfilled') {
+      const { refunds, netPaidSatang, dueSatang } = payments.value;
+      store.setState({
+        ledger: {
+          ...store.getState().ledger,
+          [orderId]: {
+            refunds: refunds ?? [],
+            netPaidSatang: netPaidSatang ?? null,
+            dueSatang: dueSatang ?? null,
+          },
+        },
+      });
+    }
     deps.entities.applyMany([
       ...(payments.status === 'fulfilled' ? payments.value.payments.map(paymentFrame) : []),
       ...(order.status === 'fulfilled' ? [orderFrame(order.value)] : []),

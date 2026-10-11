@@ -8,7 +8,8 @@ import { useLocale, useT } from '../ui/hooks.ts';
 import { PaymentMoves } from './PaymentMoves.tsx';
 import { Callout, PayModal, PaySteps, usePayDims } from './PayParts.tsx';
 import { PromptPayQr } from './PromptPayQr.tsx';
-import type { PaymentActions } from './payment-model.ts';
+import { collectAmount, type PaymentActions } from './payment-model.ts';
+import { useLedger } from './use-ledger.ts';
 import './pay-glass.css';
 
 /** How long staff hold the button to leave the customer view: a customer's tap must not. */
@@ -97,7 +98,8 @@ export function PromptPayPanel({
   const phone = dims.layout === 'phone';
   const [customerView, setCustomerView] = useState(false);
   const [target, setTarget] = useState<string | null>(null);
-  const amount = formatBaht(order.totalSatang, locale);
+  // The QR pays this payment's own amount (order total minus what was already paid).
+  const amount = formatBaht(collectAmount(order, payment, undefined), locale);
   const pending = payment.status === 'pending';
   const recorded = payment.promptpayTargetMasked;
   const changed = recorded != null && target !== null && recorded !== target;
@@ -232,7 +234,15 @@ export function PromptPayStart({ order }: { order: OrderDto }) {
   const locale = useLocale();
   const dims = usePayDims();
   const phone = dims.layout === 'phone';
-  const amount = formatBaht(order.totalSatang, locale);
+  const due = collectAmount(order, undefined, useLedger(order.id)?.dueSatang);
+  if (due === null) {
+    return (
+      <p className="g-t-s" role="status" data-testid="promptpay-loading" style={s('margin:0')}>
+        {tr('payment.loading')}
+      </p>
+    );
+  }
+  const amount = formatBaht(due, locale);
   return (
     <div
       className="g-rise pay-grow"

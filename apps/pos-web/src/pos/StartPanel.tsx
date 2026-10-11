@@ -5,8 +5,9 @@ import { Gi } from '../design/icons.tsx';
 import { s } from '../design/style.ts';
 import { useServices, useStoreState, useT } from '../ui/hooks.ts';
 import { Callout } from './PayParts.tsx';
-import type { PayMethod } from './payment-model.ts';
+import { collectAmount, type PayMethod } from './payment-model.ts';
 import { flowFor } from './payment-store.ts';
+import { useLedger } from './use-ledger.ts';
 
 type Starter = Exclude<PayMethod, 'cash'>;
 
@@ -41,11 +42,13 @@ export function StartPanel({
   const mine = flowFor(flow, order.id);
   const action = changeFrom ? 'changeMethod' : 'create';
   const sending = mine.sending !== null;
+  // No amount is known until the ledger of a part-paid order has loaded: nothing to start yet.
+  const amountKnown = collectAmount(order, undefined, useLedger(order.id)?.dueSatang) !== null;
   const unsure = mine.unsure?.action === action ? mine.unsure : null;
   const failure = !sending && mine.refused?.action === action ? mine.refused.error : null;
 
   async function start() {
-    if (sending) return;
+    if (sending || !amountKnown) return;
     onAttempt?.(method);
     const outcome = changeFrom
       ? await payments.changeMethod(order.id, changeFrom, { method })
@@ -71,7 +74,7 @@ export function StartPanel({
       <button
         type="button"
         className="g-btn g-btn-p g-btn-lg g-btn-block"
-        disabled={sending}
+        disabled={sending || !amountKnown}
         aria-busy={sending}
         onClick={() => void start()}
       >
