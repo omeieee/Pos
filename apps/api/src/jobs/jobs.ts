@@ -2,6 +2,7 @@ import { type LineJobDeps, retryLineEvents } from '../line/retry.ts';
 import {
   anonymizeOrders,
   expireEmptyLineCustomers,
+  expireMemberProfiles,
   expireRecipients,
   purgeButtonReplies,
   purgeLineEvents,
@@ -34,6 +35,8 @@ export const JOBS: readonly JobDefinition[] = [
   { name: 'retention-recipients', cron: '50 3 * * *', run: expireRecipients },
   // Followers and app visitors who never ordered or acknowledged the notice.
   { name: 'retention-line-customers', cron: '55 3 * * *', run: expireEmptyLineCustomers },
+  // Member profile (name, nickname, phone, building) of customers with no order for 24 months.
+  { name: 'retention-member-profiles', cron: '56 3 * * *', run: expireMemberProfiles },
   // Chat-button reply marks (once a day per button) older than a week.
   { name: 'retention-button-replies', cron: '57 3 * * *', run: purgeButtonReplies },
   // Invites of no use any more (they hold an e-mail).

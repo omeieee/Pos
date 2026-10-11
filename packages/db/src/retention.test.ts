@@ -96,6 +96,7 @@ describe('retention days', () => {
       recipientBook: 30,
       staffInvites: 30,
       slipImages: 90,
+      memberProfile: 730,
     });
   });
 });
@@ -403,6 +404,119 @@ describe('expireEmptyLineCustomersBatch', () => {
   });
 });
 
+describe('expireMemberProfilesBatch', () => {
+  const cutoff = () => new Date(NOW.getTime() - RETENTION_DAYS.memberProfile * 86_400_000);
+  const run = (limit = 100) =>
+    retention.expireMemberProfilesBatch(db, { before: cutoff(), limit, now: NOW });
+  let n = 0;
+  async function member(args: {
+    lastOrderDaysAgo?: number;
+    firstSeenDaysAgo?: number;
+    profile?: boolean;
+  }) {
+    const [row] = await q<{ id: string }>(
+      `insert into customers (line_user_id, first_seen_at, last_order_at, full_name, nickname, phone, member_building,
+         note, building, recipient_name, recipient_key)
+       values ($1, $2, $3, $4, $5, $6, $7, 'keep-note', 'A1', 'Rec Name', $8) returning id`,
+      [
+        `Utest-member-${++n}`,
+        daysAgo(args.firstSeenDaysAgo ?? 900),
+        args.lastOrderDaysAgo === undefined ? null : daysAgo(args.lastOrderDaysAgo),
+        args.profile === false ? null : 'Test Full Name',
+        args.profile === false ? null : 'Tester',
+        args.profile === false ? null : '0800000000',
+        args.profile === false ? null : 'B2',
+        `key-${++n}`,
+      ],
+    );
+    return row?.id as string;
+  }
+  const state = async (id: string) =>
+    (
+      await q<{
+        full_name: string | null;
+        nickname: string | null;
+        phone: string | null;
+        member_building: string | null;
+        note: string | null;
+        line_user_id: string | null;
+        anonymized_at: Date | null;
+        building: string | null;
+        version: number;
+      }>(
+        'select full_name, nickname, phone, member_building, note, line_user_id, anonymized_at, building, version from customers where id = $1',
+        [id],
+      )
+    )[0];
+
+  test('clears the four member fields 24 months after the last order and nothing else', async () => {
+    const stale = await member({ lastOrderDaysAgo: 800 });
+    const before = (await state(stale))?.version as number;
+    expect((await run()).customers).toBeGreaterThanOrEqual(1);
+    expect(await state(stale)).toMatchObject({
+      full_name: null,
+      nickname: null,
+      phone: null,
+      member_building: null,
+      note: 'keep-note',
+      building: 'A1',
+      anonymized_at: null,
+    });
+    expect((await state(stale))?.line_user_id).not.toBeNull();
+    expect((await state(stale))?.version).toBe(before + 1);
+  });
+
+  test('a customer with a newer order is kept; one who never ordered counts from first seen', async () => {
+    const recent = await member({ lastOrderDaysAgo: 100, firstSeenDaysAgo: 900 });
+    const neverOrderedOld = await member({ firstSeenDaysAgo: 800 });
+    const neverOrderedNew = await member({ firstSeenDaysAgo: 100 });
+    await run();
+    expect((await state(recent))?.full_name).toBe('Test Full Name');
+    expect((await state(neverOrderedOld))?.full_name).toBeNull();
+    expect((await state(neverOrderedNew))?.full_name).toBe('Test Full Name');
+  });
+
+  test('a customer with an open order is kept', async () => {
+    const busy = await member({ lastOrderDaysAgo: 800 });
+    await order({ customerId: busy, status: 'preparing' });
+    await run();
+    expect((await state(busy))?.full_name).toBe('Test Full Name');
+  });
+
+  test('is idempotent: a second run changes nothing and bumps no version', async () => {
+    const stale = await member({ lastOrderDaysAgo: 900 });
+    await run();
+    const version = (await state(stale))?.version;
+    expect(await run()).toEqual({ customers: 0 });
+    expect((await state(stale))?.version).toBe(version);
+  });
+
+  test('a customer with no member data is not selected; the batch is bounded; the audit row has counts only', async () => {
+    const empty = await member({ lastOrderDaysAgo: 900, profile: false });
+    const emptyVersion = (await state(empty))?.version;
+    const ids = [
+      await member({ lastOrderDaysAgo: 801 }),
+      await member({ lastOrderDaysAgo: 802 }),
+      await member({ lastOrderDaysAgo: 803 }),
+    ];
+    expect((await run(2)).customers).toBe(2);
+    expect((await run(2)).customers).toBe(1);
+    expect((await state(empty))?.version).toBe(emptyVersion);
+    const audits = await q<{ after: Record<string, unknown>; entity_id: string | null }>(
+      "select after, entity_id from audit_log where action = 'retention.member_profiles.expire' order by at",
+    );
+    expect(audits.length).toBeGreaterThanOrEqual(2);
+    const text = JSON.stringify(audits);
+    for (const id of ids) expect(text).not.toContain(id);
+    expect(text).not.toContain('Test Full Name');
+    expect(text).not.toContain('0800000000');
+    expect(audits[0]?.after).toEqual({
+      customers: expect.any(Number),
+      afterDays: RETENTION_DAYS.memberProfile,
+    });
+  });
+});
+
 // postgres-js (production) rejects a raw `Date` parameter, PGlite accepts it. A `Date` compared
 // with a `sql` expression has no column encoder, so it must be passed as an ISO string.
 describe('retention queries send no Date parameter to the driver', () => {
@@ -419,6 +533,7 @@ describe('retention queries send no Date parameter to the driver', () => {
     await retention.anonymizeOrderSnapshotsBatch(logged, args);
     await retention.expireRecipientsBatch(logged, args);
     await retention.expireEmptyLineCustomersBatch(logged, args);
+    await retention.expireMemberProfilesBatch(logged, args);
     expect(seen.length).toBeGreaterThan(0);
     expect(seen.filter((value) => value instanceof Date)).toEqual([]);
   });

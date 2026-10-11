@@ -1,5 +1,5 @@
 import type { OrderPaymentStatus, PaymentStatus } from './enums.ts';
-import { type Satang, sumSatang } from './money.ts';
+import { type Satang, satang, sumSatang } from './money.ts';
 import { makeMachine } from './state-machine.ts';
 
 /**
@@ -21,6 +21,8 @@ export const paymentMachine = makeMachine<PaymentStatus>([
 export interface PaymentAmount {
   status: PaymentStatus;
   amount: Satang;
+  /** Partial refunds recorded against this payment (default none). Only a confirmed payment keeps them. */
+  refunded?: Satang;
 }
 
 /** Derived order payment status (03 §4), stored on the order for fast queries. */
@@ -29,7 +31,9 @@ export function derivePaymentStatus(
   payments: readonly PaymentAmount[],
 ): OrderPaymentStatus {
   const confirmed = sumSatang(
-    payments.filter((p) => p.status === 'confirmed').map((p) => p.amount),
+    payments
+      .filter((p) => p.status === 'confirmed')
+      .map((p) => satang(p.amount - (p.refunded ?? 0))),
   );
   const anyConfirmed = payments.some((p) => p.status === 'confirmed');
   const anyRefunded = payments.some((p) => p.status === 'refunded');

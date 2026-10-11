@@ -33,6 +33,8 @@ export const RETENTION_DAYS = {
   recipientBook: 30,
   staffInvites: 30,
   slipImages: 90,
+  /** Member profile fields (name, nickname, phone, building) of a customer with no order for 24 months. */
+  memberProfile: 730,
 } as const;
 
 /**
@@ -42,7 +44,7 @@ export const RETENTION_DAYS = {
  * acknowledgement then records the new version and time. Still the draft's date until the owner
  * approves and publishes the notice.
  */
-export const PRIVACY_NOTICE_VERSION = '2026-10-03';
+export const PRIVACY_NOTICE_VERSION = '2026-10-11';
 
 /**
  * Why, as a fixed word and not free text: the reason is written to the audit log, which can never

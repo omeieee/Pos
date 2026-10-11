@@ -83,6 +83,7 @@ describe('migrations on an empty Postgres', () => {
         'order_items',
         'orders',
         'owner_credentials',
+        'payment_refunds',
         'payments',
         'sessions',
         'settings',

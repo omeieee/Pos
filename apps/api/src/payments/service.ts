@@ -30,6 +30,7 @@ import {
 } from '@sds/db';
 import { promptpayPayload } from '@sds/promptpay';
 import {
+  type AdjustRefundInput,
   CashPaymentError,
   type ChangePaymentMethodInput,
   type ChangePaymentMethodResult,
@@ -42,6 +43,7 @@ import {
   govCopaySchemeSchema,
   isCopayAvailable,
   maskPromptpayId,
+  netPaid,
   type OrderDto,
   type OrderPaymentStatus,
   type OrderPaymentsResponse,
@@ -52,6 +54,7 @@ import {
   type PaymentStatus,
   paymentMachine,
   paymentsSettingsSchema,
+  planAdjustment,
   satang,
   type TransitionError,
 } from '@sds/shared';
@@ -192,8 +195,37 @@ function emitPayment(emit: Emit, row: paymentsRepo.PaymentRow) {
   return dto;
 }
 
-const amountsOf = (rows: readonly paymentsRepo.PaymentRow[]) =>
-  rows.map((p) => ({ status: p.status as PaymentStatus, amount: satang(p.amountSatang) }));
+/** What each payment has partly returned so far (D-25), by payment id. */
+const refundedBy = (refunds: readonly paymentsRepo.RefundRow[]) => {
+  const byPayment = new Map<string, number>();
+  for (const r of refunds) {
+    byPayment.set(r.paymentId, (byPayment.get(r.paymentId) ?? 0) + r.amountSatang);
+  }
+  return byPayment;
+};
+
+const amountsOf = (
+  rows: readonly paymentsRepo.PaymentRow[],
+  refunds: readonly paymentsRepo.RefundRow[] = [],
+) => {
+  const returned = refundedBy(refunds);
+  return rows.map((p) => ({
+    id: p.id,
+    method: p.method as PaymentMethod,
+    status: p.status as PaymentStatus,
+    amount: satang(p.amountSatang),
+    refunded: satang(returned.get(p.id) ?? 0),
+  }));
+};
+
+/** The order's payments with their partial refunds, for money maths. The caller holds the order lock. */
+async function moneyOf(tx: Db, orderId: string) {
+  const [rows, refunds] = await Promise.all([
+    paymentsRepo.listPaymentsForOrder(tx, orderId),
+    paymentsRepo.listRefundsForOrder(tx, orderId),
+  ]);
+  return { rows, refunds, amounts: amountsOf(rows, refunds) };
+}
 
 /**
  * Recomputes the order's payment status from ALL its payments, writes it in this transaction
@@ -201,8 +233,8 @@ const amountsOf = (rows: readonly paymentsRepo.PaymentRow[]) =>
  * emits `order.upserted`. The caller holds the order lock.
  */
 async function settleOrder(tx: Db, order: ordersRepo.OrderRow, emit: Emit): Promise<OrderDto> {
-  const all = await paymentsRepo.listPaymentsForOrder(tx, order.id);
-  const status = derivePaymentStatus(satang(order.totalSatang), amountsOf(all));
+  const { amounts } = await moneyOf(tx, order.id);
+  const status = derivePaymentStatus(satang(order.totalSatang), amounts);
   const updated = await ordersRepo.updateOrderIfVersion(tx, order.id, order.version, {
     paymentStatus: status,
   });
@@ -306,11 +338,11 @@ async function insertPaymentFor(
   }
 
   // One open payment per order: the order lock above makes this check and the insert one step.
-  const existing = await paymentsRepo.listPaymentsForOrder(tx, order.id);
-  const confirmedTotal = existing
-    .filter((p) => p.status === 'confirmed')
-    .reduce((sum, p) => sum + p.amountSatang, 0);
-  if (confirmedTotal >= total) {
+  const { rows: existing, amounts } = await moneyOf(tx, order.id);
+  // A payment charges what is still due: the whole total, or after an owner's adjustment (D-25)
+  // the difference between the new total and the money already confirmed and not returned.
+  const due = satang(Math.max(0, total - netPaid(amounts)));
+  if (due <= 0) {
     throw conflict('ORDER_ALREADY_PAID', 'This order is already paid');
   }
   const open = existing.find((p) => p.status === 'pending' || p.status === 'claimed');
@@ -324,7 +356,7 @@ async function insertPaymentFor(
   const base = {
     orderId: order.id,
     method: input.method as PaymentMethod,
-    amountSatang: total,
+    amountSatang: due,
     referenceNote: input.referenceNote ?? null,
     clientRequestId: input.clientRequestId,
     requestHash,
@@ -340,7 +372,7 @@ async function insertPaymentFor(
       if (!move.ok) throw transitionFailure(move.error, 'pending', 'confirmed');
       let cash: ReturnType<typeof calculateCashChange>;
       try {
-        cash = calculateCashChange(total, satang(input.tendered));
+        cash = calculateCashChange(due, satang(input.tendered));
       } catch (error) {
         if (!(error instanceof CashPaymentError)) throw error;
         if (error.code === 'tendered_below_total') {
@@ -374,7 +406,7 @@ async function insertPaymentFor(
       const target = await currentPromptpayId(tx);
       if (!target) throw promptpayNotConfigured();
       try {
-        promptpayPayload(target, total); // fails now, not when the QR is shown, on a bad ID or amount
+        promptpayPayload(target, due); // fails now, not when the QR is shown, on a bad ID or amount
       } catch (error) {
         if (!(error instanceof RangeError)) throw error;
         throw unprocessable(
@@ -411,7 +443,7 @@ async function insertPaymentFor(
       const { row: schemeRow, scheme } = offered;
       let split: ReturnType<typeof estimateGovCopaySplit>;
       try {
-        split = estimateGovCopaySplit(total, scheme);
+        split = estimateGovCopaySplit(due, scheme);
       } catch (error) {
         if (!(error instanceof RangeError)) throw error;
         throw unprocessable('AMOUNT_TOO_LARGE', 'This amount is too large for the co-pay scheme');
@@ -813,10 +845,22 @@ export async function listOrderPayments(
 ): Promise<OrderPaymentsResponse> {
   const order = await ordersRepo.findOrderById(ctx.db, orderId);
   if (!order) throw notFound('Order');
-  const rows = await paymentsRepo.listPaymentsForOrder(ctx.db, orderId);
+  const { rows, refunds, amounts } = await moneyOf(ctx.db, orderId);
+  const paid = netPaid(amounts);
   return {
     payments: rows.map(toPaymentDto),
     slipPaymentIds: rows.filter((r) => r.slipImageKey !== null).map((r) => r.id),
+    refunds: refunds.map((r) => ({
+      id: r.id,
+      paymentId: r.paymentId,
+      amountSatang: satang(r.amountSatang),
+      method: r.method as 'cash' | 'promptpay',
+      referenceNote: r.referenceNote,
+      reason: r.reason,
+      refundedAt: r.refundedAt.toISOString(),
+    })),
+    netPaidSatang: paid,
+    dueSatang: satang(Math.max(0, order.totalSatang - paid)),
   };
 }
 
@@ -930,8 +974,10 @@ export async function retirePaymentsForOwnerChange(
   action: PastOrderPaymentAction | undefined,
   emit: Emit,
   meta: RequestMeta,
-): Promise<OrderPaymentStatus> {
-  const all = await paymentsRepo.listPaymentsForOrder(tx, order.id);
+): Promise<{ paymentStatus: OrderPaymentStatus; refundedSatang: number }> {
+  const { rows: all, refunds } = await moneyOf(tx, order.id);
+  const returnedEarlier = refundedBy(refunds);
+  let refundedSatang = 0;
   if (all.some((p) => p.status === 'confirmed') && action === undefined) {
     throw conflict(
       'PAYMENT_ACTION_REQUIRED',
@@ -965,9 +1011,15 @@ export async function retirePaymentsForOwnerChange(
     if (!updated) throw versionConflict(payment.version); // cannot happen under the order lock
     const audit =
       to === 'voided' ? 'payment.void' : to === 'refunded' ? 'payment.refund' : 'payment.cancel';
+    // A refund after partial refunds returns only what is left on the payment (D-25).
+    const earlier = returnedEarlier.get(payment.id) ?? 0;
+    if (to === 'refunded') refundedSatang += payment.amountSatang - earlier;
     await auditPayment(tx, actor, meta, audit, payment.id, snapshot(payment), {
       status: to,
       reason,
+      ...(to === 'refunded'
+        ? { returnedSatang: payment.amountSatang - earlier, refundedEarlierSatang: earlier }
+        : {}),
     });
     if (to === 'voided' || to === 'refunded') {
       emit(
@@ -981,5 +1033,144 @@ export async function retirePaymentsForOwnerChange(
     emitPayment(emit, updated);
     after.push(updated);
   }
-  return derivePaymentStatus(satang(order.totalSatang), amountsOf(after));
+  return {
+    paymentStatus: derivePaymentStatus(satang(order.totalSatang), amountsOf(after)),
+    refundedSatang,
+  };
+}
+
+/** What an owner's `adjust` did to the money, for the customer's notice and the caller's audit. */
+export interface AdjustOutcome {
+  paymentStatus: OrderPaymentStatus;
+  /** Returned to the customer now (a lower total). */
+  refundedSatang: number;
+  /** Still to collect through the normal payment flow (a higher total). */
+  dueSatang: number;
+}
+
+const ADJUST_BLOCKS = {
+  claim_open: [
+    'ADJUST_CLAIM_OPEN',
+    'A payment is claimed. Confirm it or cancel the claim first, then adjust',
+  ],
+  total_zero: ['ADJUST_TOTAL_ZERO', 'The new total is zero. Void or refund the order instead'],
+  method_not_adjustable: [
+    'ADJUST_METHOD_NOT_ADJUSTABLE',
+    'The money to return was paid by a method that cannot be partly refunded. Refund it whole instead',
+  ],
+} as const;
+
+/**
+ * Partial adjustment of a paid order (D-25), in the caller's transaction, for the order's NEW total:
+ * pending payments are cancelled (their amount is stale); confirmed money stays where it is.
+ * A lower total records a partial refund of the exact difference (`refund` says how it went back);
+ * a higher total creates nothing: staff take the difference with the normal payment flow, which
+ * charges `total - netPaid`. The payment stays `confirmed`, so the state machine is not involved in
+ * the money itself; who may do it is the machine's own `confirmed -> refunded` rule (manager/owner,
+ * reason, step-up), asked as a probe so the permission cannot drift from a whole refund.
+ */
+export async function adjustPaymentsForOwnerChange(
+  tx: Db,
+  ctx: Pick<CoreContext, 'now'>,
+  actor: Principal,
+  order: ordersRepo.OrderRow,
+  newTotal: number,
+  reason: string,
+  refund: AdjustRefundInput | undefined,
+  emit: Emit,
+  meta: RequestMeta,
+): Promise<AdjustOutcome> {
+  const { rows: all, refunds, amounts } = await moneyOf(tx, order.id);
+  const plan = planAdjustment(satang(newTotal), amounts);
+  if (plan.kind === 'blocked') {
+    const [code, message] = ADJUST_BLOCKS[plan.reason];
+    throw conflict(code, message);
+  }
+  if (plan.kind !== 'refund' && refund !== undefined) {
+    throw unprocessable('REFUND_NOT_NEEDED', 'The new total does not need a refund');
+  }
+  if (plan.kind === 'refund') {
+    if (refund === undefined) {
+      throw unprocessable(
+        'REFUND_DETAILS_REQUIRED',
+        'The total goes down: say how the difference is returned (cash or PromptPay)',
+        { refundSatang: plan.amountSatang },
+      );
+    }
+    const probe = paymentMachine.transition('confirmed', 'refunded', {
+      actor: { kind: 'staff', role: actor.role },
+      reason,
+    });
+    if (!probe.ok) throw transitionFailure(probe.error, 'confirmed', 'refunded');
+    if (probe.stepUp && !hasFreshStepUp(actor, ctx.now())) throw stepUpRequired();
+  }
+
+  const after = [...all];
+  for (const [i, payment] of all.entries()) {
+    if (payment.status !== 'pending') continue;
+    const move = paymentMachine.transition('pending', 'cancelled', {
+      actor: { kind: 'staff', role: actor.role },
+      reason,
+    });
+    if (!move.ok) throw transitionFailure(move.error, 'pending', 'cancelled');
+    const cancelled = await paymentsRepo.updatePaymentIfVersion(tx, payment.id, payment.version, {
+      status: 'cancelled',
+      voidReason: reason,
+    });
+    if (!cancelled) throw versionConflict(payment.version); // cannot happen under the order lock
+    await auditPayment(tx, actor, meta, 'payment.cancel', payment.id, snapshot(payment), {
+      status: 'cancelled',
+      reason,
+    });
+    emitPayment(emit, cancelled);
+    after[i] = cancelled;
+  }
+
+  const added: paymentsRepo.RefundRow[] = [];
+  if (plan.kind === 'refund' && refund !== undefined) {
+    for (const part of plan.allocations) {
+      const row = await paymentsRepo.insertRefund(tx, {
+        orderId: order.id,
+        paymentId: part.paymentId,
+        amountSatang: part.amountSatang,
+        method: refund.method,
+        referenceNote: refund.referenceNote ?? null,
+        reason,
+        refundedByStaffId: actor.staffId,
+      });
+      added.push(row);
+      await auditPayment(
+        tx,
+        actor,
+        meta,
+        'payment.partial_refund',
+        part.paymentId,
+        { orderTotalSatang: order.totalSatang },
+        {
+          refundId: row.id,
+          amountSatang: part.amountSatang,
+          method: refund.method,
+          reason,
+          newOrderTotalSatang: newTotal,
+        },
+      );
+      emit(
+        securityAlert(ctx, 'payment.partial_refund', 'critical', {
+          staffId: actor.staffId,
+          deviceId: actor.deviceId,
+          subject: { paymentId: part.paymentId, orderId: order.id },
+        }),
+      );
+    }
+  }
+
+  const paymentStatus = derivePaymentStatus(
+    satang(newTotal),
+    amountsOf(after, [...refunds, ...added]),
+  );
+  return {
+    paymentStatus,
+    refundedSatang: plan.kind === 'refund' ? plan.amountSatang : 0,
+    dueSatang: plan.kind === 'topup' ? plan.amountSatang : 0,
+  };
 }

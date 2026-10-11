@@ -10,6 +10,7 @@ import { registerCustomerAppRoutes } from './customer-app/routes.ts';
 import { registerCustomerRoutes } from './customers/routes.ts';
 import type { EventBus } from './events.ts';
 import { registerCompletionPush } from './line/completion-push.ts';
+import { notifyOrderChange } from './line/order-change-push.ts';
 import { registerLineRoutes } from './line/routes.ts';
 import { createLineRuntime, type LineRuntime } from './line/runtime.ts';
 import { registerMenuRoutes } from './menu/routes.ts';
@@ -122,9 +123,16 @@ export async function registerV1(app: FastifyInstance, deps: V1Deps): Promise<vo
       await v1.register((scope) => registerAuthRoutes(scope, context.auth, context.guard), {
         prefix: '/auth',
       });
-      await v1.register((scope) => registerOrderRoutes(scope, context.auth, context.guard), {
-        prefix: '/orders',
-      });
+      await v1.register(
+        (scope) =>
+          registerOrderRoutes(scope, context.auth, context.guard, (notice) =>
+            notifyOrderChange(
+              { db: deps.db, runtime: lineRuntime, events: deps.events, now: auth.now },
+              notice,
+            ),
+          ),
+        { prefix: '/orders' },
+      );
       await v1.register((scope) => registerRecipientRoutes(scope, context.auth, context.guard), {
         prefix: '/recipients',
       });

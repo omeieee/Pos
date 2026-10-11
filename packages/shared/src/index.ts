@@ -14,6 +14,7 @@ export * from './money.ts';
 export * from './order-machine.ts';
 export * from './orderable.ts';
 export * from './orders.ts';
+export * from './payment-adjustment.ts';
 export * from './payment-machine.ts';
 export * from './payments.ts';
 export * from './permissions.ts';

@@ -101,6 +101,22 @@ export async function expireEmptyLineCustomers(deps: JobDeps, bounds: Bounds = {
   return { customers };
 }
 
+/** Member profile fields (name, nickname, phone, building) of customers with no order for 24 months. */
+export async function expireMemberProfiles(deps: JobDeps, bounds: Bounds = {}) {
+  const before = cutoff(deps, RETENTION_DAYS.memberProfile);
+  let customers = 0;
+  await drain(bounds, async (limit) => {
+    const result = await retentionRepo.expireMemberProfilesBatch(deps.db, {
+      before,
+      limit,
+      now: deps.now(),
+    });
+    customers += result.customers;
+    return result.customers;
+  });
+  return { customers };
+}
+
 /** A slip file is written just before its payment row points to it: younger files are left alone. */
 export const SLIP_ORPHAN_GRACE_MS = 86_400_000;
 

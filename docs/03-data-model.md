@@ -58,6 +58,7 @@ erDiagram
 | Table | Key columns |
 |---|---|
 | `payments` | `id, order_id, method` (`cash, promptpay, gov_copay, platform, other`)`, status` (`pending, claimed, confirmed, cancelled, voided, refunded`)`, amount_satang, tendered_satang?, change_satang?, promptpay_target_masked?, qr_payload?, scheme_id?, est_gov_share_satang?, est_customer_share_satang?, slip_image_key?, slip_ref?` (P9 duplicate-slip check)`, reference_note, claimed_at, confirmed_by_staff_id?, confirmed_at, void_reason, client_request_id` (unique, idempotent POST)`, version, rev`. A check requires `confirmed_by_staff_id` and `confirmed_at` once confirmed |
+| `payment_refunds` | `id, order_id, payment_id, amount_satang (>0), method` (`cash, promptpay`)`, reference_note?, reason, refunded_by_staff_id, refunded_at`. Partial refunds of a confirmed payment after the owner lowered the order (D-25). Append-only (update, delete and truncate are refused); not synced. Net paid of a payment = `amount_satang` − Σ its refunds |
 | `gov_copay_schemes` | `id, code, name_th, name_en, gov_share_bp` (6000 = 60%)`, gov_daily_cap_satang, gov_total_cap_satang?, active_from, active_to, active_from_minute, active_to_minute` (minutes from local midnight, e.g. 360–1380 = `06:00–23:00`)`, channels text[]` (default `{storefront}`)`, settlement_note, enabled` |
 
 ### People and devices
@@ -128,7 +129,8 @@ stateDiagram-v2
 - `refunded`: every confirmed payment was refunded.
 
 **Rules**
-- Only staff can move a payment to `confirmed`, and only for its exact amount.
+- Only staff can move a payment to `confirmed`, and only for its exact amount. A payment's amount is what was still due when it was made: the order total, or after an owner's adjustment the difference between the new total and the net paid (a top-up).
+- A partial refund (D-25) is not a status move: the payment stays `confirmed` and a `payment_refunds` row records the money handed back. `paid` means net paid (confirmed − partial refunds) is at least the order total.
 - For cash, `tendered ≥ amount` and `change = tendered − amount`.
 - Changing the method = cancel the pending payment and create a new one (§4.4 of the architecture doc).
 - An unpaid LINE order goes *overdue* after N minutes (setting, default 20). Staff are reminded and decide. Automatic cancellation is off by default.
@@ -142,7 +144,7 @@ stateDiagram-v2
 ## 6. Reporting
 - Reports are computed on the fly from `orders`, `order_items`, `payments` and `expenses`, grouped by `business_date`. At this data size that is fast.
 - Materialised daily rollups come later, only if a query exceeds about 300 ms.
-- Revenue is recognised on the order's business date, for **paid** orders only.
+- Revenue is recognised on the order's business date, for **paid** orders only, and is **net paid** = confirmed payments − their partial refunds (`payment_refunds`); voided (cancelled) orders are excluded; a payment later refunded or voided whole counts nothing.
 - A void or refund counts against **the original order's business date**, even when it is done after midnight (owner, 2026-10-02).
 - Gov co-pay money counts as revenue on the sale date and as a receivable until it is settled the next day.
 - Platform orders count the platform price as revenue and the commission as an expense.
@@ -154,4 +156,5 @@ stateDiagram-v2
 | Orders, payments, expenses, audit log | ≥ 5 years (tax records; ⚠️ confirm) |
 | Slip images | 90 days after confirmation |
 | `line_events` | 30 days |
+| Member profile (full name, nickname, phone, building) | Cleared after 24 months without an order (nightly job `retention-member-profiles`); the customer and history stay; audit row with counts only |
 | Inactive customer personal data | Anonymised after 24 months without an order. Order rows keep the anonymised `customer_id` |

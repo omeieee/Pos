@@ -11,6 +11,9 @@
  * - `expireRecipientsBatch`: erases the remembered recipients (counter customers with a recipient)
  *   whose last order is older than the cutoff, the way the owner's erasure request does.
  *
+ * - `expireMemberProfilesBatch`: clears the member profile fields of customers with no order for
+ *   24 months (the customer and their history stay).
+ *
  * - `findDueSlips` and `clearSlipKeys`: slip images (90 days after the payment was confirmed or
  *   cancelled). The files live outside the database, so the job deletes the file FIRST and only
  *   then clears the key here: a file that could not be deleted keeps its key and is tried again.
@@ -276,6 +279,60 @@ export async function expireEmptyLineCustomersBatch(
       });
     }
     return { customers: erased };
+  });
+}
+
+/**
+ * Clears the member profile (full name, nickname, phone, building) of up to `limit` customers who
+ * have not ordered for 24 months (owner, 2026-10-11): the last order, or for one who never ordered
+ * the day first seen, is before `before`. Only those four fields go; the LINE id, the history and
+ * the counters stay, so the customer keeps ordering and the reports still add up. A customer with
+ * an open order, an anonymised one and one with no member data are not selected, so a second run
+ * changes nothing and bumps no version. The update goes through the sync trigger. One `system`
+ * audit row says how many and the period, never who.
+ */
+export async function expireMemberProfilesBatch(
+  db: Db,
+  args: { before: Date; limit: number; now: Date },
+): Promise<{ customers: number }> {
+  return db.transaction(async (tx) => {
+    const due = await tx
+      .select({ id: customers.id })
+      .from(customers)
+      .where(
+        and(
+          isNull(customers.anonymizedAt),
+          or(
+            isNotNull(customers.fullName),
+            isNotNull(customers.nickname),
+            isNotNull(customers.phone),
+            isNotNull(customers.memberBuilding),
+          ),
+          sql`coalesce(${customers.lastOrderAt}, ${customers.firstSeenAt}) < ${args.before.toISOString()}::timestamptz`,
+          sql`not exists (select 1 from ${orders} where ${orders.customerId} = ${customers.id} and ${orders.status} in ('new', 'preparing', 'ready'))`,
+        ),
+      )
+      .orderBy(asc(customers.id))
+      .limit(args.limit)
+      .for('update', { of: customers, skipLocked: true });
+    if (due.length === 0) return { customers: 0 };
+    const changed = await tx
+      .update(customers)
+      .set({ fullName: null, nickname: null, phone: null, memberBuilding: null })
+      .where(
+        inArray(
+          customers.id,
+          due.map((row) => row.id),
+        ),
+      )
+      .returning({ id: customers.id });
+    await insertAudit(tx, {
+      actorType: 'system',
+      action: 'retention.member_profiles.expire',
+      entity: 'customers',
+      after: { customers: changed.length, afterDays: RETENTION_DAYS.memberProfile },
+    });
+    return { customers: changed.length };
   });
 }
 

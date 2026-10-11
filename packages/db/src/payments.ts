@@ -10,7 +10,7 @@
 import type { PaymentMethod, PaymentStatus } from '@sds/shared';
 import { and, asc, count, eq, inArray } from 'drizzle-orm';
 import type { Db } from './client.ts';
-import { payments } from './schema.ts';
+import { paymentRefunds, payments } from './schema.ts';
 
 export type PaymentRow = typeof payments.$inferSelect;
 
@@ -155,4 +155,34 @@ export async function updatePaymentIfVersion(
     .where(and(eq(payments.id, id), eq(payments.version, expectedVersion)))
     .returning();
   return row;
+}
+
+// ---------- Partial refunds (D-25) ----------
+
+export type RefundRow = typeof paymentRefunds.$inferSelect;
+
+export interface NewRefund {
+  orderId: string;
+  paymentId: string;
+  amountSatang: number;
+  method: 'cash' | 'promptpay';
+  referenceNote?: string | null;
+  reason: string;
+  refundedByStaffId: string;
+}
+
+/** Records one partial refund. Rows are append-only; a trigger refuses any change or delete. */
+export async function insertRefund(db: Db, refund: NewRefund): Promise<RefundRow> {
+  const [row] = await db.insert(paymentRefunds).values(refund).returning();
+  if (!row) throw new Error('refund insert returned no row');
+  return row;
+}
+
+/** Every partial refund of an order, oldest first. */
+export async function listRefundsForOrder(db: Db, orderId: string): Promise<RefundRow[]> {
+  return db
+    .select()
+    .from(paymentRefunds)
+    .where(eq(paymentRefunds.orderId, orderId))
+    .orderBy(asc(paymentRefunds.refundedAt), asc(paymentRefunds.id));
 }

@@ -14,6 +14,7 @@ import { type GuardFactory, principalOf } from '../auth/guards.ts';
 import { ApiError } from '../errors.ts';
 import type { CoreContext } from '../tx.ts';
 import { parse } from '../validate.ts';
+import type { OrderChangeNotice } from './change-notice.ts';
 import { correctOrder, voidOrder } from './correction.ts';
 import { issueReceipt } from './receipt.ts';
 import { createOrder, getOrder, listOrdersForDay, patchOrder, transitionOrder } from './service.ts';
@@ -30,6 +31,8 @@ export async function registerOrderRoutes(
   app: FastifyInstance,
   ctx: CoreContext,
   guard: GuardFactory,
+  /** Called after the commit of an owner's void or edit; sends the customer's LINE notice. */
+  onOwnerChange: (notice: OrderChangeNotice) => void = () => undefined,
 ): Promise<void> {
   app.post('/', { onRequest: guard('order.create') }, async (request, reply) => {
     const input = parse(createOrderInputSchema, request.body);
@@ -94,15 +97,17 @@ export async function registerOrderRoutes(
 
   // The owner's correction and void of any order, paid or finished included (decision 2026-10-11).
   // `order.edit_past` is owner-only and asks for a fresh step-up in the guard.
-  app.patch('/:id/correction', { onRequest: guard('order.edit_past') }, async (request) =>
-    correctOrder(
+  app.patch('/:id/correction', { onRequest: guard('order.edit_past') }, async (request) => {
+    const { order, notice } = await correctOrder(
       ctx,
       principalOf(request),
       idOf(request),
       parse(correctOrderInputSchema, request.body),
       { ip: request.ip ?? null },
-    ),
-  );
+    );
+    if (notice) onOwnerChange(notice);
+    return order;
+  });
 
   app.post('/:id/void', { onRequest: guard('order.edit_past') }, async (request, reply) => {
     const input = parse(voidOrderInputSchema, request.body);
@@ -117,9 +122,14 @@ export async function registerOrderRoutes(
         'Idempotency-Key must equal clientRequestId',
       );
     }
-    const { order, replay } = await voidOrder(ctx, principalOf(request), idOf(request), input, {
-      ip: request.ip ?? null,
-    });
+    const { order, replay, notice } = await voidOrder(
+      ctx,
+      principalOf(request),
+      idOf(request),
+      input,
+      { ip: request.ip ?? null },
+    );
+    if (notice) onOwnerChange(notice);
     return reply.status(replay ? 200 : 201).send(order);
   });
 

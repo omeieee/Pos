@@ -9,7 +9,9 @@
  * - Money: a changed total retires the order's payments through the payment state machine
  *   (`retirePaymentsForOwnerChange`): pending or claimed ones are cancelled, a confirmed one is
  *   voided or refunded as the owner chose. Staff then take the new total with the usual payment
- *   flow. No payment is created or adjusted here and no partial refund exists.
+ *   flow. No payment is created here. `paymentAction: 'adjust'` (D-25) keeps the confirmed money
+ *   instead: a lower total records a partial refund of the difference, a higher total leaves the
+ *   difference for staff to collect. A LINE customer is told afterwards (`notice`).
  * - Status: a void is the order machine's move to `cancelled` (a finished order may make it only
  *   under `order.edit_past`).
  */
@@ -42,8 +44,9 @@ import {
   stepUpRequired,
   versionConflict,
 } from '../errors.ts';
-import { retirePaymentsForOwnerChange } from '../payments/service.ts';
+import { adjustPaymentsForOwnerChange, retirePaymentsForOwnerChange } from '../payments/service.ts';
 import { type CoreContext, type Emit, withTransaction } from '../tx.ts';
+import type { OrderChangeNotice } from './change-notice.ts';
 import { toOrderDto } from './dto.ts';
 
 const modifierDeltas = z.array(z.object({ priceDeltaSatang: z.number().int() }));
@@ -80,7 +83,7 @@ export async function correctOrder(
   id: string,
   input: CorrectOrderInput,
   meta: RequestMeta,
-): Promise<OrderDto> {
+): Promise<{ order: OrderDto; notice: OrderChangeNotice | null }> {
   return withTransaction(ctx, async (tx, emit) => {
     const row = await ordersRepo.lockOrderById(tx, id);
     if (!row) throw notFound('Order');
@@ -201,18 +204,35 @@ export async function correctOrder(
     if (input.note !== undefined && input.note !== row.note) patch.note = input.note;
 
     const totalChanged = patch.totalSatang !== undefined && patch.totalSatang !== row.totalSatang;
+    let refundedSatang = 0;
+    let dueSatang = 0;
     if (totalChanged) {
       const payments = await paymentsRepo.listPaymentsForOrder(tx, id);
       const heldMoney = payments.some((p) => p.status === 'claimed' || p.status === 'confirmed');
       if (heldMoney && input.paymentAction === undefined) {
         throw conflict(
           'PAYMENT_ACTION_REQUIRED',
-          'The total changes while a payment is claimed or confirmed. Say whether to void or refund it; staff then take the new total',
+          'The total changes while a payment is claimed or confirmed. Say whether to void or refund it, or adjust it; staff then take the new total or the difference',
           { oldTotalSatang: row.totalSatang, newTotalSatang: patch.totalSatang },
         );
       }
-      if (payments.some((p) => ['pending', 'claimed', 'confirmed'].includes(p.status))) {
-        patch.paymentStatus = await retirePaymentsForOwnerChange(
+      if (input.paymentAction === 'adjust') {
+        const done = await adjustPaymentsForOwnerChange(
+          tx,
+          ctx,
+          actor,
+          row,
+          patch.totalSatang ?? row.totalSatang,
+          input.reason,
+          input.refund,
+          emit,
+          meta,
+        );
+        patch.paymentStatus = done.paymentStatus;
+        refundedSatang = done.refundedSatang;
+        dueSatang = done.dueSatang;
+      } else if (payments.some((p) => ['pending', 'claimed', 'confirmed'].includes(p.status))) {
+        const retired = await retirePaymentsForOwnerChange(
           tx,
           ctx,
           actor,
@@ -222,7 +242,19 @@ export async function correctOrder(
           emit,
           meta,
         );
+        patch.paymentStatus = retired.paymentStatus;
+        refundedSatang = retired.refundedSatang;
+        // Money was held and is now out of play: the customer owes the whole new total again.
+        if (payments.some((p) => p.status === 'confirmed')) {
+          dueSatang = patch.totalSatang ?? row.totalSatang;
+        }
       }
+    } else if (input.refund !== undefined) {
+      throw new ApiError(
+        422,
+        'REFUND_NOT_NEEDED',
+        'The total does not change, so nothing is refunded',
+      );
     }
 
     if (Object.keys(patch).length === 0 && !itemsChanged) {
@@ -266,7 +298,19 @@ export async function correctOrder(
       }),
     );
     emitUpserted(emit, updated, dto);
-    return dto;
+    // The customer hears of a change to what they ordered or owe, not of a staff note.
+    const notice: OrderChangeNotice | null =
+      itemsChanged || totalChanged
+        ? {
+            kind: 'edit',
+            orderId: id,
+            version: updated.version,
+            totalSatang: updated.totalSatang,
+            refundedSatang,
+            dueSatang,
+          }
+        : null;
+    return { order: dto, notice };
   });
 }
 
@@ -283,13 +327,14 @@ export async function voidOrder(
   id: string,
   input: VoidOrderInput,
   meta: RequestMeta,
-): Promise<{ order: OrderDto; replay: boolean }> {
+): Promise<{ order: OrderDto; replay: boolean; notice: OrderChangeNotice | null }> {
   return withTransaction(ctx, async (tx, emit) => {
     const row = await ordersRepo.lockOrderById(tx, id);
     if (!row) throw notFound('Order');
     if (row.status === 'cancelled') {
       const done = await findAuditByRequestId(tx, 'orders', id, input.clientRequestId);
-      if (done?.action === 'order.void') return { order: await dtoOf(tx, row), replay: true };
+      if (done?.action === 'order.void')
+        return { order: await dtoOf(tx, row), replay: true, notice: null };
     }
     if (input.expectedVersion !== undefined && row.version !== input.expectedVersion) {
       throw versionConflict(row.version);
@@ -311,7 +356,7 @@ export async function voidOrder(
       });
     }
 
-    const paymentStatus = await retirePaymentsForOwnerChange(
+    const retired = await retirePaymentsForOwnerChange(
       tx,
       ctx,
       actor,
@@ -325,10 +370,11 @@ export async function voidOrder(
       status: 'cancelled',
       cancelledAt: ctx.now(),
       cancelReason: input.reason,
-      paymentStatus,
+      paymentStatus: retired.paymentStatus,
     });
     if (!updated) throw versionConflict(row.version); // cannot happen under the row lock
     const dto = await dtoOf(tx, updated);
+    const { paymentStatus } = retired;
 
     await insertAudit(tx, {
       actorType: 'staff',
@@ -359,6 +405,17 @@ export async function voidOrder(
       }),
     );
     emitUpserted(emit, updated, dto);
-    return { order: dto, replay: false };
+    return {
+      order: dto,
+      replay: false,
+      notice: {
+        kind: 'void',
+        orderId: id,
+        version: updated.version,
+        totalSatang: updated.totalSatang,
+        refundedSatang: retired.refundedSatang,
+        dueSatang: 0,
+      },
+    };
   });
 }

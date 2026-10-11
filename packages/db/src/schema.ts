@@ -655,6 +655,41 @@ export const payments = pgTable(
   ],
 );
 
+/**
+ * A partial refund of a confirmed payment (owner correction of a paid order, D-25). Append-only:
+ * the payment stays `confirmed` and what has really been paid is its amount minus its refunds. Not
+ * a synced table (no rev): devices read it with `GET /v1/orders/:id/payments`. Rows are never
+ * changed or deleted (a trigger forbids it, like the other financial tables).
+ */
+export const paymentRefunds = pgTable(
+  'payment_refunds',
+  {
+    id: id(),
+    orderId: uuid('order_id')
+      .notNull()
+      .references(() => orders.id),
+    paymentId: uuid('payment_id')
+      .notNull()
+      .references(() => payments.id),
+    amountSatang: money('amount_satang').notNull(),
+    /** How the money went back: `cash` or `promptpay`. */
+    method: text('method').notNull(),
+    referenceNote: text('reference_note'),
+    reason: text('reason').notNull(),
+    refundedByStaffId: uuid('refunded_by_staff_id')
+      .notNull()
+      .references(() => staff.id),
+    refundedAt: ts('refunded_at').notNull().defaultNow(),
+  },
+  (t) => [
+    index('payment_refunds_order_id_idx').on(t.orderId),
+    index('payment_refunds_payment_id_idx').on(t.paymentId),
+    index('payment_refunds_refunded_by_staff_id_idx').on(t.refundedByStaffId),
+    check('payment_refunds_amount_positive', sql`amount_satang > 0`),
+    check('payment_refunds_method', oneOf('method', ['cash', 'promptpay'])),
+  ],
+);
+
 // ---------- Money outside orders ----------
 
 export const expenses = pgTable(

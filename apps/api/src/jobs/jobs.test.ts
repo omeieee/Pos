@@ -44,6 +44,7 @@ describe('the job list', () => {
         'retention-line-customers',
         'retention-staff-invites',
         'retention-button-replies',
+        'retention-member-profiles',
       ]),
     );
     for (const j of JOBS) expect(j.cron.trim().split(/\s+/)).toHaveLength(5);
@@ -189,6 +190,31 @@ describe('retention jobs', () => {
     expect(text).not.toContain('Job Person');
     expect(text).not.toContain('D2');
     expect(text).not.toContain('Utest-job');
+  });
+
+  test('member profile fields are cleared after 24 months without an order, counts only', async () => {
+    const old = new Date(deps.now().getTime() - 740 * 86_400_000).toISOString();
+    const fresh = new Date(deps.now().getTime() - 100 * 86_400_000).toISOString();
+    const make = async (lastOrderAt: string) =>
+      (
+        await h.client.query<{ id: string }>(
+          `insert into customers (line_user_id, last_order_at, full_name, nickname, phone, member_building)
+           values ($1, $2, 'Job Member', 'Jm', '0800000001', 'D9') returning id`,
+          [`Utest-job-member-${crypto.randomUUID()}`, lastOrderAt],
+        )
+      ).rows[0]?.id as string;
+    const stale = await make(old);
+    const recent = await make(fresh);
+    expect(await job('retention-member-profiles').run(deps)).toEqual({ customers: 1 });
+    const state = async (id: string) =>
+      (await h.client.query('select full_name, phone from customers where id = $1', [id])).rows[0];
+    expect(await state(stale)).toEqual({ full_name: null, phone: null });
+    expect(await state(recent)).toEqual({ full_name: 'Job Member', phone: '0800000001' });
+    expect(await job('retention-member-profiles').run(deps)).toEqual({ customers: 0 });
+    const audit = await h.client.query(
+      "select actor_type, after from audit_log where action = 'retention.member_profiles.expire'",
+    );
+    expect(audit.rows).toEqual([{ actor_type: 'system', after: { customers: 1, afterDays: 730 } }]);
   });
 
   test('the default bounds are finite', () => {

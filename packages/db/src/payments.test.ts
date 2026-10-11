@@ -212,4 +212,39 @@ describe('payments repo', () => {
     expect(updated).toMatchObject({ paymentStatus: 'awaiting_confirmation', version: 2 });
     expect(updated?.rev).toBeGreaterThan(order.rev);
   });
+
+  test('partial refunds are append-only: listed oldest first, never changed or deleted', async () => {
+    const order = await newOrder();
+    const paid = await repo.insertPayment(
+      db,
+      pending(order.id, {
+        method: 'cash',
+        status: 'confirmed',
+        confirmedByStaffId: staffId,
+        confirmedAt: new Date('2026-10-01T03:01:00Z'),
+        tenderedSatang: 5000,
+        changeSatang: 0,
+      }),
+    );
+    const base = {
+      orderId: order.id,
+      paymentId: paid?.id ?? '',
+      reason: 'test',
+      refundedByStaffId: staffId,
+    };
+    const a = await repo.insertRefund(db, { ...base, amountSatang: 1000, method: 'cash' });
+    const b = await repo.insertRefund(db, {
+      ...base,
+      amountSatang: 500,
+      method: 'promptpay',
+      referenceNote: 'ref',
+    });
+    expect((await repo.listRefundsForOrder(db, order.id)).map((r) => r.id)).toEqual([a.id, b.id]);
+    await expect(
+      repo.insertRefund(db, { ...base, amountSatang: 0, method: 'cash' }),
+    ).rejects.toThrow();
+    await expect(client.query('update payment_refunds set amount_satang = 1')).rejects.toThrow();
+    await expect(client.query('delete from payment_refunds')).rejects.toThrow();
+    await expect(client.query('truncate payment_refunds')).rejects.toThrow();
+  });
 });

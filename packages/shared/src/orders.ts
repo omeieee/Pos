@@ -5,6 +5,7 @@
 import { z } from 'zod';
 import { ORDER_PAYMENT_STATUSES, ORDER_STATUSES } from './enums.ts';
 import { memberProfileSchema } from './member.ts';
+import { adjustRefundInputSchema, CORRECTION_PAYMENT_ACTIONS } from './payment-adjustment.ts';
 import {
   fulfillmentSchema,
   isoDateSchema,
@@ -153,8 +154,8 @@ const newLineSchema = z.strictObject({
  * list: a saved line you leave out is removed (kept in the database, marked removed), a line with
  * `orderItemId` keeps its saved price, a line with `menuItemId` is new. The server recomputes every
  * total. When the total changes while a payment is claimed or confirmed, `paymentAction` must say
- * what to do with it (the payments are then cancelled, voided or refunded, whole: staff collect
- * the new total again).
+ * what to do with it: `void` or `refund` retire the payments whole (staff collect the new total
+ * again), `adjust` keeps the confirmed money and settles only the difference (D-25).
  */
 export const correctOrderInputSchema = z
   .strictObject({
@@ -166,11 +167,20 @@ export const correctOrderInputSchema = z
       .min(1)
       .max(50)
       .optional(),
-    paymentAction: pastOrderPaymentActionSchema.optional(),
+    /**
+     * `void` and `refund` retire a confirmed payment whole. `adjust` keeps it: a lower total returns
+     * the difference (`refund` says how), a higher total leaves a difference staff then collect.
+     */
+    paymentAction: z.enum(CORRECTION_PAYMENT_ACTIONS).optional(),
+    refund: adjustRefundInputSchema.optional(),
   })
   .refine((v) => v.note !== undefined || v.items !== undefined, {
     message: 'give note or items',
     path: ['items'],
+  })
+  .refine((v) => v.refund === undefined || v.paymentAction === 'adjust', {
+    message: 'refund goes with paymentAction adjust',
+    path: ['refund'],
   });
 export type CorrectOrderInput = z.infer<typeof correctOrderInputSchema>;
 
