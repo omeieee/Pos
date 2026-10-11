@@ -28,4 +28,5 @@ export * from './slip-amount.ts';
 export * from './slip-qr.ts';
 export * from './slip-recipient.ts';
 export * from './slip-ref.ts';
+export * from './slip-verify.ts';
 export * from './state-machine.ts';

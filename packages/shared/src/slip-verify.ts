@@ -1,0 +1,148 @@
+/**
+ * Slip2Go slip verification (D-27), the pure part. Nothing here talks to the network.
+ *
+ * Slip2Go checks a transfer slip against the bank's records and answers with a `code`. We branch on
+ * the code, never on the HTTP status (the QR-text call answers 200, the image call 201). The
+ * answer is a hint for staff; the server auto-confirms only under the conditions of D-27.
+ *
+ * Money (CLAUDE.md rule 1): Slip2Go speaks baht (`"85.50"` out, `85.5` as a JSON number back).
+ * Both directions go through integer string maths, never `* 100`, `toFixed` or other float steps.
+ */
+import { z } from 'zod';
+import { type Satang, satang } from './money.ts';
+
+/** Where the bank check of a slip stands. Null on a payment without a slip (or with the verifier off). */
+export const SLIP_VERIFY_VERDICTS = [
+  'pending',
+  'valid',
+  'amount_mismatch',
+  'receiver_mismatch',
+  'date_mismatch',
+  'not_found',
+  'fraud',
+  'unchecked',
+] as const;
+export type SlipVerifyVerdict = (typeof SLIP_VERIFY_VERDICTS)[number];
+
+/** A verdict that Slip2Go (or our fallback) has given: everything except `pending`. */
+export type SlipVerifyResult = Exclude<SlipVerifyVerdict, 'pending'>;
+
+/** Satang to the string Slip2Go wants for `checkAmount.amount`: always two decimals ("85.50"). */
+export function satangToSlip2goAmount(value: number): string {
+  if (!Number.isSafeInteger(value) || value < 0) {
+    throw new RangeError(`satang must be a non-negative safe integer, got ${value}`);
+  }
+  const whole = Math.trunc(value / 100);
+  const fraction = value - whole * 100;
+  return `${whole}.${String(fraction).padStart(2, '0')}`;
+}
+
+const BAHT = /^(\d+)(?:\.(\d{1,2}))?$/;
+
+/**
+ * Slip2Go's `data.amount` (a JSON number in baht, e.g. 85.5) or a baht string to satang, or null
+ * when it is not a clean amount: NaN, negative, more than two decimals, exponent notation, or a
+ * float artefact such as 0.1 + 0.2. A number is read through its shortest decimal string.
+ */
+export function slip2goAmountToSatang(value: number | string): Satang | null {
+  const text = typeof value === 'number' ? String(value) : value;
+  const match = BAHT.exec(text);
+  if (!match?.[1]) return null;
+  const whole = Number(match[1]);
+  const fraction = Number((match[2] ?? '').padEnd(2, '0'));
+  const total = whole * 100 + fraction;
+  return Number.isSafeInteger(total) ? satang(total) : null;
+}
+
+/** One entry of `checkReceiver`: a match on any one entry passes. */
+export interface Slip2goReceiver {
+  accountType: string;
+  accountNumber: string;
+}
+
+const PROMPTPAY_TYPE_BY_LENGTH: Record<number, string> = { 10: '02001', 13: '02003', 15: '02004' };
+
+/**
+ * The receivers to send, built from the shop's settings at check time (never hardcoded). The
+ * PromptPay ID is typed by its shape: 10-digit phone `02001`, 13-digit ID `02003`, 15-digit
+ * e-wallet `02004` (only `02001` is proven live). A bank account counts only with its bank code
+ * (`01` + code). An empty list means "nothing to check against": the caller must not call Slip2Go,
+ * because a call without a receiver would let a transfer to anyone pass.
+ */
+export function slip2goReceivers(
+  promptpayId: string | null,
+  account: { bankCode: string; accountNumber: string } | null,
+): Slip2goReceiver[] {
+  const out: Slip2goReceiver[] = [];
+  const digits = promptpayId?.replace(/[\s-]/g, '') ?? '';
+  const accountType = /^\d+$/.test(digits) ? PROMPTPAY_TYPE_BY_LENGTH[digits.length] : undefined;
+  if (accountType) out.push({ accountType, accountNumber: digits });
+  if (account && /^\d{3}$/.test(account.bankCode) && /^\d{10,15}$/.test(account.accountNumber)) {
+    out.push({ accountType: `01${account.bankCode}`, accountNumber: account.accountNumber });
+  }
+  return out;
+}
+
+export interface Slip2goVerdict {
+  verdict: SlipVerifyResult;
+  /** Try again later (bank error, rate limit, server error). */
+  retry: boolean;
+  /** The shop's Slip2Go account is the problem (expired, no tokens, IP not allowed): tell the owner. */
+  alert: boolean;
+}
+
+const verdictOf = (
+  verdict: SlipVerifyResult,
+  flags: Partial<Omit<Slip2goVerdict, 'verdict'>> = {},
+): Slip2goVerdict => ({ verdict, retry: false, alert: false, ...flags });
+
+/**
+ * Slip2Go's result code to our verdict. Only `200200` (every condition passed) is `valid`, and
+ * even then a local amount re-check that says `false` wins. `200000` (found, nothing checked)
+ * fails closed. Unknown codes are `unchecked`.
+ */
+export function slip2goVerdict(code: string, localAmountOk: boolean | null): Slip2goVerdict {
+  switch (code) {
+    case '200200':
+      return verdictOf(localAmountOk === false ? 'amount_mismatch' : 'valid');
+    case '200401':
+      return verdictOf('receiver_mismatch');
+    case '200402':
+      return verdictOf('amount_mismatch');
+    case '200403':
+      return verdictOf('date_mismatch');
+    case '200404':
+      return verdictOf('not_found');
+    case '200500':
+      return verdictOf('fraud');
+    case '200502':
+    case '429000':
+      return verdictOf('unchecked', { retry: true });
+    case '401004':
+    case '401005':
+    case '401006':
+    case '401007':
+      return verdictOf('unchecked', { alert: true });
+    default:
+      return verdictOf('unchecked', { retry: /^5\d{5}$/.test(code) });
+  }
+}
+
+/**
+ * The part of Slip2Go's answer we keep. Everything else (names, account numbers, receiver and
+ * sender details) is dropped by the parse and never reaches memory beyond it.
+ */
+export const slip2goResponseSchema = z.object({
+  code: z.string().min(1),
+  message: z.string().optional(),
+  data: z
+    .object({
+      referenceId: z.string().optional(),
+      transRef: z.string().optional(),
+      amount: z.union([z.number(), z.string()]).optional(),
+      dateTime: z.string().optional(),
+      sender: z.object({ bank: z.object({ id: z.string().optional() }).optional() }).optional(),
+    })
+    .optional(),
+});
+export type Slip2goResponse = z.infer<typeof slip2goResponseSchema>;
