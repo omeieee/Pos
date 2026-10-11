@@ -179,4 +179,24 @@ describe('the customer API client', () => {
     expect(slip?.type).toBe('image/png');
     expect(slip?.auth).toBe('Bearer tok-1');
   });
+
+  test('reads and saves the member profile with only the fields given', async () => {
+    const member = { fullName: 'ก', nickname: null, building: null, phone: null };
+    const { calls, fetcher } = server((call) =>
+      call.url.endsWith('/session') ? session('tok-1') : { status: 200, body: { member } },
+    );
+    const api = createApi({
+      baseUrl: 'https://api.example.test',
+      credential: () => ({ idToken: 'x' }),
+      fetch: fetcher,
+    });
+    expect((await api.member()).member).toEqual(member);
+    await api.saveMember({ nickname: '' });
+    expect(calls[1]).toMatchObject({
+      url: 'https://api.example.test/v1/app/member',
+      method: 'GET',
+    });
+    expect(calls[2]).toMatchObject({ method: 'PUT', auth: 'Bearer tok-1' });
+    expect(JSON.parse(calls[2]?.body ?? '')).toEqual({ nickname: '' });
+  });
 });

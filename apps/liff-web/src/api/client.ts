@@ -11,12 +11,19 @@ import type {
   AppPayMethod,
   CheckoutInfo,
   CustomerSessionResponse,
+  MemberInput,
+  MemberProfile,
   MyOrder,
   MyOrdersResponse,
   MyQrResponse,
   PrivacyAckResponse,
   PublicMenuResponse,
 } from '@sds/shared';
+
+/** `GET`/`PUT /v1/app/member`: the saved member profile. */
+export interface MemberResponse {
+  member: MemberProfile;
+}
 
 export type Credential = { idToken: string } | { accessToken: string };
 
@@ -120,6 +127,10 @@ export function createApi(options: ApiOptions) {
     signIn,
     checkout: () => authed<CheckoutInfo>('/v1/app/checkout'),
     acknowledgePrivacy: () => post<PrivacyAckResponse>('/v1/app/privacy-ack'),
+    member: () => authed<MemberResponse>('/v1/app/member'),
+    /** Only the fields to change: left out keeps the saved value, "" clears it. */
+    saveMember: (input: MemberInput) =>
+      authed<MemberResponse>('/v1/app/member', { method: 'PUT', body: JSON.stringify(input) }),
     placeOrder: (input: AppOrderInput) => post<AppOrderResult>('/v1/app/orders', input),
     orders: () => authed<MyOrdersResponse>('/v1/app/orders'),
     order: (id: string) => authed<MyOrder>(`/v1/app/orders/${id}`),

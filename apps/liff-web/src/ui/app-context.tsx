@@ -84,7 +84,10 @@ const KNOWN: Record<string, MessageKey> = {
 
 /** The message key for a failed call: the API's own code when we know it, else a generic one. */
 export function errorKey(error: unknown): MessageKey {
-  if (error instanceof ApiFailure && error.fields.includes('member.phone')) {
+  if (
+    error instanceof ApiFailure &&
+    (error.fields.includes('member.phone') || error.fields.includes('phone'))
+  ) {
     return 'liff.member.phoneBad';
   }
   return (error instanceof ApiFailure ? KNOWN[error.code] : undefined) ?? 'liff.error.generic';

@@ -20,11 +20,9 @@ import {
   NOTE_MAX,
   prefilled,
 } from '../model/checkout.ts';
-import { memberFormOf, memberInput, memberProblems } from '../model/member.ts';
 import { errorKey, useApp, useT } from './app-context.tsx';
 import { BarButton, Body, Dock, Header, Notice, SectionLabel } from './Chrome.tsx';
 import { DishThumb } from './DishThumb.tsx';
-import { MemberSection } from './MemberSection.tsx';
 import { METHOD_ORDER, PayRadio } from './PayOption.tsx';
 
 /**
@@ -52,10 +50,7 @@ export function CheckoutScreen({
   const [form, setForm] = useState<CheckoutForm>(() => prefilled(info));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [member, setMember] = useState(() => memberFormOf(info.member));
   const requests = useRef(createRequestIds()).current;
-  const memberToSend = memberInput(member, info.member);
-  const memberBad = memberProblems(member);
   const problems = formProblems(form, info);
   const [tried, setTried] = useState(false);
   const nameField = useRef<HTMLInputElement>(null);
@@ -70,9 +65,8 @@ export function CheckoutScreen({
         form.name.trim(),
         form.note.trim(),
         form.method,
-        memberToSend ?? null,
       ]),
-    [cart, form, memberToSend],
+    [cart, form],
   );
   const name = (n: { nameTh: string; nameEn: string | null }) =>
     locale === 'en' && n.nameEn ? n.nameEn : n.nameTh;
@@ -93,15 +87,7 @@ export function CheckoutScreen({
       field?.focus();
       field?.scrollIntoView({ block: 'center', behavior: 'smooth' });
     }
-    if (memberBad.length > 0) {
-      // The section shows the message once `tried` is set; bring it into view.
-      requestAnimationFrame(() =>
-        document
-          .querySelector('[aria-invalid="true"]')
-          ?.scrollIntoView({ block: 'center', behavior: 'smooth' }),
-      );
-    }
-    if (problems.length > 0 || memberBad.length > 0 || busy || form.method === '') return;
+    if (problems.length > 0 || busy || form.method === '') return;
     setBusy(true);
     setError(null);
     try {
@@ -112,7 +98,6 @@ export function CheckoutScreen({
         recipientName: form.name.trim(),
         ...(form.note.trim() ? { deliveryNote: form.note.trim() } : {}),
         paymentMethod: form.method,
-        ...(memberToSend ? { member: memberToSend } : {}),
       });
       requests.reset();
       clearCart();
@@ -286,10 +271,16 @@ export function CheckoutScreen({
                 <Gi n="info" style={{ width: 14, height: 14, marginTop: 3 }} />
                 {tr('liff.checkout.deliverNote')}
               </div>
+              <button
+                type="button"
+                className="g-btn g-btn-sm"
+                style={s('align-self:flex-start')}
+                onClick={() => go('/member')}
+              >
+                {tr('liff.member.link')}
+              </button>
             </div>
           </section>
-
-          <MemberSection value={member} onChange={setMember} showErrors={tried} />
 
           <section className="g-rise" aria-labelledby="co-pay" style={s('--d:.12s')}>
             <SectionLabel id="co-pay">{tr('liff.checkout.payment')}</SectionLabel>

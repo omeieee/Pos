@@ -18,6 +18,7 @@ import {
 } from './ui/app-context.tsx';
 import { CheckoutScreen, PrivacyGate } from './ui/CartScreen.tsx';
 import { Body, Frame, Header, Notice } from './ui/Chrome.tsx';
+import { MemberScreen } from './ui/MemberScreen.tsx';
 import { MenuScreen } from './ui/MenuScreen.tsx';
 import { OrderScreen, OrdersScreen } from './ui/OrderScreen.tsx';
 
@@ -152,6 +153,8 @@ function Screens({ path }: { path: string }) {
   }
   if (orderId) return <OrderScreen id={orderId} flag={flag} shopPhone={shopPhoneOf(info)} />;
   if (pathname === '/orders') return <OrdersScreen />;
+  // The rich menu's "ข้อมูลสมาชิก" tile opens `{LIFF_BASE_URL}/member`; it needs no menu.
+  if (pathname === '/member') return <MemberScreen />;
   if (!menu) {
     return (
       <>

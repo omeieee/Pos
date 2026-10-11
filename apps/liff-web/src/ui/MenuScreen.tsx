@@ -320,6 +320,21 @@ function MoreMenu({ tel, onClose }: { tel: string | null; onClose: () => void })
           <Gi n="receipt" />
           {tr('liff.nav.orders')}
         </button>
+        <button
+          type="button"
+          role="menuitem"
+          className="g-side"
+          style={s(
+            'width:100%;border:0;background:transparent;font-family:inherit;text-align:left',
+          )}
+          onClick={() => {
+            onClose();
+            go('/member');
+          }}
+        >
+          <Gi n="user" />
+          {tr('liff.member.page')}
+        </button>
         {tel ? (
           <a role="menuitem" className="g-side" href={tel} style={s('text-decoration:none')}>
             <Gi n="phone" />
