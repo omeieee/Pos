@@ -1,0 +1,3 @@
+ALTER TABLE "payments" DROP CONSTRAINT "payments_confirmed_by_staff";--> statement-breakpoint
+ALTER TABLE "payments" ADD COLUMN "auto_confirmed" boolean DEFAULT false NOT NULL;--> statement-breakpoint
+ALTER TABLE "payments" ADD CONSTRAINT "payments_confirmed_by_staff" CHECK (status not in ('confirmed', 'voided', 'refunded') or (confirmed_at is not null and (confirmed_by_staff_id is not null or auto_confirmed)));

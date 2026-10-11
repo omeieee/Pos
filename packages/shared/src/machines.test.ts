@@ -38,7 +38,8 @@ const ORDER_EXPECTED: Partial<Record<`${OrderStatus}>${OrderStatus}`, Expected>>
 const PAYMENT_EXPECTED: Partial<Record<`${PaymentStatus}>${PaymentStatus}`, Expected>> = {
   'pending>claimed': { actors: ['owner', 'manager', 'cashier', 'customer'] },
   'pending>confirmed': { actors: ['owner', 'manager', 'cashier'] },
-  'claimed>confirmed': { actors: ['owner', 'manager', 'cashier'] },
+  // D-27: the server confirms by itself only here, after a valid bank check of the slip.
+  'claimed>confirmed': { actors: ['owner', 'manager', 'cashier', 'system'] },
   'pending>cancelled': { actors: ['owner', 'manager', 'cashier', 'customer', 'system'] },
   'claimed>cancelled': { actors: ['owner', 'manager', 'cashier'], reason: true },
   'confirmed>voided': { actors: ['owner', 'manager'], reason: true, stepUp: true },
@@ -122,12 +123,31 @@ describe('payment machine: every state pair × every actor', () => {
     );
   });
 
-  test('rule 2: neither the customer nor the system can ever confirm a payment', () => {
+  test('rule 2 (amended by D-27): the customer can never confirm; the system only from claimed', () => {
     for (const from of PAYMENT_STATUSES) {
-      for (const actor of [ACTORS.customer, ACTORS.system] as Actor[]) {
-        expect(paymentMachine.transition(from, 'confirmed', { actor, reason: 'x' }).ok).toBe(false);
-      }
+      expect(
+        paymentMachine.transition(from, 'confirmed', {
+          actor: ACTORS.customer as Actor,
+          reason: 'x',
+        }).ok,
+      ).toBe(false);
+      expect(
+        paymentMachine.transition(from, 'confirmed', { actor: ACTORS.system as Actor, reason: 'x' })
+          .ok,
+      ).toBe(from === 'claimed');
     }
+  });
+
+  test('the system never voids, refunds or cancels a claimed payment', () => {
+    const system = ACTORS.system as Actor;
+    for (const to of ['voided', 'refunded', 'cancelled'] as const) {
+      expect(paymentMachine.transition('claimed', to, { actor: system, reason: 'x' }).ok).toBe(
+        false,
+      );
+    }
+    expect(
+      paymentMachine.transition('confirmed', 'voided', { actor: system, reason: 'x' }).ok,
+    ).toBe(false);
   });
 });
 

@@ -3,13 +3,16 @@ import { type Satang, satang, sumSatang } from './money.ts';
 import { makeMachine } from './state-machine.ts';
 
 /**
- * Payment record status (03 §4). Only staff can confirm (CLAUDE.md rule 2):
- * a customer's "โอนแล้ว" or slip only moves a payment to `claimed`.
+ * Payment record status (03 §4). Staff confirm (CLAUDE.md rule 2): a customer's "โอนแล้ว" or slip
+ * only moves a payment to `claimed`. The one exception (D-27): the system may move `claimed ->
+ * confirmed` after a valid bank check of the slip, under the conditions the server checks
+ * (SLIP_AUTOCONFIRM on, PromptPay, code 200200, the amount equal, no duplicate, under the ceiling).
+ * A void or refund stays with staff.
  */
 export const paymentMachine = makeMachine<PaymentStatus>([
   { from: 'pending', to: 'claimed', staff: 'payment.record', customer: true },
   { from: 'pending', to: 'confirmed', staff: 'payment.confirm' },
-  { from: 'claimed', to: 'confirmed', staff: 'payment.confirm' },
+  { from: 'claimed', to: 'confirmed', staff: 'payment.confirm', system: true },
   // Method changed or order cancelled; nothing has been paid yet.
   { from: 'pending', to: 'cancelled', staff: 'payment.record', customer: true, system: true },
   // Staff checked the bank app and found no money.

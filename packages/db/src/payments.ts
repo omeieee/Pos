@@ -113,6 +113,8 @@ export interface PaymentPatch {
   slipVerifyRef?: string | null;
   slipVerifyAttempts?: number;
   slipVerifiedAt?: Date | null;
+  /** Confirmed by the server itself after a valid bank check (D-27), not by a staff member. */
+  autoConfirmed?: boolean;
 }
 
 export async function findPaymentById(db: Db, id: string): Promise<PaymentRow | undefined> {

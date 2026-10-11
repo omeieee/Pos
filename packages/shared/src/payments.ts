@@ -169,6 +169,12 @@ export const orderPaymentsResponseSchema = z.object({
    */
   slipPaymentIds: z.array(z.uuid()).optional(),
   /**
+   * The payments of this order that the server confirmed itself after a valid bank check of the
+   * slip (D-27), so the screen can label them. Only on this REST answer, never in sync, realtime
+   * or a customer answer; absent when there is none. Staff void such a payment as any other.
+   */
+  autoConfirmedPaymentIds: z.array(z.uuid()).optional(),
+  /**
    * What the automatic reading of each slip said (D-26): a hint for staff, never a confirmation.
    * `amountSatang` is the amount read off the slip, null while pending or when it was unreadable.
    * Only on this REST answer, like the ids above; a payment with a slip but no entry has no hint.

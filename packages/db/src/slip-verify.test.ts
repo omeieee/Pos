@@ -229,6 +229,58 @@ describe('where the verdict never goes', () => {
   });
 });
 
+describe('an automatic confirmation (D-27, migration 0032)', () => {
+  const confirmedAt = new Date('2026-10-01T03:10:00Z');
+
+  test('a confirmed payment may name nobody only when it is marked automatic', async () => {
+    const row = await claimedPayment();
+    await expect(
+      repo.updatePaymentIfVersion(db, row.id, row.version, { status: 'confirmed', confirmedAt }),
+    ).rejects.toThrow();
+    const done = await repo.updatePaymentIfVersion(db, row.id, row.version, {
+      status: 'confirmed',
+      confirmedAt,
+      autoConfirmed: true,
+    });
+    expect(done).toMatchObject({
+      status: 'confirmed',
+      confirmedByStaffId: null,
+      autoConfirmed: true,
+    });
+  });
+
+  test('automatic still needs a time, and a void of it works without naming the staff column', async () => {
+    const row = await claimedPayment();
+    await expect(
+      repo.updatePaymentIfVersion(db, row.id, row.version, {
+        status: 'confirmed',
+        autoConfirmed: true,
+      }),
+    ).rejects.toThrow();
+    const confirmed = await repo.updatePaymentIfVersion(db, row.id, row.version, {
+      status: 'confirmed',
+      confirmedAt,
+      autoConfirmed: true,
+    });
+    const voided = await repo.updatePaymentIfVersion(db, row.id, confirmed?.version ?? 0, {
+      status: 'voided',
+      voidReason: 'checked the bank app: no money',
+    });
+    expect(voided).toMatchObject({ status: 'voided', autoConfirmed: true });
+  });
+
+  test('a payment confirmed by staff is not automatic, and the sync feed never says otherwise', async () => {
+    const row = await claimedPayment();
+    expect(row.autoConfirmed).toBe(false);
+    const batch = await sync.readChanges(db, {
+      since: 0,
+      limit: 500,
+      include: { orders: false, payments: true, menu: false, settings: false, customers: false },
+    });
+    expect(JSON.stringify(batch)).not.toMatch(/auto/i);
+  });
+});
+
 describe('daily Slip2Go usage', () => {
   test('counts calls per business date and lets an alert go out once a day', async () => {
     const date = '2026-10-01';

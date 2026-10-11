@@ -676,6 +676,12 @@ export const payments = pgTable(
     /** Set only when the owner took over a device's outbox: the cashier who took this cash. */
     originalStaffId: uuid('original_staff_id').references(() => staff.id),
     voidReason: text('void_reason'),
+    /**
+     * Confirmed by the server itself after a valid bank check of the slip (D-27): then
+     * `confirmed_by_staff_id` stays null. Staff void and refund such a payment as any other. Never
+     * in sync or realtime; staff see it on `GET /v1/orders/:id/payments`.
+     */
+    autoConfirmed: boolean('auto_confirmed').notNull().default(false),
     clientRequestId: uuid('client_request_id').notNull(),
     /** Fingerprint of the request that made this payment; null on rows saved before it existed. */
     requestHash: text('request_hash'),
@@ -712,10 +718,11 @@ export const payments = pgTable(
       'payments_cash_change',
       sql`tendered_satang is null or (tendered_satang >= amount_satang and change_satang = tendered_satang - amount_satang)`,
     ),
-    // Rule 2: a confirmed payment always names the staff member who confirmed it.
+    // Rule 2: a confirmed payment names the staff member who confirmed it, or is marked as
+    // confirmed by the server itself after a valid bank check (D-27).
     check(
       'payments_confirmed_by_staff',
-      sql`status not in ('confirmed', 'voided', 'refunded') or (confirmed_by_staff_id is not null and confirmed_at is not null)`,
+      sql`status not in ('confirmed', 'voided', 'refunded') or (confirmed_at is not null and (confirmed_by_staff_id is not null or auto_confirmed))`,
     ),
   ],
 );
