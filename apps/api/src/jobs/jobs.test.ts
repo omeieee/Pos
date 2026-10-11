@@ -1,6 +1,11 @@
 import { ANONYMIZED_BUILDING, ANONYMIZED_RECIPIENT_NAME } from '@sds/shared';
-import { afterAll, beforeAll, describe, expect, test } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from 'vitest';
 import { createLineRuntime } from '../line/runtime.ts';
+import {
+  type AccountInfoResult,
+  installSlipVerifier,
+  type SlipVerifier,
+} from '../slips/slip2go.ts';
 import { createMemorySlipStore } from '../slips/store.ts';
 import { createHarness, type Harness } from '../test-support/harness.ts';
 import { JOBS, type JobDeps } from './jobs.ts';
@@ -45,6 +50,7 @@ describe('the job list', () => {
         'retention-staff-invites',
         'retention-button-replies',
         'retention-member-profiles',
+        'slip2go-account-check',
       ]),
     );
     for (const j of JOBS) expect(j.cron.trim().split(/\s+/)).toHaveLength(5);
@@ -221,5 +227,90 @@ describe('retention jobs', () => {
     expect(RETENTION_BATCH.size).toBeGreaterThan(0);
     expect(RETENTION_BATCH.maxBatches).toBeGreaterThan(0);
     expect(RETENTION_BATCH.size * RETENTION_BATCH.maxBatches).toBeLessThanOrEqual(50_000);
+  });
+});
+
+describe('slip2go-account-check (D-27)', () => {
+  const run = () => job('slip2go-account-check').run(deps);
+  const day = 86_400_000;
+  let reply: AccountInfoResult = { kind: 'failed' };
+  let asked = 0;
+  const verifier: SlipVerifier = {
+    verifyQr: async () => ({ kind: 'transient' }),
+    verifyImage: async () => ({ kind: 'transient' }),
+    accountInfo: async () => {
+      asked += 1;
+      return reply;
+    },
+  };
+  const info = (
+    estimatedQuotaSlip: number | null,
+    expiresInMs: number | null,
+  ): AccountInfoResult => ({
+    kind: 'info',
+    estimatedQuotaSlip,
+    packageExpiredDate:
+      expiresInMs === null ? null : new Date(deps.now().getTime() + expiresInMs).toISOString(),
+  });
+  const kinds = () => h.alerts.filter((a) => a.kind.startsWith('slip2go.')).map((a) => a.kind);
+
+  beforeEach(() => {
+    installSlipVerifier(verifier);
+    asked = 0;
+    h.alerts.length = 0;
+  });
+  afterEach(() => installSlipVerifier(null));
+
+  test('with the verifier off it does nothing and asks nobody', async () => {
+    installSlipVerifier(null);
+    expect(await run()).toEqual({ checked: 0, failed: 0, alerts: 0 });
+    expect(asked).toBe(0);
+    expect(kinds()).toEqual([]);
+  });
+
+  test('plenty of slips and a package that lasts: no alert', async () => {
+    reply = info(30, 4 * day);
+    expect(await run()).toEqual({ checked: 1, failed: 0, alerts: 0 });
+    expect(kinds()).toEqual([]);
+  });
+
+  test('fewer than 30 slips left alerts the owner with the number only', async () => {
+    reply = info(29, 20 * day);
+    expect(await run()).toEqual({ checked: 1, failed: 0, alerts: 1 });
+    expect(h.alerts.filter((a) => a.kind.startsWith('slip2go.'))).toEqual([
+      expect.objectContaining({
+        kind: 'slip2go.quota_low',
+        severity: 'warn',
+        staffId: null,
+        slip2go: { quotaSlips: 29 },
+      }),
+    ]);
+  });
+
+  test('a package that ends within 3 days (or already ended) alerts with the date only', async () => {
+    reply = info(500, 3 * day);
+    expect(await run()).toEqual({ checked: 1, failed: 0, alerts: 1 });
+    expect(h.alerts.at(-1)?.slip2go).toEqual({
+      expiresOn: new Date(deps.now().getTime() + 3 * day).toISOString().slice(0, 10),
+    });
+    h.alerts.length = 0;
+    reply = info(500, -day);
+    await run();
+    expect(kinds()).toEqual(['slip2go.package_expiring']);
+  });
+
+  test('both low quota and expiry give two alerts; unknown figures give none', async () => {
+    reply = info(1, day);
+    expect(await run()).toEqual({ checked: 1, failed: 0, alerts: 2 });
+    expect(kinds().sort()).toEqual(['slip2go.package_expiring', 'slip2go.quota_low']);
+    h.alerts.length = 0;
+    reply = info(null, null);
+    expect(await run()).toEqual({ checked: 1, failed: 0, alerts: 0 });
+  });
+
+  test('an account call that fails is counted, never thrown, and raises no alert', async () => {
+    reply = { kind: 'failed', code: '401001' };
+    expect(await run()).toEqual({ checked: 0, failed: 1, alerts: 0 });
+    expect(kinds()).toEqual([]);
   });
 });

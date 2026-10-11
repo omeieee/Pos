@@ -11,6 +11,7 @@ import {
   purgeStaffInvites,
   sweepOrphanSlips,
 } from './retention.ts';
+import { checkSlip2goAccount } from './slip2go.ts';
 
 /** What every job gets. Jobs are plain functions of this, so tests call them directly. */
 export type JobDeps = LineJobDeps;
@@ -37,6 +38,9 @@ export const JOBS: readonly JobDefinition[] = [
     cron: '* * * * *',
     run: async () => ({ read: (await activeSlipChecker()?.sweep()) ?? 0 }),
   },
+  // The Slip2Go account (D-27): slips left and package end, 08:00 Bangkok. Not charged; a no-op when
+  // the bank check is off.
+  { name: 'slip2go-account-check', cron: '0 8 * * *', run: checkSlip2goAccount },
   // Retention (owner decisions 2026-10-03), nightly, staggered. Each is idempotent and bounded.
   { name: 'retention-line-events', cron: '30 3 * * *', run: purgeLineEvents },
   { name: 'retention-orders', cron: '40 3 * * *', run: anonymizeOrders },
