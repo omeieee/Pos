@@ -85,62 +85,183 @@ const logoSvgs = {
   'logo-line-profile.svg': () => svgWrap(256, 256, `<rect width="256" height="256" fill="${C.brand}"/><g transform="translate(128 128) scale(.82) translate(-128 -128)">${glyph({ bowl: C.white, wisp: C.white, stripe: C.accent })}</g>`, 'แซ่บโดนเส้น'),
 };
 
-// ---- rich menu ----
+// ---- rich menu ("Hot bowl, calm glass": same palette, radii, glass cards and 24-grid stroke icons as the customer app) ----
+// App icon paths (apps/liff-web/src/design/icons.tsx, 24 grid, stroke 1.8, round caps); cart, baht and chat are drawn in the same style.
 const ICON = {
-  bowl: (s) => `<g fill="none" stroke="${s}" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 54H88A38 38 0 0 1 12 54Z"/><path d="M34 46C28 36 40 32 34 22M50 46C44 36 56 32 50 22M66 46C60 36 72 32 66 22"/></g>`,
-  cart: (s) => `<g fill="none" stroke="${s}" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 18H24L34 62H78L88 30H28"/><circle cx="42" cy="78" r="6"/><circle cx="72" cy="78" r="6"/></g>`,
-  pay: (s) => `<circle cx="50" cy="50" r="38" fill="none" stroke="${s}" stroke-width="6"/>${text('฿', { x: 50, y: 69, size: 54, fam: 'p7', fill: s, anchor: 'middle' })}`,
-  chat: (s) => `<g fill="none" stroke="${s}" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"><path d="M14 20H86V68H48L28 86V68H14Z"/></g><g fill="${s}"><circle cx="34" cy="44" r="5"/><circle cx="50" cy="44" r="5"/><circle cx="66" cy="44" r="5"/></g>`,
+  bowl: '<path d="M3 11h18c0 5-4 9-9 9s-9-4-9-9zM8 6c1-1.5 1-2.5 0-4M13 6c1-1.5 1-2.5 0-4"/>',
+  cart: '<path d="M3 4h2.4l2.1 11h10.2l2-8H6.4"/><circle cx="9.6" cy="19.3" r="1.3"/><circle cx="16.8" cy="19.3" r="1.3"/>',
+  baht: '<circle cx="12" cy="12" r="9.5"/><path d="M10 7.2h3.4a2.2 2.2 0 0 1 0 4.4H10M10 11.6h3.9a2.2 2.2 0 0 1 0 4.4H10M10 7.2V16M12 5.6v1.6M12 16v1.6"/>',
+  chat: '<path d="M4 5h16v11h-6.5L9 20v-4H4z"/><path d="M8.5 10.5h.01M12 10.5h.01M15.5 10.5h.01" stroke-width="2.6"/>',
+  building: '<path d="M5 21V4h9v17M14 9h5v12M3 21h18"/>',
+  chevronRight: '<path d="M9 6l6 6-6 6"/>',
 };
-const icon = (name, cx, cy, size, stroke) => `<g transform="translate(${cx - size / 2} ${cy - size / 2}) scale(${size / 100})">${ICON[name](stroke)}</g>`;
+const icon = (name, cx, cy, size, color, sw = 1.8) =>
+  `<g transform="translate(${cx - size / 2} ${cy - size / 2}) scale(${size / 24})" fill="none" stroke="${color}" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round">${ICON[name]}</g>`;
 
-function smallTile(r, { ic, label, sub, iconR, labelSize, subSize, top }) {
-  const cx = r.x + r.w / 2;
-  const cy = r.y + top;
-  const lines = sub.map((s, i) => text(s, { x: cx, y: cy + iconR + labelSize * 1.55 + subSize * 1.45 * (i + 1) + 6, size: subSize, fam: 'p', fill: C.muted, anchor: 'middle' })).join('');
-  return `<rect x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" fill="${C.bg}"/>
-<circle cx="${cx}" cy="${cy}" r="${iconR}" fill="${C.brandSubtle}"/>${icon(ic, cx, cy, iconR * 1.15, C.brand)}
-${text(label, { x: cx, y: cy + iconR + labelSize * 1.3, size: labelSize, fill: C.ink, anchor: 'middle' })}${lines}`;
-}
-const heroBg = (r) => `<rect x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" fill="${C.brand}"/><rect x="${r.x}" y="${r.y + r.h - 22}" width="${r.w}" height="22" fill="${C.accent}"/>`;
-const badge = (x, y, size, label) => {
-  const w = [...label].length * size * 0.5 + size * 1.6;
-  return `<rect x="${x}" y="${y}" width="${w}" height="${size * 1.9}" rx="${size * 0.95}" fill="${C.white}"/>${text(label, { x: x + size * 0.8, y: y + size * 1.32, size, fam: 'p7', fill: C.brand })}`;
+// app tokens (packages/ui design.css)
+const G = {
+  chili2: '#d63a2e',
+  chili: '#c62828',
+  chiliDeep: '#bd2424',
+  chiliInk: '#9c1c1c',
+  chiliSoft: '#fce6e1',
+  amberSoft: '#ffefd0',
+  amberInk: '#8a4b00',
+  skySoft: '#e4ecfa',
+  skyInk: '#1d4e9e',
+  ink: '#1c1411',
+  ink2: '#5e504a',
+  paper: '#fbf4ec',
 };
+
+const defs = (w, h) => `<defs>
+<radialGradient id="o1" gradientUnits="userSpaceOnUse" cx="${w * 0.08}" cy="${h * 0.04}" r="${w * 0.42}"><stop offset="0" stop-color="#ff8a65" stop-opacity=".42"/><stop offset="1" stop-color="#ff8a65" stop-opacity="0"/></radialGradient>
+<radialGradient id="o2" gradientUnits="userSpaceOnUse" cx="${w * 0.96}" cy="${h * 0.08}" r="${w * 0.36}"><stop offset="0" stop-color="#ffc46b" stop-opacity=".5"/><stop offset="1" stop-color="#ffc46b" stop-opacity="0"/></radialGradient>
+<radialGradient id="o3" gradientUnits="userSpaceOnUse" cx="${w * 0.86}" cy="${h}" r="${w * 0.4}"><stop offset="0" stop-color="#d68cc8" stop-opacity=".3"/><stop offset="1" stop-color="#d68cc8" stop-opacity="0"/></radialGradient>
+<linearGradient id="hero" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${G.chili2}"/><stop offset="1" stop-color="${G.chiliDeep}"/></linearGradient>
+<radialGradient id="glow" cx=".9" cy=".05" r=".7"><stop offset="0" stop-color="#f5a524" stop-opacity=".55"/><stop offset="1" stop-color="#f5a524" stop-opacity="0"/></radialGradient>
+<linearGradient id="glass" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".94"/><stop offset="1" stop-color="#fff" stop-opacity=".72"/></linearGradient>
+<filter id="shR" x="-10%" y="-12%" width="120%" height="140%"><feDropShadow dx="0" dy="26" stdDeviation="28" flood-color="#c62828" flood-opacity=".34"/></filter>
+<filter id="shG" x="-12%" y="-12%" width="124%" height="135%"><feDropShadow dx="0" dy="22" stdDeviation="26" flood-color="#783c1e" flood-opacity=".16"/></filter>
+</defs>`;
+const backdrop = (w, h) =>
+  `<rect width="${w}" height="${h}" fill="${G.paper}"/><rect width="${w}" height="${h}" fill="url(#o1)"/><rect width="${w}" height="${h}" fill="url(#o2)"/><rect width="${w}" height="${h}" fill="url(#o3)"/>`;
+
+/** Pill with an icon and a label (the app's chip). */
+function pill(x, y, size, label, ic) {
+  const h = size * 2;
+  const w = [...label].length * size * 0.52 + size * 3.1;
+  return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${h / 2}" fill="#fff" fill-opacity=".92"/>${icon(ic, x + size * 1.15, y + h / 2, size * 1.2, G.chiliInk)}${text(label, { x: x + size * 2.1, y: y + h / 2 + size * 0.36, size, fam: 'p7', fill: G.chiliInk })}`;
+}
+/** Primary-action card: the app's chili gradient button, scaled up. */
+function heroCard(r, k, o) {
+  const { x, y, w, h } = r;
+  const rad = 56 * k;
+  const cid = `hc${Math.round(w)}`;
+  const dcx = x + o.discX,
+    dcy = y + o.discY;
+  const bx = x + o.btnX,
+    by = y + o.btnY;
+  return `<clipPath id="${cid}"><rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${rad}"/></clipPath>
+<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${rad}" fill="url(#hero)" filter="url(#shR)"/>
+<g clip-path="url(#${cid})"><rect x="${x}" y="${y}" width="${w}" height="${h}" fill="url(#glow)"/>
+<circle cx="${x + w * 0.82}" cy="${y + h * 1.0}" r="${h * 0.62}" fill="#fff" fill-opacity=".07"/><circle cx="${x + w * 0.1}" cy="${y + h * 1.05}" r="${h * 0.45}" fill="#fff" fill-opacity=".06"/>
+<g opacity=".06">${icon('bowl', x + w * 0.64, y + h * 0.5, h * 1.25, '#fff', 1.2)}</g></g>
+<rect x="${x + 1.5}" y="${y + 1.5}" width="${w - 3}" height="${h - 3}" rx="${rad - 1.5}" fill="none" stroke="#fff" stroke-opacity=".32" stroke-width="3"/>
+<circle cx="${dcx}" cy="${dcy}" r="${o.discR}" fill="#fff" fill-opacity=".18" stroke="#fff" stroke-opacity=".45" stroke-width="${4 * k}"/>
+${icon('bowl', dcx, dcy, o.discR * 1.3, '#fff', 1.7)}
+${text('สั่งอาหาร', { x: x + o.tx, y: y + o.ty, size: o.tSize, fill: '#fff', id: 'hero-title' })}
+${text('เลือกเมนู ใส่ตะกร้า สั่งได้เลย', { x: x + o.tx + 4, y: y + o.sy, size: o.sSize, fam: 'p', fill: '#fff', id: 'hero-sub' })}
+${pill(x + o.tx + 4, y + o.py, o.pSize, 'ส่งถึงทางเข้าอาคาร', 'building')}
+<circle cx="${bx}" cy="${by}" r="${o.btnR}" fill="#fff"/>${icon('chevronRight', bx + o.btnR * 0.04, by, o.btnR * 1.1, G.chili, 2.2)}`;
+}
+/** Soft glass card with a tinted icon chip, label and sub-lines. */
+function tileCard(r, k, t, o) {
+  const { x, y, w, h } = r;
+  const rad = 48 * k;
+  const cx = x + w / 2;
+  const cy = y + o.chipY;
+  const cs = o.chip;
+  const subs = t.sub
+    .map((s, i) =>
+      text(s, {
+        x: cx,
+        y: y + o.subY + i * o.subGap,
+        size: o.subSize,
+        fam: 'p',
+        fill: G.ink2,
+        anchor: 'middle',
+      }),
+    )
+    .join('');
+  return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${rad}" fill="url(#glass)" filter="url(#shG)"/>
+<rect x="${x + 1.5}" y="${y + 1.5}" width="${w - 3}" height="${h - 3}" rx="${rad - 1.5}" fill="none" stroke="#fff" stroke-width="3"/>
+<rect x="${cx - cs / 2}" y="${cy - cs / 2}" width="${cs}" height="${cs}" rx="${cs * 0.32}" fill="${t.soft}"/><rect x="${cx - cs / 2 + 2}" y="${cy - cs / 2 + 2}" width="${cs - 4}" height="${cs - 4}" rx="${cs * 0.32 - 2}" fill="none" stroke="#fff" stroke-opacity=".7" stroke-width="3"/>
+${icon(t.ic, cx, cy, cs * 0.6, t.ink, 1.8)}
+${text(t.label, { x: cx, y: y + o.labelY, size: o.labelSize, fill: G.ink, anchor: 'middle' })}${subs}`;
+}
+const TILES = [
+  {
+    ic: 'cart',
+    label: 'ออเดอร์ของฉัน',
+    sub: ['ตะกร้า · ดูสถานะอาหาร'],
+    soft: G.chiliSoft,
+    ink: G.chili,
+  },
+  {
+    ic: 'baht',
+    label: 'วิธีชำระเงิน',
+    sub: ['PromptPay · เงินสด', 'ไทยช่วยไทย'],
+    soft: G.amberSoft,
+    ink: G.amberInk,
+  },
+  { ic: 'chat', label: 'ติดต่อร้าน', sub: ['แชทถามร้านได้เลย'], soft: G.skySoft, ink: G.skyInk },
+];
 
 function menuFull() {
   const hero = { x: 0, y: 0, w: 2500, h: 843 };
-  const tiles = [
-    { x: 0, y: 843, w: 833, h: 843, ic: 'cart', label: 'ออเดอร์ของฉัน', sub: ['ตะกร้า · ดูสถานะอาหาร'] },
-    { x: 833, y: 843, w: 834, h: 843, ic: 'pay', label: 'วิธีชำระเงิน', sub: ['PromptPay · เงินสด', 'ไทยช่วยไทย'] },
-    { x: 1667, y: 843, w: 833, h: 843, ic: 'chat', label: 'ติดต่อร้าน', sub: ['แชทถามร้านได้เลย'] },
+  const bounds = [
+    { x: 0, y: 843, w: 833, h: 843 },
+    { x: 833, y: 843, w: 834, h: 843 },
+    { x: 1667, y: 843, w: 833, h: 843 },
   ];
-  const body = `<rect width="2500" height="1686" fill="${C.bg}"/>${heroBg(hero)}
-<g opacity=".16" transform="translate(1560 90) scale(3.1)" fill="#fff">${ICON.bowl('#fff')}</g>
-${icon('bowl', 330, 380, 360, C.white)}
-${text('สั่งอาหาร', { x: 600, y: 440, size: 250, fill: C.white, id: 'hero-title' })}
-${text('เลือกเมนู ใส่ตะกร้า สั่งได้เลย', { x: 606, y: 560, size: 86, fam: 'p', fill: C.white, id: 'hero-sub' })}
-${badge(606, 620, 54, 'ส่งถึงทางเข้าอาคาร')}
-${tiles.map((t) => smallTile(t, { ic: t.ic, label: t.label, sub: t.sub, iconR: 150, labelSize: 120, subSize: 62, top: 255 })).join('')}
-<g fill="${C.border}"><rect x="832" y="843" width="3" height="843"/><rect x="1665" y="843" width="3" height="843"/></g>`;
-  return { svg: svgWrap(2500, 1686, body, 'Rich menu แซ่บโดนเส้น'), w: 2500, h: 1686, tiles: [hero, ...tiles] };
+  // cards sit inside their tap areas: 70 px outer margin, 70 px gap
+  const card = (b) => ({
+    x: b.x + (b.x === 0 ? 70 : 35),
+    y: b.y + 35,
+    w: b.w - (b.x === 0 ? 70 + 35 : b.x === 1667 ? 35 + 70 : 70),
+    h: 738,
+  });
+  const hc = { x: 70, y: 70, w: 2360, h: 738 };
+  const to = {
+    chipY: 215,
+    chip: 310,
+    labelY: 510,
+    labelSize: 92,
+    subY: 600,
+    subGap: 76,
+    subSize: 62,
+  };
+  const body = `${defs(2500, 1686)}${backdrop(2500, 1686)}
+${heroCard(hc, 3.2, { discX: 290, discY: 369, discR: 215, btnX: 2150, btnY: 369, btnR: 135, tx: 600, ty: 340, tSize: 250, sy: 452, sSize: 84, py: 508, pSize: 52 })}
+${bounds.map((b, i) => tileCard(card(b), 3.2, TILES[i], to)).join('')}`;
+  return {
+    svg: svgWrap(2500, 1686, body, 'Rich menu แซ่บโดนเส้น'),
+    w: 2500,
+    h: 1686,
+    tiles: [hero, ...bounds],
+  };
 }
 function menuCompact() {
   const hero = { x: 0, y: 0, w: 1000, h: 843 };
-  const tiles = [
-    { x: 1000, y: 0, w: 500, h: 843, ic: 'cart', label: 'ออเดอร์ของฉัน', sub: ['ตะกร้า · สถานะ'] },
-    { x: 1500, y: 0, w: 500, h: 843, ic: 'pay', label: 'วิธีชำระเงิน', sub: ['PromptPay · เงินสด', 'ไทยช่วยไทย'] },
-    { x: 2000, y: 0, w: 500, h: 843, ic: 'chat', label: 'ติดต่อร้าน', sub: ['แชทถามร้านได้เลย'] },
+  const bounds = [
+    { x: 1000, y: 0, w: 500, h: 843 },
+    { x: 1500, y: 0, w: 500, h: 843 },
+    { x: 2000, y: 0, w: 500, h: 843 },
   ];
-  const body = `<rect width="2500" height="843" fill="${C.bg}"/>${heroBg(hero)}
-${icon('bowl', 150, 175, 170, C.white)}
-${text('สั่งอาหาร', { x: 70, y: 500, size: 190, fill: C.white, id: 'hero-title' })}
-${text('เลือกเมนู ใส่ตะกร้า สั่งได้เลย', { x: 74, y: 585, size: 56, fam: 'p', fill: C.white, id: 'hero-sub' })}
-${badge(74, 625, 40, 'ส่งถึงทางเข้าอาคาร')}
-${tiles.map((t) => smallTile(t, { ic: t.ic, label: t.label, sub: t.sub, iconR: 100, labelSize: 62, subSize: 44, top: 330 })).join('')}
-<g fill="${C.border}"><rect x="1000" y="0" width="3" height="843"/><rect x="1500" y="0" width="3" height="843"/><rect x="2000" y="0" width="3" height="843"/></g>`;
-  return { svg: svgWrap(2500, 843, body, 'Rich menu แซ่บโดนเส้น (compact)'), w: 2500, h: 843, tiles: [hero, ...tiles] };
+  // 36 px outer margin, 36 px gap
+  const hc = { x: 36, y: 36, w: 946, h: 771 };
+  const card = (b) => ({ x: b.x + 18, y: 36, w: b.x === 2000 ? 500 - 18 - 36 : 464, h: 771 });
+  const to = {
+    chipY: 300,
+    chip: 240,
+    labelY: 535,
+    labelSize: 54,
+    subY: 615,
+    subGap: 62,
+    subSize: 44,
+  };
+  const body = `${defs(2500, 843)}${backdrop(2500, 843)}
+${heroCard(hc, 1.6, { discX: 150, discY: 150, discR: 100, btnX: 830, btnY: 150, btnR: 70, tx: 60, ty: 470, tSize: 170, sy: 548, sSize: 52, py: 590, pSize: 38 })}
+${bounds.map((b, i) => tileCard(card(b), 1.6, TILES[i], to)).join('')}`;
+  return {
+    svg: svgWrap(2500, 843, body, 'Rich menu แซ่บโดนเส้น (compact)'),
+    w: 2500,
+    h: 843,
+    tiles: [hero, ...bounds],
+  };
 }
+
 
 // ---- tap areas (LINE Messaging API rich menu object; packages/line fills the placeholders) ----
 const LIFF = '{{LIFF_BASE_URL}}';

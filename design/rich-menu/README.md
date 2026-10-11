@@ -1,11 +1,13 @@
 # LINE rich menu art
 
+Style: the customer app "Hot bowl, calm glass" (chili gradient primary card, white glass tiles with tinted icon chips, app stroke icons, same palette and shadows). Preview at 390 px: `preview/phone-390.png`.
+
 Source of truth is `design/build/build-brand-art.mjs` (regenerates every file here and in `design/logo/`). Text is Thai only; colours and fonts come from [brand.md](../brand.md).
 
 | Variant | Image | Source | Tap areas |
 |---|---|---|---|
-| Full 2500x1686 (default) | `rich-menu-full.png` (157 KB) | `rich-menu-full.svg` | `rich-menu-full.json` |
-| Compact 2500x843 | `rich-menu-compact.png` (90 KB) | `rich-menu-compact.svg` | `rich-menu-compact.json` |
+| Full 2500x1686 (default) | `rich-menu-full.png` (926 KB) | `rich-menu-full.svg` | `rich-menu-full.json` |
+| Compact 2500x843 | `rich-menu-compact.png` (664 KB) | `rich-menu-compact.svg` | `rich-menu-compact.json` |
 
 LINE limits: PNG or JPEG, at most 1 MB, width 800-2500, aspect ratio at least 1.45. Both PNGs pass (the build script fails at 1 MB or more).
 
