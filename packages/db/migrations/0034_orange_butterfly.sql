@@ -1,0 +1,1 @@
+ALTER TABLE "payments" ADD COLUMN "slip_uploaded_at" timestamp with time zone;

@@ -84,6 +84,8 @@ let respond: (call: Call, n: number) => Reply = () => ({ body: answer('200200', 
 let localQr: SlipQrText | null = null;
 let dailyCap = 100;
 let autoConfirm: { maxSatang: number } | null = null;
+/** Off (0) unless a test opts in: the older tests are about final answers. */
+let graceSeconds = 0;
 let ownerFixture: Awaited<ReturnType<Harness['newOwner']>>;
 let ocrOn = false;
 let ocrText = '';
@@ -138,6 +140,7 @@ function buildChecker(): SlipChecker {
     ),
     dailyCap,
     autoConfirm,
+    notFoundGraceSeconds: graceSeconds,
     log: { warn: (o) => logLines.push(o) },
   });
 }
@@ -180,6 +183,7 @@ beforeEach(async () => {
   localQr = localQrFor();
   dailyCap = 100;
   autoConfirm = null;
+  graceSeconds = 0;
   ocrOn = false;
   ocrText = '';
   respond = (_call, _n) => {
@@ -2317,5 +2321,162 @@ describe('the owner lifts a block or a flag', () => {
     await upload(token, next.id, picture(6));
     await checker.idle();
     expect((await payments(next.id)).at(-1)?.status).toBe('confirmed');
+  });
+});
+
+describe('a slow bank: "not found" inside the grace window is not final', () => {
+  beforeEach(() => {
+    graceSeconds = 180;
+    dailyCap = 10_000;
+    checker = buildChecker();
+    installSlipChecker(checker);
+  });
+  const notFound = () => ({ body: answer('200404', currentAmountBaht) });
+  async function sendAt404(fill = 1) {
+    const placed = await start();
+    respond = notFound;
+    await upload(placed.token, placed.order.id, picture(fill));
+    await checker.idle();
+    return placed;
+  }
+
+  test('a 404 right after the upload stays pending: no cooldown count, no final verdict, one call', async () => {
+    const { order } = await sendAt404();
+    expect(await row(order.id)).toMatchObject({
+      slip_verify: 'pending',
+      slip_verify_code: null,
+      slip_verify_attempts: 1,
+      status: 'claimed',
+    });
+    const [payment] = await payments(order.id);
+    expect(payment).toMatchObject({ slip_invalid_count: 0, slip_invalid_at: null });
+    expect(payment?.slip_verified_at).toBeNull();
+    expect(calls).toHaveLength(1);
+  });
+
+  test('the sweep does not call again before the gap, and calls once after it (no busy loop)', async () => {
+    const { order } = await sendAt404();
+    for (let i = 0; i < 3; i++) {
+      await checker.sweep();
+      await checker.idle();
+    }
+    expect(calls).toHaveLength(1);
+    h.clock.advanceSeconds(19);
+    await checker.sweep();
+    await checker.idle();
+    expect(calls).toHaveLength(1);
+    h.clock.advanceSeconds(1);
+    await checker.sweep();
+    await checker.idle();
+    expect(calls).toHaveLength(2);
+    expect((await row(order.id))?.slip_verify).toBe('pending');
+  });
+
+  test('a later 200200 takes the normal valid path, including the automatic confirmation', async () => {
+    autoConfirm = { maxSatang: 100_000 };
+    checker = buildChecker();
+    installSlipChecker(checker);
+    const { order } = await sendAt404();
+    expect((await row(order.id))?.status).toBe('claimed');
+    h.clock.advanceSeconds(30);
+    respond = () => ({ body: answer('200200', currentAmountBaht) });
+    await checker.sweep();
+    await checker.idle();
+    expect(await row(order.id)).toMatchObject({
+      slip_verify: 'valid',
+      slip_verify_code: '200200',
+      status: 'confirmed',
+    });
+    expect((await payments(order.id))[0]?.slip_invalid_count).toBe(0);
+    expect(calls).toHaveLength(2);
+  });
+
+  test('a 404 after the window is final not_found, counted once, and no more calls', async () => {
+    const { order } = await sendAt404();
+    h.clock.advanceSeconds(200);
+    await checker.sweep();
+    await checker.idle();
+    const [payment] = await payments(order.id);
+    expect(payment).toMatchObject({ slip_verify: 'not_found', slip_invalid_count: 1 });
+    expect(calls).toHaveLength(2);
+    for (let i = 0; i < 3; i++) {
+      h.clock.advanceSeconds(60);
+      await checker.sweep();
+      await checker.idle();
+    }
+    expect(calls).toHaveLength(2);
+    expect((await payments(order.id))[0]?.slip_invalid_count).toBe(1);
+  });
+
+  test('when the attempts run out inside the window the last 404 is final, counted once', async () => {
+    const { order } = await sendAt404();
+    for (let i = 0; i < 6; i++) {
+      h.clock.advanceSeconds(25);
+      await checker.sweep();
+      await checker.idle();
+    }
+    expect(calls).toHaveLength(3);
+    expect((await payments(order.id))[0]).toMatchObject({
+      slip_verify: 'not_found',
+      slip_invalid_count: 1,
+      slip_verify_attempts: 3,
+    });
+  });
+
+  test('the daily cap is respected: no call over it, and nothing is counted against the customer', async () => {
+    // The day's usage is shared by the tests of this file: allow exactly one more call.
+    const used = await h.client.query<{ n: number }>(
+      "select coalesce(sum(n), 0)::int as n from slip_verify_daily where kind = 'calls' and business_date = '2028-02-01'",
+    );
+    dailyCap = (used.rows[0]?.n ?? 0) + 1;
+    checker = buildChecker();
+    installSlipChecker(checker);
+    const { order } = await sendAt404();
+    h.clock.advanceSeconds(30);
+    await checker.sweep();
+    await checker.idle();
+    expect(calls).toHaveLength(1);
+    expect((await payments(order.id))[0]?.slip_invalid_count).toBe(0);
+  });
+
+  test('a fake-slip answer (200500) is never delayed: final and blocked at once', async () => {
+    const placed = await start();
+    respond = () => ({ body: answer('200500', currentAmountBaht) });
+    await upload(placed.token, placed.order.id, picture(1));
+    await checker.idle();
+    expect((await payments(placed.order.id))[0]).toMatchObject({
+      slip_verify: 'fraud',
+      slip_block_reason: 'fraud',
+      slip_invalid_count: 0,
+    });
+    expect(calls).toHaveLength(1);
+  });
+
+  test('the other final answers (e.g. wrong amount) are not delayed either', async () => {
+    const placed = await start();
+    respond = () => ({ body: answer('200402', currentAmountBaht) });
+    await upload(placed.token, placed.order.id, picture(1));
+    await checker.idle();
+    expect((await payments(placed.order.id))[0]).toMatchObject({
+      slip_verify: 'amount_mismatch',
+      slip_invalid_count: 1,
+    });
+  });
+
+  test('a staff recheck of a fresh slip is final on a 404 and does not count', async () => {
+    const { order } = await sendAt404();
+    const [before] = await payments(order.id);
+    await h.client.query(
+      "update payments set slip_verify = 'pending', slip_uploaded_at = $2 where id = $1",
+      [before?.id, h.clock.now().toISOString()],
+    );
+    await checker.recheck(before?.id ?? '', {
+      verdict: 'unchecked',
+      code: null,
+      ref: null,
+      at: null,
+    });
+    const [after] = await payments(order.id);
+    expect(after).toMatchObject({ slip_verify: 'not_found', slip_invalid_count: 0 });
   });
 });

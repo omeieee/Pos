@@ -5,7 +5,9 @@ import {
   compareSlipAmount,
   extractSlipAmount,
   extractSlipRef,
+  inSlipNotFoundGrace,
   isInvalidSlipVerdict,
+  SLIP_NOT_FOUND_GRACE_SECONDS,
   type SlipCheck,
   type SlipRecipientCheck,
   type SlipVerifyResult,
@@ -94,6 +96,12 @@ export const MAX_VERIFY_ATTEMPTS_STAFF = MAX_VERIFY_ATTEMPTS + STAFF_RECHECK_EXT
 /** The transfer may predate the order a little (the customer paid while the cart was open). */
 const DATE_SLACK_MS = 10 * 60_000;
 export const DEFAULT_DAILY_CAP = 100;
+/**
+ * Least time between two calls for a slip whose "not found" is inside the grace window. The sweep
+ * runs every minute, so a retry lands on the first tick at least this long after the last call:
+ * 20 to 80 seconds later, never in a loop.
+ */
+export const NOT_FOUND_RETRY_GAP_MS = 20_000;
 
 /** What the bank check decided for one picture. */
 type VerifyOutcome =
@@ -109,7 +117,13 @@ type VerifyOutcome =
       /** Which owner alert this answer calls for, once per business date. */
       alert: 'account' | 'cap' | null;
     }
-  | { kind: 'retry'; code: string | null; alert: null };
+  | {
+      kind: 'retry';
+      code: string | null;
+      alert: null;
+      /** A "not found" inside the grace window: the answer is not final yet, the payment stays pending. */
+      grace?: boolean;
+    };
 
 interface Evaluated {
   ocr: {
@@ -145,12 +159,15 @@ export function createSlipChecker(args: {
    * Null or absent: never (the default). Needs the verifier.
    */
   autoConfirm?: { maxSatang: number } | null;
+  /** The not-found grace window in seconds (default SLIP_NOT_FOUND_GRACE_SECONDS); 0 turns it off. */
+  notFoundGraceSeconds?: number;
   /** Counts and ids only: never the text. */
   log?: { warn(obj: Record<string, unknown>, msg: string): void };
 }): SlipChecker {
   const { ctx, slips, ocr, qr, verifier } = args;
   if (!ocr && !verifier) throw new Error('a slip checker needs the OCR or the verifier');
   const dailyCap = args.dailyCap ?? DEFAULT_DAILY_CAP;
+  const graceSeconds = args.notFoundGraceSeconds ?? SLIP_NOT_FOUND_GRACE_SECONDS;
   const waiting = new Set<string>();
   /** A new slip arrived for a payment that is being read: read it again when this one ends. */
   const again = new Set<string>();
@@ -159,6 +176,8 @@ export function createSlipChecker(args: {
    * the verdict to put back if the check is refused. Their result does not count toward the cooldown.
    */
   const manual = new Map<string, VerdictSnapshot>();
+  /** Per picture: the earliest time of the next grace retry (this process only; a restart just retries sooner). */
+  const retryNotBefore = new Map<string, number>();
   let tail: Promise<void> = Promise.resolve();
 
   async function readOcr(bytes: Buffer, expected: number): Promise<NonNullable<Evaluated['ocr']>> {
@@ -243,9 +262,8 @@ export function createSlipChecker(args: {
       return noCall('cap');
     // The attempt is counted BEFORE the call, on its own, so that a commit that fails after the
     // answer cannot make the same slip be sent every minute. Null: the slip was replaced meanwhile.
-    if ((await paymentsRepo.bumpSlipVerifyAttempts(ctx.db, row.id, row.slipImageHash)) === null) {
-      return noCall();
-    }
+    const attempt = await paymentsRepo.bumpSlipVerifyAttempts(ctx.db, row.id, row.slipImageHash);
+    if (attempt === null) return noCall();
     await paymentsRepo.recordSlipVerifyCall(ctx.db, businessDate);
     const result = rawQr
       ? await verifier.verifyQr(rawQr, conditions)
@@ -266,6 +284,16 @@ export function createSlipChecker(args: {
         : null;
     const qrHash = keyText ? sha256(keyText) : null;
     if (decided.retry) return { outcome: { kind: 'retry', code, alert: null }, qrHash };
+    // Banks can be slow to publish a transfer: a first "not found" of a fresh slip is asked again
+    // later. Only while calls remain (the last answer is always final) and never for staff's recheck.
+    if (
+      result.code === '200404' &&
+      !manual.has(row.id) &&
+      attempt < attemptCeiling(row.id) &&
+      inSlipNotFoundGrace(row.slipUploadedAt, ctx.now(), graceSeconds)
+    ) {
+      return { outcome: { kind: 'retry', code, alert: null, grace: true }, qrHash };
+    }
     return {
       outcome: {
         kind: 'final',
@@ -338,6 +366,14 @@ export function createSlipChecker(args: {
     if (!wantOcr && !wantVerify) return;
     const key = row.slipImageKey;
     const hash = row.slipImageHash;
+    // A "not found" that is still inside the grace window waits its turn: the sweep comes by again.
+    const gate = `${paymentId}:${hash}`;
+    if (
+      wantVerify &&
+      !manual.has(paymentId) &&
+      (retryNotBefore.get(gate) ?? 0) > ctx.now().getTime()
+    )
+      return;
     const done = await evaluate(row, key, wantOcr, wantVerify);
     await withTransaction(ctx, async (tx, emit) => {
       // Lock order, always: the order row, then the payment (see `payments/service.ts`).
@@ -398,12 +434,14 @@ export function createSlipChecker(args: {
           patch.slipVerifiedAt = previous.at;
         } else if (outcome.kind === 'retry') {
           // The attempt was counted before the call (`bumpSlipVerifyAttempts`).
+          if (outcome.grace) retryNotBefore.set(gate, ctx.now().getTime() + NOT_FOUND_RETRY_GAP_MS);
           if (previous || locked.slipVerifyAttempts >= attemptCeiling(paymentId)) {
             patch.slipVerify = 'unchecked';
             patch.slipVerifyCode = outcome.code;
             patch.slipVerifiedAt = ctx.now();
           }
         } else {
+          retryNotBefore.delete(gate);
           patch.slipVerify = outcome.verdict;
           patch.slipVerifyCode = outcome.code;
           patch.slipVerifyRef = outcome.ref;

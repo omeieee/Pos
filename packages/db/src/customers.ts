@@ -261,6 +261,7 @@ export async function takeCustomerSlipKeys(db: Db, customerId: string): Promise<
         slipVerifyRef: null,
         slipVerifyAttempts: 0,
         slipVerifiedAt: null,
+        slipUploadedAt: null,
       })
       .where(eq(payments.id, row.id));
     keys.push(row.key);

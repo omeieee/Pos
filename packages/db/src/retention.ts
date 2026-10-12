@@ -404,6 +404,7 @@ export async function clearSlipKeys(
           slipVerifyRef: null,
           slipVerifyAttempts: 0,
           slipVerifiedAt: null,
+          slipUploadedAt: null,
           slipInvalidCount: 0,
           slipInvalidAt: null,
           slipBlockedAt: null,

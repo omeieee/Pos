@@ -735,6 +735,7 @@ export interface MoveInput {
 const slipPatch = (
   slip: { key: string; hash: string; ocr?: boolean; verify?: boolean },
   current: paymentsRepo.PaymentRow,
+  now: Date,
 ): paymentsRepo.PaymentPatch => ({
   slipImageKey: slip.key,
   slipCheck: slip.ocr ? 'pending' : null,
@@ -752,6 +753,7 @@ const slipPatch = (
         slipVerifyRef: null,
         slipVerifyAttempts: 0,
         slipVerifiedAt: null,
+        slipUploadedAt: now,
         // The owner's review was of the earlier picture, not of this one.
         slipReviewedAt: null,
       }),
@@ -795,7 +797,7 @@ export async function movePayment(
       // A second slip on a claim that is already made replaces the first; nothing else changes.
       if (input.slip && moveName === 'claim') {
         const swapped = await paymentsRepo.updatePaymentIfVersion(tx, row.id, row.version, {
-          ...slipPatch(input.slip, row),
+          ...slipPatch(input.slip, row, ctx.now()),
         });
         if (!swapped) throw versionConflict(row.version); // cannot happen under the row lock
         if (row.slipImageKey) input.slip.onReplaced?.(row.slipImageKey);
@@ -850,7 +852,7 @@ export async function movePayment(
         ? {
             status: 'claimed',
             claimedAt: now,
-            ...(input.slip && moveName === 'claim' ? slipPatch(input.slip, row) : {}),
+            ...(input.slip && moveName === 'claim' ? slipPatch(input.slip, row, now) : {}),
           }
         : spec.to === 'confirmed'
           ? {

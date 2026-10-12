@@ -113,6 +113,8 @@ export interface PaymentPatch {
   slipVerifyRef?: string | null;
   slipVerifyAttempts?: number;
   slipVerifiedAt?: Date | null;
+  /** When the current picture was uploaded; the start of the not-found grace window. */
+  slipUploadedAt?: Date | null;
   /** Slip cooldown: definitive failures so far and when the last was. Kept across new slips. */
   slipInvalidCount?: number;
   slipInvalidAt?: Date | null;

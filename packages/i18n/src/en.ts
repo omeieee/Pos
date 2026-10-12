@@ -411,7 +411,7 @@ export const en = {
   'payment.slip.verify.date_mismatch':
     'This slip was made before the order was placed (automatic check)',
   'payment.slip.verify.not_found':
-    "Not found in the bank's records. It may be a fake slip (automatic check)",
+    "Not found in the bank's records (checked again). Check in the shop's bank app: the transfer may be very recent or the picture unclear",
   'payment.slip.verify.fraud': 'Slip2Go says this is a fake slip (automatic check)',
   'payment.slip.verify.pending': 'Checking with the bank…',
   'payment.slip.verify.unchecked': 'Could not check automatically. Check in the bank app.',

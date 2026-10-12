@@ -183,6 +183,20 @@ export const slip2goResponseSchema = z.object({
 });
 export type Slip2goResponse = z.infer<typeof slip2goResponseSchema>;
 
+/**
+ * Banks can take a while (Bangkok Bank: 10 s or more) before Slip2Go can find a transfer. A "not
+ * found" (200404) for a slip uploaded less than this many seconds ago is not final: the check is
+ * tried again (within the attempt ceiling) and only the last answer counts.
+ */
+export const SLIP_NOT_FOUND_GRACE_SECONDS = 180;
+
+/** Whether a slip uploaded at `uploadedAt` is still inside the not-found grace window at `now`. */
+export const inSlipNotFoundGrace = (
+  uploadedAt: Date | null,
+  now: Date,
+  graceSeconds: number = SLIP_NOT_FOUND_GRACE_SECONDS,
+): boolean => uploadedAt !== null && now.getTime() - uploadedAt.getTime() < graceSeconds * 1000;
+
 // ---------- Cooldown and fraud (owner decision) ----------
 
 /** The verdicts that count as a definitive "this slip is not good" for the cooldown. */

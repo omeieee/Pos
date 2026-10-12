@@ -1,10 +1,12 @@
 import { describe, expect, test } from 'vitest';
 import { parseSlipQr } from './slip-qr.ts';
 import {
+  inSlipNotFoundGrace,
   isInvalidSlipVerdict,
   SLIP_COOLDOWN_SECONDS,
   SLIP_INVALID_FREE_TRIES,
   SLIP_INVALID_VERDICTS,
+  SLIP_NOT_FOUND_GRACE_SECONDS,
   SLIP_VERIFY_VERDICTS,
   SLIP2GO_AUTOCONFIRM_ACCOUNT_TYPES,
   satangToSlip2goAmount,
@@ -308,5 +310,20 @@ describe('the slip cooldown', () => {
     // A fourth failure restarts the wait from itself.
     const four = { invalidCount: 4, lastInvalidAt: at(400_000) };
     expect(slipCooldownSeconds(four, at(401_000))).toBe(299);
+  });
+});
+
+describe('the not-found grace window', () => {
+  const up = new Date('2028-02-01T08:00:00.000Z');
+  const at = (seconds: number) => new Date(up.getTime() + seconds * 1000);
+  test('is 180 seconds, open before the end and closed at it', () => {
+    expect(SLIP_NOT_FOUND_GRACE_SECONDS).toBe(180);
+    expect(inSlipNotFoundGrace(up, at(0))).toBe(true);
+    expect(inSlipNotFoundGrace(up, at(179))).toBe(true);
+    expect(inSlipNotFoundGrace(up, at(180))).toBe(false);
+  });
+  test('an unknown upload time, or a window of 0, is never in grace', () => {
+    expect(inSlipNotFoundGrace(null, at(1))).toBe(false);
+    expect(inSlipNotFoundGrace(up, at(0), 0)).toBe(false);
   });
 });

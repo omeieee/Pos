@@ -279,6 +279,7 @@ export const SYNC_POLICY = {
     'slipVerifyRef',
     'slipVerifyAttempts',
     'slipVerifiedAt',
+    'slipUploadedAt',
     'slipInvalidCount',
     'slipInvalidAt',
     'slipBlockedAt',

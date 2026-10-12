@@ -678,6 +678,8 @@ export const payments = pgTable(
     slipVerifyRef: text('slip_verify_ref'),
     slipVerifyAttempts: smallint('slip_verify_attempts').notNull().default(0),
     slipVerifiedAt: ts('slip_verified_at'),
+    /** When this picture was uploaded: the start of the not-found grace window (banks are slow). Cleared with the slip. */
+    slipUploadedAt: ts('slip_uploaded_at'),
     /**
      * Slip cooldown (owner decision): how many finished bank checks of this payment were a
      * definitive failure (wrong receiver, amount or date, or not found), and when the last was.
