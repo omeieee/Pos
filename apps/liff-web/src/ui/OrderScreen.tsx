@@ -9,7 +9,7 @@ import { nextPollDelayMs } from '../model/poll.ts';
 import { browserSaveEnv, qrFileName, saveQrImage, toPng } from '../model/qr-save.ts';
 import { canDownloadReceipt, receiptFileName, receiptHtml } from '../model/receipt.ts';
 import { awaitsTransferConfirmation, isPaymentRejected, orderSteps } from '../model/steps.ts';
-import { errorKey, useApp, useT } from './app-context.tsx';
+import { cooldownMinutes, errorKey, errorText, useApp, useT } from './app-context.tsx';
 import { BarButton, Body, Header, Notice } from './Chrome.tsx';
 import { PayButton } from './PayOption.tsx';
 
@@ -184,7 +184,7 @@ export function OrderView({
       setChanging(false);
       return true;
     } catch (e) {
-      setError(tr(errorKey(e)));
+      setError(errorText(tr, e));
       return false;
     } finally {
       setBusy(false);
@@ -552,6 +552,21 @@ function SentSlip({ orderId, stamp }: { orderId: string; stamp: number }) {
  * The PromptPay step: the QR for this order's exact total, the "โอนแล้ว" button (which only tells
  * the shop; staff confirm the money by hand) and the note that says so.
  */
+/**
+ * Seconds left before another slip may be sent. The server's number (from the polled order) is
+ * the source; this only counts it down on screen, so a wrong device clock changes nothing.
+ */
+function useCooldown(fromServer: number | undefined): number {
+  const [left, setLeft] = useState(fromServer ?? 0);
+  useEffect(() => {
+    setLeft(fromServer ?? 0);
+    if (!fromServer) return;
+    const timer = setInterval(() => setLeft((n) => Math.max(0, n - 1)), 1000);
+    return () => clearInterval(timer);
+  }, [fromServer]);
+  return left;
+}
+
 function PromptPayPanel({
   order,
   busy,
@@ -578,6 +593,7 @@ function PromptPayPanel({
   const showQr = order.actions.showQr;
   const claimed = order.payment?.status === 'claimed';
   const orderId = order.id;
+  const cooldown = useCooldown(order.slipRetryAfterSeconds);
 
   const fetchQr = useCallback(async () => {
     try {
@@ -750,6 +766,19 @@ function PromptPayPanel({
         </Notice>
       ) : null}
 
+      {order.actions.attachSlip && cooldown > 0 ? (
+        <Notice icon="clock">
+          <span role="status">
+            {tr('liff.error.SLIP_COOLDOWN', { minutes: cooldownMinutes(cooldown) })}
+          </span>
+        </Notice>
+      ) : null}
+      {order.slipBlocked && !order.actions.attachSlip ? (
+        <Notice icon="bank">
+          <span role="status">{tr('liff.error.SLIP_BLOCKED')}</span>
+        </Notice>
+      ) : null}
+
       {order.actions.claim || showQr || order.actions.attachSlip ? (
         <div className="g-rise" style={s('display:flex;flex-direction:column;gap:10px;--d:.16s')}>
           {order.actions.claim ? (
@@ -778,7 +807,12 @@ function PromptPayPanel({
                   {tr('liff.qr.save')}
                 </button>
               ) : null}
-              {order.actions.attachSlip ? (
+              {order.actions.attachSlip && cooldown > 0 ? (
+                <button type="button" className="g-btn" style={s('flex:1')} disabled>
+                  <Gi n="image" size="sm" />
+                  {tr(order.hasSlip ? 'liff.slip.replace' : 'liff.qr.attachSlip')}
+                </button>
+              ) : order.actions.attachSlip ? (
                 <label className="g-btn" style={s('flex:1;cursor:pointer')} aria-disabled={busy}>
                   <input
                     type="file"

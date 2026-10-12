@@ -78,6 +78,8 @@ const KNOWN: Record<string, MessageKey> = {
   SLIP_TOO_LARGE: 'liff.error.SLIP_TOO_LARGE',
   FST_ERR_CTP_BODY_TOO_LARGE: 'liff.error.SLIP_TOO_LARGE',
   SLIP_TYPE_UNSUPPORTED: 'liff.error.SLIP_TYPE_UNSUPPORTED',
+  SLIP_COOLDOWN: 'liff.error.SLIP_COOLDOWN',
+  SLIP_BLOCKED: 'liff.error.SLIP_BLOCKED',
   NO_PAYMENT_TO_CLAIM: 'liff.error.PAYMENT_NOT_PENDING',
   NETWORK: 'liff.error.network',
   LIFF_TOKEN_INVALID: 'liff.error.signin',
@@ -93,4 +95,21 @@ export function errorKey(error: unknown): MessageKey {
     return 'liff.member.phoneBad';
   }
   return (error instanceof ApiFailure ? KNOWN[error.code] : undefined) ?? 'liff.error.generic';
+}
+
+/** Whole minutes to wait, rounded up, never below 1. */
+export function cooldownMinutes(seconds: number): number {
+  return Math.max(1, Math.ceil(seconds / 60));
+}
+
+/** The text for a failed call. `errorKey` cannot pass values, so a slip cooldown is formatted here. */
+export function errorText(
+  tr: (key: MessageKey, params?: MessageParams) => string,
+  error: unknown,
+): string {
+  const minutes =
+    error instanceof ApiFailure && error.code === 'SLIP_COOLDOWN'
+      ? cooldownMinutes(error.retryAfterSeconds ?? 60)
+      : undefined;
+  return tr(errorKey(error), minutes === undefined ? undefined : { minutes });
 }

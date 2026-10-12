@@ -34,6 +34,8 @@ export class ApiFailure extends Error {
     readonly code: string,
     /** The request fields the API refused (`member.phone`), from a VALIDATION_ERROR; else empty. */
     readonly fields: readonly string[] = [],
+    /** From a SLIP_COOLDOWN: how long until the next slip may be sent. */
+    readonly retryAfterSeconds?: number,
   ) {
     super(`${status} ${code}`);
     this.name = 'ApiFailure';
@@ -64,19 +66,27 @@ export function createApi(options: ApiOptions) {
   async function failure(response: Response): Promise<ApiFailure> {
     let code = 'ERROR';
     let fields: string[] = [];
+    let retry: unknown;
     try {
       const body = (await response.json()) as {
         code?: unknown;
-        details?: { issues?: { path?: unknown }[] };
+        details?: { issues?: { path?: unknown }[]; retryAfterSeconds?: unknown };
       };
       if (typeof body.code === 'string') code = body.code;
+      retry = body.details?.retryAfterSeconds;
       fields = (body.details?.issues ?? []).flatMap((i) =>
         typeof i.path === 'string' ? [i.path] : [],
       );
     } catch {
       // not JSON: keep the generic code
     }
-    return new ApiFailure(response.status, code, fields);
+
+    return new ApiFailure(
+      response.status,
+      code,
+      fields,
+      typeof retry === 'number' && retry > 0 ? retry : undefined,
+    );
   }
 
   async function signIn(): Promise<CustomerSessionResponse> {
