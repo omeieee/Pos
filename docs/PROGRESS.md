@@ -32,6 +32,11 @@ Newest entries first. Add entries with `/checkpoint`. Each entry covers what cha
 
 ---
 
+## 2026-10-12 · P4 · Slip status for customers, no-slip flag, recheck, cooldown, fake-slip block (D-28; merged locally, NOT pushed; privacy line + owner alert added, notice 2026-10-14)
+- **Done:** Slip2Go deploy `a6b7ce0` is live (healthz ok, `SLIP_AUTOCONFIRM` off). On top, local `main`: customer neutral slip states + paid pop-up (no push), LINE replies asking for the slip, POS no-slip flag / matched-slip line / recheck button, 5-minute cooldown after 3 invalid slips, per-order fake-slip block, staff-only customer flag, owner-only clear endpoints (migration 0033). QA reviews: no blockers; fixes for PDPA erasure of flag/block fields and cooldown surviving a staff reject are in progress.
+- **Next:** merge the QA fixes, full test run, owner approval to push, check `/healthz`; real-device checks (iPad banners, LIFF pop-up, recheck, cooldown); owner decides the privacy-notice line and the real PromptPay ID; keep `SLIP_AUTOCONFIRM` off until a few real transfers are watched.
+- **Not done:** order-board flag for no-slip claims (needs a backend field), customer detail screen for the flag, Playwright E2E.
+
 ## 2026-10-12 · P4 · Slip2Go built and merged locally (NOT pushed, NOT deployed)
 - **Done:** D-27 accepted (owner: auto-confirm, correctable by void; privacy accepted; real PromptPay ID later in Settings); CLAUDE.md rule 2 amended. Backend (shared `slip-verify`, migrations 0031 + 0032, `slips/slip2go.ts` client, checker, daily cap, daily account check, auto-confirm behind `SLIP_AUTOCONFIRM`), staff screen (banners per verdict, tick rule, "ยืนยันอัตโนมัติ (Slip2Go)" label) and privacy text (th/en, LINE card snapshot updated, `PRIVACY_NOTICE_VERSION` 2026-10-13) are on `main` as local commits plus uncommitted docs/privacy/CLAUDE.md edits. QA review (qa-security-reviewer): no blockers with auto-confirm off; two High fixed (any-status duplicate rule, Slip2Go transfer key required) plus receiver restricted to proven phone type `02001`, attempt counting, alerts.
 - **Verified (run on main after the merge):** biome 0 errors; build 12/12; shared 1100, db 263, api 1265, i18n 22, line 69, pos-web 1855, liff-web 74. Live probes (3 calls) showed the QR reference equals Slip2Go's `transRef` for the sample slip (bank 002). Egress IP 161.118.211.42.
