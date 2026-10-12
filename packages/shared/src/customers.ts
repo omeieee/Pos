@@ -44,7 +44,7 @@ export const RETENTION_DAYS = {
  * acknowledgement then records the new version and time. Still the draft's date until the owner
  * approves and publishes the notice.
  */
-export const PRIVACY_NOTICE_VERSION = '2026-10-13';
+export const PRIVACY_NOTICE_VERSION = '2026-10-14';
 
 /**
  * Why, as a fixed word and not free text: the reason is written to the audit log, which can never

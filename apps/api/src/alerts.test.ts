@@ -45,6 +45,24 @@ describe('forwardAlerts (security alerts to Sentry)', () => {
     expect(reports).toEqual([]);
   });
 
+  test('a fake-slip alert names the order number and nothing personal', () => {
+    const report = alertReport(
+      alert({
+        kind: 'slip.fraud_blocked',
+        severity: 'warn',
+        staffId: null,
+        deviceId: null,
+        subject: { orderId: '0192f3a0-0000-7000-8000-000000000003', paymentId: 'p-1' },
+        orderNo: 'S-014',
+      }),
+    );
+    expect(report.message).toBe(
+      'security alert: slip.fraud_blocked (order S-014: suspected fake slip, order blocked, staff must verify by hand)',
+    );
+    expect(report.extra).toMatchObject({ orderNo: 'S-014' });
+    expect(JSON.stringify(report)).not.toMatch(/200500|slip2go/i);
+  });
+
   test('the report holds the event name and ids only', () => {
     const report = alertReport(alert());
     expect(report).toEqual({

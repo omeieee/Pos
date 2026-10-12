@@ -429,6 +429,15 @@ export function createSlipChecker(args: {
               entityId: locked.id,
               after: { reason: 'fraud', code: outcome.code },
             });
+            // The owner hears of every block: the order number only, no customer or slip data.
+            if (order) {
+              emit(
+                securityAlert(ctx, 'slip.fraud_blocked', 'warn', {
+                  subject: { orderId: order.id, paymentId: locked.id },
+                  orderNo: order.orderNo,
+                }),
+              );
+            }
           }
         }
       }

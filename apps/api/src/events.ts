@@ -16,6 +16,8 @@ export interface SecurityAlertEvent {
   deviceId: string | null;
   /** The order (and payment, for a payment alert) the alert is about (ids only), so the owner can find it. */
   subject?: { paymentId?: string; orderId: string };
+  /** The order number the owner reads in the alert (`slip.fraud_blocked`); nothing about the customer. */
+  orderNo?: string;
   /**
    * A PromptPay ID change: how many PromptPay payments were pending or claimed at that moment (a
    * count only). They are NOT cancelled; the owner is warned to check them (decision 2026-10-02).

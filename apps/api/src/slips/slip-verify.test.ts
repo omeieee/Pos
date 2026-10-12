@@ -1682,6 +1682,7 @@ describe('the slip cooldown', () => {
     ['200501', 0],
     ['401004', 0],
   ])('code %s adds %i to the count of invalid results', async (code, added) => {
+    const before = alertsOf('slip.fraud_blocked').length;
     const { token, order } = await start();
     respond = () => ({ body: answer(code, currentAmountBaht) });
     await upload(token, order.id, picture(1));
@@ -1689,6 +1690,8 @@ describe('the slip cooldown', () => {
     const [payment] = await payments(order.id);
     expect(payment?.slip_invalid_count).toBe(added);
     expect(payment?.slip_invalid_at === null).toBe(added === 0);
+    // Only the fake-slip answer raises the owner alert; every other verdict stays quiet.
+    expect(alertsOf('slip.fraud_blocked')).toHaveLength(before + (code === '200500' ? 1 : 0));
   });
 
   test('a call that failed (network) is no invalid result', async () => {
@@ -1852,6 +1855,26 @@ describe('a "fake slip" answer (200500)', () => {
     expect(audit).toHaveLength(1);
     expect(audit[0]).toMatchObject({ actorType: 'system' });
     expect(audit[0]?.after).toEqual({ reason: 'fraud', code: '200500' });
+  });
+
+  test('the owner is alerted once per block, with the order number and no personal data', async () => {
+    const before = alertsOf('slip.fraud_blocked').length;
+    const { order, paymentId } = await fraudOrder();
+    const alerts = alertsOf('slip.fraud_blocked').slice(before);
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0]).toMatchObject({
+      severity: 'warn',
+      subject: { orderId: order.id, paymentId },
+      orderNo: order.orderNo,
+    });
+    const text = JSON.stringify(alerts[0]);
+    expect(text).not.toMatch(/200500|slip2go|lineUserId|displayName|phone|U[0-9a-f]{32}/i);
+    // A staff recheck of the same block raises nothing new.
+    const res = await send('POST', `/v1/payments/${paymentId}/slip-recheck`, staffToken, {
+      clientRequestId: crypto.randomUUID(),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(alertsOf('slip.fraud_blocked')).toHaveLength(before + 1);
   });
 
   test('a second "fake" answer for the same block does not raise the flag again', async () => {

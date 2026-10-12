@@ -13,6 +13,7 @@ export interface AlertReport {
     deviceId: string | null;
     paymentId?: string;
     orderId?: string;
+    orderNo?: string;
     openPromptpayPayments?: number;
     slip2go?: { code?: string; quotaSlips?: number; expiresOn?: string };
   };
@@ -20,7 +21,10 @@ export interface AlertReport {
 
 export function alertReport(event: SecurityAlertEvent): AlertReport {
   return {
-    message: `security alert: ${event.kind}`,
+    message:
+      event.kind === 'slip.fraud_blocked' && event.orderNo
+        ? `security alert: ${event.kind} (order ${event.orderNo}: suspected fake slip, order blocked, staff must verify by hand)`
+        : `security alert: ${event.kind}`,
     level: event.severity === 'critical' ? 'error' : 'warning',
     tags: { alert: event.kind, severity: event.severity },
     extra: {
@@ -33,6 +37,7 @@ export function alertReport(event: SecurityAlertEvent): AlertReport {
             orderId: event.subject.orderId,
           }
         : {}),
+      ...(event.orderNo ? { orderNo: event.orderNo } : {}),
       ...(event.detail ? { openPromptpayPayments: event.detail.openPromptpayPayments } : {}),
       // Picked field by field too: a result code, slips left and a date, nothing else.
       ...(event.slip2go

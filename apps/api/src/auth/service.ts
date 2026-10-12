@@ -88,6 +88,7 @@ export function securityAlert(
     staffId?: string | null;
     deviceId?: string | null;
     subject?: SecurityAlertEvent['subject'];
+    orderNo?: string;
     detail?: SecurityAlertEvent['detail'];
     slip2go?: SecurityAlertEvent['slip2go'];
   },
@@ -100,6 +101,7 @@ export function securityAlert(
     staffId: who.staffId ?? null,
     deviceId: who.deviceId ?? null,
     ...(who.subject ? { subject: who.subject } : {}),
+    ...(who.orderNo ? { orderNo: who.orderNo } : {}),
     ...(who.detail ? { detail: who.detail } : {}),
     ...(who.slip2go ? { slip2go: who.slip2go } : {}),
   };
