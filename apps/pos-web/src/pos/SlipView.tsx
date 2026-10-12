@@ -11,11 +11,15 @@ import { Gi } from '../design/icons.tsx';
 import { s } from '../design/style.ts';
 import { useLocale, useServices, useT } from '../ui/hooks.ts';
 import { Callout } from './PayParts.tsx';
+import { SlipAlerts } from './SlipAlerts.tsx';
 import {
   canRecheckSlip,
+  NO_ALERTS,
   recheckErrorKey,
+  type SlipAlerts as SlipAlertFacts,
   type SlipFacts,
   showNoSlipFlag,
+  slipAlertsOf,
   slipIsBankMatched,
 } from './slip-gate.ts';
 
@@ -69,6 +73,7 @@ export function SlipView({
   amountSatang,
   status = 'claimed',
   onCheck,
+  customerId,
   quiet = false,
 }: {
   orderId: string;
@@ -85,6 +90,8 @@ export function SlipView({
    * then asks for the tick (fail closed).
    */
   onCheck?: (facts: SlipFacts) => void;
+  /** The order's customer, for the owner's "clear customer flag" button. */
+  customerId?: string | null | undefined;
   /** In the payment history: say nothing when there is no slip (only a payment with one shows it). */
   quiet?: boolean;
 }) {
@@ -106,6 +113,9 @@ export function SlipView({
   const [url, setUrl] = useState<string | null>(null);
   const [noSlipClaim, setNoSlipClaim] = useState(false);
   const [facts, setFacts] = useState<SlipFacts | null>(null);
+  const [alerts, setAlerts] = useState<SlipAlertFacts>(NO_ALERTS);
+  // Bumped after an owner's clear, so the list is read again.
+  const [reloads, setReloads] = useState(0);
   const [recheck, setRecheck] = useState<{ busy: boolean; error: MessageKey | null }>({
     busy: false,
     error: null,
@@ -115,6 +125,7 @@ export function SlipView({
   function apply(answer: OrderPaymentsResponse) {
     const has = answer.slipPaymentIds?.includes(paymentId) === true;
     setKnown(has ? 'has' : 'missing');
+    setAlerts(slipAlertsOf(answer));
     setNoSlipClaim(!has && showNoSlipFlag(paymentId, answer.claimedWithoutSlipPaymentIds));
     const found = has ? answer.slipChecks?.find((c) => c.paymentId === paymentId) : undefined;
     setHint(
@@ -140,6 +151,7 @@ export function SlipView({
       verdict: found?.verify?.verdict ?? null,
       recipient: found?.recipientCheck ?? null,
       duplicate: used !== undefined,
+      ...(found?.verify?.reviewedAt !== undefined ? { reviewed: true } : {}),
     };
     setFacts(next);
     onCheck?.(next);
@@ -172,7 +184,7 @@ export function SlipView({
     return () => {
       live = false;
     };
-  }, [api, orderId, paymentId, rev]);
+  }, [api, orderId, paymentId, rev, reloads]);
 
   useEffect(() => {
     return () => {
@@ -191,10 +203,21 @@ export function SlipView({
   }
 
   if (known === 'checking') return null;
+  const alertsView =
+    known !== 'unknown' && !quiet ? (
+      <SlipAlerts
+        alerts={alerts}
+        reviewed={facts?.reviewed === true}
+        paymentId={paymentId}
+        customerId={customerId}
+        onCleared={() => setReloads((n) => n + 1)}
+      />
+    ) : null;
   if (known === 'missing') {
     if (quiet) return null;
     return (
       <div style={s('display:flex;flex-direction:column;gap:8px')}>
+        {alertsView}
         {noSlipClaim ? (
           <div data-testid="no-slip-flag">
             <Callout tone="warn" role="alert">
@@ -211,6 +234,7 @@ export function SlipView({
 
   return (
     <div style={s('display:flex;flex-direction:column;gap:8px')}>
+      {alertsView}
       {known === 'has' ? (
         <p className="g-t-c" data-testid="slip-has" style={s('margin:0;font-weight:600')}>
           {tr('payment.slip.has')}

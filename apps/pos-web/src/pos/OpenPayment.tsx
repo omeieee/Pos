@@ -56,6 +56,7 @@ export function OpenPayment({
           rev={payment.rev}
           amountSatang={payment.amountSatang}
           onCheck={setSlip}
+          customerId={order.customerId}
         />
       ) : null}
       {payment.method === 'promptpay' ? (
