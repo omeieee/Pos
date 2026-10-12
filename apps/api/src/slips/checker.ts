@@ -172,6 +172,8 @@ export function createSlipChecker(args: {
   autoConfirm?: { maxSatang: number } | null;
   /** The not-found grace window in seconds (default SLIP_NOT_FOUND_GRACE_SECONDS); 0 turns it off. */
   notFoundGraceSeconds?: number;
+  /** Wait this long after an upload before the first bank call (the bank may not know a fresh transfer yet). 0 = at once. */
+  firstCallDelayMs?: number;
   /** Counts and ids only: never the text. */
   log?: { warn(obj: Record<string, unknown>, msg: string): void };
 }): SlipChecker {
@@ -615,7 +617,12 @@ export function createSlipChecker(args: {
     wants: { ocr: Boolean(ocr), verify: Boolean(verifier) },
     enqueue(paymentId) {
       if (waiting.has(paymentId)) again.add(paymentId);
-      else if (waiting.size < MAX_QUEUED) void schedule(paymentId);
+      else if (waiting.size < MAX_QUEUED) {
+        const hold = args.firstCallDelayMs ?? 0;
+        // A restart inside the hold loses the timer; the minute sweep then picks the row up.
+        if (hold > 0) setTimeout(() => void schedule(paymentId), hold).unref();
+        else void schedule(paymentId);
+      }
     },
     async sweep(limit = SWEEP_LIMIT) {
       const ids = (

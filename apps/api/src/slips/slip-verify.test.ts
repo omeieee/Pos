@@ -86,6 +86,7 @@ let dailyCap = 100;
 let autoConfirm: { maxSatang: number } | null = null;
 /** Off (0) unless a test opts in: the older tests are about final answers. */
 let graceSeconds = 0;
+let firstCallDelayMs = 0;
 let ownerFixture: Awaited<ReturnType<Harness['newOwner']>>;
 let ocrOn = false;
 let ocrText = '';
@@ -141,6 +142,7 @@ function buildChecker(): SlipChecker {
     dailyCap,
     autoConfirm,
     notFoundGraceSeconds: graceSeconds,
+    firstCallDelayMs,
     log: { warn: (o) => logLines.push(o) },
   });
 }
@@ -184,6 +186,7 @@ beforeEach(async () => {
   dailyCap = 100;
   autoConfirm = null;
   graceSeconds = 0;
+  firstCallDelayMs = 0;
   ocrOn = false;
   ocrText = '';
   respond = (_call, _n) => {
@@ -285,6 +288,21 @@ const waitFor = async (condition: () => boolean) => {
   for (let i = 0; i < 400 && !condition(); i++) await new Promise((r) => setTimeout(r, 5));
   expect(condition()).toBe(true);
 };
+
+describe('the first bank call is held back a moment', () => {
+  test('with a hold set, nothing is sent at once and the one call goes out after it', async () => {
+    firstCallDelayMs = 250;
+    checker = buildChecker();
+    installSlipChecker(checker);
+    const { token, order } = await start();
+    respond = () => ({ body: answer('200200', currentAmountBaht) });
+    const res = await upload(token, order.id, picture());
+    expect(res.statusCode).toBe(200);
+    await new Promise((r) => setTimeout(r, 80));
+    expect(calls.length).toBe(0);
+    await waitFor(() => calls.length === 1);
+  });
+});
 
 describe('the verdict lands in the background', () => {
   test('the upload answers at once, marked pending; then the verdict is stored and the status is untouched', async () => {
