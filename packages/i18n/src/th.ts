@@ -399,7 +399,7 @@ export const th = {
   'payment.slip.verify.chip.pending': 'กำลังตรวจกับธนาคาร',
   'payment.slip.verify.chip.unchecked': 'ตรวจอัตโนมัติไม่ได้',
   'payment.slip.verify.hint':
-    'ตรวจอัตโนมัติโดย Slip2Go เป็นตัวช่วยเท่านั้น ถ้ายังไม่แน่ใจ ให้ดูยอดเข้าในแอปธนาคารของร้าน',
+    'Slip2Go ตรวจสลิปกับธนาคารให้ ถ้าผ่านและเปิดใช้การยืนยันอัตโนมัติไว้ ระบบอาจยืนยันการชำระให้เอง และพนักงานยกเลิก (void) ได้ ถ้ายังไม่แน่ใจ ให้ดูยอดเข้าในแอปธนาคารของร้าน',
   'payment.autoConfirmed.note': 'ยืนยันอัตโนมัติ (Slip2Go) — ตรวจสอบได้ ยกเลิก/คืนเงินได้',
   'payment.autoConfirmed.chip': 'ยืนยันอัตโนมัติ',
   'payment.promptpay.customer.close': 'กลับหน้าพนักงาน (กดค้าง 1 วินาที)',

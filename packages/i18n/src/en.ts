@@ -424,7 +424,7 @@ export const en = {
   'payment.slip.verify.chip.pending': 'Checking with bank',
   'payment.slip.verify.chip.unchecked': 'Not auto-checked',
   'payment.slip.verify.hint':
-    "Checked automatically by Slip2Go, as a help only. If unsure, look for the money in the shop's bank app.",
+    "Slip2Go checks the slip against the bank. A valid result may confirm the payment automatically if that is switched on, and staff can void it. If unsure, look for the money in the shop's bank app.",
   'payment.autoConfirmed.note':
     'Confirmed automatically (Slip2Go): you can review it, and void or refund it.',
   'payment.autoConfirmed.chip': 'Auto-confirmed',
