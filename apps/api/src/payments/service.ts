@@ -912,6 +912,8 @@ export interface AutoConfirmInput {
   code: string;
   /** SLIP_AUTOCONFIRM_MAX_SATANG. */
   maxSatang: number;
+  /** Told which condition said no (a fixed word, never data), for the log. */
+  refused?: (reason: string) => void;
 }
 
 /**
@@ -934,17 +936,25 @@ export async function autoConfirmClaimedPayment(
   input: AutoConfirmInput,
 ): Promise<paymentsRepo.PaymentRow | null> {
   const { order, payment, patch } = input;
-  if (payment.status !== 'claimed' || payment.method !== 'promptpay') return null;
-  if (payment.amountSatang > input.maxSatang) return null;
-  // Never for a slip-blocked order or a slip-flagged customer: staff confirm those by hand.
-  if (orderSlipBlocked(await paymentsRepo.listPaymentsForOrder(tx, order.id))) return null;
-  if (order.customerId && (await customersRepo.getSlipFlag(tx, order.customerId))) return null;
-  if (!paymentMachine.transition('claimed', 'confirmed', { actor: { kind: 'system' } }).ok) {
+  const no = (reason: string): null => {
+    input.refused?.(reason);
     return null;
+  };
+  if (payment.status !== 'claimed' || payment.method !== 'promptpay')
+    return no('not_claimed_promptpay');
+  if (payment.amountSatang > input.maxSatang) return no('over_ceiling');
+  // Never for a slip-blocked order or a slip-flagged customer: staff confirm those by hand.
+  if (orderSlipBlocked(await paymentsRepo.listPaymentsForOrder(tx, order.id)))
+    return no('order_blocked');
+  if (order.customerId && (await customersRepo.getSlipFlag(tx, order.customerId)))
+    return no('customer_flagged');
+  if (!paymentMachine.transition('claimed', 'confirmed', { actor: { kind: 'system' } }).ok) {
+    return no('machine');
   }
   // A machine confirmation needs the transfer's own key (D-27): without it two photos of one
   // transfer could not be told apart.
-  if ((patch.slipQrHash !== undefined ? patch.slipQrHash : payment.slipQrHash) == null) return null;
+  if ((patch.slipQrHash !== undefined ? patch.slipQrHash : payment.slipQrHash) == null)
+    return no('no_transfer_key');
   // Any other payment that used this slip counts, in any status and earlier or later (D-27): two
   // photos of one transfer must not both confirm, whichever is checked first, and a cancelled or
   // voided one may have been a reused slip.
@@ -954,7 +964,7 @@ export async function autoConfirmClaimedPayment(
     slipRefHash: patch.slipRefHash !== undefined ? patch.slipRefHash : payment.slipRefHash,
     slipQrHash: patch.slipQrHash !== undefined ? patch.slipQrHash : payment.slipQrHash,
   });
-  if (earlier) return null;
+  if (earlier) return no('slip_used_elsewhere');
   const updated = await paymentsRepo.updatePaymentIfVersion(tx, payment.id, payment.version, {
     ...patch,
     status: 'confirmed',

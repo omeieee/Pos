@@ -464,9 +464,36 @@ export function createSlipChecker(args: {
           referenceId: outcome.ref,
           code: outcome.code,
           maxSatang: args.autoConfirm.maxSatang,
+          refused: (reason) => args.log?.warn({ reason }, 'slip auto-confirm refused'),
         });
         // It wrote the payment and emitted its events itself; the plain write below is for the rest.
         if (confirmed) return;
+      }
+      if (
+        args.autoConfirm &&
+        outcome?.kind === 'final' &&
+        outcome.verdict === 'valid' &&
+        !(
+          verifyFresh &&
+          order &&
+          outcome.called &&
+          outcome.code === '200200' &&
+          done.remoteHash !== null &&
+          outcome.receiversOk
+        )
+      ) {
+        args.log?.warn(
+          {
+            reason: 'before_gate',
+            verifyFresh,
+            hasOrder: Boolean(order),
+            called: outcome.called,
+            code: outcome.code,
+            transferKey: done.remoteHash !== null,
+            receiversOk: outcome.receiversOk,
+          },
+          'slip auto-confirm refused',
+        );
       }
       const updated = await paymentsRepo.updatePaymentIfVersion(
         tx,
