@@ -310,22 +310,113 @@ describe('findOtherSlipUse (the strict duplicate rule of an automatic confirmati
 });
 
 // Voided and refunded rows need a staff member (a table constraint): the route tests cover them.
-describe('findOtherSlipUse counts a payment in ANY status (D-27)', () => {
+describe('findOtherSlipUse counts a payment in almost ANY status (D-27)', () => {
   const keys = [
     { slipImageHash: 'img-any' },
     { slipRefHash: 'ref-any' },
     { slipQrHash: 'qr-any' },
   ] as const;
-  for (const status of ['cancelled'] as const) {
-    test.each(keys)(`a ${status} payment with the same key %o still blocks`, async (key) => {
+  const cancelledWith = async (key: (typeof keys)[number], verdict: string | null) => {
+    // Every test gets its own value: the database is shared.
+    const fresh = Object.fromEntries(
+      Object.entries(key).map(([k, v]) => [k, `${v}-${unique()}`]),
+    ) as Record<string, string>;
+    const mine = await claimedPayment(null, fresh);
+    const other = await claimedPayment(null, fresh);
+    await repo.updatePaymentIfVersion(db, other.id, other.version, {
+      status: 'cancelled',
+      ...(verdict ? { slipVerify: verdict as 'valid' } : {}),
+    });
+    return mine;
+  };
+  // A claim cancelled before the bank check ever said anything about the transfer (live case).
+  test.each(keys)(
+    'a cancelled payment with no verdict and the same key %o does not block',
+    async (key) => {
+      const mine = await cancelledWith(key, null);
+      expect(await repo.findOtherSlipUse(db, mine)).toBeUndefined();
+    },
+  );
+  test.each(keys.flatMap((key) => ['unchecked', 'not_found'].map((v) => [key, v] as const)))(
+    'a cancelled payment, verdict %# (%o), does not block',
+    async (key, verdict) => {
+      const mine = await cancelledWith(key, verdict);
+      expect(await repo.findOtherSlipUse(db, mine)).toBeUndefined();
+    },
+  );
+  test.each(
+    keys.flatMap((key) =>
+      ['valid', 'pending', 'amount_mismatch', 'receiver_mismatch', 'date_mismatch', 'fraud'].map(
+        (v) => [key, v] as const,
+      ),
+    ),
+  )('a cancelled payment, verdict %# (%o), still blocks', async (key, verdict) => {
+    const mine = await cancelledWith(key, verdict);
+    expect(await repo.findOtherSlipUse(db, mine)).toMatchObject({ status: 'cancelled' });
+    // The staff hint keeps its narrower rule: rejected payments do not look "used".
+    expect(await repo.findEarlierSlipUse(db, mine)).toBeUndefined();
+  });
+  test('a cancelled payment that was blocked, or that was ever confirmed, still blocks', async () => {
+    const key = { slipImageHash: 'img-blocked' } as const;
+    const mine = await claimedPayment(null, key);
+    const blocked = await claimedPayment(null, key);
+    await repo.updatePaymentIfVersion(db, blocked.id, blocked.version, {
+      status: 'cancelled',
+      slipBlockedAt: new Date('2026-10-01T03:06:00Z'),
+    });
+    expect(await repo.findOtherSlipUse(db, mine)).toBeDefined();
+    const key2 = { slipImageHash: 'img-was-confirmed' } as const;
+    const mine2 = await claimedPayment(null, key2);
+    const was = await claimedPayment(null, key2);
+    await q(
+      "update payments set status = 'cancelled', confirmed_at = now(), auto_confirmed = true where id = $1",
+      [was.id],
+    );
+    expect(await repo.findOtherSlipUse(db, mine2)).toBeDefined();
+  });
+  test.each(['pending', 'claimed'] as const)('an open %s payment still blocks', async (status) => {
+    const key = { slipImageHash: `img-open-${status}` };
+    const mine = await claimedPayment(null, key);
+    const other = await claimedPayment(null, key);
+    if (status === 'pending') {
+      await q("update payments set status = 'pending' where id = $1", [other.id]);
+    }
+    expect(await repo.findOtherSlipUse(db, mine)).toMatchObject({ status });
+  });
+  test.each(['confirmed', 'voided'] as const)(
+    'a %s (automatic) payment still blocks',
+    async (status) => {
+      const key = { slipImageHash: `img-${status}` };
       const mine = await claimedPayment(null, key);
       const other = await claimedPayment(null, key);
-      await repo.updatePaymentIfVersion(db, other.id, other.version, { status });
+      const done = await repo.updatePaymentIfVersion(db, other.id, other.version, {
+        status: 'confirmed',
+        confirmedAt: new Date('2026-10-01T03:10:00Z'),
+        autoConfirmed: true,
+      });
+      if (status === 'voided') {
+        await repo.updatePaymentIfVersion(db, other.id, done?.version ?? 0, {
+          status: 'voided',
+          voidReason: 'no money',
+        });
+      }
       expect(await repo.findOtherSlipUse(db, mine)).toMatchObject({ status });
-      // The staff hint keeps its narrower rule: rejected payments do not look "used".
-      expect(await repo.findEarlierSlipUse(db, mine)).toBeUndefined();
+    },
+  );
+  test('two cancelled-unchecked payments with the same slip and one confirmed: the confirmed one blocks both', async () => {
+    const key = { slipImageHash: 'img-sym' } as const;
+    const a = await claimedPayment(null, key);
+    const b = await claimedPayment(null, key);
+    await repo.updatePaymentIfVersion(db, a.id, a.version, { status: 'cancelled' });
+    // b is confirmed (as the automatic path would): a re-created A must not also confirm.
+    await repo.updatePaymentIfVersion(db, b.id, b.version, {
+      status: 'confirmed',
+      confirmedAt: new Date('2026-10-01T03:10:00Z'),
+      autoConfirmed: true,
     });
-  }
+    const reopened = await claimedPayment(null, key);
+    expect(await repo.findOtherSlipUse(db, reopened)).toMatchObject({ status: 'confirmed' });
+  });
 });
 
 describe('bumpSlipVerifyAttempts', () => {

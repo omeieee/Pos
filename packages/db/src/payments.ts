@@ -14,7 +14,22 @@ import type {
   SlipRecipientCheck,
   SlipVerifyVerdict,
 } from '@sds/shared';
-import { and, asc, count, eq, inArray, isNotNull, isNull, lt, lte, ne, or, sql } from 'drizzle-orm';
+import type { SQL } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  count,
+  eq,
+  inArray,
+  isNotNull,
+  isNull,
+  lt,
+  lte,
+  ne,
+  not,
+  or,
+  sql,
+} from 'drizzle-orm';
 import type { Db } from './client.ts';
 import { orders, paymentRefunds, payments, slipVerifyDaily } from './schema.ts';
 
@@ -322,12 +337,27 @@ export async function findEarlierSlipUse(
 }
 
 /**
+ * A payment whose slip left no trace of a real transfer or a fraud: cancelled, never confirmed
+ * (so never voided or refunded either), no block, and the bank check never gave a verdict about
+ * the transfer (null, `unchecked` or `not_found`). Its slip does not hold the picture for ever: a
+ * transfer that only reached the bank late may be sent again on a new order (live case 2026-10-12).
+ */
+const abandonedUnchecked: SQL = sql`${and(
+  eq(payments.status, 'cancelled'),
+  or(isNull(payments.slipVerify), inArray(payments.slipVerify, ['unchecked', 'not_found'])),
+  isNull(payments.confirmedAt),
+  isNull(payments.slipBlockedAt),
+  sql`not exists (select 1 from ${paymentRefunds} where ${paymentRefunds.paymentId} = ${payments.id})`,
+)}`;
+
+/**
  * ANY other payment, in ANY status (cancelled and voided included), that holds the same slip
  * picture, bank reference or QR reference, whenever it was claimed (D-27). `findEarlierSlipUse` only looks backwards in time, which is right for a hint
  * to staff but not for an automatic confirmation: the key from Slip2Go arrives at check time, so
  * the checks of two photos of one transfer can run in either order, and each must see the other.
- * A rejected or taken-back payment counts too: a cancelled claim or a voided confirmation may be
- * a transfer that was faked or reused, so the same slip must go to staff, never to the machine.
+ * A rejected or taken-back payment counts too (a voided confirmation, or a cancelled claim with a
+ * valid / mismatch / fraud verdict): it may be a transfer that was faked or reused, so the same slip
+ * must go to staff, never to the machine. The one exception is `abandonedUnchecked`.
  * (`SLIP_USED_STATUSES` stays for the staff hint above.)
  */
 export async function findOtherSlipUse(
@@ -343,7 +373,7 @@ export async function findOtherSlipUse(
   const [row] = await db
     .select({ status: payments.status })
     .from(payments)
-    .where(and(ne(payments.id, payment.id), or(...same)))
+    .where(and(ne(payments.id, payment.id), or(...same), not(abandonedUnchecked)))
     .limit(1);
   return row ? { status: row.status as PaymentStatus } : undefined;
 }

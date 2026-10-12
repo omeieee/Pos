@@ -1132,7 +1132,7 @@ describe('auto-confirm (D-27)', () => {
     };
 
     test('cancelled, then the same file is claimed again: it stays claimed for staff', async () => {
-      const first = await sendSlip(); // auto-confirm is off: the claim waits
+      const first = await sendSlip(picture(7)); // auto-confirm is off: the claim waits
       const firstPayment = await latest(first.order.id);
       expect(firstPayment?.status).toBe('claimed');
       const cancel = await h.app.inject({
@@ -1143,14 +1143,52 @@ describe('auto-confirm (D-27)', () => {
         remoteAddress: h.nextIp(),
       });
       expect(cancel.statusCode).toBe(200);
+      // The bank check had said "valid" for it before staff took the claim back.
+      await h.client.query("update payments set slip_verify = 'valid' where id = $1", [
+        firstPayment?.id,
+      ]);
       on();
-      await upload(first.token, first.order.id, picture());
+      await upload(first.token, first.order.id, picture(7));
       await checker.idle();
       const again = await latest(first.order.id);
       expect(again?.id).not.toBe(firstPayment?.id);
       expect(again).toMatchObject({ status: 'claimed', auto_confirmed: false });
       expect((await row(first.order.id))?.slip_verify).toBe('valid');
     });
+
+    // The live case (2026-10-12): bank lag, the claim was cancelled while "unchecked", then the
+    // same picture came on a new order.
+    for (const verdict of ['unchecked', 'not_found', null] as const) {
+      test(`cancelled with verdict ${verdict}, then the same file on a NEW order: it confirms; the old order cannot also confirm`, async () => {
+        const a = await sendSlip(picture(5)); // auto-confirm is off: A waits as claimed
+        const aPayment = await latest(a.order.id);
+        const cancel = await h.app.inject({
+          method: 'POST',
+          url: `/v1/payments/${aPayment?.id}/cancel-claimed`,
+          headers: { authorization: `Bearer ${staffToken}` },
+          payload: { reason: 'bank lag, no money yet' },
+          remoteAddress: h.nextIp(),
+        });
+        expect(cancel.statusCode).toBe(200);
+        await h.client.query('update payments set slip_verify = $2 where id = $1', [
+          aPayment?.id,
+          verdict,
+        ]);
+        on();
+        const b = await sendSlip(picture(5));
+        expect(await latest(b.order.id)).toMatchObject({
+          status: 'confirmed',
+          auto_confirmed: true,
+        });
+        // A is re-opened with the same picture: B (confirmed) now blocks it.
+        await upload(a.token, a.order.id, picture(5));
+        await checker.idle();
+        expect(await latest(a.order.id)).toMatchObject({
+          status: 'claimed',
+          auto_confirmed: false,
+        });
+      });
+    }
 
     test('voided, then the same file is claimed again on the same order: staff tick', async () => {
       on();
@@ -1389,6 +1427,7 @@ describe('what the customer is told about the slip (neutral)', () => {
   });
 
   test('a paid order carries no slipCheck', async () => {
+    dailyCap = 10_000; // the file's earlier tests share one business date and its call counter
     autoConfirm = { maxSatang: 100_000 };
     checker = buildChecker();
     installSlipChecker(checker);
