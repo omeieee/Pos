@@ -1479,8 +1479,10 @@ export const en = {
   'lineBot.pick.title': 'Choose how to pay · {orderNo}',
   'lineBot.pick.altText': 'Choose how to pay order {orderNo}',
   'lineBot.pick.hint': 'Total {amount} · tap to change the payment method',
-  'lineBot.claim.done':
-    'We got your transfer notice for order {orderNo}. Staff will check the money arrived and confirm.',
+  'lineBot.claim.noSlip':
+    'We got your transfer notice for order {orderNo}. Please send the picture of your transfer slip in this chat so we can check it faster. Staff will also check that the money arrived.',
+  'lineBot.claim.slipReceived':
+    'We got the slip for order {orderNo} and are checking it. Staff will see the money arrive and confirm.',
   'lineBot.err.generic': 'That did not work. Please try again, or type your question here.',
   'lineBot.err.noOrder': 'We cannot find that order on your account.',
   'lineBot.err.claimed':

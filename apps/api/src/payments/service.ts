@@ -995,6 +995,9 @@ export async function listOrderPayments(
   return {
     payments: rows.map(toPaymentDto),
     slipPaymentIds: rows.filter((r) => r.slipImageKey !== null).map((r) => r.id),
+    claimedWithoutSlipPaymentIds: rows
+      .filter((r) => r.status === 'claimed' && r.slipImageKey === null)
+      .map((r) => r.id),
     ...(rows.some((r) => r.autoConfirmed)
       ? { autoConfirmedPaymentIds: rows.filter((r) => r.autoConfirmed).map((r) => r.id) }
       : {}),

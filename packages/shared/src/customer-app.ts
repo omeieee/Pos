@@ -131,6 +131,25 @@ export const myPaymentSchema = z.object({
 });
 export type MyPayment = z.infer<typeof myPaymentSchema>;
 
+/** `none`: no slip sent. `checking`: sent, the bank check is still running. `staff_review`: staff look at it. */
+export const CUSTOMER_SLIP_CHECKS = ['none', 'checking', 'staff_review'] as const;
+export type CustomerSlipCheck = (typeof CUSTOMER_SLIP_CHECKS)[number];
+
+/**
+ * What the customer is told about the slip of their open PromptPay payment. Neutral on purpose
+ * (owner decision): every finished bank check, whatever it found (a pass that staff still tick, a
+ * wrong amount or receiver, not found, fraud, a duplicate, not checked), is the same `staff_review`,
+ * so a cheater cannot learn which check failed. Only a check still running is `checking`; a slip
+ * that has no check marked at all (the bank check was off when it arrived) is staff's to look at.
+ */
+export function customerSlipCheck(slip: {
+  hasSlip: boolean;
+  slipVerify: string | null;
+}): CustomerSlipCheck {
+  if (!slip.hasSlip) return 'none';
+  return slip.slipVerify === 'pending' ? 'checking' : 'staff_review';
+}
+
 export const myOrderSchema = z.object({
   id: z.uuid(),
   orderNo: z.string(),
@@ -166,6 +185,12 @@ export const myOrderSchema = z.object({
   paymentRejected: z.boolean().optional(),
   /** The customer has sent a slip for the waiting payment: the app offers "view" and "replace". */
   hasSlip: z.boolean().optional(),
+  /**
+   * Where the slip of the open PromptPay payment stands, in words that say nothing about the bank
+   * check (owner decision: a cheater must not learn which check failed). Absent when no PromptPay
+   * payment is open (nothing to pay, paid, closed). See `customerSlipCheck`.
+   */
+  slipCheck: z.enum(CUSTOMER_SLIP_CHECKS).optional(),
   /** What the customer may do next. The server decides; the app shows. */
   actions: z.object({
     /** "โอนแล้ว": only for a pending PromptPay payment. It makes the payment `claimed`; staff confirm. */

@@ -314,6 +314,10 @@ describe('"โอนแล้ว" from the chat', () => {
         .some((e) => e.type === 'payment.upserted' && e.data.status === 'claimed'),
     ).toBe(true);
     expect(allText(lastReply())).toContain(order.orderNo);
+    // No slip yet: the reply asks for the picture here and says staff will check as well (a free reply).
+    expect(allText(lastReply())).toContain('ส่งรูปสลิป');
+    expect(allText(lastReply())).toContain('พนักงานจะตรวจสอบยอดเงินเข้า');
+    expect(pushes()).toHaveLength(0);
     // The app sees the same.
     const view = (await call('GET', `/v1/app/orders/${order.id}`, token)).json();
     expect(view.payment.status).toBe('claimed');
@@ -699,6 +703,15 @@ describe('a picture in the chat', () => {
     expect(replies()).toHaveLength(1);
     expect(pushes()).toHaveLength(0);
     expect(allText(lastReply())).toContain(order.orderNo);
+    // The slip is received and being checked; it says nothing about a result.
+    expect(allText(lastReply())).toContain('ได้รับสลิป');
+    expect(allText(lastReply())).toContain('กำลังตรวจสอบ');
+    expect(allText(lastReply())).not.toContain('ส่งรูปสลิป');
+
+    // "โอนแล้ว" after the slip does not ask for it again.
+    await deliver(postback(U_A, `action=paid&order=${order.id}`));
+    expect(allText(lastReply())).toContain('ได้รับสลิป');
+    expect(allText(lastReply())).not.toContain('ส่งรูปสลิป');
   });
 
   test('finds the waiting PromptPay order even when more than three newer orders are open', async () => {

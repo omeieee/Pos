@@ -101,6 +101,14 @@ export const paymentReasonInputSchema = z.strictObject({
 });
 export type PaymentReasonInput = z.infer<typeof paymentReasonInputSchema>;
 
+/**
+ * Staff run the bank check of a claimed payment's slip again (`POST /v1/payments/:id/slip-recheck`).
+ * The request id is the idempotency key: the same id again answers the current state and spends
+ * no second call to the bank-check service.
+ */
+export const slipRecheckInputSchema = z.strictObject({ clientRequestId: z.uuid() });
+export type SlipRecheckInput = z.infer<typeof slipRecheckInputSchema>;
+
 // ---------- Responses ----------
 
 export const paymentDtoSchema = z.object({
@@ -174,6 +182,12 @@ export const orderPaymentsResponseSchema = z.object({
    * or a customer answer; absent when there is none. Staff void such a payment as any other.
    */
   autoConfirmedPaymentIds: z.array(z.uuid()).optional(),
+  /**
+   * The payments of this order that are `claimed` ("โอนแล้ว") with NO slip picture, so the POS can
+   * flag them: look in the bank app, or ask the customer for the slip. Only on this REST answer
+   * (a slip is never in sync or realtime, so neither is its absence); always sent by the server.
+   */
+  claimedWithoutSlipPaymentIds: z.array(z.uuid()).optional(),
   /**
    * What the automatic reading of each slip said (D-26): a hint for staff, never a confirmation.
    * `amountSatang` is the amount read off the slip, null while pending or when it was unreadable.

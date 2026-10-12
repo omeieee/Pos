@@ -1247,3 +1247,285 @@ describe('the other account codes alert the owner too', () => {
     expect(alertsOf('slip2go.unavailable')).toHaveLength(before + 1);
   });
 });
+
+describe('what the customer is told about the slip (neutral)', () => {
+  const slipCheckOf = async (token: string, orderId: string) =>
+    (await call('GET', `/v1/app/orders/${orderId}`, token)).json().slipCheck;
+  const claimOnly = (token: string, orderId: string) =>
+    call('POST', `/v1/app/orders/${orderId}/claim`, token);
+
+  test('none with no picture, checking while the bank check runs, then staff_review', async () => {
+    const { token, order } = await start();
+    expect(await slipCheckOf(token, order.id)).toBe('none');
+    await claimOnly(token, order.id);
+    expect(await slipCheckOf(token, order.id)).toBe('none');
+
+    let release: (reply: { body: unknown }) => void = () => undefined;
+    respond = () => new Promise((resolve) => (release = resolve));
+    await upload(token, order.id, picture());
+    await waitFor(() => calls.length === 1);
+    expect(await slipCheckOf(token, order.id)).toBe('checking');
+    release({ body: answer('200200', currentAmountBaht) });
+    await checker.idle();
+    // A valid answer with auto-confirm off is still staff's to tick.
+    expect(await slipCheckOf(token, order.id)).toBe('staff_review');
+  });
+
+  test.each([
+    ['200200'],
+    ['200000'],
+    ['200401'],
+    ['200402'],
+    ['200403'],
+    ['200404'],
+    ['200500'],
+    ['401004'],
+  ])(
+    'code %s: the customer sees the same staff_review and not a trace of the verdict',
+    async (code) => {
+      const { token, order } = await start();
+      respond = () => ({ body: answer(code, currentAmountBaht) });
+      const res = await upload(token, order.id, picture());
+      await checker.idle();
+      const mine = await call('GET', `/v1/app/orders/${order.id}`, token);
+      expect(mine.json().slipCheck).toBe('staff_review');
+      expect(mine.json().payment.status).toBe('claimed');
+      for (const body of [mine.body, res.body]) {
+        expect(body).not.toMatch(
+          /verify|verdict|valid|mismatch|not_found|fraud|unchecked|\b\d{6}\b/i,
+        );
+      }
+    },
+  );
+
+  test('a slip that was never marked for the bank check (verifier off) is staff_review, not an endless checking', async () => {
+    const { token, order } = await start();
+    installSlipChecker(null);
+    await upload(token, order.id, picture());
+    expect((await row(order.id))?.slip_verify).toBeNull();
+    expect(await slipCheckOf(token, order.id)).toBe('staff_review');
+  });
+
+  test('a paid order carries no slipCheck', async () => {
+    autoConfirm = { maxSatang: 100_000 };
+    checker = buildChecker();
+    installSlipChecker(checker);
+    const { token, order } = await start();
+    await upload(token, order.id, picture());
+    await checker.idle();
+    const mine = await call('GET', `/v1/app/orders/${order.id}`, token);
+    expect(mine.json().paymentStatus).toBe('paid');
+    expect(mine.json().slipCheck).toBeUndefined();
+  });
+});
+
+describe('staff recheck of the bank check', () => {
+  // The earlier tests used up this business date's 100 calls: these start with room to spare.
+  beforeEach(() => {
+    dailyCap = 10_000;
+    checker = buildChecker();
+    installSlipChecker(checker);
+  });
+
+  const crid = () => crypto.randomUUID();
+  const recheck = (paymentId: string, token: string | null = staffToken, id = crid()) =>
+    h.app.inject({
+      method: 'POST',
+      url: `/v1/payments/${paymentId}/slip-recheck`,
+      headers: token ? { authorization: `Bearer ${token}` } : {},
+      payload: { clientRequestId: id },
+      remoteAddress: h.nextIp(),
+    });
+  const verdictOf = (res: { json(): { slipChecks?: { verify?: { verdict: string } }[] } }) =>
+    res.json().slipChecks?.[0]?.verify?.verdict;
+  /** An order whose slip got `first` as the bank's answer. */
+  async function checked(first: string, picFill = 1) {
+    const placed = await start();
+    respond = () => ({ body: answer(first, currentAmountBaht) });
+    await upload(placed.token, placed.order.id, picture(picFill));
+    await checker.idle();
+    const payment = await row(placed.order.id);
+    return { ...placed, paymentId: payment?.id ?? '' };
+  }
+
+  test('runs the check again, stores the new verdict, answers the payments view, audits, and publishes', async () => {
+    const { order, paymentId } = await checked('200404');
+    expect((await row(order.id))?.slip_verify).toBe('not_found');
+    respond = () => ({ body: answer('200200', currentAmountBaht) });
+    const marker = h.events.length;
+
+    const res = await recheck(paymentId);
+    expect(res.statusCode).toBe(200);
+    expect(verdictOf(res)).toBe('valid');
+    expect(calls).toHaveLength(2);
+    expect(await row(order.id)).toMatchObject({
+      slip_verify: 'valid',
+      slip_verify_attempts: 2,
+      status: 'claimed',
+    });
+    const seen = h.events
+      .slice(marker)
+      .filter((e) => e.type === 'payment.upserted' && e.id === paymentId);
+    expect(seen.length).toBeGreaterThanOrEqual(2);
+    const audit = (await h.auditRows(paymentId)).filter((a) => a.action === 'payment.slip_recheck');
+    expect(audit).toHaveLength(1);
+    expect(audit[0]).toMatchObject({ actorType: 'staff', actorId: ownerId });
+    expect(JSON.stringify(audit[0])).not.toContain(KEY);
+  });
+
+  test('with auto-confirm on, a valid recheck confirms by the D-27 path; with it off the payment stays claimed', async () => {
+    autoConfirm = { maxSatang: 100_000 };
+    checker = buildChecker();
+    installSlipChecker(checker);
+    const on = await checked('200402');
+    expect((await row(on.order.id))?.status).toBe('claimed');
+    respond = () => ({ body: answer('200200', currentAmountBaht) });
+    expect((await recheck(on.paymentId)).statusCode).toBe(200);
+    expect(
+      (
+        await h.client.query<{ status: string; auto_confirmed: boolean }>(
+          'select status, auto_confirmed from payments where id = $1',
+          [on.paymentId],
+        )
+      ).rows[0],
+    ).toEqual({ status: 'confirmed', auto_confirmed: true });
+
+    autoConfirm = null;
+    checker = buildChecker();
+    installSlipChecker(checker);
+    const off = await checked('200402', 2);
+    respond = () => ({ body: answer('200200', currentAmountBaht) });
+    expect(verdictOf(await recheck(off.paymentId))).toBe('valid');
+    expect((await row(off.order.id))?.status).toBe('claimed');
+  });
+
+  test('the same request id again makes no second call and changes nothing', async () => {
+    const { order, paymentId } = await checked('200404');
+    respond = () => ({ body: answer('200200', currentAmountBaht) });
+    const id = crid();
+    expect((await recheck(paymentId, staffToken, id)).statusCode).toBe(200);
+    const again = await recheck(paymentId, staffToken, id);
+    expect(again.statusCode).toBe(200);
+    expect(verdictOf(again)).toBe('valid');
+    expect(calls).toHaveLength(2);
+    expect((await row(order.id))?.slip_verify_attempts).toBe(2);
+    expect(
+      (await h.auditRows(paymentId)).filter((a) => a.action === 'payment.slip_recheck'),
+    ).toHaveLength(1);
+  });
+
+  test('a body without a request id, or with anything else, is refused', async () => {
+    const { paymentId } = await checked('200404');
+    for (const payload of [{}, { clientRequestId: crid(), x: 1 }]) {
+      const res = await h.app.inject({
+        method: 'POST',
+        url: `/v1/payments/${paymentId}/slip-recheck`,
+        headers: { authorization: `Bearer ${staffToken}` },
+        payload,
+        remoteAddress: h.nextIp(),
+      });
+      expect(res.statusCode).toBe(400);
+    }
+    expect(calls).toHaveLength(1);
+  });
+
+  test('a role without payment.confirm gets 403, no session 401, a customer token is no staff session', async () => {
+    const { token, paymentId } = await checked('200404');
+    const device = await h.newDevice();
+    const kitchen = await h.newStaff('kitchen', '4821');
+    const kitchenToken = await h.pinSession(device.token, kitchen.id, kitchen.pin);
+    expect((await recheck(paymentId, kitchenToken)).statusCode).toBe(403);
+    expect((await recheck(paymentId, null)).statusCode).toBe(401);
+    expect((await recheck(paymentId, token)).statusCode).toBe(401);
+    expect(calls).toHaveLength(1);
+  });
+
+  test('one press is one call: a bank hiccup settles as unchecked at once', async () => {
+    const { order, paymentId } = await checked('200404');
+    respond = () => new Error('connection reset');
+    const res = await recheck(paymentId);
+    expect(res.statusCode).toBe(200);
+    expect(verdictOf(res)).toBe('unchecked');
+    expect(calls).toHaveLength(2);
+    expect((await row(order.id))?.slip_verify_attempts).toBe(2);
+  });
+
+  test('staff get 3 more attempts than the automatic 3: a 7th call is refused, nothing is written', async () => {
+    const { order, paymentId } = await checked('200404');
+    await h.client.query('update payments set slip_verify_attempts = 5 where id = $1', [paymentId]);
+    respond = () => ({ body: answer('200404', currentAmountBaht) });
+    expect((await recheck(paymentId)).statusCode).toBe(200);
+    expect((await row(order.id))?.slip_verify_attempts).toBe(6);
+    const before = await row(order.id);
+    const refused = await recheck(paymentId);
+    expect(refused.statusCode).toBe(429);
+    expect(refused.json()).toMatchObject({ code: 'SLIP_RECHECK_LIMIT' });
+    expect(calls).toHaveLength(2);
+    expect(await row(order.id)).toEqual(before);
+  });
+
+  test('the daily cap holds: refused with the old verdict kept and no call', async () => {
+    // Today's calls so far, plus the one this test makes, are the whole day's allowance.
+    const used = (
+      await h.client.query<{ n: number }>(
+        "select coalesce(sum(n), 0)::int as n from slip_verify_daily where kind = 'calls' and business_date = '2028-02-01'",
+      )
+    ).rows[0]?.n;
+    dailyCap = (used ?? 0) + 1;
+    checker = buildChecker();
+    installSlipChecker(checker);
+    const { order, paymentId } = await checked('200404');
+    expect(calls).toHaveLength(1);
+    const refused = await recheck(paymentId);
+    expect(refused.statusCode).toBe(429);
+    expect(refused.json()).toMatchObject({ code: 'SLIP2GO_DAILY_CAP' });
+    expect(calls).toHaveLength(1);
+    expect((await row(order.id))?.slip_verify).toBe('not_found');
+  });
+
+  test('refused (409) for a payment that is not claimed, has no slip, or is still being checked', async () => {
+    const done = await checked('200404');
+    await h.client.query("update payments set status = 'cancelled' where id = $1", [
+      done.paymentId,
+    ]);
+    expect((await recheck(done.paymentId)).json()).toMatchObject({ code: 'PAYMENT_NOT_CLAIMED' });
+
+    const bare = await start();
+    await call('POST', `/v1/app/orders/${bare.order.id}/claim`, bare.token);
+    const bareId = (await row(bare.order.id))?.id ?? '';
+    const noSlip = await recheck(bareId);
+    expect(noSlip.statusCode).toBe(409);
+    expect(noSlip.json()).toMatchObject({ code: 'NO_SLIP' });
+
+    const running = await checked('200404', 3);
+    await h.client.query("update payments set slip_verify = 'pending' where id = $1", [
+      running.paymentId,
+    ]);
+    const busy = await recheck(running.paymentId);
+    expect(busy.statusCode).toBe(409);
+    expect(busy.json()).toMatchObject({ code: 'SLIP_CHECK_RUNNING' });
+    await h.client.query("update payments set slip_verify = 'unchecked' where id = $1", [
+      running.paymentId,
+    ]);
+    expect(calls).toHaveLength(2);
+  });
+
+  test('with no bank check switched on there is nothing to run again: 409', async () => {
+    const { paymentId } = await checked('200404');
+    installSlipChecker(null);
+    const res = await recheck(paymentId);
+    expect(res.statusCode).toBe(409);
+    expect(res.json()).toMatchObject({ code: 'SLIP_VERIFIER_OFF' });
+  });
+
+  test('the payments view lists claimed payments that have no slip picture', async () => {
+    const withSlip = await checked('200404');
+    const bare = await start();
+    await call('POST', `/v1/app/orders/${bare.order.id}/claim`, bare.token);
+    const bareId = (await row(bare.order.id))?.id ?? '';
+    const bareView = await call('GET', `/v1/orders/${bare.order.id}/payments`, staffToken);
+    expect(bareView.json().claimedWithoutSlipPaymentIds).toEqual([bareId]);
+    const slipView = await call('GET', `/v1/orders/${withSlip.order.id}/payments`, staffToken);
+    expect(slipView.json().claimedWithoutSlipPaymentIds).toEqual([]);
+  });
+});

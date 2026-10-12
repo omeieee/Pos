@@ -6,13 +6,14 @@ import {
   orderIdParamSchema,
   paymentIdParamSchema,
   paymentReasonInputSchema,
+  slipRecheckInputSchema,
 } from '@sds/shared';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { type GuardFactory, markSignedUrlCheck, principalOf } from '../auth/guards.ts';
 import type { AuthContext } from '../auth/service.ts';
 import { ApiError } from '../errors.ts';
-import { readSlip } from '../slips/service.ts';
+import { readSlip, recheckSlip } from '../slips/service.ts';
 import type { SlipStore } from '../slips/store.ts';
 import { parse } from '../validate.ts';
 import { checkQrLink } from './qr.ts';
@@ -205,6 +206,22 @@ export async function registerPaymentRoutes(
         .header('content-security-policy', "default-src 'none'; sandbox")
         .header('referrer-policy', 'no-referrer')
         .send(bytes);
+    },
+  );
+
+  /**
+   * Staff run the bank check of a claimed payment's slip again. Same permission as confirming (the
+   * check can end in the D-27 automatic confirmation, which staff could do by hand anyway). The
+   * request id is the idempotency key; Idempotency-Key, if sent, must say the same. Per staff
+   * member after the guard, and bounded by the payment's attempts and the day's Slip2Go cap.
+   */
+  app.post(
+    '/payments/:id/slip-recheck',
+    { onRequest: [guard('payment.confirm'), slipViewLimit] },
+    async (request) => {
+      const input = parse(slipRecheckInputSchema, request.body);
+      checkIdempotencyHeader(request, input.clientRequestId);
+      return recheckSlip(ctx, principalOf(request), paymentIdOf(request), input, meta(request));
     },
   );
 

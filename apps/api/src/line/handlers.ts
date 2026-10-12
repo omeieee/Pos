@@ -243,7 +243,10 @@ async function handleClaim(
   if (!customer) return;
   try {
     const order = await claimPayment(core(ctx), customer.id, event.orderId, { ip: null });
-    await say(ctx, event.replyToken, [botText('lineBot.claim.done', { orderNo: order.orderNo })], {
+    // No slip yet: ask for the picture here (a free reply; nothing is pushed later).
+    // A slip already sent earlier: only say it is being checked.
+    const key = order.hasSlip ? 'lineBot.claim.slipReceived' : 'lineBot.claim.noSlip';
+    await say(ctx, event.replyToken, [botText(key, { orderNo: order.orderNo })], {
       template: 'payment_claimed',
       customerId: customer.id,
       orderId: order.id,
@@ -285,11 +288,16 @@ async function handleSlip(
     const order = await attachSlip(core(ctx), ctx.slips, customer.id, waiting, content.bytes, {
       ip: null,
     });
-    await say(ctx, event.replyToken, [botText('lineBot.claim.done', { orderNo: order.orderNo })], {
-      template: 'payment_claimed',
-      customerId: customer.id,
-      orderId: order.id,
-    });
+    await say(
+      ctx,
+      event.replyToken,
+      [botText('lineBot.claim.slipReceived', { orderNo: order.orderNo })],
+      {
+        template: 'payment_claimed',
+        customerId: customer.id,
+        orderId: order.id,
+      },
+    );
   } catch (error) {
     await refuse(ctx, event.replyToken, error, customer.id);
   }

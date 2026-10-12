@@ -7,6 +7,7 @@ import {
   createPaymentInputSchema,
   paymentDtoSchema,
   paymentReasonInputSchema,
+  slipRecheckInputSchema,
 } from './payments.ts';
 
 let counter = 0;
@@ -181,5 +182,15 @@ describe('paymentDtoSchema', () => {
   test('refuses an unknown method or status', () => {
     expect(paymentDtoSchema.safeParse({ ...dto, method: 'card' }).success).toBe(false);
     expect(paymentDtoSchema.safeParse({ ...dto, status: 'paid' }).success).toBe(false);
+  });
+});
+
+describe('slipRecheckInputSchema', () => {
+  test('needs a request id and nothing else', () => {
+    expect(slipRecheckInputSchema.safeParse({ clientRequestId: id() }).success).toBe(true);
+    expect(slipRecheckInputSchema.safeParse({}).success).toBe(false);
+    expect(
+      slipRecheckInputSchema.safeParse({ clientRequestId: id(), amountSatang: 1 }).success,
+    ).toBe(false);
   });
 });

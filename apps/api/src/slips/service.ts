@@ -1,10 +1,12 @@
 import { createHash } from 'node:crypto';
-import { insertAudit, ordersRepo, paymentsRepo } from '@sds/db';
-import type { MyOrder } from '@sds/shared';
-import type { Principal, RequestMeta } from '../auth/service.ts';
+import { findAuditByRequestId, insertAudit, ordersRepo, paymentsRepo } from '@sds/db';
+import type { MyOrder, OrderPaymentsResponse, SlipRecheckInput } from '@sds/shared';
+import type { AuthContext, Principal, RequestMeta } from '../auth/service.ts';
 import { claimPayment } from '../customer-app/service.ts';
-import { ApiError, notFound } from '../errors.ts';
-import type { CoreContext } from '../tx.ts';
+import { ApiError, conflict, notFound, versionConflict } from '../errors.ts';
+import { toPaymentDto } from '../payments/dto.ts';
+import { listOrderPayments } from '../payments/service.ts';
+import { type CoreContext, withTransaction } from '../tx.ts';
 import { activeSlipChecker } from './checker.ts';
 import { MAX_SLIP_BYTES, type SlipMime, sniffSlip } from './image.ts';
 import { newSlipKey, type SlipStore } from './store.ts';
@@ -54,6 +56,89 @@ export async function attachSlip(
   for (const oldKey of replaced) await removeFile(slips, oldKey);
   if (checker && order.payment) checker.enqueue(order.payment.id);
   return order;
+}
+
+/**
+ * Staff press "check again" on a claimed payment's slip (`POST /v1/payments/:id/slip-recheck`,
+ * `payment.confirm`). It marks the bank check `pending` again (one transaction with the audit row
+ * `payment.slip_recheck`, and `payment.upserted` after the commit), then runs the same checker:
+ * the D-27 auto-confirm conditions are unchanged and still gated by SLIP_AUTOCONFIRM. Attempts
+ * count against the picture's cap (3 automatic + 3 staff) and the day's Slip2Go cap.
+ *
+ * Idempotent by `clientRequestId`, found in the audit row under the locks (order, then payment):
+ * a repeat answers the current view and calls nothing. Every refusal happens before any write, so
+ * the verdict already on the payment is never lost to a check that could not be made.
+ * Answers the order's payments view, the only answer that carries the verdict for staff.
+ */
+export async function recheckSlip(
+  ctx: AuthContext,
+  actor: Principal,
+  paymentId: string,
+  input: SlipRecheckInput,
+  meta: RequestMeta,
+): Promise<OrderPaymentsResponse> {
+  const checker = activeSlipChecker();
+  if (!checker?.wants.verify) {
+    throw conflict('SLIP_VERIFIER_OFF', 'The bank check of slips is not switched on');
+  }
+  const probe = await paymentsRepo.findPaymentById(ctx.db, paymentId);
+  if (!probe) throw notFound('Payment');
+  const started = await withTransaction(ctx, async (tx, emit) => {
+    const order = await ordersRepo.lockOrderById(tx, probe.orderId);
+    if (!order) throw notFound('Order');
+    const row = await paymentsRepo.lockPaymentById(tx, paymentId);
+    if (!row) throw notFound('Payment');
+    if (await findAuditByRequestId(tx, 'payments', row.id, input.clientRequestId)) return false;
+    if (row.status !== 'claimed') {
+      throw conflict('PAYMENT_NOT_CLAIMED', 'Only a claimed payment has a slip to check', {
+        status: row.status,
+      });
+    }
+    if (!row.slipImageKey || !row.slipImageHash) {
+      throw conflict('NO_SLIP', 'This payment has no slip picture to check');
+    }
+    if (row.slipVerify === 'pending') {
+      throw conflict('SLIP_CHECK_RUNNING', 'The bank check of this slip is still running');
+    }
+    const blocked = await checker.recheckBlocker(row, tx);
+    if (blocked === 'attempts') {
+      throw new ApiError(
+        429,
+        'SLIP_RECHECK_LIMIT',
+        'This slip has been checked as often as allowed',
+      );
+    }
+    if (blocked === 'cap') {
+      throw new ApiError(429, 'SLIP2GO_DAILY_CAP', "Today's bank checks are used up. Try tomorrow");
+    }
+    const updated = await paymentsRepo.updatePaymentIfVersion(tx, row.id, row.version, {
+      slipVerify: 'pending',
+      slipVerifyCode: null,
+      slipVerifyRef: null,
+      slipVerifiedAt: null,
+    });
+    if (!updated) throw versionConflict(row.version);
+    await insertAudit(tx, {
+      actorType: 'staff',
+      actorId: actor.staffId,
+      deviceId: actor.deviceId,
+      action: 'payment.slip_recheck',
+      entity: 'payments',
+      entityId: row.id,
+      before: { slipVerify: row.slipVerify, attempts: row.slipVerifyAttempts },
+      after: { clientRequestId: input.clientRequestId, slipVerify: 'pending' },
+      ip: meta.ip,
+    });
+    emit({
+      type: 'payment.upserted',
+      id: updated.id,
+      rev: updated.rev,
+      data: toPaymentDto(updated),
+    });
+    return true;
+  });
+  if (started) await checker.recheck(paymentId);
+  return listOrderPayments(ctx, probe.orderId);
 }
 
 /** Size and magic bytes, whatever the client called the file. */

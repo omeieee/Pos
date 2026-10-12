@@ -20,6 +20,7 @@ import {
   type AppPayMethod,
   type CheckoutInfo,
   type CustomerSessionResponse,
+  customerSlipCheck,
   MAX_ORDER_QUANTITY,
   type MemberInput,
   type MemberProfile,
@@ -269,6 +270,15 @@ export async function viewOrder(ctx: CoreContext, order: ordersRepo.OrderRow): P
     cancelledAt: order.cancelledAt?.toISOString() ?? null,
     paymentRejected: rejected,
     hasSlip: payment?.slipImageKey != null,
+    // Only for the PromptPay payment that is still open, and only neutral words (never a verdict).
+    ...(open?.method === 'promptpay'
+      ? {
+          slipCheck: customerSlipCheck({
+            hasSlip: open.slipImageKey != null,
+            slipVerify: open.slipVerify,
+          }),
+        }
+      : {}),
     payment: payment
       ? {
           id: payment.id,

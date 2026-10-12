@@ -323,8 +323,10 @@ describe('with the reading on', () => {
     expect(res.json().hasSlip).toBe(true);
     const mine = await call('GET', `/v1/app/orders/${order.id}`, token);
     expect(mine.json().hasSlip).toBe(true);
-    expect(mine.body).not.toMatch(/slipCheck|slipAmount|mismatch|unreadable|1234500/);
-    expect(res.body).not.toMatch(/slipCheck|slipAmount|mismatch|unreadable/);
+    // `slipCheck` is the neutral stage (none, checking, staff_review), never the reading.
+    expect(['checking', 'staff_review']).toContain(mine.json().slipCheck);
+    expect(mine.body).not.toMatch(/slipAmount|mismatch|unreadable|1234500/);
+    expect(res.body).not.toMatch(/slipAmount|mismatch|unreadable/);
   });
 
   test('the text the reader found is not kept anywhere', async () => {

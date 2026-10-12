@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { ordersRepo, paymentsRepo } from '@sds/db';
+import { type Db, ordersRepo, paymentsRepo } from '@sds/db';
 import {
   checkSlipRecipient,
   compareSlipAmount,
@@ -51,6 +51,18 @@ export interface SlipChecker {
   sweep(limit?: number): Promise<number>;
   /** Resolves when everything queued so far is done (tests, shutdown). */
   idle(): Promise<void>;
+  /**
+   * Why a staff recheck of this payment's bank check must not start now: the attempts of this
+   * picture are used up, or today's Slip2Go calls are. Null when it may go ahead. Nothing is written.
+   */
+  recheckBlocker(row: paymentsRepo.PaymentRow, db?: Db): Promise<'attempts' | 'cap' | null>;
+  /**
+   * Runs the bank check of a payment the staff marked `pending` again, and resolves when that one
+   * payment is done (not the whole queue). The attempt ceiling is the automatic one plus
+   * STAFF_RECHECK_EXTRA_ATTEMPTS, and a failed call settles as `unchecked` at once, so one press
+   * is at most one call. Everything else (D-27 conditions, auto-confirm) is the same path.
+   */
+  recheck(paymentId: string): Promise<void>;
 }
 
 const sha256 = (text: string): string => createHash('sha256').update(text).digest('hex');
@@ -62,6 +74,9 @@ const MAX_QUEUED = 50;
 const SWEEP_LIMIT = 5;
 /** Calls to Slip2Go per slip when it keeps failing (network, 429, 5xx, bank error), then `unchecked`. */
 export const MAX_VERIFY_ATTEMPTS = 3;
+/** Staff may press "check again" until a picture has had this many calls more than the automatic ones: 3 + 3 = 6 in all. */
+export const STAFF_RECHECK_EXTRA_ATTEMPTS = 3;
+export const MAX_VERIFY_ATTEMPTS_STAFF = MAX_VERIFY_ATTEMPTS + STAFF_RECHECK_EXTRA_ATTEMPTS;
 /** The transfer may predate the order a little (the customer paid while the cart was open). */
 const DATE_SLACK_MS = 10 * 60_000;
 export const DEFAULT_DAILY_CAP = 100;
@@ -125,6 +140,8 @@ export function createSlipChecker(args: {
   const waiting = new Set<string>();
   /** A new slip arrived for a payment that is being read: read it again when this one ends. */
   const again = new Set<string>();
+  /** Payments whose read in progress was asked for by staff: a higher ceiling, no second try. */
+  const manual = new Set<string>();
   let tail: Promise<void> = Promise.resolve();
 
   async function readOcr(bytes: Buffer, expected: number): Promise<NonNullable<Evaluated['ocr']>> {
@@ -158,6 +175,9 @@ export function createSlipChecker(args: {
     return { check: compareSlipAmount(amount, expected), amount, refHash, recipient };
   }
 
+  const attemptCeiling = (paymentId: string) =>
+    manual.has(paymentId) ? MAX_VERIFY_ATTEMPTS_STAFF : MAX_VERIFY_ATTEMPTS;
+
   /** The bank check: one call to Slip2Go, or a reason not to make it. */
   async function readVerify(
     row: paymentsRepo.PaymentRow,
@@ -183,7 +203,7 @@ export function createSlipChecker(args: {
     if (row.status !== 'claimed') return noCall();
     // Calls already made for this picture that never reached a verdict (a commit that failed
     // after the answer, or retries): at most MAX_VERIFY_ATTEMPTS in all, then unchecked.
-    if (row.slipVerifyAttempts >= MAX_VERIFY_ATTEMPTS) return noCall();
+    if (row.slipVerifyAttempts >= attemptCeiling(row.id)) return noCall();
     const mime = bytes ? sniffSlip(bytes) : null;
     // The QR text goes first (no picture leaves the machine); the picture only when no QR was read,
     // and only as JPEG or PNG (Slip2Go documents nothing else).
@@ -353,7 +373,7 @@ export function createSlipChecker(args: {
         const outcome = done.verify;
         if (outcome.kind === 'retry') {
           // The attempt was counted before the call (`bumpSlipVerifyAttempts`).
-          if (locked.slipVerifyAttempts >= MAX_VERIFY_ATTEMPTS) {
+          if (manual.has(paymentId) || locked.slipVerifyAttempts >= attemptCeiling(paymentId)) {
             patch.slipVerify = 'unchecked';
             patch.slipVerifyCode = outcome.code;
             patch.slipVerifiedAt = ctx.now();
@@ -442,6 +462,19 @@ export function createSlipChecker(args: {
       ).filter((id) => !waiting.has(id));
       await Promise.all(ids.map(schedule));
       return ids.length;
+    },
+    async recheckBlocker(row, db = ctx.db) {
+      if (row.slipVerifyAttempts >= MAX_VERIFY_ATTEMPTS_STAFF) return 'attempts';
+      const day = await currentBusinessDate(db, ctx.now());
+      return (await paymentsRepo.slipVerifyCallsOn(db, day)) >= dailyCap ? 'cap' : null;
+    },
+    async recheck(paymentId) {
+      manual.add(paymentId);
+      try {
+        await schedule(paymentId);
+      } finally {
+        manual.delete(paymentId);
+      }
     },
     idle: async () => {
       // A read can queue another (a newer slip): wait until the tail stops moving.

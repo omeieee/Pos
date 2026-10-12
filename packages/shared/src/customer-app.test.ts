@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest';
 import {
   appOrderInputSchema,
   customerSessionRequestSchema,
+  customerSlipCheck,
   selectPaymentInputSchema,
 } from './customer-app.ts';
 
@@ -70,5 +71,31 @@ describe('selectPaymentInputSchema and customerSessionRequestSchema', () => {
       false,
     );
     expect(customerSessionRequestSchema.safeParse({ userId: 'U1' }).success).toBe(false);
+  });
+});
+
+describe('customerSlipCheck', () => {
+  test('no picture is none, whatever the check says', () => {
+    expect(customerSlipCheck({ hasSlip: false, slipVerify: null })).toBe('none');
+    expect(customerSlipCheck({ hasSlip: false, slipVerify: 'valid' })).toBe('none');
+  });
+
+  test('a check still running is checking', () => {
+    expect(customerSlipCheck({ hasSlip: true, slipVerify: 'pending' })).toBe('checking');
+  });
+
+  test('every finished check, and a slip never marked for one, is the same staff_review', () => {
+    for (const slipVerify of [
+      'valid',
+      'amount_mismatch',
+      'receiver_mismatch',
+      'date_mismatch',
+      'not_found',
+      'fraud',
+      'unchecked',
+      null,
+    ]) {
+      expect(customerSlipCheck({ hasSlip: true, slipVerify })).toBe('staff_review');
+    }
   });
 });
