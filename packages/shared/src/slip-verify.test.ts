@@ -338,13 +338,13 @@ describe('the not-found grace window', () => {
         (acc, d) => [...acc, (acc[acc.length - 1] ?? first) + d],
         [first],
       ).map((t) => t / 1000);
-    expect(times(SLIP_FIRST_CALL_DELAY_MS)).toEqual([25, 45, 75, 135]);
-    expect(times(SLIP_FIRST_CALL_DELAY_BY_BANK_MS['002'] ?? 0)).toEqual([70, 90, 120, 180]);
-    expect(inSlipNotFoundGrace(up, at(180))).toBe(true);
+    expect(times(SLIP_FIRST_CALL_DELAY_MS)).toEqual([10, 30, 60, 120]);
+    expect(times(SLIP_FIRST_CALL_DELAY_BY_BANK_MS['002'] ?? 0)).toEqual([50, 70, 100, 160]);
+    expect(inSlipNotFoundGrace(up, at(160))).toBe(true);
   });
-  test('the first-call hold is 25 s, and 70 s for Bangkok Bank (002) only', () => {
-    expect(SLIP_FIRST_CALL_DELAY_MS).toBe(25_000);
-    expect(SLIP_FIRST_CALL_DELAY_BY_BANK_MS).toEqual({ '002': 70_000 });
+  test('the first-call hold is 10 s, and 50 s for Bangkok Bank (002) only', () => {
+    expect(SLIP_FIRST_CALL_DELAY_MS).toBe(10_000);
+    expect(SLIP_FIRST_CALL_DELAY_BY_BANK_MS).toEqual({ '002': 50_000 });
   });
   test('an unknown upload time, or a window of 0, is never in grace', () => {
     expect(inSlipNotFoundGrace(null, at(1))).toBe(false);

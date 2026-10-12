@@ -202,7 +202,7 @@ export const SLIP_NOT_FOUND_GRACE_MAX_CALLS = 4;
  * How long after the upload the first bank call waits by default (production). Most banks know a
  * transfer within this time; a bank that is known to be slower has its own entry below.
  */
-export const SLIP_FIRST_CALL_DELAY_MS = 25_000;
+export const SLIP_FIRST_CALL_DELAY_MS = 10_000;
 
 /**
  * Per sending bank (3-digit code from the slip's own QR) first-call hold, for banks that were seen
@@ -210,13 +210,13 @@ export const SLIP_FIRST_CALL_DELAY_MS = 25_000;
  * upload. Used only when the local QR decode tells the bank; an unreadable QR gets the default.
  */
 export const SLIP_FIRST_CALL_DELAY_BY_BANK_MS: Readonly<Record<string, number>> = {
-  '002': 70_000,
+  '002': 50_000,
 };
 
 /**
  * Waits between the calls of the not-found grace budget: a timer fires the next call this long
- * after the END of the previous call. With the default hold the calls start about 25, 45, 75 and
- * 135 s after the upload (70, 90, 120 and 180 s for bank 002), the last well inside the window. One
+ * after the END of the previous call. With the default hold the calls start about 10, 30, 60 and
+ * 120 s after the upload (50, 70, 100 and 160 s for bank 002), the last well inside the window. One
  * entry fewer than SLIP_NOT_FOUND_GRACE_MAX_CALLS. The minute sweep is the fallback after a restart.
  */
 export const SLIP_GRACE_RETRY_DELAYS_MS: readonly number[] = [20_000, 30_000, 60_000];
