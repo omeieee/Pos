@@ -8,6 +8,12 @@ import { markPaidPopupSeen, paidPopupSeen, shouldShowPaidPopup } from '../model/
 import { nextPollDelayMs } from '../model/poll.ts';
 import { browserSaveEnv, qrFileName, saveQrImage, toPng } from '../model/qr-save.ts';
 import { canDownloadReceipt, receiptFileName, receiptHtml } from '../model/receipt.ts';
+import {
+  msUntilMinShown,
+  type SlipProgressPhase,
+  slipPollDelayMs,
+  slipProgressPhase,
+} from '../model/slip-progress.ts';
 import { awaitsTransferConfirmation, isPaymentRejected, orderSteps } from '../model/steps.ts';
 import { cooldownMinutes, errorKey, errorText, useApp, useT } from './app-context.tsx';
 import { BarButton, Body, Header, Notice } from './Chrome.tsx';
@@ -62,6 +68,10 @@ function useOrder(id: string) {
   const [failure, setFailure] = useState<unknown>(null);
   const failures = useRef(0);
   const latest = useRef<MyOrder | null>(null);
+  /** When the customer sent a slip in this visit: the page asks faster for a while after it. */
+  const fastSince = useRef<number | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const tickRef = useRef<() => void>(() => {});
 
   const load = useCallback(async () => {
     try {
@@ -77,31 +87,45 @@ function useOrder(id: string) {
   }, [api, id]);
 
   useEffect(() => {
-    let timer: ReturnType<typeof setTimeout> | undefined;
     let stopped = false;
     const tick = async () => {
       await load();
       if (stopped) return;
-      const delay = nextPollDelayMs(latest.current, document.hidden, failures.current);
-      if (delay !== null) timer = setTimeout(() => void tick(), delay);
+      const normal = nextPollDelayMs(latest.current, document.hidden, failures.current);
+      const fast =
+        fastSince.current === null
+          ? null
+          : slipPollDelayMs(Date.now() - fastSince.current, latest.current, failures.current);
+      // A closed order stops the page whatever the slip says; otherwise the quicker rate wins.
+      const delay = normal === null ? null : (fast ?? normal);
+      clearTimeout(timerRef.current);
+      if (delay !== null) timerRef.current = setTimeout(() => void tick(), delay);
     };
+    tickRef.current = () => void tick();
     void tick();
     // Coming back to the app shows the newest state at once.
     const onVisible = () => {
       if (!document.hidden) {
-        clearTimeout(timer);
+        clearTimeout(timerRef.current);
         void tick();
       }
     };
     document.addEventListener('visibilitychange', onVisible);
     return () => {
       stopped = true;
-      clearTimeout(timer);
+      clearTimeout(timerRef.current);
       document.removeEventListener('visibilitychange', onVisible);
     };
   }, [load]);
 
-  return { order, setOrder, failure, reload: load };
+  /** A slip was just sent: poll quickly for a while (the page's own rate takes over after). */
+  const speedUp = useCallback((startedAt: number) => {
+    fastSince.current = startedAt;
+    clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => tickRef.current(), 2000);
+  }, []);
+
+  return { order, setOrder, failure, reload: load, speedUp };
 }
 
 export function OrderScreen({
@@ -116,7 +140,7 @@ export function OrderScreen({
 }) {
   const tr = useT();
   const { platform } = useApp();
-  const { order, setOrder, failure } = useOrder(id);
+  const { order, setOrder, failure, speedUp } = useOrder(id);
 
   if (!order) {
     return (
@@ -137,7 +161,15 @@ export function OrderScreen({
       </>
     );
   }
-  return <OrderView order={order} setOrder={setOrder} flag={flag} shopPhone={shopPhone} />;
+  return (
+    <OrderView
+      order={order}
+      setOrder={setOrder}
+      flag={flag}
+      shopPhone={shopPhone}
+      onSlipSent={speedUp}
+    />
+  );
 }
 
 /** The loaded order page. Split from the polling shell so it can be rendered on its own. */
@@ -146,11 +178,14 @@ export function OrderView({
   setOrder,
   flag,
   shopPhone,
+  onSlipSent,
 }: {
   order: MyOrder;
   setOrder: (order: MyOrder) => void;
   flag: string | null;
   shopPhone: string | null;
+  /** Called when a slip upload succeeds, so the page can poll faster. */
+  onSlipSent?: (startedAt: number) => void;
 }) {
   const tr = useT();
   const { api, locale, go, platform } = useApp();
@@ -162,6 +197,11 @@ export function OrderView({
   const [slipStamp, setSlipStamp] = useState(0);
   const tel = telHref(shopPhone);
   const [paidPopup, setPaidPopup] = useState(false);
+  /** When the slip-check pop-up opened (null when it is closed) and the clock that drives it. */
+  const [slipProgress, setSlipProgress] = useState<number | null>(null);
+  const [now, setNow] = useState(0);
+  /** True from the moment a slip is sent until its pop-up is closed: it owns the paid message. */
+  const progressOwnsPaid = useRef(false);
   /** The payment status this page saw last. Starts as the first load, so a paid order never pops up. */
   const lastPayment = useRef(order.paymentStatus);
   const paymentId = order.payment?.id;
@@ -171,9 +211,43 @@ export function OrderView({
     lastPayment.current = order.paymentStatus;
     if (shouldShowPaidPopup(previous, order, paymentId ? paidPopupSeen(paymentId) : false)) {
       if (paymentId) markPaidPopupSeen(paymentId);
-      setPaidPopup(true);
+      // The slip-check pop-up shows the success itself: no second pop-up for the same payment.
+      if (!progressOwnsPaid.current) setPaidPopup(true);
     }
   }, [order.paymentStatus]);
+
+  const phase: SlipProgressPhase | null =
+    slipProgress === null ? null : slipProgressPhase(Math.max(0, now - slipProgress), order);
+  // Re-evaluate when the minimum time ends, then now and then until there is an answer.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `now` re-arms the timer
+  useEffect(() => {
+    if (slipProgress === null || phase !== 'checking') return;
+    const wait = msUntilMinShown(Date.now() - slipProgress);
+    const timer = setTimeout(() => setNow(Date.now()), wait > 0 ? wait : 1000);
+    return () => clearTimeout(timer);
+  }, [slipProgress, phase, now]);
+
+  const closeSlipProgress = useCallback(() => {
+    progressOwnsPaid.current = false;
+    setSlipProgress(null);
+  }, []);
+
+  function sendSlip(file: File) {
+    progressOwnsPaid.current = true;
+    void act(() => api.attachSlip(order.id, file)).then((ok) => {
+      if (!ok) {
+        // Refused (a wait, a block, a bad file): the message under the buttons says why.
+        progressOwnsPaid.current = false;
+        return;
+      }
+      const startedAt = Date.now();
+      setSlipSent(true);
+      setSlipStamp((n) => n + 1);
+      setNow(startedAt);
+      setSlipProgress(startedAt);
+      onSlipSent?.(startedAt);
+    });
+  }
 
   async function act(run: () => Promise<MyOrder>): Promise<boolean> {
     if (busy) return false;
@@ -292,14 +366,7 @@ export function OrderView({
                   onClaim={() => void act(() => api.claim(order.id))}
                   slipSent={slipSent}
                   slipStamp={slipStamp}
-                  onSlip={(file) =>
-                    void act(() => api.attachSlip(order.id, file)).then((ok) => {
-                      if (ok) {
-                        setSlipSent(true);
-                        setSlipStamp((n) => n + 1);
-                      }
-                    })
-                  }
+                  onSlip={sendSlip}
                 />
               ) : null}
               {method === 'gov_copay' && waiting ? (
@@ -417,14 +484,26 @@ export function OrderView({
           ) : null}
         </div>
       </Body>
-      {paidPopup ? <PaidPopup orderNo={order.orderNo} onClose={() => setPaidPopup(false)} /> : null}
+      {phase ? (
+        <SlipProgressPopup phase={phase} orderNo={order.orderNo} onClose={closeSlipProgress} />
+      ) : null}
+      {paidPopup && !phase ? (
+        <PaidPopup orderNo={order.orderNo} onClose={() => setPaidPopup(false)} />
+      ) : null}
     </>
   );
 }
 
-/** Rises from the bottom when the shop confirms the transfer while the page is open. */
-export function PaidPopup({ orderNo, onClose }: { orderNo: string; onClose: () => void }) {
-  const tr = useT();
+/** The bottom sheet every pop-up here uses: focus on open, Escape or the scrim closes it. */
+function PopupShell({
+  titleId,
+  onClose,
+  children,
+}: {
+  titleId: string;
+  onClose: () => void;
+  children: React.ReactNode;
+}) {
   const dialog = useRef<HTMLDivElement>(null);
   useEffect(() => {
     dialog.current?.focus({ preventScroll: true });
@@ -449,24 +528,103 @@ export function PaidPopup({ orderNo, onClose }: { orderNo: string; onClose: () =
         className="sheet liff-sheet"
         role="dialog"
         aria-modal="true"
-        aria-labelledby="paid-popup-title"
+        aria-labelledby={titleId}
         style={s('align-items:center;gap:10px;text-align:center')}
       >
-        <Gi n="check" size="lg" style={{ color: 'var(--jade)' }} />
-        <h2 id="paid-popup-title" className="g-t-2" style={s('margin:0')}>
-          {tr('liff.paidPopup.title')}
-        </h2>
-        <p className="g-t-3" style={s('margin:0')}>
-          {tr('liff.paidPopup.body')}
-        </p>
-        <p className="g-num g-t-c" style={s('margin:0')}>
-          {tr('liff.paidPopup.order', { orderNo })}
-        </p>
-        <button type="button" className="g-btn g-btn-p g-btn-block" onClick={onClose}>
-          {tr('liff.close')}
-        </button>
+        {children}
       </div>
     </div>
+  );
+}
+
+/** Rises from the bottom when the shop confirms the transfer while the page is open. */
+export function PaidPopup({ orderNo, onClose }: { orderNo: string; onClose: () => void }) {
+  const tr = useT();
+  return (
+    <PopupShell titleId="paid-popup-title" onClose={onClose}>
+      <Gi n="check" size="lg" style={{ color: 'var(--jade)' }} />
+      <h2 id="paid-popup-title" className="g-t-2" style={s('margin:0')}>
+        {tr('liff.paidPopup.title')}
+      </h2>
+      <p className="g-t-3" style={s('margin:0')}>
+        {tr('liff.paidPopup.body')}
+      </p>
+      <p className="g-num g-t-c" style={s('margin:0')}>
+        {tr('liff.paidPopup.order', { orderNo })}
+      </p>
+      <button type="button" className="g-btn g-btn-p g-btn-block" onClick={onClose}>
+        {tr('liff.close')}
+      </button>
+    </PopupShell>
+  );
+}
+
+/**
+ * Opens when the customer sends a slip and follows the check in the same pop-up: moving bar, then
+ * "money received", or the neutral "the shop is checking". Never a failure or a reason. It can be
+ * closed at any time; the check goes on and the page keeps showing the status.
+ */
+export function SlipProgressPopup({
+  phase,
+  orderNo,
+  onClose,
+}: {
+  phase: SlipProgressPhase;
+  orderNo: string;
+  onClose: () => void;
+}) {
+  const tr = useT();
+  return (
+    <PopupShell titleId="slip-progress-title" onClose={onClose}>
+      <div
+        aria-live="polite"
+        style={s('display:flex;flex-direction:column;align-items:center;gap:10px;width:100%')}
+      >
+        {phase === 'paid' ? (
+          <>
+            <Gi n="check" size="lg" style={{ color: 'var(--jade)' }} />
+            <h2 id="slip-progress-title" className="g-t-2" style={s('margin:0')}>
+              {tr('liff.paidPopup.title')}
+            </h2>
+            <p className="g-t-3" style={s('margin:0')}>
+              {tr('liff.paidPopup.body')}
+            </p>
+            <p className="g-num g-t-c" style={s('margin:0')}>
+              {tr('liff.paidPopup.order', { orderNo })}
+            </p>
+          </>
+        ) : phase === 'staff_review' ? (
+          <>
+            <Gi n="clock" size="lg" style={{ color: 'var(--ink2)' }} />
+            <h2 id="slip-progress-title" className="g-t-2" style={s('margin:0')}>
+              {tr('liff.slipProgress.staffTitle')}
+            </h2>
+            <p className="g-t-3" style={s('margin:0')}>
+              {tr('liff.slipProgress.staffBody')}
+            </p>
+          </>
+        ) : (
+          <>
+            <h2 id="slip-progress-title" className="g-t-2" style={s('margin:0')}>
+              {tr('liff.slipProgress.title')}
+            </h2>
+            <div
+              className="liff-progress"
+              role="progressbar"
+              aria-label={tr('liff.slipProgress.label')}
+            >
+              <span />
+            </div>
+            <p className="g-t-3" style={s('margin:0')}>
+              {tr('liff.slipProgress.hint')}
+            </p>
+          </>
+        )}
+      </div>
+      <button type="button" className="g-btn g-btn-p g-btn-block" onClick={onClose}>
+        {tr('liff.close')}
+      </button>
+    </PopupShell>
   );
 }
 
