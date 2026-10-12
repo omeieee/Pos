@@ -443,6 +443,31 @@ export const en = {
     'This slip has been checked the most times allowed. Check the bank app yourself.',
   'pos.slipRecheck.err.dailyCap': "Today's bank checks are used up. Check the bank app yourself.",
   'pos.slipRecheck.err.failed': 'The re-check did not work. Try again, or check the bank app.',
+  'pos.slipRecheck.err.alreadyValid': 'The bank already confirmed this slip; no re-check needed.',
+  'pos.slipRecheck.err.reviewed':
+    'The owner already reviewed this slip by hand, so it is not re-checked. Check the bank app before confirming.',
+  'pos.slipBlock.banner':
+    'The system suspects a fake slip on this order. Slips are closed. Check the amount in the bank app yourself before confirming.',
+  'pos.slipFlag2.banner':
+    'The system has suspected a fake slip from this customer before ({count} times). Check carefully; nothing is confirmed automatically.',
+  'pos.slipBlock.reviewed': 'Reviewed by the owner',
+  'pos.slipBlock.clear.button': 'Lift slip block',
+  'pos.slipFlag2.clear.button': 'Clear customer flag',
+  'pos.slipBlock.clear.title': 'Lift the slip block on this order',
+  'pos.slipFlag2.clear.title': 'Clear the customer slip flag',
+  'pos.slipBlock.clear.body':
+    'Only after the owner has checked the slip by hand. It is logged and the owner is alerted.',
+  'pos.slipBlock.reason.label': 'Reason (up to 200 characters)',
+  'pos.slipBlock.reason.warn':
+    'Do not type the customer name, phone number or other personal data.',
+  'pos.slipBlock.reason.empty': 'Please give a reason.',
+  'pos.slipBlock.reason.tooLong': 'The reason is over 200 characters.',
+  'pos.slipBlock.submit': 'Confirm and save',
+  'pos.slipBlock.busy': 'Saving...',
+  'pos.slipBlock.err.notBlocked': 'This order no longer has a slip block.',
+  'pos.slipBlock.err.forbidden': 'Only the owner can do this.',
+  'pos.slipBlock.err.notFound': 'Not found. Reopen the screen.',
+  'pos.slipBlock.err.failed': 'Could not save. Try again.',
   'payment.promptpay.customer.close': 'Back to staff view (hold 1 second)',
   'payment.promptpay.customer.scanAny': 'Scan with any bank app',
   'payment.promptpay.customer.amountIncluded': 'The amount is already in the QR. Do not type it.',

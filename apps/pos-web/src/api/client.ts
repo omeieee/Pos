@@ -105,6 +105,9 @@ import {
   settingResponseSchema,
   shopPatchInputSchema,
   shopSettingsSchema,
+  slipBlockClearInputSchema,
+  slipFlagClearInputSchema,
+  slipFlagResponseSchema,
   slipRecheckInputSchema,
   staffDtoSchema,
   staffStepUpInputSchema,
@@ -1030,6 +1033,38 @@ export function createApiClient(options: ApiClientOptions) {
         })
       ).data;
     },
+
+    /**
+     * The owner lifts the slip block of the order this payment belongs to (owner + fresh step-up, so
+     * call it through `auth.runSensitive`). Answers with the payment list view.
+     */
+    slipBlockClear: async (id: string, input: z.input<typeof slipBlockClearInputSchema>) =>
+      (
+        await post({
+          path: `${paymentPath(id)}/slip-block/clear`,
+          body: checked(slipBlockClearInputSchema, input),
+          schema: orderPaymentsResponseSchema,
+          session: true,
+          device: 'optional',
+          headers: { 'Idempotency-Key': input.clientRequestId },
+        })
+      ).data,
+
+    /**
+     * The owner clears a customer's slip flag (owner + fresh step-up). It sits here because the
+     * staff app reaches it from the payment screen only.
+     */
+    slipFlagClear: async (customerId: string, input: z.input<typeof slipFlagClearInputSchema>) =>
+      (
+        await post({
+          path: `/v1/customers/${encodeURIComponent(customerId)}/slip-flag/clear`,
+          body: checked(slipFlagClearInputSchema, input),
+          schema: slipFlagResponseSchema,
+          session: true,
+          device: 'optional',
+          headers: { 'Idempotency-Key': input.clientRequestId },
+        })
+      ).data,
 
     claim: async (id: string, input: z.input<typeof claimPaymentInputSchema> = {}) =>
       paymentMove(`${paymentPath(id)}/claim`, checked(claimPaymentInputSchema, input)),

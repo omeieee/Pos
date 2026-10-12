@@ -147,6 +147,12 @@ export function createFakeApi(
     slipRecheck: vi.fn<Payments['slipRecheck']>(
       overrides.payments?.slipRecheck ?? unexpected('payments.slipRecheck'),
     ),
+    slipBlockClear: vi.fn<Payments['slipBlockClear']>(
+      overrides.payments?.slipBlockClear ?? unexpected('payments.slipBlockClear'),
+    ),
+    slipFlagClear: vi.fn<Payments['slipFlagClear']>(
+      overrides.payments?.slipFlagClear ?? unexpected('payments.slipFlagClear'),
+    ),
   };
   // The keepalive of a kitchen display calls this; it answers like a live session.
   const auth = { me: vi.fn(async () => ({}) as never) };
