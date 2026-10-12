@@ -1,4 +1,5 @@
 import { createDb, pingDb, pingFreshDb } from '@sds/db';
+import { SLIP_FIRST_CALL_DELAY_BY_BANK_MS, SLIP_FIRST_CALL_DELAY_MS } from '@sds/shared';
 import type { FastifyInstance } from 'fastify';
 import { type AlertReport, forwardAlerts } from './alerts.ts';
 import { buildApp } from './app.ts';
@@ -92,7 +93,8 @@ if (config.slipOcr || verifier) {
             verifier,
             dailyCap: config.slipVerifier.dailyCap,
             autoConfirm: config.slipAutoconfirm,
-            firstCallDelayMs: 10_000,
+            firstCallDelayMs: SLIP_FIRST_CALL_DELAY_MS,
+            firstCallDelayByBankMs: SLIP_FIRST_CALL_DELAY_BY_BANK_MS,
           }
         : {}),
       log: app.log,

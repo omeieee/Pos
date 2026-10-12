@@ -87,6 +87,8 @@ let autoConfirm: { maxSatang: number } | null = null;
 /** Off (0) unless a test opts in: the older tests are about final answers. */
 let graceSeconds = 0;
 let firstCallDelayMs = 0;
+/** Per sending bank hold (the shop's table is empty in tests unless a test opts in). */
+let firstCallDelayByBankMs: Record<string, number> = {};
 /** No retry timers unless a test opts in: the older tests drive the retries with the sweep. */
 let graceDelays: number[] = [];
 let ownerFixture: Awaited<ReturnType<Harness['newOwner']>>;
@@ -145,6 +147,7 @@ function buildChecker(): SlipChecker {
     autoConfirm,
     notFoundGraceSeconds: graceSeconds,
     firstCallDelayMs,
+    firstCallDelayByBankMs,
     graceRetryDelaysMs: graceDelays,
     log: { warn: (o) => logLines.push(o) },
   });
@@ -190,6 +193,7 @@ beforeEach(async () => {
   autoConfirm = null;
   graceSeconds = 0;
   firstCallDelayMs = 0;
+  firstCallDelayByBankMs = {};
   graceDelays = [];
   ocrOn = false;
   ocrText = '';
@@ -1575,16 +1579,16 @@ describe('staff recheck of the bank check', () => {
     expect((await row(order.id))?.slip_verify_attempts).toBe(2);
   });
 
-  test('staff get 3 more attempts on top of the automatic ones (6 for a not-found picture): a 10th call is refused, nothing is written', async () => {
+  test('staff get 3 more attempts on top of the automatic ones (7 for a not-found picture): an 8th call is refused, nothing is written', async () => {
     const { order, paymentId } = await checked('200404');
-    // The grace budget was used up (6 calls) and staff already made 2 more: one press is left.
+    // The grace budget was used up (4 calls) and staff already made 2 more: one press is left.
     await h.client.query(
-      'update payments set slip_verify_attempts = 8, slip_staff_calls = 2 where id = $1',
+      'update payments set slip_verify_attempts = 6, slip_staff_calls = 2 where id = $1',
       [paymentId],
     );
     respond = () => ({ body: answer('200404', currentAmountBaht) });
     expect((await recheck(paymentId)).statusCode).toBe(200);
-    expect((await row(order.id))?.slip_verify_attempts).toBe(9);
+    expect((await row(order.id))?.slip_verify_attempts).toBe(7);
     const before = await row(order.id);
     const refused = await recheck(paymentId);
     expect(refused.statusCode).toBe(429);
@@ -2582,18 +2586,18 @@ describe('a slow bank: "not found" inside the grace window is not final', () => 
     expect(calls).toHaveLength(4);
   });
 
-  test('8 calls inside the window use the grace budget up: the last 404 is final, counted once', async () => {
+  test('4 calls inside the window use the grace budget up: the last 404 is final, counted once', async () => {
     const { order } = await sendAt404();
     for (let i = 0; i < 12; i++) {
       h.clock.advanceSeconds(30);
       await checker.sweep();
       await checker.idle();
     }
-    expect(calls).toHaveLength(8);
+    expect(calls).toHaveLength(4);
     expect((await payments(order.id))[0]).toMatchObject({
       slip_verify: 'not_found',
       slip_invalid_count: 1,
-      slip_verify_attempts: 8,
+      slip_verify_attempts: 4,
     });
   });
 
@@ -2627,7 +2631,7 @@ describe('a slow bank: "not found" inside the grace window is not final', () => 
     });
   });
 
-  test('errors inside the grace budget are bounded by its 8 calls and settle as unchecked', async () => {
+  test('errors inside the grace budget are bounded by its 4 calls and settle as unchecked', async () => {
     const { order } = await sendAt404();
     respond = () => new Error('connection reset');
     for (let i = 0; i < 10; i++) {
@@ -2635,10 +2639,10 @@ describe('a slow bank: "not found" inside the grace window is not final', () => 
       await checker.sweep();
       await checker.idle();
     }
-    expect(calls).toHaveLength(8);
+    expect(calls).toHaveLength(4);
     expect(await row(order.id)).toMatchObject({
       slip_verify: 'unchecked',
-      slip_verify_attempts: 8,
+      slip_verify_attempts: 4,
     });
   });
 
@@ -2798,8 +2802,8 @@ describe('a slow bank: "not found" inside the grace window is not final', () => 
       expect(calls.length).toBe(before);
       expect(await row(order.id)).toMatchObject({ slip_verify: null, slip_verify_attempts: 0 });
       expect(await cyclesOf(order.id)).toBe(3);
-      // At most 3 cycles x 6 calls reached the bank for this payment.
-      expect(calls.length).toBeLessThanOrEqual(18);
+      // At most 3 cycles x 4 calls reached the bank for this payment.
+      expect(calls.length).toBeLessThanOrEqual(12);
     });
 
     test('the cooldown refuses the upload first, with no call', async () => {
@@ -2898,7 +2902,7 @@ describe('grace retries ride their own timers (front-loaded), the sweep is only 
   beforeEach(() => {
     graceSeconds = 300;
     dailyCap = 10_000;
-    graceDelays = [40, 40, 40, 40, 40, 40, 40];
+    graceDelays = [40, 40, 40];
     checker = buildChecker();
     installSlipChecker(checker);
   });
@@ -2926,22 +2930,22 @@ describe('grace retries ride their own timers (front-loaded), the sweep is only 
     expect((await payments(placed.order.id))[0]?.slip_invalid_count).toBe(0);
   });
 
-  test('calls never exceed 8; the last 404 is final, counted once', async () => {
+  test('calls never exceed 4; the last 404 is final, counted once', async () => {
     const { order } = await sendAt404();
-    await waitFor(() => calls.length === 8);
+    await waitFor(() => calls.length === 4);
     await checker.idle();
     await sleep(200);
     await checker.idle();
-    expect(calls).toHaveLength(8);
+    expect(calls).toHaveLength(4);
     expect((await payments(order.id))[0]).toMatchObject({
       slip_verify: 'not_found',
       slip_invalid_count: 1,
-      slip_verify_attempts: 8,
+      slip_verify_attempts: 4,
     });
   });
 
   test('the sweep does not double-call while a timer is pending', async () => {
-    graceDelays = [300, 300, 300, 300, 300];
+    graceDelays = [300, 300, 300];
     checker = buildChecker();
     installSlipChecker(checker);
     const { order } = await sendAt404();
@@ -2969,7 +2973,7 @@ describe('grace retries ride their own timers (front-loaded), the sweep is only 
   });
 
   test('a new upload replaces the timer: no stray call from the old one', async () => {
-    graceDelays = [150, 150, 150, 150, 150];
+    graceDelays = [150, 150, 150];
     checker = buildChecker();
     installSlipChecker(checker);
     const { token, order } = await sendAt404();
@@ -2981,5 +2985,161 @@ describe('grace retries ride their own timers (front-loaded), the sweep is only 
     await sleep(300);
     await checker.idle();
     expect(calls).toHaveLength(after);
+  });
+});
+
+describe('the first call waits longer for a slow bank (per-bank hold), and costs one call', () => {
+  beforeEach(() => {
+    dailyCap = 10_000;
+  });
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  const qrOf = (bank: string): SlipQrText => ({
+    qr: { sendingBank: bank, transRef: localRef() },
+    raw: RAW_QR,
+  });
+  const customerState = async (token: string, orderId: string) =>
+    (await call('GET', `/v1/app/orders/${orderId}`, token)).json().slipCheck;
+
+  test('a 002 slip waits its long hold, stays checking, then exactly one call confirms', async () => {
+    firstCallDelayMs = 80;
+    firstCallDelayByBankMs = { '002': 500 };
+    autoConfirm = { maxSatang: 100_000 };
+    checker = buildChecker();
+    installSlipChecker(checker);
+    localQr = qrOf('002');
+    const { token, order } = await start();
+    await upload(token, order.id, picture());
+    // Past the default hold, inside the bank's: the QR was read but no call was made.
+    await sleep(250);
+    await checker.idle();
+    expect(calls).toHaveLength(0);
+    expect(await row(order.id)).toMatchObject({ slip_verify: 'pending', slip_verify_attempts: 0 });
+    expect(await customerState(token, order.id)).toBe('checking');
+    await waitFor(() => calls.length === 1);
+    await checker.idle();
+    expect(calls).toHaveLength(1);
+    expect(await row(order.id)).toMatchObject({
+      slip_verify: 'valid',
+      slip_verify_attempts: 1,
+      status: 'confirmed',
+    });
+  });
+
+  test('a slip of another bank waits only the default hold', async () => {
+    firstCallDelayMs = 80;
+    firstCallDelayByBankMs = { '002': 800 };
+    checker = buildChecker();
+    installSlipChecker(checker);
+    localQr = qrOf('014');
+    const { token, order } = await start();
+    await upload(token, order.id, picture());
+    await waitFor(() => calls.length === 1);
+    await checker.idle();
+    expect((await row(order.id))?.slip_verify).toBe('valid');
+    expect(calls).toHaveLength(1);
+  });
+
+  test('an unreadable QR gets the default hold, not the long one', async () => {
+    firstCallDelayMs = 80;
+    firstCallDelayByBankMs = { '002': 800 };
+    checker = buildChecker();
+    installSlipChecker(checker);
+    localQr = null;
+    const { token, order } = await start();
+    await upload(token, order.id, picture());
+    await waitFor(() => calls.length === 1);
+    await checker.idle();
+    expect(calls).toHaveLength(1);
+    expect(urls()).toEqual(['/api/verify-slip/qr-image/info']);
+  });
+
+  test('a bank-lag 404 at the first call is retried up to 4 calls in all, then final once', async () => {
+    graceSeconds = 300;
+    graceDelays = [30, 30, 30];
+    firstCallDelayMs = 50;
+    firstCallDelayByBankMs = { '002': 200 };
+    checker = buildChecker();
+    installSlipChecker(checker);
+    localQr = qrOf('002');
+    const { token, order } = await start();
+    respond = () => ({ body: answer('200404', currentAmountBaht) });
+    await upload(token, order.id, picture());
+    await waitFor(() => calls.length === 4);
+    await checker.idle();
+    await sleep(150);
+    await checker.idle();
+    expect(calls).toHaveLength(4);
+    expect((await payments(order.id))[0]).toMatchObject({
+      slip_verify: 'not_found',
+      slip_invalid_count: 1,
+      slip_verify_attempts: 4,
+    });
+  });
+
+  test('a 404 at the first call, then 200200 at the second, spends two calls', async () => {
+    graceSeconds = 300;
+    graceDelays = [30, 30, 30];
+    firstCallDelayMs = 50;
+    firstCallDelayByBankMs = { '002': 150 };
+    autoConfirm = { maxSatang: 100_000 };
+    checker = buildChecker();
+    installSlipChecker(checker);
+    localQr = qrOf('002');
+    const { token, order } = await start();
+    respond = (_c, n) =>
+      n < 2
+        ? { body: answer('200404', currentAmountBaht) }
+        : { body: answer('200200', currentAmountBaht) };
+    await upload(token, order.id, picture());
+    await waitFor(() => calls.length === 2);
+    await checker.idle();
+    expect(await row(order.id)).toMatchObject({ slip_verify: 'valid', status: 'confirmed' });
+  });
+
+  test('the sweep makes no call inside any hold, and a restart after the hold still checks', async () => {
+    firstCallDelayMs = 60;
+    firstCallDelayByBankMs = { '002': 70_000 };
+    checker = buildChecker();
+    installSlipChecker(checker);
+    localQr = qrOf('002');
+    const { token, order } = await start();
+    await upload(token, order.id, picture());
+    await sleep(200);
+    await checker.idle();
+    // The default hold is over (30 s on the clock), the bank's is not: nothing is called.
+    h.clock.advanceSeconds(30);
+    expect(await checker.sweep()).toBe(0);
+    await checker.idle();
+    expect(calls).toHaveLength(0);
+    // A restart loses the timer: a new checker's sweep reads the row but still defers (no call).
+    checker = buildChecker();
+    installSlipChecker(checker);
+    expect(await checker.sweep()).toBe(1);
+    await checker.idle();
+    expect(calls).toHaveLength(0);
+    expect(await row(order.id)).toMatchObject({ slip_verify: 'pending', slip_verify_attempts: 0 });
+    // Another restart once the bank's hold is over: the sweep makes the one call.
+    h.clock.advanceSeconds(41);
+    checker = buildChecker();
+    installSlipChecker(checker);
+    expect(await checker.sweep()).toBe(1);
+    await checker.idle();
+    expect(calls).toHaveLength(1);
+    expect((await row(order.id))?.slip_verify).toBe('valid');
+  });
+
+  test('a fraud answer at the first call is final at once, with one call', async () => {
+    firstCallDelayMs = 50;
+    firstCallDelayByBankMs = { '002': 150 };
+    checker = buildChecker();
+    installSlipChecker(checker);
+    localQr = qrOf('002');
+    const { token, order } = await start();
+    respond = () => ({ body: answer('200500', currentAmountBaht) });
+    await upload(token, order.id, picture());
+    await waitFor(() => calls.length === 1);
+    await checker.idle();
+    expect(calls).toHaveLength(1);
+    expect(await row(order.id)).toMatchObject({ slip_verify: 'fraud' });
   });
 });

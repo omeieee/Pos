@@ -4,6 +4,8 @@ import {
   inSlipNotFoundGrace,
   isInvalidSlipVerdict,
   SLIP_COOLDOWN_SECONDS,
+  SLIP_FIRST_CALL_DELAY_BY_BANK_MS,
+  SLIP_FIRST_CALL_DELAY_MS,
   SLIP_GRACE_RETRY_DELAYS_MS,
   SLIP_INVALID_FREE_TRIES,
   SLIP_INVALID_VERDICTS,
@@ -321,21 +323,28 @@ describe('the slip cooldown', () => {
 describe('the not-found grace window', () => {
   const up = new Date('2028-02-01T08:00:00.000Z');
   const at = (seconds: number) => new Date(up.getTime() + seconds * 1000);
-  test('is 300 seconds, open before the end and closed at it, with its own budget of 6 calls', () => {
+  test('is 300 seconds, open before the end and closed at it, with its own budget of 4 calls', () => {
     expect(SLIP_NOT_FOUND_GRACE_SECONDS).toBe(300);
-    expect(SLIP_NOT_FOUND_GRACE_MAX_CALLS).toBe(8);
+    expect(SLIP_NOT_FOUND_GRACE_MAX_CALLS).toBe(4);
     expect(inSlipNotFoundGrace(up, at(0))).toBe(true);
     expect(inSlipNotFoundGrace(up, at(299))).toBe(true);
     expect(inSlipNotFoundGrace(up, at(300))).toBe(false);
   });
   test('the retry schedule gives one call fewer retries than the budget, the last inside the window', () => {
+    expect(SLIP_GRACE_RETRY_DELAYS_MS).toEqual([20_000, 30_000, 60_000]);
     expect(SLIP_GRACE_RETRY_DELAYS_MS).toHaveLength(SLIP_NOT_FOUND_GRACE_MAX_CALLS - 1);
-    const times = SLIP_GRACE_RETRY_DELAYS_MS.reduce<number[]>(
-      (acc, d) => [...acc, (acc[acc.length - 1] ?? 10_000) + d],
-      [10_000],
-    );
-    expect(times.map((t) => t / 1000)).toEqual([10, 13, 16, 21, 29, 49, 94, 184]);
-    expect(inSlipNotFoundGrace(up, at((times[times.length - 1] ?? 0) / 1000))).toBe(true);
+    const times = (first: number) =>
+      SLIP_GRACE_RETRY_DELAYS_MS.reduce<number[]>(
+        (acc, d) => [...acc, (acc[acc.length - 1] ?? first) + d],
+        [first],
+      ).map((t) => t / 1000);
+    expect(times(SLIP_FIRST_CALL_DELAY_MS)).toEqual([25, 45, 75, 135]);
+    expect(times(SLIP_FIRST_CALL_DELAY_BY_BANK_MS['002'] ?? 0)).toEqual([70, 90, 120, 180]);
+    expect(inSlipNotFoundGrace(up, at(180))).toBe(true);
+  });
+  test('the first-call hold is 25 s, and 70 s for Bangkok Bank (002) only', () => {
+    expect(SLIP_FIRST_CALL_DELAY_MS).toBe(25_000);
+    expect(SLIP_FIRST_CALL_DELAY_BY_BANK_MS).toEqual({ '002': 70_000 });
   });
   test('an unknown upload time, or a window of 0, is never in grace', () => {
     expect(inSlipNotFoundGrace(null, at(1))).toBe(false);

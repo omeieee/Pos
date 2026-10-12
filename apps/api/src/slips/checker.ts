@@ -99,7 +99,7 @@ export const MAX_VERIFY_ATTEMPTS_STAFF = MAX_VERIFY_ATTEMPTS + STAFF_RECHECK_EXT
 const NOT_FOUND_CODE = '200404';
 /**
  * The calls one picture may have on its own: the 3 of an error, or, once a "not found" has been
- * answered (the code is kept), the grace budget of 6. Staff's recheck comes on top of either.
+ * answered (the code is kept), the grace budget of 4. Staff's recheck comes on top of either.
  */
 const autoCeiling = (code: string | null): number =>
   code === NOT_FOUND_CODE ? SLIP_NOT_FOUND_GRACE_MAX_CALLS : MAX_VERIFY_ATTEMPTS;
@@ -160,6 +160,8 @@ interface Evaluated {
   /** The key built from Slip2Go's answer; an automatic confirmation needs it. */
   remoteHash: string | null;
   businessDate: string;
+  /** More than 0: the first call is held this many ms longer (slow bank); nothing was done. */
+  deferMs?: number;
 }
 
 export function createSlipChecker(args: {
@@ -182,6 +184,12 @@ export function createSlipChecker(args: {
   notFoundGraceSeconds?: number;
   /** Wait this long after an upload before the first bank call (the bank may not know a fresh transfer yet). 0 = at once. */
   firstCallDelayMs?: number;
+  /**
+   * Longer first-call hold per sending bank (3-digit code read from the slip's own QR, locally),
+   * for banks that publish a transfer late. Empty by default; production passes
+   * SLIP_FIRST_CALL_DELAY_BY_BANK_MS. A slip whose QR cannot be read gets `firstCallDelayMs` only.
+   */
+  firstCallDelayByBankMs?: Readonly<Record<string, number>>;
   /**
    * Waits between the grace calls of a "not found" (default SLIP_GRACE_RETRY_DELAYS_MS): an in-process
    * timer fires each next call. Empty: no timers, the minute sweep drives the retries alone.
@@ -209,6 +217,7 @@ export function createSlipChecker(args: {
   /** Payments whose timer just fired: that read skips the sweep's gap rule. */
   const timerDue = new Set<string>();
   const retryDelays = args.graceRetryDelaysMs ?? SLIP_GRACE_RETRY_DELAYS_MS;
+  const bankHolds = args.firstCallDelayByBankMs ?? {};
   let tail: Promise<void> = Promise.resolve();
 
   async function readOcr(bytes: Buffer, expected: number): Promise<NonNullable<Evaluated['ocr']>> {
@@ -379,6 +388,8 @@ export function createSlipChecker(args: {
     key: string,
     wantOcr: boolean,
     wantVerify: boolean,
+    /** The first bank call may still be held back for a slow bank (no timer has already held it). */
+    mayDefer: boolean,
   ): Promise<Evaluated> {
     const businessDate = await currentBusinessDate(ctx.db, ctx.now());
     const bytes = await slips.get(key);
@@ -388,17 +399,27 @@ export function createSlipChecker(args: {
     // when the text cannot be read. A failure here only means "no QR key"; it never fails the check.
     let localHash: string | null = null;
     let rawQr: string | null = null;
+    let deferMs = 0;
     if (qr && bytes && usable) {
       try {
         const found = qr.readRaw ? await qr.readRaw(bytes) : null;
         const parsed = qr.readRaw ? (found?.qr ?? null) : await qr.read(bytes);
         const keyText = parsed ? slipQrKeyText(parsed.sendingBank, parsed.transRef) : null;
         if (keyText) localHash = sha256(keyText);
+        // A bank known to be slow: the first call waits until its own hold after the upload is over.
+        const bankHold = parsed ? bankHolds[parsed.sendingBank] : undefined;
+        if (mayDefer && bankHold && row.slipUploadedAt) {
+          deferMs = bankHold - (ctx.now().getTime() - row.slipUploadedAt.getTime());
+        }
         // The text is for the bank check only and is dropped with this call.
         if (wantVerify && found) rawQr = found.raw;
       } catch (error) {
         args.log?.warn({ reason: error instanceof Error ? error.message : 'QR_FAILED' }, 'slip QR');
       }
+    }
+    // Still inside the bank's hold: no OCR, no call, nothing written. A timer reads the slip again then.
+    if (deferMs > 0) {
+      return { ocr: null, verify: null, qrHash: null, remoteHash: null, businessDate, deferMs };
     }
     const ocrPart = wantOcr
       ? bytes && usable
@@ -442,7 +463,14 @@ export function createSlipChecker(args: {
       (retryNotBefore.get(gate) ?? 0) > ctx.now().getTime()
     )
       return;
-    const done = await evaluate(row, key, wantOcr, wantVerify);
+    // Only the first call of a picture is held for its bank; a timer that fired already waited.
+    const mayDefer =
+      wantVerify && !timerFired && !manual.has(paymentId) && row.slipVerifyAttempts === 0;
+    const done = await evaluate(row, key, wantOcr, wantVerify, mayDefer);
+    if (done.deferMs) {
+      armRetry(paymentId, done.deferMs);
+      return;
+    }
     /** Set inside the transaction, acted on after it commits. */
     let nextRetryMs: number | null = null;
     await withTransaction(ctx, async (tx, emit) => {
