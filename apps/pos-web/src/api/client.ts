@@ -105,6 +105,7 @@ import {
   settingResponseSchema,
   shopPatchInputSchema,
   shopSettingsSchema,
+  slipRecheckInputSchema,
   staffDtoSchema,
   staffStepUpInputSchema,
   stepUpResponseSchema,
@@ -1011,6 +1012,24 @@ export function createApiClient(options: ApiClientOptions) {
           device: 'optional',
         })
       ).data,
+
+    /**
+     * Asks the server to check the claimed payment's slip with the bank again (D-27). Answers with
+     * the payment list view, as `list` does. Each call is a fresh attempt, so a new key by default.
+     */
+    slipRecheck: async (id: string, options?: { clientRequestId?: string }) => {
+      const clientRequestId = options?.clientRequestId ?? newClientRequestId();
+      return (
+        await post({
+          path: `${paymentPath(id)}/slip-recheck`,
+          body: checked(slipRecheckInputSchema, { clientRequestId }),
+          schema: orderPaymentsResponseSchema,
+          session: true,
+          device: 'optional',
+          headers: { 'Idempotency-Key': clientRequestId },
+        })
+      ).data;
+    },
 
     claim: async (id: string, input: z.input<typeof claimPaymentInputSchema> = {}) =>
       paymentMove(`${paymentPath(id)}/claim`, checked(claimPaymentInputSchema, input)),

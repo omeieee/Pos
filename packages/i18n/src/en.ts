@@ -428,6 +428,21 @@ export const en = {
   'payment.autoConfirmed.note':
     'Confirmed automatically (Slip2Go): you can review it, and void or refund it.',
   'payment.autoConfirmed.chip': 'Auto-confirmed',
+  'pos.slipFlag.noSlip':
+    'The customer tapped "paid" but has not sent a slip. Check the amount in the bank app yourself before you confirm.',
+  'pos.slipMatched.title': 'Slip matches the amount, checked with the bank',
+  'pos.slipRecheck.button': 'Check the slip again',
+  'pos.slipRecheck.busy': 'Checking the slip…',
+  'pos.slipRecheck.err.off': 'The bank check is switched off. Check the amount in the bank app.',
+  'pos.slipRecheck.err.notClaimed':
+    'This payment is no longer claimed, so its slip cannot be checked.',
+  'pos.slipRecheck.err.noSlip': 'This payment has no slip picture to check. Check the bank app.',
+  'pos.slipRecheck.err.running':
+    'This slip is being checked right now. Wait a moment and try again.',
+  'pos.slipRecheck.err.limit':
+    'This slip has been checked the most times allowed. Check the bank app yourself.',
+  'pos.slipRecheck.err.dailyCap': "Today's bank checks are used up. Check the bank app yourself.",
+  'pos.slipRecheck.err.failed': 'The re-check did not work. Try again, or check the bank app.',
   'payment.promptpay.customer.close': 'Back to staff view (hold 1 second)',
   'payment.promptpay.customer.scanAny': 'Scan with any bank app',
   'payment.promptpay.customer.amountIncluded': 'The amount is already in the QR. Do not type it.',
