@@ -113,6 +113,13 @@ export interface PaymentPatch {
   slipVerifyRef?: string | null;
   slipVerifyAttempts?: number;
   slipVerifiedAt?: Date | null;
+  /** Slip cooldown: definitive failures so far and when the last was. Kept across new slips. */
+  slipInvalidCount?: number;
+  slipInvalidAt?: Date | null;
+  /** Slip block (the service said "fake slip"), its reason word, and when the owner reviewed it. */
+  slipBlockedAt?: Date | null;
+  slipBlockReason?: string | null;
+  slipReviewedAt?: Date | null;
   /** Confirmed by the server itself after a valid bank check (D-27), not by a staff member. */
   autoConfirmed?: boolean;
 }

@@ -63,3 +63,32 @@ export const anonymizeCustomerResponseSchema = z.object({
   version: z.number().int().min(1),
 });
 export type AnonymizeCustomerResponse = z.infer<typeof anonymizeCustomerResponseSchema>;
+
+// ---------- The slip flag (staff only) ----------
+
+/**
+ * A customer for whom the bank-check service said "fake slip". STAFF ONLY: it is never in a
+ * customer answer, a LINE message, sync, realtime or a log. It does not stop the customer from
+ * ordering; it only turns the automatic confirmation off for their payments. `count` is how many
+ * times it was raised (kept after a clear, with the audit rows as the history).
+ */
+export const slipFlagSchema = z.object({
+  at: z.iso.datetime(),
+  reason: z.literal('fraud'),
+  count: z.number().int().min(1),
+});
+export type SlipFlag = z.infer<typeof slipFlagSchema>;
+
+/** `GET /v1/customers/:id/slip-flag` (customer.view) and the answer of `POST .../slip-flag/clear`. */
+export const slipFlagResponseSchema = z.object({ slipFlag: slipFlagSchema.nullable() });
+export type SlipFlagResponse = z.infer<typeof slipFlagResponseSchema>;
+
+/**
+ * The owner clears the flag (`POST /v1/customers/:id/slip-flag/clear`): a typed reason (kept in the
+ * audit log only) and the request id, which is the idempotency key.
+ */
+export const slipFlagClearInputSchema = z.strictObject({
+  clientRequestId: z.uuid(),
+  reason: z.string().trim().min(1).max(200),
+});
+export type SlipFlagClearInput = z.infer<typeof slipFlagClearInputSchema>;

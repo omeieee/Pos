@@ -1,13 +1,24 @@
 import { createHash } from 'node:crypto';
 import { findAuditByRequestId, insertAudit, ordersRepo, paymentsRepo } from '@sds/db';
-import type { MyOrder, OrderPaymentsResponse, SlipRecheckInput } from '@sds/shared';
-import type { AuthContext, Principal, RequestMeta } from '../auth/service.ts';
+import type {
+  MyOrder,
+  OrderPaymentsResponse,
+  SlipBlockClearInput,
+  SlipRecheckInput,
+  SlipVerifyVerdict,
+} from '@sds/shared';
+import {
+  type AuthContext,
+  type Principal,
+  type RequestMeta,
+  securityAlert,
+} from '../auth/service.ts';
 import { claimPayment } from '../customer-app/service.ts';
 import { ApiError, conflict, notFound, versionConflict } from '../errors.ts';
 import { toPaymentDto } from '../payments/dto.ts';
 import { listOrderPayments } from '../payments/service.ts';
 import { type CoreContext, withTransaction } from '../tx.ts';
-import { activeSlipChecker } from './checker.ts';
+import { activeSlipChecker, type VerdictSnapshot } from './checker.ts';
 import { MAX_SLIP_BYTES, type SlipMime, sniffSlip } from './image.ts';
 import { newSlipKey, type SlipStore } from './store.ts';
 
@@ -83,6 +94,8 @@ export async function recheckSlip(
   }
   const probe = await paymentsRepo.findPaymentById(ctx.db, paymentId);
   if (!probe) throw notFound('Payment');
+  /** What the payment had before it was cleared for the check; set when this request started one. */
+  let previous: VerdictSnapshot | null = null;
   const started = await withTransaction(ctx, async (tx, emit) => {
     const order = await ordersRepo.lockOrderById(tx, probe.orderId);
     if (!order) throw notFound('Order');
@@ -99,6 +112,15 @@ export async function recheckSlip(
     }
     if (row.slipVerify === 'pending') {
       throw conflict('SLIP_CHECK_RUNNING', 'The bank check of this slip is still running');
+    }
+    // The owner reviewed this very picture by hand and lifted the block: asking the bank again
+    // would only raise the block and the flag the owner just cleared. A new picture can be checked.
+    if (row.slipReviewedAt !== null) {
+      throw conflict('SLIP_REVIEWED', 'The owner already reviewed this slip by hand');
+    }
+    // A slip the bank already confirmed has nothing to check again.
+    if (row.slipVerify === 'valid') {
+      throw conflict('SLIP_ALREADY_VALID', 'The bank check of this slip already passed');
     }
     const blocked = await checker.recheckBlocker(row, tx);
     if (blocked === 'attempts') {
@@ -118,6 +140,12 @@ export async function recheckSlip(
       slipVerifiedAt: null,
     });
     if (!updated) throw versionConflict(row.version);
+    previous = {
+      verdict: row.slipVerify as SlipVerifyVerdict | null,
+      code: row.slipVerifyCode,
+      ref: row.slipVerifyRef,
+      at: row.slipVerifiedAt,
+    };
     await insertAudit(tx, {
       actorType: 'staff',
       actorId: actor.staffId,
@@ -137,7 +165,77 @@ export async function recheckSlip(
     });
     return true;
   });
-  if (started) await checker.recheck(paymentId);
+  if (started && previous) await checker.recheck(paymentId, previous);
+  return listOrderPayments(ctx, probe.orderId);
+}
+
+/**
+ * The owner lifts the slip block of an order (`POST /v1/payments/:id/slip-block/clear`,
+ * `payment.slip_block_clear`: owner only, step-up). Every payment of the order that carries the
+ * block is released, a payment whose verdict is `fraud` is put back to `unchecked` (the earlier
+ * verdict stays in the audit row) and marked reviewed, so staff confirm it by hand as usual. The
+ * customer's slip flag is NOT touched: that is its own owner action. One transaction with the audit
+ * row (the typed reason, which is only ever in the audit log) and the owner alert; `payment.upserted`
+ * goes out after the commit. Idempotent by `clientRequestId`, found in the audit row under the locks.
+ * Answers the order's payments view.
+ */
+export async function clearSlipBlock(
+  ctx: AuthContext,
+  actor: Principal,
+  paymentId: string,
+  input: SlipBlockClearInput,
+  meta: RequestMeta,
+): Promise<OrderPaymentsResponse> {
+  const probe = await paymentsRepo.findPaymentById(ctx.db, paymentId);
+  if (!probe) throw notFound('Payment');
+  await withTransaction(ctx, async (tx, emit) => {
+    const order = await ordersRepo.lockOrderById(tx, probe.orderId);
+    if (!order) throw notFound('Order');
+    const row = await paymentsRepo.lockPaymentById(tx, paymentId);
+    if (!row) throw notFound('Payment');
+    if (await findAuditByRequestId(tx, 'payments', row.id, input.clientRequestId)) return;
+    const blocked = (await paymentsRepo.listPaymentsForOrder(tx, order.id)).filter(
+      (p) => p.slipBlockedAt !== null,
+    );
+    if (blocked.length === 0) {
+      throw conflict('SLIP_NOT_BLOCKED', 'No slip block is set on this order');
+    }
+    const now = ctx.now();
+    for (const payment of blocked) {
+      const fraud = payment.slipVerify === 'fraud';
+      const updated = await paymentsRepo.updatePaymentIfVersion(tx, payment.id, payment.version, {
+        slipBlockedAt: null,
+        slipBlockReason: null,
+        slipReviewedAt: now,
+        ...(fraud ? { slipVerify: 'unchecked', slipVerifyCode: null } : {}),
+      });
+      if (!updated) throw versionConflict(payment.version);
+      emit({
+        type: 'payment.upserted',
+        id: updated.id,
+        rev: updated.rev,
+        data: toPaymentDto(updated),
+      });
+    }
+    await insertAudit(tx, {
+      actorType: 'staff',
+      actorId: actor.staffId,
+      deviceId: actor.deviceId,
+      action: 'payment.slip_block_clear',
+      entity: 'payments',
+      entityId: row.id,
+      before: { verdict: row.slipVerify, blockedPayments: blocked.length },
+      after: { clientRequestId: input.clientRequestId, reason: input.reason },
+      ip: meta.ip,
+    });
+    emit(
+      securityAlert(ctx, 'payment.slip_block_cleared', 'warn', {
+        staffId: actor.staffId,
+        deviceId: actor.deviceId,
+        subject: { paymentId: row.id, orderId: order.id },
+      }),
+    );
+  });
   return listOrderPayments(ctx, probe.orderId);
 }
 

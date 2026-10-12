@@ -1,6 +1,10 @@
 import { describe, expect, test } from 'vitest';
 import { parseSlipQr } from './slip-qr.ts';
 import {
+  isInvalidSlipVerdict,
+  SLIP_COOLDOWN_SECONDS,
+  SLIP_INVALID_FREE_TRIES,
+  SLIP_INVALID_VERDICTS,
   SLIP_VERIFY_VERDICTS,
   SLIP2GO_AUTOCONFIRM_ACCOUNT_TYPES,
   satangToSlip2goAmount,
@@ -9,6 +13,7 @@ import {
   slip2goReceivers,
   slip2goResponseSchema,
   slip2goVerdict,
+  slipCooldownSeconds,
   slipQrKeyText,
 } from './slip-verify.ts';
 
@@ -262,5 +267,46 @@ describe('the duplicate key meets from both sides (D-27)', () => {
     expect(slipQrKeyText('0021', 'SYN0123456789ABCDEF')).toBeNull();
     expect(slipQrKeyText('abc', 'SYN0123456789ABCDEF')).toBeNull();
     expect(slipQrKeyText('002', 'short')).toBeNull();
+  });
+});
+
+describe('the slip cooldown', () => {
+  const last = new Date('2028-02-01T08:00:00.000Z');
+  const at = (ms: number) => new Date(last.getTime() + ms);
+
+  test('only definitive failures count: not valid, unchecked, pending or fraud', () => {
+    expect(SLIP_INVALID_VERDICTS).toEqual([
+      'amount_mismatch',
+      'receiver_mismatch',
+      'date_mismatch',
+      'not_found',
+    ]);
+    for (const verdict of SLIP_VERIFY_VERDICTS) {
+      const counts = (SLIP_INVALID_VERDICTS as readonly string[]).includes(verdict);
+      expect(isInvalidSlipVerdict(verdict), verdict).toBe(counts);
+    }
+    expect(isInvalidSlipVerdict('fraud')).toBe(false);
+  });
+
+  test('the constants are three free tries and five minutes', () => {
+    expect(SLIP_INVALID_FREE_TRIES).toBe(3);
+    expect(SLIP_COOLDOWN_SECONDS).toBe(300);
+  });
+
+  test('fewer than three invalid results never wait', () => {
+    expect(slipCooldownSeconds({ invalidCount: 0, lastInvalidAt: null }, last)).toBe(0);
+    expect(slipCooldownSeconds({ invalidCount: 2, lastInvalidAt: last }, last)).toBe(0);
+  });
+
+  test('three or more wait until five minutes after the last one, and not a moment longer', () => {
+    const three = { invalidCount: 3, lastInvalidAt: last };
+    expect(slipCooldownSeconds(three, last)).toBe(300);
+    expect(slipCooldownSeconds(three, at(299_000))).toBe(1);
+    expect(slipCooldownSeconds(three, at(299_001))).toBe(1);
+    expect(slipCooldownSeconds(three, at(300_000))).toBe(0);
+    expect(slipCooldownSeconds(three, at(301_000))).toBe(0);
+    // A fourth failure restarts the wait from itself.
+    const four = { invalidCount: 4, lastInvalidAt: at(400_000) };
+    expect(slipCooldownSeconds(four, at(401_000))).toBe(299);
   });
 });

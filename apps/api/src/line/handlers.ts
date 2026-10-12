@@ -87,6 +87,9 @@ const REFUSALS: Record<string, Parameters<typeof botText>[0]> = {
   NOTHING_TO_PAY: 'lineBot.err.generic',
   SLIP_TOO_LARGE: 'lineBot.err.generic',
   SLIP_TYPE_UNSUPPORTED: 'lineBot.err.generic',
+  // Neutral on purpose: the customer is never told why (see `slips/guard.ts`).
+  SLIP_COOLDOWN: 'lineBot.err.slipCooldown',
+  SLIP_BLOCKED: 'lineBot.err.slipBlocked',
 };
 
 /**
@@ -178,7 +181,11 @@ async function refuse(
   if (!(error instanceof ApiError)) throw error;
   const key = REFUSALS[error.code];
   if (!key) throw error;
-  await say(ctx, replyToken, [botText(key)], { template: 'refusal', customerId });
+  // A cooldown says how long to wait, in whole minutes (never 0).
+  const wait = Number(error.details.retryAfterSeconds);
+  const params =
+    error.code === 'SLIP_COOLDOWN' ? { minutes: Math.max(1, Math.ceil(wait / 60)) } : {};
+  await say(ctx, replyToken, [botText(key, params)], { template: 'refusal', customerId });
 }
 
 /** The page of one order in the customer app, or undefined when there is no app address. */

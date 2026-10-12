@@ -1,13 +1,15 @@
 import { createHash } from 'node:crypto';
-import { type Db, ordersRepo, paymentsRepo } from '@sds/db';
+import { customersRepo, type Db, insertAudit, ordersRepo, paymentsRepo } from '@sds/db';
 import {
   checkSlipRecipient,
   compareSlipAmount,
   extractSlipAmount,
   extractSlipRef,
+  isInvalidSlipVerdict,
   type SlipCheck,
   type SlipRecipientCheck,
   type SlipVerifyResult,
+  type SlipVerifyVerdict,
   slip2goAutoConfirmReceivers,
   slip2goReceivers,
   slip2goVerdict,
@@ -62,7 +64,19 @@ export interface SlipChecker {
    * STAFF_RECHECK_EXTRA_ATTEMPTS, and a failed call settles as `unchecked` at once, so one press
    * is at most one call. Everything else (D-27 conditions, auto-confirm) is the same path.
    */
-  recheck(paymentId: string): Promise<void>;
+  recheck(paymentId: string, previous: VerdictSnapshot): Promise<void>;
+}
+
+/**
+ * The bank verdict a payment had before staff cleared it for a recheck. If the check is then
+ * refused inside the checker (the day's cap or the attempts ran out in between), this is written
+ * back, so a payment is never left with no verdict because of a check that was not made.
+ */
+export interface VerdictSnapshot {
+  verdict: SlipVerifyVerdict | null;
+  code: string | null;
+  ref: string | null;
+  at: Date | null;
 }
 
 const sha256 = (text: string): string => createHash('sha256').update(text).digest('hex');
@@ -140,8 +154,11 @@ export function createSlipChecker(args: {
   const waiting = new Set<string>();
   /** A new slip arrived for a payment that is being read: read it again when this one ends. */
   const again = new Set<string>();
-  /** Payments whose read in progress was asked for by staff: a higher ceiling, no second try. */
-  const manual = new Set<string>();
+  /**
+   * Payments whose read in progress was asked for by staff: a higher ceiling, no second try, and
+   * the verdict to put back if the check is refused. Their result does not count toward the cooldown.
+   */
+  const manual = new Map<string, VerdictSnapshot>();
   let tail: Promise<void> = Promise.resolve();
 
   async function readOcr(bytes: Buffer, expected: number): Promise<NonNullable<Evaluated['ocr']>> {
@@ -371,9 +388,17 @@ export function createSlipChecker(args: {
       if (done.qrHash !== null) patch.slipQrHash = done.qrHash;
       if (verifyFresh && done.verify) {
         const outcome = done.verify;
-        if (outcome.kind === 'retry') {
+        const previous = manual.get(paymentId);
+        if (previous && outcome.kind === 'final' && !outcome.called) {
+          // Staff asked for a check that was refused at the last step (the cap or the attempts ran
+          // out meanwhile): no call was made, so the verdict they already had stays.
+          patch.slipVerify = previous.verdict;
+          patch.slipVerifyCode = previous.code;
+          patch.slipVerifyRef = previous.ref;
+          patch.slipVerifiedAt = previous.at;
+        } else if (outcome.kind === 'retry') {
           // The attempt was counted before the call (`bumpSlipVerifyAttempts`).
-          if (manual.has(paymentId) || locked.slipVerifyAttempts >= attemptCeiling(paymentId)) {
+          if (previous || locked.slipVerifyAttempts >= attemptCeiling(paymentId)) {
             patch.slipVerify = 'unchecked';
             patch.slipVerifyCode = outcome.code;
             patch.slipVerifiedAt = ctx.now();
@@ -383,6 +408,28 @@ export function createSlipChecker(args: {
           patch.slipVerifyCode = outcome.code;
           patch.slipVerifyRef = outcome.ref;
           patch.slipVerifiedAt = ctx.now();
+          // A definitive failure counts toward the cooldown of the next slip; a staff recheck does not.
+          if (outcome.called && !previous && isInvalidSlipVerdict(outcome.verdict)) {
+            patch.slipInvalidCount = locked.slipInvalidCount + 1;
+            patch.slipInvalidAt = ctx.now();
+          }
+          // "Fake slip" (code 200500 only): the order takes no more slips and the customer is
+          // flagged for staff. Once per block; the audit row holds the reason word and the code.
+          if (outcome.called && outcome.verdict === 'fraud' && locked.slipBlockedAt === null) {
+            patch.slipBlockedAt = ctx.now();
+            patch.slipBlockReason = 'fraud';
+            patch.slipReviewedAt = null;
+            if (order?.customerId) {
+              await customersRepo.raiseSlipFlag(tx, order.customerId, ctx.now(), 'fraud');
+            }
+            await insertAudit(tx, {
+              actorType: 'system',
+              action: 'payment.slip_blocked',
+              entity: 'payments',
+              entityId: locked.id,
+              after: { reason: 'fraud', code: outcome.code },
+            });
+          }
         }
       }
       // The one case where the status moves (D-27): a valid answer to a full call, every other
@@ -468,8 +515,8 @@ export function createSlipChecker(args: {
       const day = await currentBusinessDate(db, ctx.now());
       return (await paymentsRepo.slipVerifyCallsOn(db, day)) >= dailyCap ? 'cap' : null;
     },
-    async recheck(paymentId) {
-      manual.add(paymentId);
+    async recheck(paymentId, previous) {
+      manual.set(paymentId, previous);
       try {
         await schedule(paymentId);
       } finally {

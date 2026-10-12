@@ -117,6 +117,65 @@ export async function getMemberProfile(db: Db, customerId: string): Promise<Memb
   return row ?? { fullName: null, nickname: null, building: null, phone: null };
 }
 
+// ---------- The slip flag (staff only) ----------
+
+export interface SlipFlagRow {
+  at: Date;
+  reason: string;
+  count: number;
+}
+
+/** The customer's slip flag, or null when there is none (or no such customer). */
+export async function getSlipFlag(db: Db, customerId: string): Promise<SlipFlagRow | null> {
+  const [row] = await db
+    .select({
+      at: customers.slipFlagAt,
+      reason: customers.slipFlagReason,
+      count: customers.slipFlagCount,
+    })
+    .from(customers)
+    .where(eq(customers.id, customerId))
+    .limit(1);
+  return row?.at ? { at: row.at, reason: row.reason ?? 'fraud', count: row.count } : null;
+}
+
+/** Raises the flag (or raises it again), in the caller's transaction: the time, the reason, count + 1. */
+export async function raiseSlipFlag(
+  db: Db,
+  customerId: string,
+  at: Date,
+  reason: string,
+): Promise<void> {
+  await db
+    .update(customers)
+    .set({
+      slipFlagAt: at,
+      slipFlagReason: reason,
+      slipFlagCount: sql`${customers.slipFlagCount} + 1`,
+    })
+    .where(eq(customers.id, customerId));
+}
+
+/** Clears the flag but keeps the count. Returns false when there was no flag to clear. */
+export async function clearSlipFlag(db: Db, customerId: string): Promise<boolean> {
+  const rows = await db
+    .update(customers)
+    .set({ slipFlagAt: null, slipFlagReason: null })
+    .where(and(eq(customers.id, customerId), isNotNull(customers.slipFlagAt)))
+    .returning({ id: customers.id });
+  return rows.length > 0;
+}
+
+/** Whether the customer exists. */
+export async function customerExists(db: Db, customerId: string): Promise<boolean> {
+  const [row] = await db
+    .select({ id: customers.id })
+    .from(customers)
+    .where(eq(customers.id, customerId))
+    .limit(1);
+  return row !== undefined;
+}
+
 /**
  * Saves the member profile on a live customer, in the caller's transaction. Writes nothing when
  * nothing changed, so a repeated form does not bump the customer's rev and version.

@@ -6,6 +6,7 @@ import {
   orderIdParamSchema,
   paymentIdParamSchema,
   paymentReasonInputSchema,
+  slipBlockClearInputSchema,
   slipRecheckInputSchema,
 } from '@sds/shared';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
@@ -13,7 +14,7 @@ import { z } from 'zod';
 import { type GuardFactory, markSignedUrlCheck, principalOf } from '../auth/guards.ts';
 import type { AuthContext } from '../auth/service.ts';
 import { ApiError } from '../errors.ts';
-import { readSlip, recheckSlip } from '../slips/service.ts';
+import { clearSlipBlock, readSlip, recheckSlip } from '../slips/service.ts';
 import type { SlipStore } from '../slips/store.ts';
 import { parse } from '../validate.ts';
 import { checkQrLink } from './qr.ts';
@@ -222,6 +223,21 @@ export async function registerPaymentRoutes(
       const input = parse(slipRecheckInputSchema, request.body);
       checkIdempotencyHeader(request, input.clientRequestId);
       return recheckSlip(ctx, principalOf(request), paymentIdOf(request), input, meta(request));
+    },
+  );
+
+  /**
+   * The owner lifts the slip block of an order after a "fake slip" answer (`payment.slip_block_clear`:
+   * owner only, with step-up). A typed reason is required and goes to the audit log; the owner is
+   * alerted. The request id is the idempotency key; Idempotency-Key, if sent, must say the same.
+   */
+  app.post(
+    '/payments/:id/slip-block/clear',
+    { onRequest: guard('payment.slip_block_clear') },
+    async (request) => {
+      const input = parse(slipBlockClearInputSchema, request.body);
+      checkIdempotencyHeader(request, input.clientRequestId);
+      return clearSlipBlock(ctx, principalOf(request), paymentIdOf(request), input, meta(request));
     },
   );
 

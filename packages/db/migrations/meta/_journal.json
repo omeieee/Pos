@@ -232,6 +232,13 @@
       "when": 1791761560264,
       "tag": "0032_slip_autoconfirm",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1791776497552,
+      "tag": "0033_slip_cooldown_block",
+      "breakpoints": true
     }
   ]
 }

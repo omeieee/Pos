@@ -18,6 +18,8 @@ test('only the owner can change the PromptPay ID, the co-pay scheme, staff or de
       'data.export',
       'customer.anonymize',
       'order.edit_past',
+      'payment.slip_block_clear',
+      'customer.slip_flag_clear',
     ] as const) {
       expect(hasPermission(role, p)).toBe(role === 'owner');
     }
@@ -63,9 +65,11 @@ test('sensitive actions need step-up', () => {
   expect(PERMISSIONS.filter(requiresStepUp).sort()).toEqual(
     [
       'customer.anonymize',
+      'customer.slip_flag_clear',
       'data.export',
       'device.manage',
       'order.edit_past',
+      'payment.slip_block_clear',
       'payment.void_refund',
       'settings.gov_copay',
       'settings.promptpay',

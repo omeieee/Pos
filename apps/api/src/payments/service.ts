@@ -20,6 +20,7 @@
  * tests here; the lock order (order, then payment) is what keeps real Postgres free of deadlocks.
  */
 import {
+  customersRepo,
   type Db,
   type GovCopayRow,
   getGovCopayRow,
@@ -83,6 +84,7 @@ import {
 } from '../errors.ts';
 import { toOrderDto } from '../orders/dto.ts';
 import { currentPromptpayId } from '../settings/service.ts';
+import { orderSlipBlocked, slipUploadRefusal } from '../slips/guard.ts';
 import { type CoreContext, type Emit, withTransaction } from '../tx.ts';
 import { toPaymentDto } from './dto.ts';
 import { QR_URL_TTL_SECONDS, qrPng, signQrLink } from './qr.ts';
@@ -750,6 +752,8 @@ const slipPatch = (
         slipVerifyRef: null,
         slipVerifyAttempts: 0,
         slipVerifiedAt: null,
+        // The owner's review was of the earlier picture, not of this one.
+        slipReviewedAt: null,
       }),
 });
 
@@ -777,6 +781,16 @@ export async function movePayment(
     if (isCustomer(actor) && moveName !== 'claim') throw forbidden();
     const row = await paymentsRepo.lockPaymentById(tx, paymentId);
     if (!row) throw notFound('Payment');
+    // A customer's slip is refused while the order is slip-blocked or the payment is cooling down
+    // (neutral words, nothing written). A claim with no slip is never refused here.
+    if (isCustomer(actor) && moveName === 'claim' && input.slip) {
+      const refusal = slipUploadRefusal(
+        await paymentsRepo.listPaymentsForOrder(tx, order.id),
+        row,
+        ctx.now(),
+      );
+      if (refusal) throw refusal;
+    }
 
     if (row.status === spec.to) {
       // A second slip on a claim that is already made replaces the first; nothing else changes.
@@ -923,6 +937,9 @@ export async function autoConfirmClaimedPayment(
   const { order, payment, patch } = input;
   if (payment.status !== 'claimed' || payment.method !== 'promptpay') return null;
   if (payment.amountSatang > input.maxSatang) return null;
+  // Never for a slip-blocked order or a slip-flagged customer: staff confirm those by hand.
+  if (orderSlipBlocked(await paymentsRepo.listPaymentsForOrder(tx, order.id))) return null;
+  if (order.customerId && (await customersRepo.getSlipFlag(tx, order.customerId))) return null;
   if (!paymentMachine.transition('claimed', 'confirmed', { actor: { kind: 'system' } }).ok) {
     return null;
   }
@@ -992,6 +1009,12 @@ export async function listOrderPayments(
       });
     }
   }
+  const blocks = rows.flatMap((r) =>
+    r.slipBlockedAt !== null
+      ? [{ paymentId: r.id, at: r.slipBlockedAt.toISOString(), reason: 'fraud' as const }]
+      : [],
+  );
+  const flag = order.customerId ? await customersRepo.getSlipFlag(ctx.db, order.customerId) : null;
   return {
     payments: rows.map(toPaymentDto),
     slipPaymentIds: rows.filter((r) => r.slipImageKey !== null).map((r) => r.id),
@@ -1021,6 +1044,9 @@ export async function listOrderPayments(
                     verify: {
                       verdict: r.slipVerify as SlipVerifyVerdict,
                       ...(r.slipVerifiedAt !== null ? { at: r.slipVerifiedAt.toISOString() } : {}),
+                      ...(r.slipReviewedAt !== null
+                        ? { reviewedAt: r.slipReviewedAt.toISOString() }
+                        : {}),
                     },
                   }
                 : {}),
@@ -1029,6 +1055,16 @@ export async function listOrderPayments(
         : [],
     ),
     ...(duplicates.length > 0 ? { slipDuplicates: duplicates } : {}),
+    ...(blocks.length > 0 ? { slipBlocks: blocks } : {}),
+    ...(flag
+      ? {
+          customerSlipFlag: {
+            at: flag.at.toISOString(),
+            reason: 'fraud' as const,
+            count: flag.count,
+          },
+        }
+      : {}),
     refunds: refunds.map((r) => ({
       id: r.id,
       paymentId: r.paymentId,

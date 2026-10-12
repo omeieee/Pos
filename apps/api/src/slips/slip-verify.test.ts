@@ -1529,3 +1529,741 @@ describe('staff recheck of the bank check', () => {
     expect(slipView.json().claimedWithoutSlipPaymentIds).toEqual([]);
   });
 });
+
+// ---------- QA fixes, cooldown, block and flag (owner decisions) ----------
+
+const send = (
+  method: 'GET' | 'POST',
+  url: string,
+  token: string | undefined,
+  body?: Record<string, unknown>,
+) =>
+  h.app.inject({
+    method,
+    url,
+    headers: token ? { authorization: `Bearer ${token}` } : {},
+    ...(body === undefined ? {} : { payload: body }),
+    remoteAddress: h.nextIp(),
+  });
+
+interface SlipState {
+  id: string;
+  status: string;
+  slip_verify: string | null;
+  slip_verified_at: string | null;
+  slip_verify_attempts: number;
+  slip_image_hash: string | null;
+  slip_invalid_count: number;
+  slip_invalid_at: string | null;
+  slip_blocked_at: string | null;
+  slip_block_reason: string | null;
+  slip_reviewed_at: string | null;
+}
+/** Every payment of the order, oldest first, with the slip fields the new rules use. */
+const payments = async (orderId: string) =>
+  (
+    await h.client.query<SlipState>(
+      `select id, status, slip_verify, slip_verified_at, slip_verify_attempts, slip_image_hash,
+              slip_invalid_count, slip_invalid_at, slip_blocked_at, slip_block_reason, slip_reviewed_at
+         from payments where order_id = $1 order by rev`,
+      [orderId],
+    )
+  ).rows;
+const flagOf = async (orderId: string) =>
+  (
+    await h.client.query<{
+      id: string;
+      slip_flag_at: string | null;
+      slip_flag_reason: string | null;
+      slip_flag_count: number;
+    }>(
+      `select c.id, c.slip_flag_at, c.slip_flag_reason, c.slip_flag_count
+         from customers c join orders o on o.customer_id = c.id where o.id = $1`,
+      [orderId],
+    )
+  ).rows[0];
+const ms = (iso: string | null) => new Date(iso ?? 'invalid').getTime();
+const seconds = (n: number) => n * 1000;
+/** A transfer nobody has used yet: the QR the local reader finds and the reference Slip2Go answers with. */
+let transferNo = 0;
+function freshTransfer(): string {
+  transferNo += 1;
+  localQr = {
+    qr: { sendingBank: '014', transRef: `FRESHREF${String(transferNo).padStart(7, '0')}` },
+    raw: RAW_QR,
+  };
+  return String(900_000 + transferNo).padStart(25, '0');
+}
+const NEUTRAL_LEAK =
+  /fraud|flag|suspect|fake|forg|ปลอม|200500|verdict|verify|blocked_at|slipBlockedAt|invalid_count|reason/i;
+
+describe('QA fixes in the staff recheck', () => {
+  beforeEach(() => {
+    dailyCap = 10_000;
+    checker = buildChecker();
+    installSlipChecker(checker);
+  });
+  const recheckOf = (paymentId: string, token = staffToken) =>
+    send('POST', `/v1/payments/${paymentId}/slip-recheck`, token, {
+      clientRequestId: crypto.randomUUID(),
+    });
+  async function checkedAs(code: string) {
+    const placed = await start();
+    respond = () => ({ body: answer(code, currentAmountBaht) });
+    await upload(placed.token, placed.order.id, picture(1));
+    await checker.idle();
+    return { ...placed, paymentId: (await row(placed.order.id))?.id ?? '' };
+  }
+
+  test('a refusal that comes late, inside the checker, keeps the verdict staff had (the cap)', async () => {
+    const used = (
+      await h.client.query<{ n: number }>(
+        "select coalesce(sum(n), 0)::int as n from slip_verify_daily where kind = 'calls' and business_date = '2028-02-01'",
+      )
+    ).rows[0]?.n;
+    dailyCap = (used ?? 0) + 1;
+    // The route's own pre-check says yes; only the checker's last look at the cap says no.
+    checker = { ...buildChecker(), recheckBlocker: async () => null };
+    installSlipChecker(checker);
+    const { order, paymentId } = await checkedAs('200404');
+    const before = (await payments(order.id))[0];
+    expect(before?.slip_verify).toBe('not_found');
+    expect(calls).toHaveLength(1);
+
+    const res = await recheckOf(paymentId);
+    expect(res.statusCode).toBe(200);
+    expect(res.json().slipChecks[0].verify.verdict).toBe('not_found');
+    expect(calls).toHaveLength(1);
+    const after = (await payments(order.id))[0];
+    expect(after?.slip_verify).toBe('not_found');
+    expect(ms(after?.slip_verified_at ?? null)).toBe(ms(before?.slip_verified_at ?? null));
+    expect(after?.slip_verify_attempts).toBe(before?.slip_verify_attempts);
+  });
+
+  test('the same when the attempts run out between the route and the checker', async () => {
+    checker = { ...buildChecker(), recheckBlocker: async () => null };
+    installSlipChecker(checker);
+    const { order, paymentId } = await checkedAs('200402');
+    await h.client.query('update payments set slip_verify_attempts = 6 where id = $1', [paymentId]);
+    const res = await recheckOf(paymentId);
+    expect(res.statusCode).toBe(200);
+    expect(res.json().slipChecks[0].verify.verdict).toBe('amount_mismatch');
+    expect(calls).toHaveLength(1);
+    expect((await payments(order.id))[0]?.slip_verify).toBe('amount_mismatch');
+  });
+
+  test('a verdict that is already valid cannot be rechecked: 409, no call, nothing written', async () => {
+    const { order, paymentId } = await checkedAs('200200');
+    expect((await payments(order.id))[0]?.slip_verify).toBe('valid');
+    const before = await row(order.id);
+    const res = await recheckOf(paymentId);
+    expect(res.statusCode).toBe(409);
+    expect(res.json()).toMatchObject({ code: 'SLIP_ALREADY_VALID' });
+    expect(calls).toHaveLength(1);
+    expect(await row(order.id)).toEqual(before);
+  });
+});
+
+describe('the slip cooldown', () => {
+  beforeEach(() => {
+    dailyCap = 10_000;
+    checker = buildChecker();
+    installSlipChecker(checker);
+  });
+
+  test.each([
+    ['200401', 1],
+    ['200402', 1],
+    ['200403', 1],
+    ['200404', 1],
+    ['200200', 0],
+    ['200000', 0],
+    ['200500', 0],
+    ['200501', 0],
+    ['401004', 0],
+  ])('code %s adds %i to the count of invalid results', async (code, added) => {
+    const { token, order } = await start();
+    respond = () => ({ body: answer(code, currentAmountBaht) });
+    await upload(token, order.id, picture(1));
+    await checker.idle();
+    const [payment] = await payments(order.id);
+    expect(payment?.slip_invalid_count).toBe(added);
+    expect(payment?.slip_invalid_at === null).toBe(added === 0);
+  });
+
+  test('a call that failed (network) is no invalid result', async () => {
+    const { token, order } = await start();
+    respond = () => new Error('connection reset');
+    await upload(token, order.id, picture(1));
+    await checker.idle();
+    expect((await payments(order.id))[0]?.slip_invalid_count).toBe(0);
+  });
+
+  /** Three invalid slips on one order; returns the clock time of the last result. */
+  async function threeInvalid() {
+    const placed = await start();
+    respond = () => ({ body: answer('200404', currentAmountBaht) });
+    for (const fill of [1, 2, 3]) {
+      expect((await upload(placed.token, placed.order.id, picture(fill))).statusCode).toBe(200);
+      await checker.idle();
+      if (fill < 3) h.clock.advanceSeconds(10);
+    }
+    expect((await payments(placed.order.id))[0]).toMatchObject({ slip_invalid_count: 3 });
+    return { ...placed, lastAt: h.clock.now().getTime() };
+  }
+
+  test('after three invalid results the next slip waits until 5 minutes after the LAST one, exactly', async () => {
+    const { token, order, lastAt } = await threeInvalid();
+    const hashBefore = (await payments(order.id))[0]?.slip_image_hash;
+
+    const refused = await upload(token, order.id, picture(4));
+    expect(refused.statusCode).toBe(429);
+    expect(refused.json()).toMatchObject({
+      code: 'SLIP_COOLDOWN',
+      details: { retryAfterSeconds: 300 },
+    });
+    expect(refused.body).not.toMatch(NEUTRAL_LEAK);
+    // Nothing was written for the refused picture, and the service was not called for it.
+    expect((await payments(order.id))[0]?.slip_image_hash).toBe(hashBefore);
+    expect(calls).toHaveLength(3);
+
+    // The customer's own view says how long, and keeps the slip action.
+    h.clock.set(new Date(lastAt + seconds(120)).toISOString());
+    const mine = (await send('GET', `/v1/app/orders/${order.id}`, token)).json();
+    expect(mine.slipRetryAfterSeconds).toBe(180);
+    expect(mine.actions.attachSlip).toBe(true);
+    expect(mine.slipBlocked).toBeUndefined();
+
+    h.clock.set(new Date(lastAt + seconds(299)).toISOString());
+    const late = await upload(token, order.id, picture(4));
+    expect(late.statusCode).toBe(429);
+    expect(late.json().details).toEqual({ retryAfterSeconds: 1 });
+
+    // Exactly five minutes after the last invalid result: accepted.
+    h.clock.set(new Date(lastAt + seconds(300)).toISOString());
+    expect((await send('GET', `/v1/app/orders/${order.id}`, token)).json()).not.toHaveProperty(
+      'slipRetryAfterSeconds',
+    );
+    const open = await upload(token, order.id, picture(4));
+    expect(open.statusCode).toBe(200);
+    await checker.idle();
+    // It was invalid again: the wait starts over from that result.
+    const [after] = await payments(order.id);
+    expect(after?.slip_invalid_count).toBe(4);
+    expect(ms(after?.slip_invalid_at ?? null)).toBe(lastAt + seconds(300));
+    expect((await upload(token, order.id, picture(5))).statusCode).toBe(429);
+  });
+
+  test('"โอนแล้ว" with no slip is never held back, and neither is the staff recheck; a rechecked failure does not count', async () => {
+    const { token, order } = await threeInvalid();
+    const [payment] = await payments(order.id);
+    expect((await send('POST', `/v1/app/orders/${order.id}/claim`, token)).statusCode).toBe(200);
+    const recheck = await send('POST', `/v1/payments/${payment?.id}/slip-recheck`, staffToken, {
+      clientRequestId: crypto.randomUUID(),
+    });
+    expect(recheck.statusCode).toBe(200);
+    expect(calls).toHaveLength(4);
+    expect((await payments(order.id))[0]).toMatchObject({
+      slip_invalid_count: 3,
+      slip_invalid_at: payment?.slip_invalid_at,
+    });
+  });
+
+  test('a claim that is still pending (no slip yet) is not blocked by the cooldown either', async () => {
+    const { token, order } = await start();
+    await h.client.query(
+      "update payments set slip_invalid_count = 5, slip_invalid_at = $2 where order_id = $1 and status = 'pending'",
+      [order.id, h.clock.now().toISOString()],
+    );
+    expect((await upload(token, order.id, picture(1))).statusCode).toBe(429);
+    const claim = await send('POST', `/v1/app/orders/${order.id}/claim`, token);
+    expect(claim.statusCode).toBe(200);
+    expect(claim.json().payment.status).toBe('claimed');
+  });
+
+  test('the count belongs to one payment: another order of the same customer starts clean', async () => {
+    const { token, order } = await threeInvalid();
+    const next = await place(token);
+    expect((await upload(token, next.id, picture(7))).statusCode).toBe(200);
+    expect(order.id).not.toBe(next.id);
+  });
+});
+
+describe('a "fake slip" answer (200500)', () => {
+  beforeEach(() => {
+    dailyCap = 10_000;
+    checker = buildChecker();
+    installSlipChecker(checker);
+  });
+  const claimOf = (token: string, orderId: string) =>
+    send('POST', `/v1/app/orders/${orderId}/claim`, token);
+
+  async function fraudOrder(fill = 1) {
+    const placed = await start();
+    respond = () => ({ body: answer('200500', currentAmountBaht) });
+    const res = await upload(placed.token, placed.order.id, picture(fill));
+    await checker.idle();
+    return { ...placed, res, paymentId: (await row(placed.order.id))?.id ?? '' };
+  }
+
+  test('blocks the order, flags the customer, writes an audit row, and the payment stays claimed', async () => {
+    const { order, paymentId } = await fraudOrder();
+    const [payment] = await payments(order.id);
+    expect(payment).toMatchObject({
+      status: 'claimed',
+      slip_verify: 'fraud',
+      slip_block_reason: 'fraud',
+      slip_invalid_count: 0,
+    });
+    expect(payment?.slip_blocked_at).not.toBeNull();
+    const flag = await flagOf(order.id);
+    expect(flag).toMatchObject({ slip_flag_reason: 'fraud', slip_flag_count: 1 });
+    expect(flag?.slip_flag_at).not.toBeNull();
+    const audit = (await h.auditRows(paymentId)).filter((a) => a.action === 'payment.slip_blocked');
+    expect(audit).toHaveLength(1);
+    expect(audit[0]).toMatchObject({ actorType: 'system' });
+    expect(audit[0]?.after).toEqual({ reason: 'fraud', code: '200500' });
+  });
+
+  test('a second "fake" answer for the same block does not raise the flag again', async () => {
+    const { order, paymentId } = await fraudOrder();
+    const res = await send('POST', `/v1/payments/${paymentId}/slip-recheck`, staffToken, {
+      clientRequestId: crypto.randomUUID(),
+    });
+    expect(res.statusCode).toBe(200);
+    expect((await flagOf(order.id))?.slip_flag_count).toBe(1);
+  });
+
+  test('more slips for the order are refused with a neutral message; "โอนแล้ว" still works', async () => {
+    const { token, order } = await fraudOrder();
+    const hash = (await payments(order.id))[0]?.slip_image_hash;
+    const refused = await upload(token, order.id, picture(2));
+    expect(refused.statusCode).toBe(409);
+    expect(refused.json()).toMatchObject({ code: 'SLIP_BLOCKED' });
+    expect(refused.body).not.toMatch(NEUTRAL_LEAK);
+    expect((await payments(order.id))[0]?.slip_image_hash).toBe(hash);
+    expect(calls).toHaveLength(1);
+
+    const mine = (await send('GET', `/v1/app/orders/${order.id}`, token)).json();
+    expect(mine.slipBlocked).toBe(true);
+    expect(mine.actions.attachSlip).toBe(false);
+    expect(mine.payment.status).toBe('claimed');
+    expect((await claimOf(token, order.id)).statusCode).toBe(200);
+  });
+
+  test('a pending payment of a blocked order can still be claimed; only the slip is refused', async () => {
+    const { token, order } = await start();
+    await h.client.query(
+      "update payments set slip_blocked_at = now(), slip_block_reason = 'fraud' where order_id = $1",
+      [order.id],
+    );
+    expect((await upload(token, order.id, picture(1))).statusCode).toBe(409);
+    const claim = await claimOf(token, order.id);
+    expect(claim.statusCode).toBe(200);
+    expect(claim.json().payment.status).toBe('claimed');
+  });
+
+  test('the block belongs to the order: it survives a rejected claim and the new payment', async () => {
+    const { token, order, paymentId } = await fraudOrder();
+    const cancelled = await send('POST', `/v1/payments/${paymentId}/cancel-claimed`, staffToken, {
+      reason: 'ไม่พบยอดเงินเข้า',
+    });
+    expect(cancelled.statusCode).toBe(200);
+    // The customer pays again: a fresh payment is made when they claim, and still no slip.
+    const again = await claimOf(token, order.id);
+    expect(again.statusCode).toBe(200);
+    expect((await payments(order.id)).length).toBe(2);
+    expect((await upload(token, order.id, picture(2))).json()).toMatchObject({
+      code: 'SLIP_BLOCKED',
+    });
+    expect((await send('GET', `/v1/app/orders/${order.id}`, token)).json().actions.attachSlip).toBe(
+      false,
+    );
+  });
+
+  test('a NEW order of the same customer starts clean', async () => {
+    const { token } = await fraudOrder();
+    const next = await place(token);
+    const view = (await send('GET', `/v1/app/orders/${next.id}`, token)).json();
+    expect(view.slipBlocked).toBeUndefined();
+    expect(view.actions.attachSlip).toBe(true);
+    respond = () => ({ body: answer('200200', currentAmountBaht) });
+    expect((await upload(token, next.id, picture(9))).statusCode).toBe(200);
+  });
+
+  test('staff see the block and the flag; the customer, sync and the payment itself do not carry them', async () => {
+    const { token, order, res, paymentId } = await fraudOrder();
+    const staff = await send('GET', `/v1/orders/${order.id}/payments`, staffToken);
+    const body = staff.json();
+    expect(body.slipBlocks).toEqual([{ paymentId, at: expect.any(String), reason: 'fraud' }]);
+    expect(body.customerSlipFlag).toMatchObject({ reason: 'fraud', count: 1 });
+    expect(body.slipChecks[0].verify.verdict).toBe('fraud');
+    expect(JSON.stringify(body.payments)).not.toMatch(/slip|flag|block/i);
+
+    // Every answer the customer can get, in every shape.
+    const bodies = [
+      res.body,
+      (await send('GET', `/v1/app/orders/${order.id}`, token)).body,
+      (await send('GET', '/v1/app/orders', token)).body,
+      (await claimOf(token, order.id)).body,
+      (await upload(token, order.id, picture(3))).body,
+    ];
+    for (const text of bodies) expect(text).not.toMatch(NEUTRAL_LEAK);
+
+    const sync = await send('GET', '/v1/sync', staffToken);
+    expect(sync.statusCode).toBe(200);
+    expect(sync.body).not.toMatch(/slip_?flag|slip_?block|slipBlocked|slipInvalid|slipReviewed/i);
+  });
+
+  test('a customer flag is read by staff on its own endpoint (customer.view), 404 for nobody', async () => {
+    const { order } = await fraudOrder();
+    const id = (await flagOf(order.id))?.id ?? '';
+    const res = await send('GET', `/v1/customers/${id}/slip-flag`, staffToken);
+    expect(res.statusCode).toBe(200);
+    expect(res.json().slipFlag).toMatchObject({ reason: 'fraud', count: 1 });
+    expect((await send('GET', `/v1/customers/${id}/slip-flag`, undefined)).statusCode).toBe(401);
+    const kitchenDevice = await h.newDevice();
+    const kitchen = await h.newStaff('kitchen', '4821');
+    const kitchenToken = await h.pinSession(kitchenDevice.token, kitchen.id, '4821');
+    expect((await send('GET', `/v1/customers/${id}/slip-flag`, kitchenToken)).statusCode).toBe(403);
+    expect(
+      (await send('GET', `/v1/customers/${crypto.randomUUID()}/slip-flag`, staffToken)).statusCode,
+    ).toBe(404);
+    const clean = await start();
+    const cleanId = (await flagOf(clean.order.id))?.id ?? '';
+    expect((await send('GET', `/v1/customers/${cleanId}/slip-flag`, staffToken)).json()).toEqual({
+      slipFlag: null,
+    });
+  });
+
+  describe('the automatic confirmation', () => {
+    beforeEach(() => {
+      autoConfirm = { maxSatang: 100_000 };
+      checker = buildChecker();
+      installSlipChecker(checker);
+    });
+    const valid = () => {
+      respond = () => ({ body: answer('200200', currentAmountBaht) });
+    };
+    const statusOf = async (orderId: string) => (await payments(orderId)).at(-1)?.status;
+
+    test('never fires for a blocked payment, even when a recheck comes back valid', async () => {
+      const { order, paymentId } = await fraudOrder();
+      valid();
+      const res = await send('POST', `/v1/payments/${paymentId}/slip-recheck`, staffToken, {
+        clientRequestId: crypto.randomUUID(),
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.json().slipChecks[0].verify.verdict).toBe('valid');
+      expect(await statusOf(order.id)).toBe('claimed');
+    });
+
+    test("never fires for a flagged customer's other orders; an unflagged customer still confirms", async () => {
+      const flagged = await fraudOrder();
+      const next = await place(flagged.token);
+      valid();
+      expect((await upload(flagged.token, next.id, picture(8))).statusCode).toBe(200);
+      await checker.idle();
+      expect(await statusOf(next.id)).toBe('claimed');
+      expect((await payments(next.id))[0]?.slip_verify).toBe('valid');
+
+      const clean = await start();
+      const transRef = freshTransfer();
+      respond = () => ({ body: answer('200200', currentAmountBaht, { transRef }) });
+      await upload(clean.token, clean.order.id, picture(9));
+      await checker.idle();
+      expect(await statusOf(clean.order.id)).toBe('confirmed');
+    });
+  });
+});
+
+describe('the owner lifts a block or a flag', () => {
+  const crid = () => crypto.randomUUID();
+  // A one-time code cannot be used twice, so each owner sign-in gets a clock of its own.
+  let owners = 0;
+  const later = async () => {
+    h.clock.set(new Date(Date.UTC(2028, 1, 1, 8, 20, 0) + ++owners * 200_000).toISOString());
+    return h.steppedUpOwner(ownerFixture);
+  };
+  const clearBlock = (
+    paymentId: string,
+    token: string | undefined,
+    body?: Record<string, unknown>,
+  ) => send('POST', `/v1/payments/${paymentId}/slip-block/clear`, token, body);
+  const clearFlag = (
+    customerId: string,
+    token: string | undefined,
+    body?: Record<string, unknown>,
+  ) => send('POST', `/v1/customers/${customerId}/slip-flag/clear`, token, body);
+
+  async function fraudOrder(fill = 1) {
+    const placed = await start();
+    respond = () => ({ body: answer('200500', currentAmountBaht) });
+    await upload(placed.token, placed.order.id, picture(fill));
+    await checker.idle();
+    const paymentId = (await row(placed.order.id))?.id ?? '';
+    const customerId = (await flagOf(placed.order.id))?.id ?? '';
+    return { ...placed, paymentId, customerId };
+  }
+  beforeEach(() => {
+    dailyCap = 10_000;
+    checker = buildChecker();
+    installSlipChecker(checker);
+  });
+
+  test('who may: no session 401; manager, cashier and kitchen 403 even after step-up; the owner needs a fresh step-up', async () => {
+    const { paymentId, customerId } = await fraudOrder();
+    const body = { clientRequestId: crid(), reason: 'ตรวจกับธนาคารแล้ว' };
+    expect((await clearBlock(paymentId, undefined, body)).statusCode).toBe(401);
+    expect((await clearFlag(customerId, undefined, body)).statusCode).toBe(401);
+    const device = await h.newDevice();
+    for (const role of ['manager', 'cashier', 'kitchen'] as const) {
+      const who = await h.newStaff(role, '4821');
+      const token = await h.pinSession(device.token, who.id, '4821');
+      await send('POST', '/v1/auth/step-up', token, { pin: '4821' });
+      expect((await clearBlock(paymentId, token, body)).statusCode, role).toBe(403);
+      expect((await clearFlag(customerId, token, body)).statusCode, role).toBe(403);
+    }
+    h.clock.set(new Date(Date.UTC(2028, 1, 1, 8, 20, 0) + ++owners * 200_000).toISOString());
+    const plain = await h.ownerSession(ownerFixture);
+    for (const res of [
+      await clearBlock(paymentId, plain, body),
+      await clearFlag(customerId, plain, body),
+    ]) {
+      expect(res.statusCode).toBe(403);
+      expect(res.json()).toMatchObject({ code: 'STEP_UP_REQUIRED' });
+    }
+    expect((await payments((await orderOf(paymentId)) ?? ''))[0]?.slip_blocked_at).not.toBeNull();
+    expect(
+      (await h.auditRows(paymentId)).some((a) => a.action === 'payment.slip_block_clear'),
+    ).toBe(false);
+  });
+
+  const orderOf = async (paymentId: string) =>
+    (
+      await h.client.query<{ order_id: string }>('select order_id from payments where id = $1', [
+        paymentId,
+      ])
+    ).rows[0]?.order_id;
+
+  test('a reason is required (1 to 200 characters) and the request id too', async () => {
+    const { paymentId, customerId } = await fraudOrder();
+    const owner = await later();
+    const bad: Record<string, unknown>[] = [
+      {},
+      { clientRequestId: crid() },
+      { clientRequestId: crid(), reason: '' },
+      { clientRequestId: crid(), reason: '   ' },
+      { clientRequestId: crid(), reason: 'x'.repeat(201) },
+      { reason: 'ok' },
+      { clientRequestId: crid(), reason: 'ok', extra: 1 },
+    ];
+    for (const body of bad) {
+      expect((await clearBlock(paymentId, owner, body)).statusCode).toBe(400);
+      expect((await clearFlag(customerId, owner, body)).statusCode).toBe(400);
+    }
+    expect((await payments((await orderOf(paymentId)) ?? ''))[0]?.slip_blocked_at).not.toBeNull();
+    const edge = await clearBlock(paymentId, owner, {
+      clientRequestId: crid(),
+      reason: 'x'.repeat(200),
+    });
+    expect(edge.statusCode).toBe(200);
+  });
+
+  test('lifting the block: reviewed, back to unchecked, audited with the reason, owner alerted, customer can send a slip again, staff confirm as usual', async () => {
+    const { token, order, paymentId, customerId } = await fraudOrder();
+    const owner = await later();
+    const marker = h.events.length;
+    const alertsBefore = h.alerts.length;
+    const reason = 'ดูสลิปแล้ว โอนจริง';
+    const id = crid();
+
+    const res = await clearBlock(paymentId, owner, { clientRequestId: id, reason });
+    expect(res.statusCode).toBe(200);
+    const view = res.json();
+    expect(view.slipBlocks).toBeUndefined();
+    expect(view.slipChecks[0].verify).toMatchObject({ verdict: 'unchecked' });
+    expect(typeof view.slipChecks[0].verify.reviewedAt).toBe('string');
+    // The customer's flag is its own action: untouched here.
+    expect(view.customerSlipFlag).toMatchObject({ count: 1 });
+
+    const [payment] = await payments(order.id);
+    expect(payment).toMatchObject({
+      slip_blocked_at: null,
+      slip_block_reason: null,
+      slip_verify: 'unchecked',
+      status: 'claimed',
+    });
+    expect(payment?.slip_reviewed_at).not.toBeNull();
+
+    const audit = (await h.auditRows(paymentId)).filter(
+      (a) => a.action === 'payment.slip_block_clear',
+    );
+    expect(audit).toHaveLength(1);
+    expect(audit[0]).toMatchObject({ actorType: 'staff', actorId: ownerId });
+    expect(audit[0]?.after).toEqual({ clientRequestId: id, reason });
+    const alerts = h.alerts
+      .slice(alertsBefore)
+      .filter((a) => a.kind === 'payment.slip_block_cleared');
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0]).toMatchObject({ severity: 'warn', staffId: ownerId });
+    expect(JSON.stringify(alerts[0])).not.toContain(reason);
+    expect(
+      h.events.slice(marker).some((e) => e.type === 'payment.upserted' && e.id === paymentId),
+    ).toBe(true);
+
+    // The same picture cannot be sent to the bank again: it would only raise the block anew.
+    const callsBefore = calls.length;
+    const again = await send('POST', `/v1/payments/${paymentId}/slip-recheck`, staffToken, {
+      clientRequestId: crid(),
+    });
+    expect(again.statusCode).toBe(409);
+    expect(again.json()).toMatchObject({ code: 'SLIP_REVIEWED' });
+    expect(calls).toHaveLength(callsBefore);
+
+    // The customer may send a slip again, and the customer's view is clean.
+    const mine = (await send('GET', `/v1/app/orders/${order.id}`, token)).json();
+    expect(mine.slipBlocked).toBeUndefined();
+    expect(mine.actions.attachSlip).toBe(true);
+    respond = () => ({ body: answer('200200', currentAmountBaht) });
+    expect((await upload(token, order.id, picture(2))).statusCode).toBe(200);
+    await checker.idle();
+    expect(await flagOf(order.id)).toMatchObject({ id: customerId, slip_flag_count: 1 });
+    // The owner's review was of the old picture: the new one carries no "reviewed" mark.
+    const fresh = await send('GET', `/v1/orders/${order.id}/payments`, staffToken);
+    expect(fresh.json().slipChecks[0].verify.verdict).toBe('valid');
+    expect(fresh.json().slipChecks[0].verify.reviewedAt).toBeUndefined();
+    expect((await payments(order.id))[0]?.slip_reviewed_at).toBeNull();
+
+    // Staff confirm normally.
+    const confirm = await send('POST', `/v1/payments/${paymentId}/confirm`, staffToken, {});
+    expect(confirm.statusCode).toBe(200);
+    expect(confirm.json().payment.status).toBe('confirmed');
+  });
+
+  test('the same request id again: 200, one audit row, one alert; a header that disagrees is 400', async () => {
+    const { paymentId } = await fraudOrder();
+    const owner = await later();
+    const id = crid();
+    const alertsBefore = h.alerts.length;
+    expect(
+      (await clearBlock(paymentId, owner, { clientRequestId: id, reason: 'ok' })).statusCode,
+    ).toBe(200);
+    const again = await clearBlock(paymentId, owner, { clientRequestId: id, reason: 'ok' });
+    expect(again.statusCode).toBe(200);
+    expect(
+      (await h.auditRows(paymentId)).filter((a) => a.action === 'payment.slip_block_clear'),
+    ).toHaveLength(1);
+    expect(
+      h.alerts.slice(alertsBefore).filter((a) => a.kind === 'payment.slip_block_cleared'),
+    ).toHaveLength(1);
+
+    const mismatch = await h.app.inject({
+      method: 'POST',
+      url: `/v1/payments/${paymentId}/slip-block/clear`,
+      headers: { authorization: `Bearer ${owner}`, 'idempotency-key': crid() },
+      payload: { clientRequestId: crid(), reason: 'ok' },
+      remoteAddress: h.nextIp(),
+    });
+    expect(mismatch.statusCode).toBe(400);
+
+    // The same id in capitals on both sides is the same id.
+    const upper = crid().toUpperCase();
+    const { customerId } = await fraudOrder(5);
+    const owner2 = await later();
+    const caps = await h.app.inject({
+      method: 'POST',
+      url: `/v1/customers/${customerId}/slip-flag/clear`,
+      headers: { authorization: `Bearer ${owner2}`, 'idempotency-key': upper },
+      payload: { clientRequestId: upper, reason: 'ok' },
+      remoteAddress: h.nextIp(),
+    });
+    expect(caps.statusCode).toBe(200);
+  });
+
+  test('an order that is not blocked answers 409, an unknown payment 404', async () => {
+    const clean = await start();
+    const paymentId = (await row(clean.order.id))?.id ?? '';
+    const owner = await later();
+    const body = { clientRequestId: crid(), reason: 'ok' };
+    const res = await clearBlock(paymentId, owner, body);
+    expect(res.statusCode).toBe(409);
+    expect(res.json()).toMatchObject({ code: 'SLIP_NOT_BLOCKED' });
+    expect((await clearBlock(crypto.randomUUID(), owner, body)).statusCode).toBe(404);
+  });
+
+  test('clearing the flag: gone from staff views, the count and the history kept, audited with the reason, owner alerted', async () => {
+    const { order, paymentId, customerId } = await fraudOrder();
+    const owner = await later();
+    const alertsBefore = h.alerts.length;
+    const reason = 'ลูกค้าแสดงหลักฐานการโอน';
+    const id = crid();
+    const res = await clearFlag(customerId, owner, { clientRequestId: id, reason });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ slipFlag: null });
+
+    expect(await flagOf(order.id)).toMatchObject({
+      slip_flag_at: null,
+      slip_flag_reason: null,
+      slip_flag_count: 1,
+    });
+    expect(
+      (await send('GET', `/v1/orders/${order.id}/payments`, staffToken)).json().customerSlipFlag,
+    ).toBeUndefined();
+    // The block of the order is a separate thing and stays until the owner lifts it too.
+    expect((await payments(order.id))[0]?.slip_blocked_at).not.toBeNull();
+    expect(
+      (await send('GET', `/v1/orders/${order.id}/payments`, staffToken)).json().slipBlocks,
+    ).toHaveLength(1);
+
+    const audit = (await h.auditRows(customerId)).filter(
+      (a) => a.action === 'customer.slip_flag_clear',
+    );
+    expect(audit).toHaveLength(1);
+    expect(audit[0]).toMatchObject({ actorType: 'staff', actorId: ownerId });
+    expect(audit[0]?.after).toEqual({ clientRequestId: id, reason });
+    // The raise is still in the history.
+    expect((await h.auditRows(paymentId)).some((a) => a.action === 'payment.slip_blocked')).toBe(
+      true,
+    );
+    const alerts = h.alerts
+      .slice(alertsBefore)
+      .filter((a) => a.kind === 'customer.slip_flag_cleared');
+    expect(alerts).toHaveLength(1);
+    expect(JSON.stringify(alerts[0])).not.toContain(reason);
+
+    // Same request again, and a customer with no flag: 200, nothing more written.
+    expect((await clearFlag(customerId, owner, { clientRequestId: id, reason })).statusCode).toBe(
+      200,
+    );
+    expect(
+      (await clearFlag(customerId, owner, { clientRequestId: crid(), reason })).statusCode,
+    ).toBe(200);
+    expect(
+      (await h.auditRows(customerId)).filter((a) => a.action === 'customer.slip_flag_clear'),
+    ).toHaveLength(1);
+    expect(
+      (await clearFlag(crypto.randomUUID(), owner, { clientRequestId: crid(), reason })).statusCode,
+    ).toBe(404);
+  });
+
+  test('after the flag is cleared (and the block lifted) the automatic confirmation works for that customer again', async () => {
+    autoConfirm = { maxSatang: 100_000 };
+    checker = buildChecker();
+    installSlipChecker(checker);
+    const { token, paymentId, customerId } = await fraudOrder();
+    const owner = await later();
+    expect(
+      (await clearBlock(paymentId, owner, { clientRequestId: crid(), reason: 'ok' })).statusCode,
+    ).toBe(200);
+    expect(
+      (await clearFlag(customerId, owner, { clientRequestId: crid(), reason: 'ok' })).statusCode,
+    ).toBe(200);
+    const next = await place(token);
+    const transRef = freshTransfer();
+    respond = () => ({ body: answer('200200', currentAmountBaht, { transRef }) });
+    await upload(token, next.id, picture(6));
+    await checker.idle();
+    expect((await payments(next.id)).at(-1)?.status).toBe('confirmed');
+  });
+});

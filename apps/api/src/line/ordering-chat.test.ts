@@ -747,6 +747,74 @@ describe('a picture in the chat', () => {
     expect(allText(lastReply())).toContain('โอนแล้ว');
   });
 
+  describe('too many slips, and a blocked order', () => {
+    const setSlipState = (orderId: string, set: string, ...values: unknown[]) =>
+      h.client.query(`update payments set ${set} where order_id = $1`, [orderId, ...values]);
+
+    test('after three invalid results the picture is not kept: a neutral free reply says how many minutes, and it is accepted exactly five minutes after the last one', async () => {
+      const token = await signIn('id-token-a-0000000000000000000000');
+      const order = await place(token);
+      const last = h.clock.now().getTime() - 100_000;
+      await setSlipState(
+        order.id,
+        'slip_invalid_count = 3, slip_invalid_at = $2',
+        new Date(last).toISOString(),
+      );
+      await deliver(image(U_A, '4101'));
+      expect(await paymentOf(order.id)).toMatchObject([{ status: 'pending' }]);
+      expect(await slipKey(order.id)).toBeNull();
+      expect(replies()).toHaveLength(1);
+      expect(pushes()).toHaveLength(0);
+      const said = allText(lastReply());
+      expect(said).toContain('ส่งสลิปบ่อยเกินไป');
+      // 200 seconds are left: rounded up to whole minutes.
+      expect(said).toContain('รอ 4 นาที');
+      expect(said).not.toMatch(/ปลอม|ไม่ถูกต้อง|ตรวจพบ/);
+
+      h.clock.set(new Date(last + 299_000).toISOString());
+      await deliver(image(U_A, '4102'));
+      expect(await slipKey(order.id)).toBeNull();
+      expect(allText(lastReply())).toContain('รอ 1 นาที');
+
+      h.clock.set(new Date(last + 300_000).toISOString());
+      await deliver(image(U_A, '4103'));
+      expect(await paymentOf(order.id)).toMatchObject([{ status: 'claimed' }]);
+      expect(await slipKey(order.id)).toBeTruthy();
+      expect(allText(lastReply())).toContain('ได้รับสลิป');
+    });
+
+    test('"โอนแล้ว" without a slip still goes through during the wait', async () => {
+      const token = await signIn('id-token-a-0000000000000000000000');
+      const order = await place(token);
+      await setSlipState(
+        order.id,
+        'slip_invalid_count = 3, slip_invalid_at = $2',
+        h.clock.now().toISOString(),
+      );
+      await deliver(postback(U_A, `action=paid&order=${order.id}`));
+      expect(await paymentOf(order.id)).toMatchObject([{ status: 'claimed' }]);
+      expect(allText(lastReply())).toContain(order.orderNo);
+    });
+
+    test('a blocked order takes no picture: the reply tells the customer to tap "โอนแล้ว" and says nothing of why; the tap still works', async () => {
+      const token = await signIn('id-token-a-0000000000000000000000');
+      const order = await place(token);
+      await setSlipState(order.id, "slip_blocked_at = now(), slip_block_reason = 'fraud'");
+      await deliver(image(U_A, '4201'));
+      expect(await slipKey(order.id)).toBeNull();
+      expect(await paymentOf(order.id)).toMatchObject([{ status: 'pending' }]);
+      expect(replies()).toHaveLength(1);
+      expect(pushes()).toHaveLength(0);
+      const said = allText(lastReply());
+      expect(said).toContain('ออเดอร์นี้ส่งสลิปไม่ได้');
+      expect(said).toContain('โอนแล้ว');
+      expect(said).not.toMatch(/ปลอม|ฉ้อโกง|สงสัย|fraud|fake/i);
+
+      await deliver(postback(U_A, `action=paid&order=${order.id}`));
+      expect(await paymentOf(order.id)).toMatchObject([{ status: 'claimed' }]);
+    });
+  });
+
   test('a picture LINE would not hand over leaves the payment as it was; a failure that may pass is retried by the sweep', async () => {
     const token = await signIn('id-token-a-0000000000000000000000');
     const order = await place(token);

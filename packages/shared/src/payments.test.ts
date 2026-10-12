@@ -7,6 +7,7 @@ import {
   createPaymentInputSchema,
   paymentDtoSchema,
   paymentReasonInputSchema,
+  slipBlockClearInputSchema,
   slipRecheckInputSchema,
 } from './payments.ts';
 
@@ -192,5 +193,24 @@ describe('slipRecheckInputSchema', () => {
     expect(
       slipRecheckInputSchema.safeParse({ clientRequestId: id(), amountSatang: 1 }).success,
     ).toBe(false);
+  });
+});
+
+describe('slipBlockClearInputSchema', () => {
+  test('a request id and a reason of 1 to 200 characters, nothing else', () => {
+    const ok = { clientRequestId: id(), reason: 'ตรวจกับธนาคารแล้ว' };
+    expect(slipBlockClearInputSchema.safeParse(ok).success).toBe(true);
+    expect(slipBlockClearInputSchema.safeParse({ ...ok, reason: 'x'.repeat(200) }).success).toBe(
+      true,
+    );
+    for (const bad of [
+      {},
+      { clientRequestId: id() },
+      { ...ok, reason: '  ' },
+      { ...ok, reason: 'x'.repeat(201) },
+      { ...ok, extra: 1 },
+    ]) {
+      expect(slipBlockClearInputSchema.safeParse(bad).success, JSON.stringify(bad)).toBe(false);
+    }
   });
 });

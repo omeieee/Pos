@@ -13,6 +13,8 @@ export const PERMISSIONS = [
   'payment.confirm',
   'payment.cancel_claimed',
   'payment.void_refund',
+  /** Lift the slip block of an order after a "fake slip" answer, with a reason. Owner only. */
+  'payment.slip_block_clear',
   'menu.edit',
   'menu.availability',
   'customer.view',
@@ -31,6 +33,8 @@ export const PERMISSIONS = [
   'data.export',
   /** Erase a customer's personal data (PDPA). Irreversible, so owner only, with step-up. */
   'customer.anonymize',
+  /** Clear a customer's slip flag, with a reason. Owner only. */
+  'customer.slip_flag_clear',
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 
@@ -76,6 +80,8 @@ export const STEP_UP_PERMISSIONS: ReadonlySet<Permission> = new Set<Permission>(
   'device.manage',
   'data.export',
   'customer.anonymize',
+  'payment.slip_block_clear',
+  'customer.slip_flag_clear',
 ]);
 
 export function hasPermission(role: StaffRole, permission: Permission): boolean {

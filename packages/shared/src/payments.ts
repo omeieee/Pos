@@ -10,6 +10,7 @@
  */
 import { z } from 'zod';
 import { cashAmountSchema } from './cash.ts';
+import { slipFlagSchema } from './customers.ts';
 import { PAYMENT_STATUSES } from './enums.ts';
 import { orderDtoSchema } from './orders.ts';
 import { REFUND_METHODS } from './payment-adjustment.ts';
@@ -108,6 +109,16 @@ export type PaymentReasonInput = z.infer<typeof paymentReasonInputSchema>;
  */
 export const slipRecheckInputSchema = z.strictObject({ clientRequestId: z.uuid() });
 export type SlipRecheckInput = z.infer<typeof slipRecheckInputSchema>;
+
+/**
+ * The owner lifts the slip block of an order (`POST /v1/payments/:id/slip-block/clear`): a typed
+ * reason (kept in the audit log only) and the request id, which is the idempotency key.
+ */
+export const slipBlockClearInputSchema = z.strictObject({
+  clientRequestId: z.uuid(),
+  reason: z.string().trim().min(1).max(200),
+});
+export type SlipBlockClearInput = z.infer<typeof slipBlockClearInputSchema>;
 
 // ---------- Responses ----------
 
@@ -212,11 +223,33 @@ export const orderPaymentsResponseSchema = z.object({
          * while `pending`). Never in sync, realtime or a customer answer.
          */
         verify: z
-          .object({ verdict: z.enum(SLIP_VERIFY_VERDICTS), at: isoInstant.optional() })
+          .object({
+            verdict: z.enum(SLIP_VERIFY_VERDICTS),
+            at: isoInstant.optional(),
+            /**
+             * When the owner reviewed this slip by hand and lifted the slip block. The verdict was
+             * then reset to `unchecked` (the earlier one stays in the audit log): confirm as usual.
+             */
+            reviewedAt: isoInstant.optional(),
+          })
           .optional(),
       }),
     )
     .optional(),
+  /**
+   * Payments of this order that are slip-blocked (the bank-check service said "fake slip"): further
+   * slip uploads for the order are refused, the customer can still claim "โอนแล้ว", and staff
+   * verify by hand. The owner may lift it (`POST /v1/payments/:id/slip-block/clear`). Staff only,
+   * REST only; absent when there is none.
+   */
+  slipBlocks: z
+    .array(z.object({ paymentId: z.uuid(), at: isoInstant, reason: z.literal('fraud') }))
+    .optional(),
+  /**
+   * The customer of this order is slip-flagged (staff only): the automatic confirmation is off for
+   * them, so confirm by hand. Absent when there is no flag or the order has no customer.
+   */
+  customerSlipFlag: slipFlagSchema.optional(),
   /**
    * Slips that look like one already used on another payment (D-26): the same picture, or the same
    * bank reference. A hint for staff, never a decision. It names only the earlier order's number

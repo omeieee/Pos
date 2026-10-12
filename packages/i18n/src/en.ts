@@ -1505,6 +1505,10 @@ export const en = {
   'lineBot.err.closed': 'This order is closed or already paid, so it cannot change.',
   'lineBot.err.methodUnavailable':
     'That payment method is not available right now. Please pick another.',
+  'lineBot.err.slipCooldown':
+    'Slips are being sent too often. Please wait {minutes} min and send again.',
+  'lineBot.err.slipBlocked':
+    'A slip cannot be sent for this order. Please tap "I have paid" and staff will check with the bank.',
   'lineBot.status.title': 'Order {orderNo} status',
   'lineBot.status.altText': 'Order {orderNo}: {status}',
   'lineBot.status.order': 'Order: {status}',
@@ -1560,6 +1564,10 @@ export const en = {
   'liff.error.QR_NOT_AVAILABLE': 'There is no QR for this order now.',
   'liff.error.SLIP_TOO_LARGE': 'The slip picture is over 5 MB. Try a smaller one.',
   'liff.error.SLIP_TYPE_UNSUPPORTED': 'Only JPEG, PNG or WebP pictures work.',
+  'liff.error.SLIP_COOLDOWN':
+    'Slips are being sent too often. Please wait {minutes} min and send again.',
+  'liff.error.SLIP_BLOCKED':
+    'A slip cannot be sent for this order. Please tap "I have paid" and staff will check with the bank.',
   'liff.error.NOT_FOUND': 'We cannot find that order.',
   'liff.error.ORDER_TOO_LARGE':
     'An order can have up to 50 items. Please reduce the quantity or split it.',

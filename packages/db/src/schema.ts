@@ -313,6 +313,15 @@ export const customers = pgTable(
     marketingConsentAt: ts('marketing_consent_at'),
     unfollowedAt: ts('unfollowed_at'),
     anonymizedAt: ts('anonymized_at'),
+    /**
+     * Slip flag (owner decision): the bank-check service once said "fake slip" for this customer.
+     * STAFF ONLY (never in a customer answer, a LINE message, sync, realtime or a log). It does not
+     * stop ordering; it turns the automatic payment confirmation off. `slip_flag_at` null: no flag.
+     * The count is a lifetime tally and stays after the owner clears the flag.
+     */
+    slipFlagAt: ts('slip_flag_at'),
+    slipFlagReason: text('slip_flag_reason'),
+    slipFlagCount: smallint('slip_flag_count').notNull().default(0),
     ...sync,
   },
   (t) => [
@@ -669,6 +678,22 @@ export const payments = pgTable(
     slipVerifyRef: text('slip_verify_ref'),
     slipVerifyAttempts: smallint('slip_verify_attempts').notNull().default(0),
     slipVerifiedAt: ts('slip_verified_at'),
+    /**
+     * Slip cooldown (owner decision): how many finished bank checks of this payment were a
+     * definitive failure (wrong receiver, amount or date, or not found), and when the last was.
+     * Kept across new slips; staff rechecks do not count. Never in sync or realtime.
+     */
+    slipInvalidCount: smallint('slip_invalid_count').notNull().default(0),
+    slipInvalidAt: ts('slip_invalid_at'),
+    /**
+     * Slip block: the bank-check service said "fake slip" (code 200500). The ORDER takes no more
+     * slips while any of its payments has this set; "โอนแล้ว" still works and staff verify by hand.
+     * The owner lifts it: `slip_blocked_at` goes back to null and `slip_reviewed_at` records when.
+     * Staff only, REST only.
+     */
+    slipBlockedAt: ts('slip_blocked_at'),
+    slipBlockReason: text('slip_block_reason'),
+    slipReviewedAt: ts('slip_reviewed_at'),
     referenceNote: text('reference_note'),
     claimedAt: ts('claimed_at'),
     confirmedByStaffId: uuid('confirmed_by_staff_id').references(() => staff.id),

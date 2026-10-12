@@ -55,6 +55,7 @@ import {
   currentShopPhone,
   lineOrderingNow,
 } from '../settings/service.ts';
+import { orderSlipBlocked, paymentSlipCooldown } from '../slips/guard.ts';
 import type { CoreContext } from '../tx.ts';
 import { CUSTOMER_SESSION_SECONDS, type CustomerPrincipal, signCustomerToken } from './session.ts';
 
@@ -245,6 +246,10 @@ export async function viewOrder(ctx: CoreContext, order: ordersRepo.OrderRow): P
   const settled = payments.some((p) => p.status === 'claimed' || p.status === 'confirmed');
   const canChange = !closed && !settled;
   const rejected = !closed && claimRejected(payments, order);
+  // A slip can be attached while a PromptPay payment is open (or was rejected and may be paid again).
+  const slipOpen = !closed && (open?.method === 'promptpay' || rejected);
+  const slipBlocked = slipOpen && orderSlipBlocked(payments);
+  const retryAfter = open?.method === 'promptpay' ? paymentSlipCooldown(open, ctx.now()) : 0;
   return myOrderSchema.parse({
     id: order.id,
     orderNo: order.orderNo,
@@ -279,6 +284,9 @@ export async function viewOrder(ctx: CoreContext, order: ordersRepo.OrderRow): P
           }),
         }
       : {}),
+    // Neutral facts only: no slip can be sent for this order, or not for the next few minutes.
+    ...(slipBlocked ? { slipBlocked: true } : {}),
+    ...(slipOpen && !slipBlocked && retryAfter > 0 ? { slipRetryAfterSeconds: retryAfter } : {}),
     payment: payment
       ? {
           id: payment.id,
@@ -293,7 +301,7 @@ export async function viewOrder(ctx: CoreContext, order: ordersRepo.OrderRow): P
       claim: !closed && ((open?.method === 'promptpay' && open.status === 'pending') || rejected),
       changeMethod: canChange,
       showQr: !closed && (open?.method === 'promptpay' || rejected),
-      attachSlip: !closed && (open?.method === 'promptpay' || rejected),
+      attachSlip: slipOpen && !slipBlocked,
       methods: canChange ? await methodsOffered(ctx.db) : [],
     },
   });

@@ -191,6 +191,18 @@ export const myOrderSchema = z.object({
    * payment is open (nothing to pay, paid, closed). See `customerSlipCheck`.
    */
   slipCheck: z.enum(CUSTOMER_SLIP_CHECKS).optional(),
+  /**
+   * Slips can no longer be sent for this order: only the neutral fact, never why (owner decision).
+   * Sent as `true` only while a slip could otherwise be attached; `actions.attachSlip` is then
+   * false. The customer can still tap "โอนแล้ว" and staff verify by hand.
+   */
+  slipBlocked: z.boolean().optional(),
+  /**
+   * Too many slips were sent for the open payment: the next one is accepted after this many
+   * seconds (SLIP_COOLDOWN_SECONDS after the last). Absent when a slip may be sent now. The claim
+   * ("โอนแล้ว") is never held back by it.
+   */
+  slipRetryAfterSeconds: z.number().int().positive().optional(),
   /** What the customer may do next. The server decides; the app shows. */
   actions: z.object({
     /** "โอนแล้ว": only for a pending PromptPay payment. It makes the payment `claimed`; staff confirm. */

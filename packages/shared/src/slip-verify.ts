@@ -182,3 +182,36 @@ export const slip2goResponseSchema = z.object({
     .optional(),
 });
 export type Slip2goResponse = z.infer<typeof slip2goResponseSchema>;
+
+// ---------- Cooldown and fraud (owner decision) ----------
+
+/** The verdicts that count as a definitive "this slip is not good" for the cooldown. */
+export const SLIP_INVALID_VERDICTS: readonly SlipVerifyResult[] = [
+  'amount_mismatch',
+  'receiver_mismatch',
+  'date_mismatch',
+  'not_found',
+];
+
+/** Whether a finished bank check counts toward the cooldown. `fraud` blocks instead; the rest never count. */
+export const isInvalidSlipVerdict = (verdict: SlipVerifyVerdict): boolean =>
+  (SLIP_INVALID_VERDICTS as readonly string[]).includes(verdict);
+
+/** A payment may have this many invalid slip results before the next upload has to wait. */
+export const SLIP_INVALID_FREE_TRIES = 3;
+/** How long after the LAST invalid result the next upload waits, once the free tries are used. */
+export const SLIP_COOLDOWN_SECONDS = 300;
+
+/**
+ * Seconds until the next slip upload for this payment is allowed; 0 when it is allowed now.
+ * Refused only when the payment has `SLIP_INVALID_FREE_TRIES` or more invalid results and `now` is
+ * before the last of them plus `SLIP_COOLDOWN_SECONDS` (at exactly that moment it is allowed).
+ */
+export function slipCooldownSeconds(
+  slip: { invalidCount: number; lastInvalidAt: Date | null },
+  now: Date,
+): number {
+  if (slip.invalidCount < SLIP_INVALID_FREE_TRIES || slip.lastInvalidAt === null) return 0;
+  const left = slip.lastInvalidAt.getTime() + SLIP_COOLDOWN_SECONDS * 1000 - now.getTime();
+  return left > 0 ? Math.ceil(left / 1000) : 0;
+}
