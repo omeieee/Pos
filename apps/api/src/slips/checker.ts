@@ -5,12 +5,13 @@ import {
   compareSlipAmount,
   extractSlipAmount,
   extractSlipRef,
-  normaliseSlipRef,
   type SlipCheck,
   type SlipRecipientCheck,
   type SlipVerifyResult,
+  slip2goAutoConfirmReceivers,
   slip2goReceivers,
   slip2goVerdict,
+  slipQrKeyText,
 } from '@sds/shared';
 import { securityAlert } from '../auth/service.ts';
 import { currentBusinessDate } from '../orders/business-day.ts';
@@ -74,6 +75,8 @@ type VerifyOutcome =
       ref: string | null;
       /** A call was made (it counts as an attempt). */
       called: boolean;
+      /** Every receiver sent is one an automatic confirmation is allowed for (proven live only). */
+      receiversOk: boolean;
       /** Which owner alert this answer calls for, once per business date. */
       alert: 'account' | 'cap' | null;
     }
@@ -87,8 +90,13 @@ interface Evaluated {
     recipient: SlipRecipientCheck | null;
   } | null;
   verify: VerifyOutcome | null;
-  /** From the local QR decode, or else from Slip2Go's sender bank and transaction reference. */
+  /**
+   * The duplicate key to store. On a valid bank answer it is Slip2Go's own (so that every
+   * automatically confirmed row shares one format), else the local QR decode, else Slip2Go's.
+   */
   qrHash: string | null;
+  /** The key built from Slip2Go's answer; an automatic confirmation needs it. */
+  remoteHash: string | null;
   businessDate: string;
 }
 
@@ -166,10 +174,16 @@ export function createSlipChecker(args: {
         code: null,
         ref: null,
         called: false,
+        receiversOk: false,
         alert,
       },
       qrHash: null,
     });
+    // The payment is no longer waiting for a decision (cancelled, voided, confirmed): no call.
+    if (row.status !== 'claimed') return noCall();
+    // Calls already made for this picture that never reached a verdict (a commit that failed
+    // after the answer, or retries): at most MAX_VERIFY_ATTEMPTS in all, then unchecked.
+    if (row.slipVerifyAttempts >= MAX_VERIFY_ATTEMPTS) return noCall();
     const mime = bytes ? sniffSlip(bytes) : null;
     // The QR text goes first (no picture leaves the machine); the picture only when no QR was read,
     // and only as JPEG or PNG (Slip2Go documents nothing else).
@@ -190,6 +204,11 @@ export function createSlipChecker(args: {
     // The cap counts calls in its own table, so replacing the slip over and over cannot hide them.
     if ((await paymentsRepo.slipVerifyCallsOn(ctx.db, businessDate)) >= dailyCap)
       return noCall('cap');
+    // The attempt is counted BEFORE the call, on its own, so that a commit that fails after the
+    // answer cannot make the same slip be sent every minute. Null: the slip was replaced meanwhile.
+    if ((await paymentsRepo.bumpSlipVerifyAttempts(ctx.db, row.id, row.slipImageHash)) === null) {
+      return noCall();
+    }
     await paymentsRepo.recordSlipVerifyCall(ctx.db, businessDate);
     const result = rawQr
       ? await verifier.verifyQr(rawQr, conditions)
@@ -204,11 +223,11 @@ export function createSlipChecker(args: {
     const decided = slip2goVerdict(result.code, localAmountOk);
     const code = /^\d{6}$/.test(result.code) ? result.code : null;
     // The duplicate key, built exactly like the local one so that the two can meet.
-    const transRef = result.transRef ? normaliseSlipRef(result.transRef) : null;
-    const qrHash =
-      transRef && result.senderBank && /^\d{3}$/.test(result.senderBank)
-        ? sha256(`${result.senderBank}:${transRef}`)
+    const keyText =
+      result.transRef && result.senderBank
+        ? slipQrKeyText(result.senderBank, result.transRef)
         : null;
+    const qrHash = keyText ? sha256(keyText) : null;
     if (decided.retry) return { outcome: { kind: 'retry', code, alert: null }, qrHash };
     return {
       outcome: {
@@ -217,6 +236,7 @@ export function createSlipChecker(args: {
         code,
         ref: result.referenceId ? result.referenceId.slice(0, 100) : null,
         called: true,
+        receiversOk: slip2goAutoConfirmReceivers(receivers),
         alert: decided.alert ? 'account' : null,
       },
       qrHash,
@@ -241,7 +261,8 @@ export function createSlipChecker(args: {
       try {
         const found = qr.readRaw ? await qr.readRaw(bytes) : null;
         const parsed = qr.readRaw ? (found?.qr ?? null) : await qr.read(bytes);
-        if (parsed) localHash = sha256(`${parsed.sendingBank}:${parsed.transRef}`);
+        const keyText = parsed ? slipQrKeyText(parsed.sendingBank, parsed.transRef) : null;
+        if (keyText) localHash = sha256(keyText);
         // The text is for the bank check only and is dropped with this call.
         if (wantVerify && found) rawQr = found.raw;
       } catch (error) {
@@ -263,7 +284,11 @@ export function createSlipChecker(args: {
     return {
       ocr: ocrPart,
       verify: verifyPart,
-      qrHash: localHash ?? remoteHash,
+      qrHash:
+        verifyPart?.kind === 'final' && verifyPart.verdict === 'valid'
+          ? (remoteHash ?? localHash)
+          : (localHash ?? remoteHash),
+      remoteHash,
       businessDate,
     };
   }
@@ -327,9 +352,8 @@ export function createSlipChecker(args: {
       if (verifyFresh && done.verify) {
         const outcome = done.verify;
         if (outcome.kind === 'retry') {
-          const attempts = locked.slipVerifyAttempts + 1;
-          patch.slipVerifyAttempts = attempts;
-          if (attempts >= MAX_VERIFY_ATTEMPTS) {
+          // The attempt was counted before the call (`bumpSlipVerifyAttempts`).
+          if (locked.slipVerifyAttempts >= MAX_VERIFY_ATTEMPTS) {
             patch.slipVerify = 'unchecked';
             patch.slipVerifyCode = outcome.code;
             patch.slipVerifiedAt = ctx.now();
@@ -338,7 +362,6 @@ export function createSlipChecker(args: {
           patch.slipVerify = outcome.verdict;
           patch.slipVerifyCode = outcome.code;
           patch.slipVerifyRef = outcome.ref;
-          patch.slipVerifyAttempts = locked.slipVerifyAttempts + (outcome.called ? 1 : 0);
           patch.slipVerifiedAt = ctx.now();
         }
       }
@@ -352,7 +375,11 @@ export function createSlipChecker(args: {
         outcome?.kind === 'final' &&
         outcome.called &&
         outcome.verdict === 'valid' &&
-        outcome.code === '200200'
+        outcome.code === '200200' &&
+        // Only on conditions proven live: a transfer key from Slip2Go itself, and a receiver of
+        // the proven form (the staff tick stays the path for everything else).
+        done.remoteHash !== null &&
+        outcome.receiversOk
       ) {
         const confirmed = await autoConfirmClaimedPayment(ctx, tx, emit, {
           order,

@@ -296,7 +296,8 @@ describe('the verdict lands in the background', () => {
       status: 'claimed',
       slip_verify: 'pending',
       slip_check: null,
-      slip_verify_attempts: 0,
+      // The attempt is counted before the call, so a failed commit cannot repeat it for ever.
+      slip_verify_attempts: 1,
     });
 
     await waitFor(() => calls.length === 1);
@@ -445,11 +446,18 @@ describe('what is sent', () => {
 });
 
 describe('the duplicate key', () => {
-  test('the local QR decode fills the key; the Slip2Go reference fills it when the decode gave none', async () => {
+  test('a valid answer stores Slip2Go key; any other answer keeps the local decode; the Slip2Go key fills it when the decode gave none', async () => {
     const { token, order } = await start();
     await upload(token, order.id, picture());
     await checker.idle();
-    expect((await row(order.id))?.slip_qr_hash).toBe(sha256(`014:${localRef()}`));
+    expect((await row(order.id))?.slip_qr_hash).toBe(sha256(`002:${remoteRef()}`));
+
+    const mismatch = await start();
+    respond = () => ({ body: answer('200402', currentAmountBaht) });
+    await upload(mismatch.token, mismatch.order.id, picture(3));
+    await checker.idle();
+    expect((await row(mismatch.order.id))?.slip_qr_hash).toBe(sha256(`014:${localRef()}`));
+    respond = () => ({ body: answer('200200', currentAmountBaht) });
 
     localQr = null;
     const other = await start();
@@ -854,7 +862,9 @@ describe('auto-confirm (D-27)', () => {
     expect(await state(order.id)).toMatchObject({ status: 'claimed' });
     expect((await row(order.id))?.slip_verify).toBe('valid');
     const exact = await start();
-    localQr = { ...localQrFor(), qr: { sendingBank: '014', transRef: 'LOCALREF9999999' } };
+    respond = () => ({
+      body: answer('200200', currentAmountBaht, { transRef: `9${remoteRef().slice(1)}` }),
+    });
     autoConfirm = { maxSatang: exact.order.totalSatang };
     checker = buildChecker();
     installSlipChecker(checker);
@@ -1013,5 +1023,227 @@ describe('auto-confirm (D-27)', () => {
     expect(h.alerts.length).toBeGreaterThan(alertsBefore);
     const actions = (await h.auditRows(payment?.id ?? '')).map((a) => a.action);
     expect(actions).toEqual(expect.arrayContaining(['payment.auto_confirm', 'payment.void']));
+  });
+
+  describe('a slip held by any other payment, in any status, never auto-confirms', () => {
+    const payments = async (orderId: string) =>
+      (
+        await h.client.query<{ id: string; status: string; auto_confirmed: boolean }>(
+          'select id, status, auto_confirmed from payments where order_id = $1 order by id',
+          [orderId],
+        )
+      ).rows;
+    const latest = async (orderId: string) => (await payments(orderId)).at(-1);
+    const voidIt = async (paymentId: string, afterSeconds: number) => {
+      // A moment no other test used: a one-time code is never accepted twice.
+      h.clock.advanceSeconds(afterSeconds);
+      const token = await h.steppedUpOwner(ownerFixture);
+      const res = await h.app.inject({
+        method: 'POST',
+        url: `/v1/payments/${paymentId}/void`,
+        headers: { authorization: `Bearer ${token}` },
+        payload: { reason: 'checked the bank app: no money arrived' },
+        remoteAddress: h.nextIp(),
+      });
+      expect(res.statusCode).toBe(200);
+      return token;
+    };
+
+    test('cancelled, then the same file is claimed again: it stays claimed for staff', async () => {
+      const first = await sendSlip(); // auto-confirm is off: the claim waits
+      const firstPayment = await latest(first.order.id);
+      expect(firstPayment?.status).toBe('claimed');
+      const cancel = await h.app.inject({
+        method: 'POST',
+        url: `/v1/payments/${firstPayment?.id}/cancel-claimed`,
+        headers: { authorization: `Bearer ${staffToken}` },
+        payload: { reason: 'no money found' },
+        remoteAddress: h.nextIp(),
+      });
+      expect(cancel.statusCode).toBe(200);
+      on();
+      await upload(first.token, first.order.id, picture());
+      await checker.idle();
+      const again = await latest(first.order.id);
+      expect(again?.id).not.toBe(firstPayment?.id);
+      expect(again).toMatchObject({ status: 'claimed', auto_confirmed: false });
+      expect((await row(first.order.id))?.slip_verify).toBe('valid');
+    });
+
+    test('voided, then the same file is claimed again on the same order: staff tick', async () => {
+      on();
+      const first = await sendSlip();
+      const confirmed = await latest(first.order.id);
+      expect(confirmed?.status).toBe('confirmed');
+      const ownerToken = await voidIt(confirmed?.id ?? '', 150);
+      // Staff open a new PromptPay payment on the order; the customer sends the same file.
+      const fresh = await h.app.inject({
+        method: 'POST',
+        url: `/v1/orders/${first.order.id}/payments`,
+        headers: { authorization: `Bearer ${ownerToken}` },
+        payload: { clientRequestId: crypto.randomUUID(), method: 'promptpay' },
+        remoteAddress: h.nextIp(),
+      });
+      expect(fresh.statusCode).toBe(201);
+      const up = await upload(first.token, first.order.id, picture());
+      expect(up.statusCode).toBe(200);
+      await checker.idle();
+      const again = await latest(first.order.id);
+      expect(again?.id).not.toBe(confirmed?.id);
+      expect(again).toMatchObject({ status: 'claimed', auto_confirmed: false });
+    });
+
+    test('a voided slip reused on a new order inside the date slack: staff tick', async () => {
+      on();
+      const first = await sendSlip();
+      const confirmed = await latest(first.order.id);
+      await voidIt(confirmed?.id ?? '', 210);
+      // Another photo of the same transfer on a new order, placed minutes later.
+      h.clock.advanceSeconds(60);
+      const second = await sendSlip(picture(9));
+      expect(await latest(second.order.id)).toMatchObject({
+        status: 'claimed',
+        auto_confirmed: false,
+      });
+      expect((await row(second.order.id))?.slip_verify).toBe('valid');
+    });
+  });
+
+  describe('the transfer key and the receiver must be proven', () => {
+    test('a valid answer without a transRef, or with a bank id that is not 3 digits, is shown but not confirmed', async () => {
+      on();
+      const variants = [
+        { transRef: undefined },
+        { sender: { bank: { id: '14' } } },
+        { sender: { bank: {} } },
+      ];
+      for (const [i, data] of variants.entries()) {
+        respond = () => ({ body: answer('200200', currentAmountBaht, data) });
+        const sent = await sendSlip(picture(20 + i));
+        expect(await state(sent.order.id)).toMatchObject({
+          status: 'claimed',
+          auto_confirmed: false,
+        });
+        const stored = await row(sent.order.id);
+        expect(stored?.slip_verify).toBe('valid');
+        // The local decode still supplies a key for the staff duplicate hint.
+        expect(stored?.slip_qr_hash).toBe(sha256(`014:${localRef()}`));
+      }
+    });
+
+    test('a valid answer stores the Slip2Go key, so auto-confirmed rows share one format', async () => {
+      on();
+      const sent = await sendSlip();
+      expect(await state(sent.order.id)).toMatchObject({ status: 'confirmed' });
+      expect((await row(sent.order.id))?.slip_qr_hash).toBe(sha256(`002:${remoteRef()}`));
+    });
+
+    const setPromptpay = (value: Record<string, string>) =>
+      h.client.query("update settings set value = $1::jsonb where key = 'promptpay'", [
+        JSON.stringify(value),
+      ]);
+    afterEach(async () => {
+      await h.client.query("delete from settings where key in ('promptpay', 'bank_account')");
+      await h.client.query(
+        "insert into settings (key, value, updated_by) values ('promptpay', $1::jsonb, $2)",
+        [JSON.stringify({ idType: 'phone', idValue: '0899994321' }), ownerId],
+      );
+    });
+
+    test.each([
+      ['a 13-digit ID', { idType: 'national_id', idValue: '1234567890123' }],
+      ['a 15-digit ID', { idType: 'ewallet', idValue: '123456789012345' }],
+    ])('%s: the call and the verdict happen, the confirmation does not', async (_n, id) => {
+      on();
+      await setPromptpay(id);
+      const sent = await sendSlip();
+      expect(calls).toHaveLength(1);
+      expect((await row(sent.order.id))?.slip_verify).toBe('valid');
+      expect(await state(sent.order.id)).toMatchObject({
+        status: 'claimed',
+        auto_confirmed: false,
+      });
+    });
+
+    test('a bank-account receiver as well', async () => {
+      on();
+      const placed = await start();
+      await h.client.query("delete from settings where key = 'promptpay'");
+      await h.client.query(
+        "insert into settings (key, value, updated_by) values ('bank_account', $1::jsonb, $2) on conflict (key) do update set value = excluded.value",
+        [
+          JSON.stringify({ bankCode: '014', accountNumber: '1234567890', accountName: 'X' }),
+          ownerId,
+        ],
+      );
+      await upload(placed.token, placed.order.id, picture());
+      await checker.idle();
+      expect(calls).toHaveLength(1);
+      expect((await row(placed.order.id))?.slip_verify).toBe('valid');
+      expect((await state(placed.order.id))?.status).toBe('claimed');
+    });
+  });
+});
+
+describe('a commit that fails after the answer', () => {
+  test('at most three calls in all, then unchecked', async () => {
+    const { token, order } = await start();
+    // The verdict cannot be written (a check constraint stands in for any commit failure).
+    await h.client.query(
+      "alter table payments add constraint test_no_valid check (slip_verify is distinct from 'valid') not valid",
+    );
+    try {
+      await upload(token, order.id, picture());
+      await checker.idle();
+      for (let i = 0; i < 6; i++) {
+        await checker.sweep();
+        await checker.idle();
+      }
+    } finally {
+      await h.client.query('alter table payments drop constraint test_no_valid');
+    }
+    expect(calls).toHaveLength(3);
+    expect(await row(order.id)).toMatchObject({
+      slip_verify: 'unchecked',
+      slip_verify_attempts: 3,
+      status: 'claimed',
+    });
+    expect(await checker.sweep()).toBe(0);
+    expect(calls).toHaveLength(3);
+  });
+});
+
+describe('a payment that is no longer claimed', () => {
+  test('is settled as unchecked without a call', async () => {
+    const { token, order } = await start();
+    await upload(token, order.id, picture());
+    await checker.idle();
+    expect(calls).toHaveLength(1);
+    await h.client.query(
+      "update payments set status = 'cancelled', slip_verify = 'pending', slip_verify_attempts = 0 where order_id = $1",
+      [order.id],
+    );
+    expect(await checker.sweep()).toBe(1);
+    await checker.idle();
+    expect(calls).toHaveLength(1);
+    expect(await row(order.id)).toMatchObject({ slip_verify: 'unchecked', status: 'cancelled' });
+  });
+});
+
+describe('the other account codes alert the owner too', () => {
+  test.each(['401001', '401002', '401003'])('%s: one alert a business date', async (code) => {
+    h.clock.set(`2028-05-0${code.slice(-1)}T08:00:00.000Z`);
+    respond = () => ({ body: { code, message: 'account' }, status: 401 });
+    const before = alertsOf('slip2go.unavailable').length;
+    for (const fill of [31, 32]) {
+      const sent = await start();
+      await upload(sent.token, sent.order.id, picture(fill));
+      await checker.idle();
+      expect(await row(sent.order.id)).toMatchObject({
+        slip_verify: 'unchecked',
+        slip_verify_code: code,
+      });
+    }
+    expect(alertsOf('slip2go.unavailable')).toHaveLength(before + 1);
   });
 });

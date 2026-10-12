@@ -926,8 +926,12 @@ export async function autoConfirmClaimedPayment(
   if (!paymentMachine.transition('claimed', 'confirmed', { actor: { kind: 'system' } }).ok) {
     return null;
   }
-  // Any other payment that used this slip counts, earlier or later (D-27): two photos of one
-  // transfer must not both confirm, whichever is checked first.
+  // A machine confirmation needs the transfer's own key (D-27): without it two photos of one
+  // transfer could not be told apart.
+  if ((patch.slipQrHash !== undefined ? patch.slipQrHash : payment.slipQrHash) == null) return null;
+  // Any other payment that used this slip counts, in any status and earlier or later (D-27): two
+  // photos of one transfer must not both confirm, whichever is checked first, and a cancelled or
+  // voided one may have been a reused slip.
   const earlier = await paymentsRepo.findOtherSlipUse(tx, {
     id: payment.id,
     slipImageHash: payment.slipImageHash,
