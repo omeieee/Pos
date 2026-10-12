@@ -9,6 +9,9 @@ export const SLIP_POLL_FAST_FOR_MS = 60_000;
 /** With no result by now the pop-up gives up and shows the neutral staff-checking text. */
 export const SLIP_PROGRESS_GIVE_UP_MS = 6 * 60_000;
 
+/** In the checking phase for this long, the pop-up adds a line that it may take a minute. */
+export const SLIP_PROGRESS_SLOW_HINT_AFTER_MS = 8000;
+
 export type SlipProgressPhase = 'checking' | 'paid' | 'staff_review';
 
 type Seen = Pick<MyOrder, 'paymentStatus' | 'slipCheck'>;
@@ -29,6 +32,11 @@ export function slipProgressPhase(elapsedMs: number, order: Seen | null): SlipPr
     return 'staff_review';
   }
   return 'checking';
+}
+
+/** Whether the "may take about a minute" line shows: only while checking, after the threshold. */
+export function slipSlowHintShown(elapsedMs: number, phase: SlipProgressPhase): boolean {
+  return phase === 'checking' && elapsedMs >= SLIP_PROGRESS_SLOW_HINT_AFTER_MS;
 }
 
 /** How long until the minimum display time is over (0 when it already is). */

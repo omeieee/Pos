@@ -5,10 +5,14 @@ import type { Platform } from '../platform/liff.ts';
 import { Ctx } from './app-context.tsx';
 import { SlipProgressPopup } from './OrderScreen.tsx';
 
-function render(phase: 'checking' | 'paid' | 'staff_review', locale: 'th' | 'en' = 'th') {
+function render(
+  phase: 'checking' | 'paid' | 'staff_review',
+  locale: 'th' | 'en' = 'th',
+  slowHint = false,
+) {
   return renderToStaticMarkup(
     <Ctx.Provider value={{ api: {} as Api, platform: {} as Platform, locale, go: () => {} }}>
-      <SlipProgressPopup phase={phase} orderNo="A-001" onClose={() => {}} />
+      <SlipProgressPopup phase={phase} orderNo="A-001" slowHint={slowHint} onClose={() => {}} />
     </Ctx.Provider>,
   );
 }
@@ -41,6 +45,17 @@ describe('SlipProgressPopup', () => {
     for (const word of ['ไม่สำเร็จ', 'ไม่ผ่าน', 'ปลอม', 'ผิดพลาด', 'ยอดไม่ตรง', 'ซ้ำ']) {
       expect(html).not.toContain(word);
     }
+  });
+
+  test('slow hint: absent by default, shown in both languages when asked, only while checking', () => {
+    const slow = 'บางธนาคารอัปเดตช้า การตรวจอาจใช้เวลาประมาณ 1 นาที ปิดหน้านี้ได้ ระบบจะยืนยันให้เอง';
+    expect(render('checking')).not.toContain(slow);
+    const html = render('checking', 'th', true);
+    expect(html).toContain(slow);
+    expect(html).toContain('aria-live="polite"');
+    expect(render('checking', 'en', true)).toContain('this can take about a minute');
+    expect(render('paid', 'th', true)).not.toContain(slow);
+    expect(render('staff_review', 'th', true)).not.toContain(slow);
   });
 
   test('english text exists for every phase', () => {

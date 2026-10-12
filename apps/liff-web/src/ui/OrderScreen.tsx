@@ -13,6 +13,7 @@ import {
   type SlipProgressPhase,
   slipPollDelayMs,
   slipProgressPhase,
+  slipSlowHintShown,
 } from '../model/slip-progress.ts';
 import { awaitsTransferConfirmation, isPaymentRejected, orderSteps } from '../model/steps.ts';
 import { cooldownMinutes, errorKey, errorText, useApp, useT } from './app-context.tsx';
@@ -485,7 +486,12 @@ export function OrderView({
         </div>
       </Body>
       {phase ? (
-        <SlipProgressPopup phase={phase} orderNo={order.orderNo} onClose={closeSlipProgress} />
+        <SlipProgressPopup
+          phase={phase}
+          orderNo={order.orderNo}
+          slowHint={slipSlowHintShown(Math.max(0, now - (slipProgress ?? now)), phase)}
+          onClose={closeSlipProgress}
+        />
       ) : null}
       {paidPopup && !phase ? (
         <PaidPopup orderNo={order.orderNo} onClose={() => setPaidPopup(false)} />
@@ -567,10 +573,13 @@ export function PaidPopup({ orderNo, onClose }: { orderNo: string; onClose: () =
 export function SlipProgressPopup({
   phase,
   orderNo,
+  slowHint = false,
   onClose,
 }: {
   phase: SlipProgressPhase;
   orderNo: string;
+  /** Adds the "may take about a minute" line; the caller decides when (checking phase only). */
+  slowHint?: boolean;
   onClose: () => void;
 }) {
   const tr = useT();
@@ -618,6 +627,11 @@ export function SlipProgressPopup({
             <p className="g-t-3" style={s('margin:0')}>
               {tr('liff.slipProgress.hint')}
             </p>
+            {slowHint && phase === 'checking' ? (
+              <p id="slip-progress-slow" className="g-t-c" style={s('margin:0')}>
+                {tr('liff.slipProgress.slowHint')}
+              </p>
+            ) : null}
           </>
         )}
       </div>

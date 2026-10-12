@@ -1725,6 +1725,8 @@ export const en = {
   'liff.paidPopup.order': 'Order {orderNo}',
   'liff.slipProgress.title': 'Checking your slip…',
   'liff.slipProgress.hint': 'One moment. You can close this; the check carries on.',
+  'liff.slipProgress.slowHint':
+    'Some banks are slow to update; this can take about a minute. You can close this: it will confirm by itself.',
   'liff.slipProgress.label': 'Checking your slip',
   'liff.slipProgress.staffTitle': 'Slip received. The shop is checking it.',
   'liff.slipProgress.staffBody': 'You can close this. The status updates on the order page.',

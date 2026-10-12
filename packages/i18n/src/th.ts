@@ -1575,6 +1575,8 @@ export const th = {
   'liff.paidPopup.order': 'ออเดอร์ {orderNo}',
   'liff.slipProgress.title': 'กำลังตรวจสอบสลิป…',
   'liff.slipProgress.hint': 'รอสักครู่ ปิดหน้านี้ได้ ระบบยังตรวจต่อให้',
+  'liff.slipProgress.slowHint':
+    'บางธนาคารอัปเดตช้า การตรวจอาจใช้เวลาประมาณ 1 นาที ปิดหน้านี้ได้ ระบบจะยืนยันให้เอง',
   'liff.slipProgress.label': 'กำลังตรวจสอบสลิป',
   'liff.slipProgress.staffTitle': 'ได้รับสลิปแล้ว ร้านกำลังตรวจสอบ',
   'liff.slipProgress.staffBody': 'ปิดหน้านี้ได้เลย สถานะจะอัปเดตในหน้าออเดอร์',
