@@ -92,7 +92,7 @@ if (config.slipOcr || verifier) {
             verifier,
             dailyCap: config.slipVerifier.dailyCap,
             autoConfirm: config.slipAutoconfirm,
-            firstCallDelayMs: 5000,
+            firstCallDelayMs: 10_000,
           }
         : {}),
       log: app.log,

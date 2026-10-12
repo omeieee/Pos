@@ -7,6 +7,7 @@ import {
   extractSlipRef,
   inSlipNotFoundGrace,
   isInvalidSlipVerdict,
+  SLIP_GRACE_RETRY_DELAYS_MS,
   SLIP_NOT_FOUND_GRACE_MAX_CALLS,
   SLIP_NOT_FOUND_GRACE_SECONDS,
   type SlipCheck,
@@ -181,6 +182,11 @@ export function createSlipChecker(args: {
   notFoundGraceSeconds?: number;
   /** Wait this long after an upload before the first bank call (the bank may not know a fresh transfer yet). 0 = at once. */
   firstCallDelayMs?: number;
+  /**
+   * Waits between the grace calls of a "not found" (default SLIP_GRACE_RETRY_DELAYS_MS): an in-process
+   * timer fires each next call. Empty: no timers, the minute sweep drives the retries alone.
+   */
+  graceRetryDelaysMs?: readonly number[];
   /** Counts and ids only: never the text. */
   log?: { warn(obj: Record<string, unknown>, msg: string): void };
 }): SlipChecker {
@@ -198,6 +204,11 @@ export function createSlipChecker(args: {
   const manual = new Map<string, VerdictSnapshot>();
   /** Per picture: the earliest time of the next grace retry (this process only; a restart just retries sooner). */
   const retryNotBefore = new Map<string, number>();
+  /** Payments with a grace retry timer pending: the sweep leaves them to it. */
+  const retryTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  /** Payments whose timer just fired: that read skips the sweep's gap rule. */
+  const timerDue = new Set<string>();
+  const retryDelays = args.graceRetryDelaysMs ?? SLIP_GRACE_RETRY_DELAYS_MS;
   let tail: Promise<void> = Promise.resolve();
 
   async function readOcr(bytes: Buffer, expected: number): Promise<NonNullable<Evaluated['ocr']>> {
@@ -423,13 +434,17 @@ export function createSlipChecker(args: {
     const hash = row.slipImageHash;
     // A "not found" that is still inside the grace window waits its turn: the sweep comes by again.
     const gate = `${paymentId}:${hash}`;
+    const timerFired = timerDue.delete(paymentId);
     if (
       wantVerify &&
+      !timerFired &&
       !manual.has(paymentId) &&
       (retryNotBefore.get(gate) ?? 0) > ctx.now().getTime()
     )
       return;
     const done = await evaluate(row, key, wantOcr, wantVerify);
+    /** Set inside the transaction, acted on after it commits. */
+    let nextRetryMs: number | null = null;
     await withTransaction(ctx, async (tx, emit) => {
       // Lock order, always: the order row, then the payment (see `payments/service.ts`).
       const order = await ordersRepo.lockOrderById(tx, row.orderId);
@@ -493,6 +508,9 @@ export function createSlipChecker(args: {
             retryNotBefore.set(gate, ctx.now().getTime() + NOT_FOUND_RETRY_GAP_MS);
             // The mark that this picture is in its grace budget; it stays pending.
             patch.slipVerifyCode = NOT_FOUND_CODE;
+            // The next call comes after the delay for this many calls made (the last delay repeats).
+            nextRetryMs =
+              retryDelays[Math.min(locked.slipVerifyAttempts, retryDelays.length) - 1] ?? null;
           }
           if (
             previous ||
@@ -612,6 +630,25 @@ export function createSlipChecker(args: {
         });
       }
     });
+    if (nextRetryMs !== null) armRetry(paymentId, nextRetryMs);
+  }
+
+  /** The next grace call, by timer (after commit). The same guard as `enqueue`: a busy payment reads again after. */
+  function armRetry(paymentId: string, delayMs: number): void {
+    clearRetry(paymentId);
+    const timer = setTimeout(() => {
+      retryTimers.delete(paymentId);
+      timerDue.add(paymentId);
+      start(paymentId);
+    }, delayMs);
+    timer.unref();
+    retryTimers.set(paymentId, timer);
+  }
+  function clearRetry(paymentId: string): void {
+    const timer = retryTimers.get(paymentId);
+    if (timer) clearTimeout(timer);
+    retryTimers.delete(paymentId);
+    timerDue.delete(paymentId);
   }
 
   function schedule(paymentId: string): Promise<void> {
@@ -641,6 +678,8 @@ export function createSlipChecker(args: {
   return {
     wants: { ocr: Boolean(ocr), verify: Boolean(verifier) },
     enqueue(paymentId) {
+      // A new upload starts its own cycle: the old picture's timer must not call for it.
+      clearRetry(paymentId);
       if (waiting.has(paymentId)) again.add(paymentId);
       else if (hold > 0) {
         // A restart inside the hold loses the timer; the minute sweep then picks the row up (it
@@ -657,7 +696,7 @@ export function createSlipChecker(args: {
           // A row inside the first-call hold belongs to its timer.
           new Date(ctx.now().getTime() - hold),
         )
-      ).filter((id) => !waiting.has(id));
+      ).filter((id) => !waiting.has(id) && !retryTimers.has(id));
       await Promise.all(ids.map(schedule));
       return ids.length;
     },
