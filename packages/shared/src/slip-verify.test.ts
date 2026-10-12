@@ -323,7 +323,7 @@ describe('the not-found grace window', () => {
   const at = (seconds: number) => new Date(up.getTime() + seconds * 1000);
   test('is 300 seconds, open before the end and closed at it, with its own budget of 6 calls', () => {
     expect(SLIP_NOT_FOUND_GRACE_SECONDS).toBe(300);
-    expect(SLIP_NOT_FOUND_GRACE_MAX_CALLS).toBe(6);
+    expect(SLIP_NOT_FOUND_GRACE_MAX_CALLS).toBe(8);
     expect(inSlipNotFoundGrace(up, at(0))).toBe(true);
     expect(inSlipNotFoundGrace(up, at(299))).toBe(true);
     expect(inSlipNotFoundGrace(up, at(300))).toBe(false);
@@ -334,7 +334,7 @@ describe('the not-found grace window', () => {
       (acc, d) => [...acc, (acc[acc.length - 1] ?? 10_000) + d],
       [10_000],
     );
-    expect(times.map((t) => t / 1000)).toEqual([10, 25, 50, 85, 145, 225]);
+    expect(times.map((t) => t / 1000)).toEqual([10, 13, 16, 21, 29, 49, 94, 184]);
     expect(inSlipNotFoundGrace(up, at((times[times.length - 1] ?? 0) / 1000))).toBe(true);
   });
   test('an unknown upload time, or a window of 0, is never in grace', () => {

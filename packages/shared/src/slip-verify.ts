@@ -194,16 +194,16 @@ export const SLIP_NOT_FOUND_GRACE_SECONDS = 300;
  * Calls in all that one picture may have while its answer is "not found" inside the window. This
  * budget is separate from the 3 attempts a slip gets when the service or bank errors out.
  */
-export const SLIP_NOT_FOUND_GRACE_MAX_CALLS = 6;
+export const SLIP_NOT_FOUND_GRACE_MAX_CALLS = 8;
 
 /**
  * Waits between the calls of the not-found grace budget, front-loaded: a timer fires the next call
- * this long after the previous one (the first call comes after the 10 s hold). Calls land about 10,
- * 25, 50, 85, 145 and 225 s after the upload: 6 calls, the last well before the window closes. One
+ * this long after the previous one (the first call comes after the 10 s hold). The wait counts from the end of the previous call (a not-found answer takes 3 to 6 s), so calls start about 10,
+ * 19, 26, 35, 47, 70, 119 and 213 s after the upload: tight at first, because most banks catch up within a minute; 8 calls, the last well before the window closes. One
  * entry fewer than SLIP_NOT_FOUND_GRACE_MAX_CALLS. The minute sweep is the fallback after a restart.
  */
 export const SLIP_GRACE_RETRY_DELAYS_MS: readonly number[] = [
-  15_000, 25_000, 35_000, 60_000, 80_000,
+  3_000, 3_000, 5_000, 8_000, 20_000, 45_000, 90_000,
 ];
 
 /** A re-send of the same picture is a fresh check only this many seconds after the last call. */

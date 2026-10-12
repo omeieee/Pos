@@ -2582,18 +2582,18 @@ describe('a slow bank: "not found" inside the grace window is not final', () => 
     expect(calls).toHaveLength(4);
   });
 
-  test('6 calls inside the window use the grace budget up: the last 404 is final, counted once', async () => {
+  test('8 calls inside the window use the grace budget up: the last 404 is final, counted once', async () => {
     const { order } = await sendAt404();
     for (let i = 0; i < 12; i++) {
       h.clock.advanceSeconds(30);
       await checker.sweep();
       await checker.idle();
     }
-    expect(calls).toHaveLength(6);
+    expect(calls).toHaveLength(8);
     expect((await payments(order.id))[0]).toMatchObject({
       slip_verify: 'not_found',
       slip_invalid_count: 1,
-      slip_verify_attempts: 6,
+      slip_verify_attempts: 8,
     });
   });
 
@@ -2627,7 +2627,7 @@ describe('a slow bank: "not found" inside the grace window is not final', () => 
     });
   });
 
-  test('errors inside the grace budget are bounded by its 6 calls and settle as unchecked', async () => {
+  test('errors inside the grace budget are bounded by its 8 calls and settle as unchecked', async () => {
     const { order } = await sendAt404();
     respond = () => new Error('connection reset');
     for (let i = 0; i < 10; i++) {
@@ -2635,10 +2635,10 @@ describe('a slow bank: "not found" inside the grace window is not final', () => 
       await checker.sweep();
       await checker.idle();
     }
-    expect(calls).toHaveLength(6);
+    expect(calls).toHaveLength(8);
     expect(await row(order.id)).toMatchObject({
       slip_verify: 'unchecked',
-      slip_verify_attempts: 6,
+      slip_verify_attempts: 8,
     });
   });
 
@@ -2898,7 +2898,7 @@ describe('grace retries ride their own timers (front-loaded), the sweep is only 
   beforeEach(() => {
     graceSeconds = 300;
     dailyCap = 10_000;
-    graceDelays = [40, 40, 40, 40, 40];
+    graceDelays = [40, 40, 40, 40, 40, 40, 40];
     checker = buildChecker();
     installSlipChecker(checker);
   });
@@ -2926,17 +2926,17 @@ describe('grace retries ride their own timers (front-loaded), the sweep is only 
     expect((await payments(placed.order.id))[0]?.slip_invalid_count).toBe(0);
   });
 
-  test('calls never exceed 6; the last 404 is final, counted once', async () => {
+  test('calls never exceed 8; the last 404 is final, counted once', async () => {
     const { order } = await sendAt404();
-    await waitFor(() => calls.length === 6);
+    await waitFor(() => calls.length === 8);
     await checker.idle();
     await sleep(200);
     await checker.idle();
-    expect(calls).toHaveLength(6);
+    expect(calls).toHaveLength(8);
     expect((await payments(order.id))[0]).toMatchObject({
       slip_verify: 'not_found',
       slip_invalid_count: 1,
-      slip_verify_attempts: 6,
+      slip_verify_attempts: 8,
     });
   });
 
