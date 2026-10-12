@@ -292,7 +292,7 @@ describe('findOtherSlipUse (the strict duplicate rule of an automatic confirmati
     expect(await repo.findOtherSlipUse(db, later)).toMatchObject({ status: 'claimed' });
   });
 
-  test('matches by image, reference or QR key; ignores itself, other keys and rejected payments', async () => {
+  test('matches by image, reference or QR key; ignores itself and other keys', async () => {
     const byImage = await claimedPayment(null, { slipImageHash: 'img-1' });
     const byRef = await claimedPayment(null, { slipRefHash: 'ref-1' });
     expect(await repo.findOtherSlipUse(db, byImage)).toBeUndefined();
@@ -303,13 +303,44 @@ describe('findOtherSlipUse (the strict duplicate rule of an automatic confirmati
     expect(await repo.findOtherSlipUse(db, byRef)).toBeDefined();
     const loner = await claimedPayment(null, { slipQrHash: 'qr-unique' });
     expect(await repo.findOtherSlipUse(db, loner)).toBeUndefined();
-    const cancelled = await claimedPayment(null, { slipQrHash: 'qr-cancelled' });
-    const other = await claimedPayment(null, { slipQrHash: 'qr-cancelled' });
-    await repo.updatePaymentIfVersion(db, other.id, other.version, { status: 'cancelled' });
-    expect(await repo.findOtherSlipUse(db, cancelled)).toBeUndefined();
     expect(
       await repo.findOtherSlipUse(db, { ...loner, slipQrHash: null, slipImageHash: null }),
     ).toBeUndefined();
+  });
+});
+
+// Voided and refunded rows need a staff member (a table constraint): the route tests cover them.
+describe('findOtherSlipUse counts a payment in ANY status (D-27)', () => {
+  const keys = [
+    { slipImageHash: 'img-any' },
+    { slipRefHash: 'ref-any' },
+    { slipQrHash: 'qr-any' },
+  ] as const;
+  for (const status of ['cancelled'] as const) {
+    test.each(keys)(`a ${status} payment with the same key %o still blocks`, async (key) => {
+      const mine = await claimedPayment(null, key);
+      const other = await claimedPayment(null, key);
+      await repo.updatePaymentIfVersion(db, other.id, other.version, { status });
+      expect(await repo.findOtherSlipUse(db, mine)).toMatchObject({ status });
+      // The staff hint keeps its narrower rule: rejected payments do not look "used".
+      expect(await repo.findEarlierSlipUse(db, mine)).toBeUndefined();
+    });
+  }
+});
+
+describe('bumpSlipVerifyAttempts', () => {
+  test('counts an attempt on a pending row only, for that picture', async () => {
+    const row = await claimedPayment(null, {
+      slipVerify: 'pending',
+      slipImageHash: 'img-attempt',
+    });
+    expect(await repo.bumpSlipVerifyAttempts(db, row.id, 'img-attempt')).toBe(1);
+    expect(await repo.bumpSlipVerifyAttempts(db, row.id, 'img-attempt')).toBe(2);
+    expect(await repo.bumpSlipVerifyAttempts(db, row.id, 'another')).toBeNull();
+    const after = await repo.findPaymentById(db, row.id);
+    expect(after).toMatchObject({ slipVerifyAttempts: 2 });
+    await repo.updatePaymentIfVersion(db, row.id, after?.version ?? 0, { slipVerify: 'valid' });
+    expect(await repo.bumpSlipVerifyAttempts(db, row.id, 'img-attempt')).toBeNull();
   });
 });
 

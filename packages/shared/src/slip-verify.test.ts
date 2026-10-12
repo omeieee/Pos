@@ -1,11 +1,15 @@
 import { describe, expect, test } from 'vitest';
+import { parseSlipQr } from './slip-qr.ts';
 import {
   SLIP_VERIFY_VERDICTS,
+  SLIP2GO_AUTOCONFIRM_ACCOUNT_TYPES,
   satangToSlip2goAmount,
   slip2goAmountToSatang,
+  slip2goAutoConfirmReceivers,
   slip2goReceivers,
   slip2goResponseSchema,
   slip2goVerdict,
+  slipQrKeyText,
 } from './slip-verify.ts';
 
 describe('amount converters', () => {
@@ -137,15 +141,15 @@ describe('slip2goVerdict', () => {
     }
   });
 
-  test('401004 to 401007 alert the owner; other 4xxxxx just fall back', () => {
-    for (const code of ['401004', '401005', '401006', '401007']) {
+  test('401001 to 401007 alert the owner; other 4xxxxx just fall back', () => {
+    for (const code of ['401001', '401002', '401003', '401004', '401005', '401006', '401007']) {
       expect(slip2goVerdict(code, null)).toEqual({
         verdict: 'unchecked',
         retry: false,
         alert: true,
       });
     }
-    for (const code of ['401001', '401002', '401003', '400400', '400001']) {
+    for (const code of ['400400', '400001']) {
       expect(slip2goVerdict(code, null)).toEqual({
         verdict: 'unchecked',
         retry: false,
@@ -198,5 +202,64 @@ describe('slip2goResponseSchema', () => {
   test('a response with no data is fine, and a missing code is not', () => {
     expect(slip2goResponseSchema.parse({ code: '401004', message: 'x' }).data).toBeUndefined();
     expect(slip2goResponseSchema.safeParse({ message: 'x' }).success).toBe(false);
+  });
+});
+
+describe('auto-confirm receivers (D-27)', () => {
+  test('only the PromptPay phone form is on the list', () => {
+    expect(SLIP2GO_AUTOCONFIRM_ACCOUNT_TYPES).toEqual(['02001']);
+  });
+
+  test('a phone PromptPay ID alone may be auto-confirmed', () => {
+    expect(slip2goAutoConfirmReceivers(slip2goReceivers('0899994321', null))).toBe(true);
+  });
+
+  test('a 13-digit ID, a 15-digit ID or a bank account may not', () => {
+    expect(slip2goAutoConfirmReceivers(slip2goReceivers('1234567890123', null))).toBe(false);
+    expect(slip2goAutoConfirmReceivers(slip2goReceivers('123456789012345', null))).toBe(false);
+    const bank = { bankCode: '014', accountNumber: '1234567890' };
+    expect(slip2goAutoConfirmReceivers(slip2goReceivers(null, bank))).toBe(false);
+  });
+
+  test('a phone plus a bank account may not: Slip2Go does not say which one matched', () => {
+    const bank = { bankCode: '014', accountNumber: '1234567890' };
+    expect(slip2goAutoConfirmReceivers(slip2goReceivers('0899994321', bank))).toBe(false);
+  });
+
+  test('no receiver at all is never allowed', () => {
+    expect(slip2goAutoConfirmReceivers([])).toBe(false);
+  });
+});
+
+describe('the duplicate key meets from both sides (D-27)', () => {
+  const tlv = (tag: string, value: string) => `${tag}${String(value.length).padStart(2, '0')}${value}`;
+  // Synthetic values only: bank 002, an invented reference.
+  const qrFor = (bank: string, ref: string) =>
+    tlv('00', '000001') + tlv('01', bank) + tlv('02', ref);
+  const raw = (bank: string, ref: string) => tlv('00', '01') + tlv('62', qrFor(bank, ref));
+
+  test('the local QR reference and Slip2Go transRef give the same key for equal inputs', () => {
+    const local = parseSlipQr(raw('002', 'SYN0123456789ABCDEF'));
+    expect(local).not.toBeNull();
+    const localKey = slipQrKeyText(local?.sendingBank ?? '', local?.transRef ?? '');
+    // Slip2Go may spell the same reference in lower case or with hyphens.
+    expect(slipQrKeyText('002', 'syn0123-456789-abcdef')).toBe(localKey);
+    expect(localKey).toBe('002:SYN0123456789ABCDEF');
+  });
+
+  test('another bank or another reference is another key', () => {
+    expect(slipQrKeyText('014', 'SYN0123456789ABCDEF')).not.toBe(
+      slipQrKeyText('002', 'SYN0123456789ABCDEF'),
+    );
+    expect(slipQrKeyText('002', 'SYN0123456789ABCDEG')).not.toBe(
+      slipQrKeyText('002', 'SYN0123456789ABCDEF'),
+    );
+  });
+
+  test('no key without a 3-digit bank or a reference that looks like one', () => {
+    expect(slipQrKeyText('02', 'SYN0123456789ABCDEF')).toBeNull();
+    expect(slipQrKeyText('0021', 'SYN0123456789ABCDEF')).toBeNull();
+    expect(slipQrKeyText('abc', 'SYN0123456789ABCDEF')).toBeNull();
+    expect(slipQrKeyText('002', 'short')).toBeNull();
   });
 });

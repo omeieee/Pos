@@ -300,10 +300,13 @@ export async function findEarlierSlipUse(
 }
 
 /**
- * ANY other payment that holds the same slip picture, bank reference or QR reference, whenever it
- * was claimed (D-27). `findEarlierSlipUse` only looks backwards in time, which is right for a hint
+ * ANY other payment, in ANY status (cancelled and voided included), that holds the same slip
+ * picture, bank reference or QR reference, whenever it was claimed (D-27). `findEarlierSlipUse` only looks backwards in time, which is right for a hint
  * to staff but not for an automatic confirmation: the key from Slip2Go arrives at check time, so
  * the checks of two photos of one transfer can run in either order, and each must see the other.
+ * A rejected or taken-back payment counts too: a cancelled claim or a voided confirmation may be
+ * a transfer that was faked or reused, so the same slip must go to staff, never to the machine.
+ * (`SLIP_USED_STATUSES` stays for the staff hint above.)
  */
 export async function findOtherSlipUse(
   db: Db,
@@ -318,11 +321,36 @@ export async function findOtherSlipUse(
   const [row] = await db
     .select({ status: payments.status })
     .from(payments)
-    .where(
-      and(ne(payments.id, payment.id), inArray(payments.status, SLIP_USED_STATUSES), or(...same)),
-    )
+    .where(and(ne(payments.id, payment.id), or(...same)))
     .limit(1);
   return row ? { status: row.status as PaymentStatus } : undefined;
+}
+
+/**
+ * Counts one call to Slip2Go on this payment's still-pending bank check of this picture, and
+ * returns the new count (null when the row no longer waits for that picture). It is written
+ * BEFORE the call and on its own, so a failed commit afterwards cannot make the same slip be sent
+ * again for ever. The sync trigger bumps `rev` and `version` as for any write; no event is sent for
+ * it (the checker's own commit sends the next one).
+ */
+export async function bumpSlipVerifyAttempts(
+  db: Db,
+  id: string,
+  slipImageHash: string | null,
+): Promise<number | null> {
+  if (slipImageHash === null) return null;
+  const [row] = await db
+    .update(payments)
+    .set({ slipVerifyAttempts: sql`${payments.slipVerifyAttempts} + 1` })
+    .where(
+      and(
+        eq(payments.id, id),
+        eq(payments.slipVerify, 'pending'),
+        eq(payments.slipImageHash, slipImageHash),
+      ),
+    )
+    .returning({ n: payments.slipVerifyAttempts });
+  return row ? row.n : null;
 }
 
 // ---------- Partial refunds (D-25) ----------

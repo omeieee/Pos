@@ -10,6 +10,7 @@
  */
 import { z } from 'zod';
 import { type Satang, satang } from './money.ts';
+import { normaliseSlipRef } from './slip-ref.ts';
 
 /** Where the bank check of a slip stands. Null on a payment without a slip (or with the verifier off). */
 export const SLIP_VERIFY_VERDICTS = [
@@ -83,6 +84,38 @@ export function slip2goReceivers(
   return out;
 }
 
+/**
+ * The receiver types for which an automatic confirmation is allowed (D-27): only the PromptPay
+ * phone number (`02001`, 10 digits), the one form proven live. The 13-digit ID (`02003`), the
+ * 15-digit e-wallet (`02004`) and bank accounts still get the call and the verdict, but staff tick.
+ * This list grows only after a live probe shows that Slip2Go matches that form correctly.
+ */
+export const SLIP2GO_AUTOCONFIRM_ACCOUNT_TYPES: readonly string[] = ['02001'];
+
+/**
+ * Whether every receiver sent to Slip2Go is one that may be auto-confirmed. "Every", not "any":
+ * Slip2Go passes on a match with any one entry and does not say which, so a single entry outside
+ * the list could be the one that matched. Empty is never allowed.
+ */
+export function slip2goAutoConfirmReceivers(receivers: readonly Slip2goReceiver[]): boolean {
+  return (
+    receivers.length > 0 &&
+    receivers.every((r) => SLIP2GO_AUTOCONFIRM_ACCOUNT_TYPES.includes(r.accountType))
+  );
+}
+
+/**
+ * The duplicate key of a transfer as text: `<3-digit sending bank>:<reference>`, the reference
+ * normalised (upper case, no hyphens). The local QR decode and Slip2Go's answer both go through it,
+ * so the same transfer gives the same key from either side. Null when the bank is not 3 digits or
+ * the reference does not look like one.
+ */
+export function slipQrKeyText(bank: string, ref: string): string | null {
+  if (!/^\d{3}$/.test(bank)) return null;
+  const normalised = normaliseSlipRef(ref);
+  return normalised ? `${bank}:${normalised}` : null;
+}
+
 export interface Slip2goVerdict {
   verdict: SlipVerifyResult;
   /** Try again later (bank error, rate limit, server error). */
@@ -118,6 +151,9 @@ export function slip2goVerdict(code: string, localAmountOk: boolean | null): Sli
     case '200502':
     case '429000':
       return verdictOf('unchecked', { retry: true });
+    case '401001':
+    case '401002':
+    case '401003':
     case '401004':
     case '401005':
     case '401006':
