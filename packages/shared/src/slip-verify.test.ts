@@ -232,7 +232,8 @@ describe('auto-confirm receivers (D-27)', () => {
 });
 
 describe('the duplicate key meets from both sides (D-27)', () => {
-  const tlv = (tag: string, value: string) => `${tag}${String(value.length).padStart(2, '0')}${value}`;
+  const tlv = (tag: string, value: string) =>
+    `${tag}${String(value.length).padStart(2, '0')}${value}`;
   // Synthetic values only: bank 002, an invented reference.
   const qrFor = (bank: string, ref: string) =>
     tlv('00', '000001') + tlv('01', bank) + tlv('02', ref);
