@@ -36,6 +36,15 @@ services:
       SLIP_OCR_LANG: ${SLIP_OCR_LANG:-}
       SLIP_OCR_TIMEOUT_MS: ${SLIP_OCR_TIMEOUT_MS:-}
       SLIP_QR: ${SLIP_QR:-}
+      # Slip2Go bank check of slips (D-27). The key lives only in the VM .env; empty = off.
+      SLIP_VERIFIER: ${SLIP_VERIFIER:-}
+      SLIP2GO_SECRET_KEY: ${SLIP2GO_SECRET_KEY:-}
+      SLIP2GO_BASE_URL: ${SLIP2GO_BASE_URL:-}
+      SLIP2GO_TIMEOUT_MS: ${SLIP2GO_TIMEOUT_MS:-}
+      SLIP2GO_DAILY_CAP: ${SLIP2GO_DAILY_CAP:-}
+      SLIP_AUTOCONFIRM: ${SLIP_AUTOCONFIRM:-}
+      SLIP_AUTOCONFIRM_MAX_SATANG: ${SLIP_AUTOCONFIRM_MAX_SATANG:-}
+
       GIT_SHA: ${GIT_SHA:-unknown}
     # Slip images (D-24) live on the VM disk in a named volume, so a redeploy keeps them.
     volumes:
