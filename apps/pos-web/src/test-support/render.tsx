@@ -144,6 +144,9 @@ export function createFakeApi(
     ),
     qrUrl: vi.fn<Payments['qrUrl']>(overrides.payments?.qrUrl ?? unexpected('payments.qrUrl')),
     slip: vi.fn<Payments['slip']>(overrides.payments?.slip ?? unexpected('payments.slip')),
+    slipRecheck: vi.fn<Payments['slipRecheck']>(
+      overrides.payments?.slipRecheck ?? unexpected('payments.slipRecheck'),
+    ),
   };
   // The keepalive of a kitchen display calls this; it answers like a live session.
   const auth = { me: vi.fn(async () => ({}) as never) };

@@ -1,11 +1,23 @@
-import { formatBaht } from '@sds/i18n';
-import type { PaymentStatus, SlipCheck, SlipRecipientCheck, SlipVerifyVerdict } from '@sds/shared';
+import { formatBaht, type MessageKey } from '@sds/i18n';
+import type {
+  OrderPaymentsResponse,
+  PaymentStatus,
+  SlipCheck,
+  SlipRecipientCheck,
+  SlipVerifyVerdict,
+} from '@sds/shared';
 import { useEffect, useState } from 'react';
 import { Gi } from '../design/icons.tsx';
 import { s } from '../design/style.ts';
 import { useLocale, useServices, useT } from '../ui/hooks.ts';
 import { Callout } from './PayParts.tsx';
-import type { SlipFacts } from './slip-gate.ts';
+import {
+  canRecheckSlip,
+  recheckErrorKey,
+  type SlipFacts,
+  showNoSlipFlag,
+  slipIsBankMatched,
+} from './slip-gate.ts';
 
 const CHIP_TONE: Record<SlipCheck, string> = {
   match: 'g-b-ok',
@@ -55,6 +67,7 @@ export function SlipView({
   paymentId,
   rev,
   amountSatang,
+  status = 'claimed',
   onCheck,
   quiet = false,
 }: {
@@ -63,6 +76,8 @@ export function SlipView({
   rev: number;
   /** What this payment charges, to put beside the amount read from the slip. */
   amountSatang: number;
+  /** The payment's status: the re-check is offered only while it is claimed. */
+  status?: PaymentStatus;
   /**
    * Tells the payment screen what is known about the slip (whether there is one, the amount and
    * receiver readings, whether it was used before), so it can ask for the "I checked the bank app"
@@ -89,6 +104,56 @@ export function SlipView({
   const [known, setKnown] = useState<'checking' | 'has' | 'missing' | 'unknown'>('checking');
   const [phase, setPhase] = useState<'idle' | 'loading' | 'none' | 'failed'>('idle');
   const [url, setUrl] = useState<string | null>(null);
+  const [noSlipClaim, setNoSlipClaim] = useState(false);
+  const [facts, setFacts] = useState<SlipFacts | null>(null);
+  const [recheck, setRecheck] = useState<{ busy: boolean; error: MessageKey | null }>({
+    busy: false,
+    error: null,
+  });
+
+  /** Takes in a payment list answer: the list itself, or the answer of a re-check. */
+  function apply(answer: OrderPaymentsResponse) {
+    const has = answer.slipPaymentIds?.includes(paymentId) === true;
+    setKnown(has ? 'has' : 'missing');
+    setNoSlipClaim(!has && showNoSlipFlag(paymentId, answer.claimedWithoutSlipPaymentIds));
+    const found = has ? answer.slipChecks?.find((c) => c.paymentId === paymentId) : undefined;
+    setHint(
+      found
+        ? {
+            check: found.check ?? null,
+            verdict: found.verify?.verdict ?? null,
+            amountSatang: found.amountSatang ?? null,
+            qrFound: found.qrFound,
+            recipient: found.recipientCheck,
+          }
+        : null,
+    );
+    const used = has ? answer.slipDuplicates?.find((d) => d.paymentId === paymentId) : undefined;
+    setDuplicate(
+      used
+        ? { orderNo: used.orderNo, paymentStatus: used.paymentStatus, matchedBy: used.matchedBy }
+        : null,
+    );
+    const next: SlipFacts = {
+      hasSlip: has,
+      check: found?.check ?? null,
+      verdict: found?.verify?.verdict ?? null,
+      recipient: found?.recipientCheck ?? null,
+      duplicate: used !== undefined,
+    };
+    setFacts(next);
+    onCheck?.(next);
+  }
+
+  async function runRecheck() {
+    setRecheck({ busy: true, error: null });
+    try {
+      apply(await api.payments.slipRecheck(paymentId));
+      setRecheck({ busy: false, error: null });
+    } catch (error) {
+      setRecheck({ busy: false, error: recheckErrorKey((error as { code?: string }).code) });
+    }
+  }
 
   // `rev` is a dependency on purpose: a new revision of the payment may mean a slip arrived.
   // biome-ignore lint/correctness/useExhaustiveDependencies: see above
@@ -97,40 +162,7 @@ export function SlipView({
     api.payments
       .list(orderId)
       .then((answer) => {
-        if (!live) return;
-        const has = answer.slipPaymentIds?.includes(paymentId) === true;
-        setKnown(has ? 'has' : 'missing');
-        const found = has ? answer.slipChecks?.find((c) => c.paymentId === paymentId) : undefined;
-        setHint(
-          found
-            ? {
-                check: found.check ?? null,
-                verdict: found.verify?.verdict ?? null,
-                amountSatang: found.amountSatang ?? null,
-                qrFound: found.qrFound,
-                recipient: found.recipientCheck,
-              }
-            : null,
-        );
-        const used = has
-          ? answer.slipDuplicates?.find((d) => d.paymentId === paymentId)
-          : undefined;
-        setDuplicate(
-          used
-            ? {
-                orderNo: used.orderNo,
-                paymentStatus: used.paymentStatus,
-                matchedBy: used.matchedBy,
-              }
-            : null,
-        );
-        onCheck?.({
-          hasSlip: has,
-          check: found?.check ?? null,
-          verdict: found?.verify?.verdict ?? null,
-          recipient: found?.recipientCheck ?? null,
-          duplicate: used !== undefined,
-        });
+        if (live) apply(answer);
       })
       .catch(() => {
         if (!live) return;
@@ -162,9 +194,18 @@ export function SlipView({
   if (known === 'missing') {
     if (quiet) return null;
     return (
-      <p className="g-t-c" role="status" data-testid="slip-missing" style={s('margin:0')}>
-        {tr('payment.slip.missing')}
-      </p>
+      <div style={s('display:flex;flex-direction:column;gap:8px')}>
+        {noSlipClaim ? (
+          <div data-testid="no-slip-flag">
+            <Callout tone="warn" role="alert">
+              <span style={s('display:block;font-weight:700')}>{tr('pos.slipFlag.noSlip')}</span>
+            </Callout>
+          </div>
+        ) : null}
+        <p className="g-t-c" role="status" data-testid="slip-missing" style={s('margin:0')}>
+          {tr('payment.slip.missing')}
+        </p>
+      </div>
     );
   }
 
@@ -231,7 +272,41 @@ export function SlipView({
           </Callout>
         </div>
       ) : null}
+      {known === 'has' && facts && slipIsBankMatched(facts) && !quiet ? (
+        <p
+          className="g-badge g-b-ok"
+          data-testid="slip-matched"
+          role="status"
+          style={s('margin:0;font-weight:700;align-self:flex-start')}
+        >
+          {tr('pos.slipMatched.title')}
+        </p>
+      ) : null}
       {known === 'has' && hint?.verdict && !quiet ? <VerifyBanner verdict={hint.verdict} /> : null}
+      {known === 'has' && facts && !quiet && canRecheckSlip(status, facts) ? (
+        <div style={s('display:flex;flex-direction:column;gap:6px')}>
+          <button
+            type="button"
+            className="g-btn g-btn-sm"
+            data-testid="slip-recheck"
+            disabled={recheck.busy}
+            aria-busy={recheck.busy}
+            onClick={() => void runRecheck()}
+          >
+            {tr(recheck.busy ? 'pos.slipRecheck.busy' : 'pos.slipRecheck.button')}
+          </button>
+          {recheck.error ? (
+            <p
+              className="g-t-c"
+              role="alert"
+              data-testid="slip-recheck-error"
+              style={s('margin:0')}
+            >
+              {tr(recheck.error)}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
       {known === 'has' && hint?.recipient === 'mismatch' && !quiet ? (
         <div data-testid="slip-recipient" data-recipient="mismatch">
           <Callout tone="bad" role="alert">
