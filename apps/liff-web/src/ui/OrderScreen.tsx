@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Gi, type GiName } from '../design/icons.tsx';
 import { s } from '../design/style.ts';
 import { telHref } from '../model/contact.ts';
+import { markPaidPopupSeen, paidPopupSeen, shouldShowPaidPopup } from '../model/paid-popup.ts';
 import { nextPollDelayMs } from '../model/poll.ts';
 import { browserSaveEnv, qrFileName, saveQrImage, toPng } from '../model/qr-save.ts';
 import { canDownloadReceipt, receiptFileName, receiptHtml } from '../model/receipt.ts';
@@ -40,6 +41,12 @@ const STATUS_BADGE: Record<MyOrder['status'], { tone: string; icon: GiName }> = 
   ready: { tone: 'g-b-ok', icon: 'check' },
   completed: { tone: 'g-b-mute', icon: 'check' },
   cancelled: { tone: 'g-b-bad', icon: 'x' },
+};
+/** One neutral line per stage; every result that is not a success shows the same words. */
+const SLIP_CHECK_KEY: Record<NonNullable<MyOrder['slipCheck']>, MessageKey> = {
+  none: 'liff.slipStatus.none',
+  checking: 'liff.slipStatus.checking',
+  staff_review: 'liff.slipStatus.staffReview',
 };
 const STEP_KEY: MessageKey[] = [
   'liff.order.step.ordered',
@@ -154,6 +161,19 @@ export function OrderView({
   /** Counts the slips sent in this visit, so a picture on show is dropped when it is replaced. */
   const [slipStamp, setSlipStamp] = useState(0);
   const tel = telHref(shopPhone);
+  const [paidPopup, setPaidPopup] = useState(false);
+  /** The payment status this page saw last. Starts as the first load, so a paid order never pops up. */
+  const lastPayment = useRef(order.paymentStatus);
+  const paymentId = order.payment?.id;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: only a change of status matters
+  useEffect(() => {
+    const previous = lastPayment.current;
+    lastPayment.current = order.paymentStatus;
+    if (shouldShowPaidPopup(previous, order, paymentId ? paidPopupSeen(paymentId) : false)) {
+      if (paymentId) markPaidPopupSeen(paymentId);
+      setPaidPopup(true);
+    }
+  }, [order.paymentStatus]);
 
   async function act(run: () => Promise<MyOrder>): Promise<boolean> {
     if (busy) return false;
@@ -397,7 +417,56 @@ export function OrderView({
           ) : null}
         </div>
       </Body>
+      {paidPopup ? <PaidPopup orderNo={order.orderNo} onClose={() => setPaidPopup(false)} /> : null}
     </>
+  );
+}
+
+/** Rises from the bottom when the shop confirms the transfer while the page is open. */
+export function PaidPopup({ orderNo, onClose }: { orderNo: string; onClose: () => void }) {
+  const tr = useT();
+  const dialog = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    dialog.current?.focus({ preventScroll: true });
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
+  return (
+    <div className="overlay liff-overlay" role="presentation">
+      <button
+        type="button"
+        tabIndex={-1}
+        aria-hidden="true"
+        className="liff-scrim"
+        onClick={onClose}
+      />
+      <div
+        ref={dialog}
+        tabIndex={-1}
+        className="sheet liff-sheet"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="paid-popup-title"
+        style={s('align-items:center;gap:10px;text-align:center')}
+      >
+        <Gi n="check" size="lg" style={{ color: 'var(--jade)' }} />
+        <h2 id="paid-popup-title" className="g-t-2" style={s('margin:0')}>
+          {tr('liff.paidPopup.title')}
+        </h2>
+        <p className="g-t-3" style={s('margin:0')}>
+          {tr('liff.paidPopup.body')}
+        </p>
+        <p className="g-num g-t-c" style={s('margin:0')}>
+          {tr('liff.paidPopup.order', { orderNo })}
+        </p>
+        <button type="button" className="g-btn g-btn-p g-btn-block" onClick={onClose}>
+          {tr('liff.close')}
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -662,12 +731,17 @@ function PromptPayPanel({
           <b>{tr('liff.order.claimedTitle')}</b>
           <br />
           {tr('liff.order.claimed')}
-          {order.actions.attachSlip && !slipSent ? (
+          {order.actions.attachSlip && !slipSent && order.slipCheck === undefined ? (
             <>
               <br />
               {tr('liff.order.claimedSlip')}
             </>
           ) : null}
+        </Notice>
+      ) : null}
+      {claimed && order.slipCheck ? (
+        <Notice icon={order.slipCheck === 'none' ? 'image' : 'clock'}>
+          <span role="status">{tr(SLIP_CHECK_KEY[order.slipCheck])}</span>
         </Notice>
       ) : null}
       {slipSent ? (
