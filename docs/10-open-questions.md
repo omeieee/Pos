@@ -216,3 +216,10 @@ On 2026-10-01 the owner authorized Claude to proceed automatically; for each que
 - **SOPs (9):** the owner said to stay on the Settings page; the SOP drafts are not started.
 - **Invitee phones (10):** later.
 
+
+## Answers 2026-10-12 · Slip2Go (D-27)
+- **Auto-confirm:** yes, with a way to correct a mistake later (void/refund by staff). Conditions in D-27; ceiling 1,000 THB by default, `SLIP_AUTOCONFIRM` off until the owner switches it on.
+- **Privacy:** the owner accepts that slip data (QR text, or the picture when the QR cannot be read) goes to Slip2Go, possibly processed abroad; notices updated, version 2026-10-13.
+- **PromptPay ID:** the one in use for the trial is a personal number; the owner sets the real shop ID later in Settings (owner, step-up, audit, alert, already built).
+- **Server access:** read-only SSH to the VM allowed (all permissions granted for this work); egress IP is 161.118.211.42.
+- **Still open:** the bank account with its bank in Settings; the paid package after the trial (money, owner only); the real ID type if not a phone number (13-digit and e-wallet receiver types are untested).

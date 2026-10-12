@@ -38,3 +38,9 @@ L = likelihood, I = impact (H/M/L). The phase column says where the mitigation i
 | R13 | Dependency or security vulnerabilities | M | M | Renovate/Dependabot; `pnpm audit` in CI; monthly updates | Ongoing |
 | R14 | The Oracle SSH private key gets committed or pasted somewhere | M | H | `.gitignore` covers `*.key`, `*.key.pub`, `.env*` (done 2026-09-29); move the key to `~/.ssh`; a hook blocks committing keys (P1); CI uses its own deploy key. **If it ever leaks: replace the key on the VM immediately** | Owner, P1 |
 | R15 | Apple rejects a public App Store build as "just a website" | M | M | Use TestFlight internal or Unlisted distribution for the shop's own devices; give the native app real native features (push, printing) | P10 |
+
+## Slip2Go verification and auto-confirm (D-27)
+- **Vendor down, expired or out of tokens:** the verdict is `unchecked`; staff confirm with the bank-app tick as before. The daily account check alerts the owner before tokens or the package run out.
+- **Auto-confirm can be wrong:** `200200` proves a transfer to the configured receiver with the right amount after the order was created, not that it belongs to this order (a real old slip, a slip not yet seen by our duplicate checks). Bounded by the date condition, the local duplicate check and the amount ceiling (`SLIP_AUTOCONFIRM_MAX_SATANG`); staff void it with the normal refund path. Kill switch: `SLIP_AUTOCONFIRM=off`.
+- **Receiver set to a personal ID in testing:** a wrong or test PromptPay ID makes every slip a receiver mismatch (safe direction). The real ID is set by the owner in Settings (step-up, audit, alert).
+- **Cost:** tokens are spent on every check, including failures; the daily cap limits abuse.

@@ -73,3 +73,8 @@
 3. Check commercial registration, the food-premises certificate and the **condo rules**.
 4. Approve the Thai privacy notice text (drafted in P4).
 5. Decide whether to track actual expenses (for the actual-expense deduction) or use the flat 60%. The POS supports both.
+
+## Slip2Go as a data processor (PDPA, 2026-10-12)
+- Slip2Go Co., Ltd. (tax ID 0105567129881) acts as processor; the shop is the controller. Their policy allows processing by cloud providers in Thailand or abroad and names no retention period or region. The owner accepted this (D-27); the th/en privacy notices and the short summaries now say so, and `PRIVACY_NOTICE_VERSION` was bumped to 2026-10-13 so customers acknowledge again.
+- Data sent: the slip's QR text, or the picture when the QR cannot be read. The shop keeps only the verdict, Slip2Go's code and reference id, never names or accounts from their answer.
+- Rights requests to Slip2Go go to the address in their policy; the shop erases its own copy through the existing 90-day purge and customer erasure.

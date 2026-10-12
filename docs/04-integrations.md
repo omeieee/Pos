@@ -175,3 +175,11 @@ Sources: [PRD merchant registration](https://www.prd.go.th/th/content/category/d
   - the POS has a Reprint button;
   - the agent runs as a service that restarts on failure;
   - the Mini PC's BIOS is set to power on after a power cut, and a small UPS is recommended.
+
+## Slip2Go slip verification (D-27, 2026-10-12)
+- **What:** a paid Thai service that checks a transfer slip against the bank's records. Our API sends the slip's QR text (or the picture when no QR can be read) with three conditions: receiver (PromptPay ID or bank account from settings), this payment's amount, and date after the order was created.
+- **Endpoints (probed 2026-10-12):** base `https://connect.slip2go.com`, header `Authorization: Bearer <key>`. `POST /api/verify-slip/qr-code/info` (JSON `{payload:{qrCode, checkCondition}}`, HTTP 200) and `POST /api/verify-slip/qr-image/info` (multipart `file` + `payload` with the conditions at the root, HTTP 201). `GET /api/account/info` is free (tokens left, package expiry).
+- **Codes:** `200200` valid (the only one that counts); `200000` found, conditions not applied -> unchecked; `200401` receiver, `200402` amount, `200403` date, `200404` not found, `200500` fraud; `401004-401007` package/tokens/IP problems -> unchecked + owner alert; `429000`/5xx retry. Branch on `code`, not on the HTTP status. Failed checks cost tokens too (0.5 token per slip on the trial).
+- **Whitelist:** set the Slip2Go IP whitelist to the VM egress IP `161.118.211.42` and remove `*`.
+- **Config:** `SLIP_VERIFIER`, `SLIP2GO_SECRET_KEY`, `SLIP2GO_BASE_URL`, `SLIP2GO_TIMEOUT_MS`, `SLIP2GO_DAILY_CAP`, `SLIP_AUTOCONFIRM`, `SLIP_AUTOCONFIRM_MAX_SATANG` (see `apps/api/.env.example`). The key lives only in the VM `.env` and the gitignored `apps/api/.env.slip2go`.
+- **Trial:** ends 2026-10-19; afterwards checks come back `unchecked` and staff use the bank-app tick unless a package is bought (owner decision, money).

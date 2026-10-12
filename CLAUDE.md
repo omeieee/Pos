@@ -71,7 +71,7 @@ A cloud POS for a made-to-order noodle restaurant inside a condominium.
 
 ## Domain rules (never break)
 1. **Money** is integer satang (`bigint`), THB only. The server computes totals; the UI only formats them.
-2. **Staff confirm every payment by hand.** A customer's "โอนแล้ว" or slip only makes the payment `claimed`. Never confirm automatically from a slip.
+2. **Staff confirm every payment by hand, with one exception (owner decision 2026-10-12, D-27).** A customer's "โอนแล้ว" or slip only makes the payment `claimed`; the server never confirms from the slip picture or from our own reading of it. The only automatic confirm is a PromptPay payment whose slip the bank-backed verifier (Slip2Go) answers `200200` for the exact receiver, amount and date conditions, with no local duplicate, under the amount ceiling and with `SLIP_AUTOCONFIRM` on. It is a `system` actor, audited, shown to staff, and staff can void it like any confirmed payment.
 3. **The PromptPay QR** is EMVCo dynamic, with the exact order total and the PromptPay ID from settings.
    - Never hardcode the ID; the initial value is recorded in 01-requirements P3.
    - Changing it requires the owner + step-up + audit + alert.
