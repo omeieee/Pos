@@ -681,6 +681,14 @@ export const payments = pgTable(
     /** When this picture was uploaded: the start of the not-found grace window (banks are slow). Cleared with the slip. */
     slipUploadedAt: ts('slip_uploaded_at'),
     /**
+     * Bank-check cycles this payment has started (a first upload, a re-send of a final "not found",
+     * or a different picture), capped lifetime so one order cannot drain the Slip2Go cap. Never reset
+     * by a new picture. Cleared with the slip purge. Never in sync or realtime.
+     */
+    slipVerifyCycles: smallint('slip_verify_cycles').notNull().default(0),
+    /** Calls of the current picture that staff asked for (inside `slip_verify_attempts`); reset with it. Never in sync. */
+    slipStaffCalls: smallint('slip_staff_calls').notNull().default(0),
+    /**
      * Slip cooldown (owner decision): how many finished bank checks of this payment were a
      * definitive failure (wrong receiver, amount or date, or not found), and when the last was.
      * Kept across new slips; staff rechecks do not count. Never in sync or realtime.

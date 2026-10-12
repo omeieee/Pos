@@ -102,8 +102,15 @@ const NOT_FOUND_CODE = '200404';
  */
 const autoCeiling = (code: string | null): number =>
   code === NOT_FOUND_CODE ? SLIP_NOT_FOUND_GRACE_MAX_CALLS : MAX_VERIFY_ATTEMPTS;
-const staffCeiling = (code: string | null): number =>
-  autoCeiling(code) + STAFF_RECHECK_EXTRA_ATTEMPTS;
+/**
+ * Where staff's presses stop: the automatic calls this picture really had (at least 3), plus the
+ * extra ones. A picture in its not-found state that had only 1 call is thus capped at 6, not 9.
+ * `autoCalls` is the attempts minus the staff's own (they are counted apart), so that staff's
+ * presses never move the ceiling up.
+ */
+const staffCeiling = (code: string | null, autoCalls: number): number =>
+  (code === NOT_FOUND_CODE ? Math.max(autoCalls, MAX_VERIFY_ATTEMPTS) : MAX_VERIFY_ATTEMPTS) +
+  STAFF_RECHECK_EXTRA_ATTEMPTS;
 /** The transfer may predate the order a little (the customer paid while the cart was open). */
 const DATE_SLACK_MS = 10 * 60_000;
 export const DEFAULT_DAILY_CAP = 100;
@@ -225,9 +232,15 @@ export function createSlipChecker(args: {
   }
 
   /** `code` is the picture's code as the automatic reading left it (a staff recheck clears it, so its snapshot has it). */
-  const attemptCeiling = (paymentId: string, code: string | null) => {
+  const attemptCeiling = (
+    paymentId: string,
+    code: string | null,
+    row: { slipVerifyAttempts: number; slipStaffCalls: number },
+  ) => {
     const snapshot = manual.get(paymentId);
-    return snapshot ? staffCeiling(snapshot.code) : autoCeiling(code);
+    return snapshot
+      ? staffCeiling(snapshot.code, row.slipVerifyAttempts - row.slipStaffCalls)
+      : autoCeiling(code);
   };
 
   /** The bank check: one call to Slip2Go, or a reason not to make it. */
@@ -276,7 +289,7 @@ export function createSlipChecker(args: {
     }
     // Calls already made for this picture that never reached a verdict (a commit that failed
     // after the answer, or retries): at most 3 (6 in its not-found grace), then unchecked.
-    if (row.slipVerifyAttempts >= attemptCeiling(row.id, row.slipVerifyCode)) return noCall();
+    if (row.slipVerifyAttempts >= attemptCeiling(row.id, row.slipVerifyCode, row)) return noCall();
     const mime = bytes ? sniffSlip(bytes) : null;
     // The QR text goes first (no picture leaves the machine); the picture only when no QR was read,
     // and only as JPEG or PNG (Slip2Go documents nothing else).
@@ -299,7 +312,12 @@ export function createSlipChecker(args: {
       return noCall('cap');
     // The attempt is counted BEFORE the call, on its own, so that a commit that fails after the
     // answer cannot make the same slip be sent every minute. Null: the slip was replaced meanwhile.
-    const attempt = await paymentsRepo.bumpSlipVerifyAttempts(ctx.db, row.id, row.slipImageHash);
+    const attempt = await paymentsRepo.bumpSlipVerifyAttempts(
+      ctx.db,
+      row.id,
+      row.slipImageHash,
+      manual.has(row.id),
+    );
     if (attempt === null) return noCall();
     await paymentsRepo.recordSlipVerifyCall(ctx.db, businessDate);
     const result = rawQr
@@ -479,7 +497,7 @@ export function createSlipChecker(args: {
           if (
             previous ||
             (!outcome.grace &&
-              locked.slipVerifyAttempts >= attemptCeiling(paymentId, locked.slipVerifyCode))
+              locked.slipVerifyAttempts >= attemptCeiling(paymentId, locked.slipVerifyCode, locked))
           ) {
             patch.slipVerify = 'unchecked';
             patch.slipVerifyCode = outcome.code;
@@ -613,29 +631,42 @@ export function createSlipChecker(args: {
     return run;
   }
 
+  const hold = args.firstCallDelayMs ?? 0;
+  /** Starts a read now, unless one is running (then it reads again after it) or the queue is full. */
+  const start = (paymentId: string): void => {
+    if (waiting.has(paymentId)) again.add(paymentId);
+    else if (waiting.size < MAX_QUEUED) void schedule(paymentId);
+  };
+
   return {
     wants: { ocr: Boolean(ocr), verify: Boolean(verifier) },
     enqueue(paymentId) {
       if (waiting.has(paymentId)) again.add(paymentId);
-      else if (waiting.size < MAX_QUEUED) {
-        const hold = args.firstCallDelayMs ?? 0;
-        // A restart inside the hold loses the timer; the minute sweep then picks the row up.
-        if (hold > 0) setTimeout(() => void schedule(paymentId), hold).unref();
-        else void schedule(paymentId);
-      }
+      else if (hold > 0) {
+        // A restart inside the hold loses the timer; the minute sweep then picks the row up (it
+        // leaves a row alone while its hold runs). The timer checks `waiting` again when it fires.
+        setTimeout(() => start(paymentId), hold).unref();
+      } else start(paymentId);
     },
     async sweep(limit = SWEEP_LIMIT) {
       const ids = (
-        await paymentsRepo.listPendingSlipChecks(ctx.db, limit, {
-          ocr: Boolean(ocr),
-          verify: Boolean(verifier),
-        })
+        await paymentsRepo.listPendingSlipChecks(
+          ctx.db,
+          limit,
+          { ocr: Boolean(ocr), verify: Boolean(verifier) },
+          // A row inside the first-call hold belongs to its timer.
+          new Date(ctx.now().getTime() - hold),
+        )
       ).filter((id) => !waiting.has(id));
       await Promise.all(ids.map(schedule));
       return ids.length;
     },
     async recheckBlocker(row, db = ctx.db) {
-      if (row.slipVerifyAttempts >= staffCeiling(row.slipVerifyCode)) return 'attempts';
+      if (
+        row.slipVerifyAttempts >=
+        staffCeiling(row.slipVerifyCode, row.slipVerifyAttempts - row.slipStaffCalls)
+      )
+        return 'attempts';
       const day = await currentBusinessDate(db, ctx.now());
       return (await paymentsRepo.slipVerifyCallsOn(db, day)) >= dailyCap ? 'cap' : null;
     },

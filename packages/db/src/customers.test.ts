@@ -415,8 +415,8 @@ describe('anonymizeCustomer (PDPA erasure)', () => {
         (
           await client.query<{ id: string }>(
             `insert into payments (order_id, method, status, amount_satang, void_reason, client_request_id,
-               slip_invalid_count, slip_invalid_at, slip_blocked_at, slip_block_reason, slip_reviewed_at)
-             values ($1, 'promptpay', 'cancelled', 5000, 'test', gen_random_uuid(), 3, now(), now(), 'fake_slip', now())
+               slip_invalid_count, slip_invalid_at, slip_blocked_at, slip_block_reason, slip_reviewed_at, slip_verify_cycles)
+             values ($1, 'promptpay', 'cancelled', 5000, 'test', gen_random_uuid(), 3, now(), now(), 'fake_slip', now(), 3)
              returning id`,
             [order],
           )
@@ -432,6 +432,7 @@ describe('anonymizeCustomer (PDPA erasure)', () => {
     });
     expect(await one2('payments', mine)).toMatchObject({
       slip_invalid_count: 0,
+      slip_verify_cycles: 0,
       slip_invalid_at: null,
       slip_blocked_at: null,
       slip_block_reason: null,
@@ -441,6 +442,7 @@ describe('anonymizeCustomer (PDPA erasure)', () => {
     expect(await one(other)).toMatchObject({ slip_flag_reason: 'fake_slip', slip_flag_count: 2 });
     expect(await one2('payments', theirs)).toMatchObject({
       slip_invalid_count: 3,
+      slip_verify_cycles: 3,
       slip_block_reason: 'fake_slip',
     });
   });

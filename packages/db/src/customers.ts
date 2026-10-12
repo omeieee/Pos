@@ -262,6 +262,8 @@ export async function takeCustomerSlipKeys(db: Db, customerId: string): Promise<
         slipVerifyAttempts: 0,
         slipVerifiedAt: null,
         slipUploadedAt: null,
+        slipVerifyCycles: 0,
+        slipStaffCalls: 0,
       })
       .where(eq(payments.id, row.id));
     keys.push(row.key);
@@ -315,6 +317,7 @@ export async function anonymizeCustomer(db: Db, id: string, at: Date): Promise<A
     .update(payments)
     .set({
       slipInvalidCount: 0,
+      slipVerifyCycles: 0,
       slipInvalidAt: null,
       slipBlockedAt: null,
       slipBlockReason: null,
@@ -328,6 +331,7 @@ export async function anonymizeCustomer(db: Db, id: string, at: Date): Promise<A
         ),
         or(
           gt(payments.slipInvalidCount, 0),
+          gt(payments.slipVerifyCycles, 0),
           isNotNull(payments.slipInvalidAt),
           isNotNull(payments.slipBlockedAt),
           isNotNull(payments.slipBlockReason),

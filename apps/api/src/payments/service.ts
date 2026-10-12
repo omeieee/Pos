@@ -60,6 +60,7 @@ import {
   type SlipRecipientCheck,
   type SlipVerifyVerdict,
   satang,
+  slipCycleAvailable,
   slipResendRechecks,
   type TransitionError,
 } from '@sds/shared';
@@ -738,43 +739,51 @@ const slipPatch = (
   slip: { key: string; hash: string; ocr?: boolean; verify?: boolean },
   current: paymentsRepo.PaymentRow,
   now: Date,
-): paymentsRepo.PaymentPatch => ({
-  slipImageKey: slip.key,
-  slipCheck: slip.ocr ? 'pending' : null,
-  slipAmountSatang: null,
-  // The picture's hash is kept for the duplicate hint; the reference hash comes with the reading.
-  slipImageHash: slip.hash,
-  slipRefHash: null,
-  slipRecipientCheck: null,
-  ...(current.slipImageHash === slip.hash &&
-  current.slipVerify !== null &&
-  // A final "not found" or "unchecked" and a last call a minute ago: sending the picture again is
-  // a fresh check (a slow bank has had time), so the old answer is not kept.
-  !(
-    slip.verify &&
-    slipResendRechecks(
-      {
-        verdict: current.slipVerify as SlipVerifyVerdict,
-        verifiedAt: current.slipVerifiedAt,
-        blockedAt: current.slipBlockedAt,
-        reviewedAt: current.slipReviewedAt,
-      },
-      now,
+): paymentsRepo.PaymentPatch => {
+  const checks = Boolean(slip.verify) && slipCycleAvailable(current.slipVerifyCycles);
+  return {
+    slipImageKey: slip.key,
+    slipCheck: slip.ocr ? 'pending' : null,
+    slipAmountSatang: null,
+    // The picture's hash is kept for the duplicate hint; the reference hash comes with the reading.
+    slipImageHash: slip.hash,
+    slipRefHash: null,
+    slipRecipientCheck: null,
+    ...(current.slipImageHash === slip.hash &&
+    current.slipVerify !== null &&
+    // A final "not found" or "unchecked" and a last call a minute ago: sending the picture again is
+    // a fresh check (a slow bank has had time), so the old answer is not kept.
+    !(
+      slip.verify &&
+      slipResendRechecks(
+        {
+          verdict: current.slipVerify as SlipVerifyVerdict,
+          verifiedAt: current.slipVerifiedAt,
+          blockedAt: current.slipBlockedAt,
+          reviewedAt: current.slipReviewedAt,
+          cycles: current.slipVerifyCycles,
+        },
+        now,
+      )
     )
-  )
-    ? {}
-    : {
-        slipQrHash: null,
-        slipVerify: slip.verify ? 'pending' : null,
-        slipVerifyCode: null,
-        slipVerifyRef: null,
-        slipVerifyAttempts: 0,
-        slipVerifiedAt: null,
-        slipUploadedAt: now,
-        // The owner's review was of the earlier picture, not of this one.
-        slipReviewedAt: null,
-      }),
-});
+      ? {}
+      : {
+          slipQrHash: null,
+          // A payment has at most 1 + SLIP_RESEND_RECHECKS_MAX check cycles for life, whatever the
+          // pictures: beyond that a fresh picture is stored but gets no bank check (staff verify it).
+          slipVerify: checks ? 'pending' : null,
+          slipVerifyCode: null,
+          slipVerifyRef: null,
+          slipVerifyAttempts: 0,
+          slipStaffCalls: 0,
+          ...(checks ? { slipVerifyCycles: current.slipVerifyCycles + 1 } : {}),
+          slipVerifiedAt: null,
+          slipUploadedAt: now,
+          // The owner's review was of the earlier picture, not of this one.
+          slipReviewedAt: null,
+        }),
+  };
+};
 
 /**
  * Claim never confirms (rule 2): it only records "โอนแล้ว". Void and refund need the manager

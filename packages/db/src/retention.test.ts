@@ -625,18 +625,18 @@ describe('slip images', () => {
     );
     const id = await payment({ status: 'cancelled', updatedDaysAgo: 120, key: KEY(11) });
     await q(
-      "update payments set slip_invalid_count = 3, slip_invalid_at = now(), slip_blocked_at = now(), slip_block_reason = 'fake_slip', slip_reviewed_at = now() where id = $1",
+      "update payments set slip_invalid_count = 3, slip_invalid_at = now(), slip_blocked_at = now(), slip_block_reason = 'fake_slip', slip_reviewed_at = now(), slip_verify_cycles = 3, slip_staff_calls = 2 where id = $1",
       [id],
     );
     await retention.clearSlipKeys(db, { slips: [{ id, key: KEY(11) }], now: NOW });
     expect(
       (
         await q<Record<string, unknown>>(
-          'select slip_invalid_count c, slip_invalid_at a, slip_blocked_at b, slip_block_reason r, slip_reviewed_at v from payments where id = $1',
+          'select slip_invalid_count c, slip_invalid_at a, slip_blocked_at b, slip_block_reason r, slip_reviewed_at v, slip_verify_cycles y, slip_staff_calls s from payments where id = $1',
           [id],
         )
       )[0],
-    ).toEqual({ c: 0, a: null, b: null, r: null, v: null });
+    ).toEqual({ c: 0, a: null, b: null, r: null, v: null, y: 0, s: 0 });
     expect(
       (
         await q<Record<string, unknown>>(

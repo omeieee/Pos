@@ -304,6 +304,66 @@ describe('the first bank call is held back a moment', () => {
   });
 });
 
+describe('the minute sweep respects the first-call hold', () => {
+  test('a sweep inside the hold makes no call; the one call goes out when the hold ends', async () => {
+    firstCallDelayMs = 300;
+    checker = buildChecker();
+    installSlipChecker(checker);
+    const { token, order } = await start();
+    respond = () => ({ body: answer('200200', currentAmountBaht) });
+    await upload(token, order.id, picture());
+    // Inside the hold (the clock has not moved): the row is pending but the sweep leaves it alone.
+    expect(await checker.sweep()).toBe(0);
+    await checker.idle();
+    expect(calls.length).toBe(0);
+    await waitFor(() => calls.length === 1);
+    await checker.idle();
+    expect(await checker.sweep()).toBe(0);
+    await new Promise((r) => setTimeout(r, 80));
+    expect(calls.length).toBe(1);
+    expect((await row(order.id))?.slip_verify).toBe('valid');
+  });
+
+  test('after the hold has passed, the sweep picks a pending row up (a restart lost the timer)', async () => {
+    firstCallDelayMs = 5000;
+    checker = buildChecker();
+    installSlipChecker(checker);
+    const { token, order } = await start();
+    await upload(token, order.id, picture());
+    expect(await checker.sweep()).toBe(0);
+    h.clock.advanceSeconds(5);
+    expect(await checker.sweep()).toBe(1);
+    await checker.idle();
+    expect(calls.length).toBe(1);
+    expect((await row(order.id))?.slip_verify).toBe('valid');
+  });
+
+  test('the timer joins a read already running instead of starting a second one', async () => {
+    firstCallDelayMs = 50;
+    checker = buildChecker();
+    installSlipChecker(checker);
+    const { token, order } = await start();
+    let release: () => void = () => {};
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    respond = async () => {
+      await gate;
+      return { body: answer('200200', currentAmountBaht) };
+    };
+    await upload(token, order.id, picture());
+    await waitFor(() => calls.length === 1);
+    // A second enqueue for the same payment while its read is in flight: no parallel call.
+    const [payment] = await payments(order.id);
+    checker.enqueue(payment?.id ?? '');
+    await new Promise((r) => setTimeout(r, 120));
+    expect(calls.length).toBe(1);
+    release();
+    await checker.idle();
+    expect(calls.length).toBe(1);
+  });
+});
+
 describe('the verdict lands in the background', () => {
   test('the upload answers at once, marked pending; then the verdict is stored and the status is untouched', async () => {
     let release: (reply: { body: unknown }) => void = () => undefined;
@@ -1474,7 +1534,11 @@ describe('staff recheck of the bank check', () => {
 
   test('staff get 3 more attempts on top of the automatic ones (6 for a not-found picture): a 10th call is refused, nothing is written', async () => {
     const { order, paymentId } = await checked('200404');
-    await h.client.query('update payments set slip_verify_attempts = 8 where id = $1', [paymentId]);
+    // The grace budget was used up (6 calls) and staff already made 2 more: one press is left.
+    await h.client.query(
+      'update payments set slip_verify_attempts = 8, slip_staff_calls = 2 where id = $1',
+      [paymentId],
+    );
     respond = () => ({ body: answer('200404', currentAmountBaht) });
     expect((await recheck(paymentId)).statusCode).toBe(200);
     expect((await row(order.id))?.slip_verify_attempts).toBe(9);
@@ -1484,6 +1548,23 @@ describe('staff recheck of the bank check', () => {
     expect(refused.json()).toMatchObject({ code: 'SLIP_RECHECK_LIMIT' });
     expect(calls).toHaveLength(2);
     expect(await row(order.id)).toEqual(before);
+  });
+
+  test('a not-found picture that only had 1 call gets a ceiling of max(1, 3) + 3 = 6, not 9', async () => {
+    const { order, paymentId } = await checked('200404');
+    expect((await row(order.id))?.slip_verify_attempts).toBe(1);
+    // Four staff calls made on top of that 1: one press is left, and the ceiling does not grow.
+    await h.client.query(
+      'update payments set slip_verify_attempts = 5, slip_staff_calls = 4 where id = $1',
+      [paymentId],
+    );
+    respond = () => ({ body: answer('200404', currentAmountBaht) });
+    expect((await recheck(paymentId)).statusCode).toBe(200);
+    expect((await row(order.id))?.slip_verify_attempts).toBe(6);
+    const refused = await recheck(paymentId);
+    expect(refused.statusCode).toBe(429);
+    expect(refused.json()).toMatchObject({ code: 'SLIP_RECHECK_LIMIT' });
+    expect(calls).toHaveLength(2);
   });
 
   test('the daily cap holds: refused with the old verdict kept and no call', async () => {
@@ -1769,6 +1850,10 @@ describe('the slip cooldown', () => {
     expect((await send('GET', `/v1/app/orders/${order.id}`, token)).json()).not.toHaveProperty(
       'slipRetryAfterSeconds',
     );
+    // The three pictures used the payment's 3 check cycles; this test is about the wait, so give one more.
+    await h.client.query('update payments set slip_verify_cycles = 2 where order_id = $1', [
+      order.id,
+    ]);
     const open = await upload(token, order.id, picture(4));
     expect(open.statusCode).toBe(200);
     await checker.idle();
@@ -2603,6 +2688,75 @@ describe('a slow bank: "not found" inside the grace window is not final', () => 
       expect((await row(a.order.id))?.slip_verify).toBe('valid');
       expect((await row(b.order.id))?.slip_verify).toBe('amount_mismatch');
       expect((await row(c.order.id))?.slip_verify).toBe('fraud');
+    });
+
+    /** Lets the current picture's window pass so its 404 becomes final, then waits out the cooldown. */
+    async function settle(orderId: string, gap = 400) {
+      h.clock.advanceSeconds(301);
+      await checker.sweep();
+      await checker.idle();
+      expect((await row(orderId))?.slip_verify).toBe('not_found');
+      h.clock.advanceSeconds(gap);
+    }
+    const cyclesOf = async (orderId: string) =>
+      (
+        await h.client.query<{ c: number }>(
+          'select slip_verify_cycles c from payments where order_id = $1',
+          [orderId],
+        )
+      ).rows[0]?.c;
+
+    test('lifetime limit: the first check and 2 re-sends are 3 cycles; a third re-send keeps the verdict and calls nothing', async () => {
+      const { token, order } = await sendAt404();
+      expect(await cyclesOf(order.id)).toBe(1);
+      await settle(order.id);
+      for (const cycle of [2, 3]) {
+        const before = calls.length;
+        expect((await upload(token, order.id, picture(1))).statusCode).toBe(200);
+        await checker.idle();
+        expect(calls.length).toBe(before + 1);
+        expect(await cyclesOf(order.id)).toBe(cycle);
+        await settle(order.id);
+      }
+      const before = calls.length;
+      const rowBefore = await row(order.id);
+      expect((await upload(token, order.id, picture(1))).statusCode).toBe(200);
+      await checker.idle();
+      expect(calls.length).toBe(before);
+      expect(await cyclesOf(order.id)).toBe(3);
+      // The stored picture is the new file; the verdict and its counters are untouched.
+      expect(await row(order.id)).toMatchObject({
+        slip_verify: 'not_found',
+        slip_verify_attempts: rowBefore?.slip_verify_attempts,
+        slip_verified_at: rowBefore?.slip_verified_at,
+      });
+      // Nothing calls later either.
+      h.clock.advanceSeconds(120);
+      await checker.sweep();
+      await checker.idle();
+      expect(calls.length).toBe(before);
+    });
+
+    test('alternating two pictures does not farm cycles: a different picture is a fresh slip but spends a cycle', async () => {
+      const { token, order } = await sendAt404(1);
+      await settle(order.id);
+      for (const fill of [2, 1]) {
+        const before = calls.length;
+        expect((await upload(token, order.id, picture(fill))).statusCode).toBe(200);
+        await checker.idle();
+        expect(calls.length).toBe(before + 1);
+        await settle(order.id);
+      }
+      expect(await cyclesOf(order.id)).toBe(3);
+      // The fourth picture of the payment gets no bank check at all.
+      const before = calls.length;
+      expect((await upload(token, order.id, picture(2))).statusCode).toBe(200);
+      await checker.idle();
+      expect(calls.length).toBe(before);
+      expect(await row(order.id)).toMatchObject({ slip_verify: null, slip_verify_attempts: 0 });
+      expect(await cyclesOf(order.id)).toBe(3);
+      // At most 3 cycles x 6 calls reached the bank for this payment.
+      expect(calls.length).toBeLessThanOrEqual(18);
     });
 
     test('the cooldown refuses the upload first, with no call', async () => {

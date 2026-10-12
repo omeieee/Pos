@@ -9,6 +9,7 @@ import {
   SLIP_NOT_FOUND_GRACE_MAX_CALLS,
   SLIP_NOT_FOUND_GRACE_SECONDS,
   SLIP_RESEND_MIN_GAP_SECONDS,
+  SLIP_RESEND_RECHECKS_MAX,
   SLIP_VERIFY_VERDICTS,
   SLIP2GO_AUTOCONFIRM_ACCOUNT_TYPES,
   satangToSlip2goAmount,
@@ -340,12 +341,19 @@ describe('a re-send of the same picture after a final "not found" or "unchecked"
     verifiedAt: ago(60),
     blockedAt: null,
     reviewedAt: null,
+    cycles: 1,
   };
   test('is a fresh check at 60 seconds after the last call, not before', () => {
     expect(SLIP_RESEND_MIN_GAP_SECONDS).toBe(60);
     expect(slipResendRechecks(base, now)).toBe(true);
     expect(slipResendRechecks({ ...base, verifiedAt: ago(59) }, now)).toBe(false);
     expect(slipResendRechecks({ ...base, verdict: 'unchecked' }, now)).toBe(true);
+  });
+  test('only while the payment has a cycle left: 3 in all, the first included', () => {
+    expect(SLIP_RESEND_RECHECKS_MAX).toBe(2);
+    expect(slipResendRechecks({ ...base, cycles: 2 }, now)).toBe(true);
+    expect(slipResendRechecks({ ...base, cycles: 3 }, now)).toBe(false);
+    expect(slipResendRechecks({ ...base, cycles: 9 }, now)).toBe(false);
   });
   test('never for another verdict, a block, a review, or an unknown call time', () => {
     for (const verdict of [

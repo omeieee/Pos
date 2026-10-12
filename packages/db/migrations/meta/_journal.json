@@ -246,6 +246,13 @@
       "when": 1791784187318,
       "tag": "0034_orange_butterfly",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1791787186060,
+      "tag": "0035_friendly_echo",
+      "breakpoints": true
     }
   ]
 }

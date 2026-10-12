@@ -14,7 +14,7 @@ import type {
   SlipRecipientCheck,
   SlipVerifyVerdict,
 } from '@sds/shared';
-import { and, asc, count, eq, inArray, isNotNull, lt, ne, or, sql } from 'drizzle-orm';
+import { and, asc, count, eq, inArray, isNotNull, isNull, lt, lte, ne, or, sql } from 'drizzle-orm';
 import type { Db } from './client.ts';
 import { orders, paymentRefunds, payments, slipVerifyDaily } from './schema.ts';
 
@@ -115,6 +115,9 @@ export interface PaymentPatch {
   slipVerifiedAt?: Date | null;
   /** When the current picture was uploaded; the start of the not-found grace window. */
   slipUploadedAt?: Date | null;
+  /** Check cycles started (lifetime, kept across new pictures) and staff-asked calls of this picture. */
+  slipVerifyCycles?: number;
+  slipStaffCalls?: number;
   /** Slip cooldown: definitive failures so far and when the last was. Kept across new slips. */
   slipInvalidCount?: number;
   slipInvalidAt?: Date | null;
@@ -199,6 +202,8 @@ export async function listPendingSlipChecks(
   db: Db,
   limit: number,
   kinds: { ocr: boolean; verify: boolean } = { ocr: true, verify: false },
+  /** Skip a row uploaded after this time: its own timer (the first-call hold) has not fired yet. */
+  uploadedBefore?: Date,
 ): Promise<string[]> {
   const waiting = [
     kinds.ocr ? eq(payments.slipCheck, 'pending') : undefined,
@@ -208,7 +213,15 @@ export async function listPendingSlipChecks(
   const rows = await db
     .select({ id: payments.id })
     .from(payments)
-    .where(and(or(...waiting), isNotNull(payments.slipImageKey)))
+    .where(
+      and(
+        or(...waiting),
+        isNotNull(payments.slipImageKey),
+        uploadedBefore
+          ? or(isNull(payments.slipUploadedAt), lte(payments.slipUploadedAt, uploadedBefore))
+          : undefined,
+      ),
+    )
     .orderBy(asc(payments.rev))
     .limit(limit);
   return rows.map((r) => r.id);
@@ -346,11 +359,16 @@ export async function bumpSlipVerifyAttempts(
   db: Db,
   id: string,
   slipImageHash: string | null,
+  /** The call is one staff asked for: it is also counted in `slip_staff_calls`. */
+  staff = false,
 ): Promise<number | null> {
   if (slipImageHash === null) return null;
   const [row] = await db
     .update(payments)
-    .set({ slipVerifyAttempts: sql`${payments.slipVerifyAttempts} + 1` })
+    .set({
+      slipVerifyAttempts: sql`${payments.slipVerifyAttempts} + 1`,
+      ...(staff ? { slipStaffCalls: sql`${payments.slipStaffCalls} + 1` } : {}),
+    })
     .where(
       and(
         eq(payments.id, id),

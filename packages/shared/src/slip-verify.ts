@@ -200,9 +200,21 @@ export const SLIP_NOT_FOUND_GRACE_MAX_CALLS = 6;
 export const SLIP_RESEND_MIN_GAP_SECONDS = 60;
 
 /**
+ * Lifetime limit per payment: a re-send (or a different picture) opens a new check cycle at most
+ * this many times after the first. One payment therefore has at most `1 + this` = 3 cycles, however
+ * the customer alternates pictures; it keeps one order from draining the shared daily call cap.
+ */
+export const SLIP_RESEND_RECHECKS_MAX = 2;
+
+/** Whether a payment that has started `cycles` bank-check cycles may start another. */
+export const slipCycleAvailable = (cycles: number): boolean =>
+  cycles < 1 + SLIP_RESEND_RECHECKS_MAX;
+
+/**
  * Whether the customer sending the SAME picture again starts a new check: only after a final
  * `not_found` or `unchecked` (never valid, fraud, a block, a reviewed slip, or any mismatch, and not
- * while pending), and only when the last bank call for it was at least a minute ago.
+ * while pending), only when the last bank call for it was at least a minute ago, and only while the
+ * payment still has a cycle left (`SLIP_RESEND_RECHECKS_MAX`).
  */
 export const slipResendRechecks = (
   current: {
@@ -210,9 +222,12 @@ export const slipResendRechecks = (
     verifiedAt: Date | null;
     blockedAt: Date | null;
     reviewedAt: Date | null;
+    /** Check cycles this payment has started so far, the first included. */
+    cycles: number;
   },
   now: Date,
 ): boolean =>
+  slipCycleAvailable(current.cycles) &&
   (current.verdict === 'not_found' || current.verdict === 'unchecked') &&
   current.verifiedAt !== null &&
   current.blockedAt === null &&
