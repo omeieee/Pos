@@ -196,6 +196,16 @@ export const SLIP_NOT_FOUND_GRACE_SECONDS = 300;
  */
 export const SLIP_NOT_FOUND_GRACE_MAX_CALLS = 6;
 
+/**
+ * Waits between the calls of the not-found grace budget, front-loaded: a timer fires the next call
+ * this long after the previous one (the first call comes after the 10 s hold). Calls land about 10,
+ * 25, 50, 85, 145 and 225 s after the upload: 6 calls, the last well before the window closes. One
+ * entry fewer than SLIP_NOT_FOUND_GRACE_MAX_CALLS. The minute sweep is the fallback after a restart.
+ */
+export const SLIP_GRACE_RETRY_DELAYS_MS: readonly number[] = [
+  15_000, 25_000, 35_000, 60_000, 80_000,
+];
+
 /** A re-send of the same picture is a fresh check only this many seconds after the last call. */
 export const SLIP_RESEND_MIN_GAP_SECONDS = 60;
 

@@ -4,6 +4,7 @@ import {
   inSlipNotFoundGrace,
   isInvalidSlipVerdict,
   SLIP_COOLDOWN_SECONDS,
+  SLIP_GRACE_RETRY_DELAYS_MS,
   SLIP_INVALID_FREE_TRIES,
   SLIP_INVALID_VERDICTS,
   SLIP_NOT_FOUND_GRACE_MAX_CALLS,
@@ -326,6 +327,15 @@ describe('the not-found grace window', () => {
     expect(inSlipNotFoundGrace(up, at(0))).toBe(true);
     expect(inSlipNotFoundGrace(up, at(299))).toBe(true);
     expect(inSlipNotFoundGrace(up, at(300))).toBe(false);
+  });
+  test('the retry schedule gives one call fewer retries than the budget, the last inside the window', () => {
+    expect(SLIP_GRACE_RETRY_DELAYS_MS).toHaveLength(SLIP_NOT_FOUND_GRACE_MAX_CALLS - 1);
+    const times = SLIP_GRACE_RETRY_DELAYS_MS.reduce<number[]>(
+      (acc, d) => [...acc, (acc[acc.length - 1] ?? 10_000) + d],
+      [10_000],
+    );
+    expect(times.map((t) => t / 1000)).toEqual([10, 25, 50, 85, 145, 225]);
+    expect(inSlipNotFoundGrace(up, at((times[times.length - 1] ?? 0) / 1000))).toBe(true);
   });
   test('an unknown upload time, or a window of 0, is never in grace', () => {
     expect(inSlipNotFoundGrace(null, at(1))).toBe(false);

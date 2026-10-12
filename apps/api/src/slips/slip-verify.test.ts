@@ -87,6 +87,8 @@ let autoConfirm: { maxSatang: number } | null = null;
 /** Off (0) unless a test opts in: the older tests are about final answers. */
 let graceSeconds = 0;
 let firstCallDelayMs = 0;
+/** No retry timers unless a test opts in: the older tests drive the retries with the sweep. */
+let graceDelays: number[] = [];
 let ownerFixture: Awaited<ReturnType<Harness['newOwner']>>;
 let ocrOn = false;
 let ocrText = '';
@@ -143,6 +145,7 @@ function buildChecker(): SlipChecker {
     autoConfirm,
     notFoundGraceSeconds: graceSeconds,
     firstCallDelayMs,
+    graceRetryDelaysMs: graceDelays,
     log: { warn: (o) => logLines.push(o) },
   });
 }
@@ -187,6 +190,7 @@ beforeEach(async () => {
   autoConfirm = null;
   graceSeconds = 0;
   firstCallDelayMs = 0;
+  graceDelays = [];
   ocrOn = false;
   ocrText = '';
   respond = (_call, _n) => {
@@ -2846,5 +2850,97 @@ describe('a slow bank: "not found" inside the grace window is not final', () => 
     });
     const [after] = await payments(order.id);
     expect(after).toMatchObject({ slip_verify: 'not_found', slip_invalid_count: 0 });
+  });
+});
+
+describe('grace retries ride their own timers (front-loaded), the sweep is only the fallback', () => {
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  const notFound = () => ({ body: answer('200404', currentAmountBaht) });
+  beforeEach(() => {
+    graceSeconds = 300;
+    dailyCap = 10_000;
+    graceDelays = [40, 40, 40, 40, 40];
+    checker = buildChecker();
+    installSlipChecker(checker);
+  });
+  async function sendAt404() {
+    const placed = await start();
+    respond = notFound;
+    await upload(placed.token, placed.order.id, picture(1));
+    await checker.idle();
+    return placed;
+  }
+
+  test('404 at the early calls, then 200200 at the 4th call confirms, with no sweep at all', async () => {
+    autoConfirm = { maxSatang: 100_000 };
+    checker = buildChecker();
+    installSlipChecker(checker);
+    const placed = await start();
+    respond = (_call, n) =>
+      n < 4
+        ? { body: answer('200404', currentAmountBaht) }
+        : { body: answer('200200', currentAmountBaht) };
+    await upload(placed.token, placed.order.id, picture(1));
+    await waitFor(() => calls.length === 4);
+    await checker.idle();
+    expect(await row(placed.order.id)).toMatchObject({ slip_verify: 'valid', status: 'confirmed' });
+    expect((await payments(placed.order.id))[0]?.slip_invalid_count).toBe(0);
+  });
+
+  test('calls never exceed 6; the last 404 is final, counted once', async () => {
+    const { order } = await sendAt404();
+    await waitFor(() => calls.length === 6);
+    await checker.idle();
+    await sleep(200);
+    await checker.idle();
+    expect(calls).toHaveLength(6);
+    expect((await payments(order.id))[0]).toMatchObject({
+      slip_verify: 'not_found',
+      slip_invalid_count: 1,
+      slip_verify_attempts: 6,
+    });
+  });
+
+  test('the sweep does not double-call while a timer is pending', async () => {
+    graceDelays = [300, 300, 300, 300, 300];
+    checker = buildChecker();
+    installSlipChecker(checker);
+    const { order } = await sendAt404();
+    expect(calls).toHaveLength(1);
+    // Past the sweep's own 30 s gap: only the timer is in the way.
+    h.clock.advanceSeconds(60);
+    expect(await checker.sweep()).toBe(0);
+    await checker.idle();
+    expect(calls).toHaveLength(1);
+    await waitFor(() => calls.length === 2);
+    await checker.idle();
+    expect((await payments(order.id))[0]?.slip_verify).toBe('pending');
+  });
+
+  test('a timer that fires after the window has closed makes no call: the last 404 is final once', async () => {
+    const { order } = await sendAt404();
+    h.clock.advanceSeconds(301);
+    await sleep(120);
+    await checker.idle();
+    expect(calls).toHaveLength(1);
+    expect((await payments(order.id))[0]).toMatchObject({
+      slip_verify: 'not_found',
+      slip_invalid_count: 1,
+    });
+  });
+
+  test('a new upload replaces the timer: no stray call from the old one', async () => {
+    graceDelays = [150, 150, 150, 150, 150];
+    checker = buildChecker();
+    installSlipChecker(checker);
+    const { token, order } = await sendAt404();
+    h.clock.advanceSeconds(61);
+    respond = () => ({ body: answer('200200', currentAmountBaht) });
+    await upload(token, order.id, picture(2));
+    await checker.idle();
+    const after = calls.length;
+    await sleep(300);
+    await checker.idle();
+    expect(calls).toHaveLength(after);
   });
 });
