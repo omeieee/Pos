@@ -14,10 +14,7 @@ export const orderSlipBlocked = (payments: readonly paymentsRepo.PaymentRow[]): 
  * Seconds the next slip for this ORDER has to wait (0: none). The count is the sum over all its
  * payments and the last time the latest of them, so a staff reject (a new payment) does not reset it.
  */
-export function orderSlipCooldown(
-  payments: readonly paymentsRepo.PaymentRow[],
-  now: Date,
-): number {
+export function orderSlipCooldown(payments: readonly paymentsRepo.PaymentRow[], now: Date): number {
   let invalidCount = 0;
   let lastInvalidAt: Date | null = null;
   for (const p of payments) {
