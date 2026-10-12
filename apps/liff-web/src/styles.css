@@ -332,6 +332,38 @@ select {
   outline: none;
 }
 
+/* Slip check pop-up: an indeterminate bar (no percentage: the bank answers when it answers). */
+.liff-progress {
+  width: 100%;
+  height: 8px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.1);
+}
+.liff-progress > span {
+  display: block;
+  width: 40%;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--jade), var(--chili));
+  animation: liff-progress 1.2s ease-in-out infinite;
+}
+@keyframes liff-progress {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(250%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .liff-progress > span {
+    animation: none;
+    width: 100%;
+    opacity: 0.5;
+  }
+}
+
 /* My orders list: a whole glass row is the button. */
 .liff-orderrow.g-glass {
   display: flex;
