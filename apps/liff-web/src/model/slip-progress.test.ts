@@ -3,9 +3,11 @@ import {
   msUntilMinShown,
   SLIP_PROGRESS_GIVE_UP_MS,
   SLIP_PROGRESS_MIN_MS,
+  SLIP_PROGRESS_SLOW_HINT_AFTER_MS,
   slipPollDelayMs,
   slipProgressPhase,
   slipResolved,
+  slipSlowHintShown,
 } from './slip-progress.ts';
 
 const checking = { paymentStatus: 'awaiting_confirmation', slipCheck: 'checking' } as const;
@@ -76,5 +78,22 @@ describe('slipPollDelayMs', () => {
   test('failures back off', () => {
     expect(slipPollDelayMs(1000, checking, 1)).toBe(4000);
     expect(slipPollDelayMs(1000, checking, 9)).toBe(30_000);
+  });
+});
+
+describe('slipSlowHintShown', () => {
+  test('only while checking, from the threshold on', () => {
+    expect(SLIP_PROGRESS_SLOW_HINT_AFTER_MS).toBe(8000);
+    expect(slipSlowHintShown(7999, 'checking')).toBe(false);
+    expect(slipSlowHintShown(8000, 'checking')).toBe(true);
+    expect(slipSlowHintShown(60_000, 'checking')).toBe(true);
+  });
+  test('never in the paid or staff_review phase', () => {
+    expect(slipSlowHintShown(20_000, 'paid')).toBe(false);
+    expect(slipSlowHintShown(20_000, 'staff_review')).toBe(false);
+  });
+  test('the 5 s minimum display is unaffected: still checking, no hint, before the threshold', () => {
+    expect(slipProgressPhase(SLIP_PROGRESS_MIN_MS, checking)).toBe('checking');
+    expect(slipSlowHintShown(SLIP_PROGRESS_MIN_MS, 'checking')).toBe(false);
   });
 });
