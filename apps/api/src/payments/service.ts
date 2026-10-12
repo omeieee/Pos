@@ -60,6 +60,7 @@ import {
   type SlipRecipientCheck,
   type SlipVerifyVerdict,
   satang,
+  slipResendRechecks,
   type TransitionError,
 } from '@sds/shared';
 import {
@@ -730,7 +731,8 @@ export interface MoveInput {
 /**
  * A new slip: its key, with the old readings cleared (and new ones asked for when they are on).
  * The same picture again on a payment that already has a bank verdict keeps that verdict and the
- * QR key it filled (D-27): re-sending the same file must not spend another call.
+ * QR key it filled (D-27): re-sending the same file must not spend another call, except after a
+ * final "not found" or "unchecked" at least a minute after the last call (`slipResendRechecks`).
  */
 const slipPatch = (
   slip: { key: string; hash: string; ocr?: boolean; verify?: boolean },
@@ -744,7 +746,22 @@ const slipPatch = (
   slipImageHash: slip.hash,
   slipRefHash: null,
   slipRecipientCheck: null,
-  ...(current.slipImageHash === slip.hash && current.slipVerify !== null
+  ...(current.slipImageHash === slip.hash &&
+  current.slipVerify !== null &&
+  // A final "not found" or "unchecked" and a last call a minute ago: sending the picture again is
+  // a fresh check (a slow bank has had time), so the old answer is not kept.
+  !(
+    slip.verify &&
+    slipResendRechecks(
+      {
+        verdict: current.slipVerify as SlipVerifyVerdict,
+        verifiedAt: current.slipVerifiedAt,
+        blockedAt: current.slipBlockedAt,
+        reviewedAt: current.slipReviewedAt,
+      },
+      now,
+    )
+  )
     ? {}
     : {
         slipQrHash: null,

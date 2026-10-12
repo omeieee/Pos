@@ -7,6 +7,7 @@ import {
   extractSlipRef,
   inSlipNotFoundGrace,
   isInvalidSlipVerdict,
+  SLIP_NOT_FOUND_GRACE_MAX_CALLS,
   SLIP_NOT_FOUND_GRACE_SECONDS,
   type SlipCheck,
   type SlipRecipientCheck,
@@ -93,15 +94,25 @@ export const MAX_VERIFY_ATTEMPTS = 3;
 /** Staff may press "check again" until a picture has had this many calls more than the automatic ones: 3 + 3 = 6 in all. */
 export const STAFF_RECHECK_EXTRA_ATTEMPTS = 3;
 export const MAX_VERIFY_ATTEMPTS_STAFF = MAX_VERIFY_ATTEMPTS + STAFF_RECHECK_EXTRA_ATTEMPTS;
+/** The code a picture carries while (and after) it is in its not-found grace budget. */
+const NOT_FOUND_CODE = '200404';
+/**
+ * The calls one picture may have on its own: the 3 of an error, or, once a "not found" has been
+ * answered (the code is kept), the grace budget of 6. Staff's recheck comes on top of either.
+ */
+const autoCeiling = (code: string | null): number =>
+  code === NOT_FOUND_CODE ? SLIP_NOT_FOUND_GRACE_MAX_CALLS : MAX_VERIFY_ATTEMPTS;
+const staffCeiling = (code: string | null): number =>
+  autoCeiling(code) + STAFF_RECHECK_EXTRA_ATTEMPTS;
 /** The transfer may predate the order a little (the customer paid while the cart was open). */
 const DATE_SLACK_MS = 10 * 60_000;
 export const DEFAULT_DAILY_CAP = 100;
 /**
  * Least time between two calls for a slip whose "not found" is inside the grace window. The sweep
- * runs every minute, so a retry lands on the first tick at least this long after the last call:
- * 20 to 80 seconds later, never in a loop.
+ * runs every minute, so a retry lands on the first tick at least this long after the last call
+ * (about a minute apart, never in a loop).
  */
-export const NOT_FOUND_RETRY_GAP_MS = 20_000;
+export const NOT_FOUND_RETRY_GAP_MS = 30_000;
 
 /** What the bank check decided for one picture. */
 type VerifyOutcome =
@@ -211,8 +222,11 @@ export function createSlipChecker(args: {
     return { check: compareSlipAmount(amount, expected), amount, refHash, recipient };
   }
 
-  const attemptCeiling = (paymentId: string) =>
-    manual.has(paymentId) ? MAX_VERIFY_ATTEMPTS_STAFF : MAX_VERIFY_ATTEMPTS;
+  /** `code` is the picture's code as the automatic reading left it (a staff recheck clears it, so its snapshot has it). */
+  const attemptCeiling = (paymentId: string, code: string | null) => {
+    const snapshot = manual.get(paymentId);
+    return snapshot ? staffCeiling(snapshot.code) : autoCeiling(code);
+  };
 
   /** The bank check: one call to Slip2Go, or a reason not to make it. */
   async function readVerify(
@@ -237,9 +251,30 @@ export function createSlipChecker(args: {
     });
     // The payment is no longer waiting for a decision (cancelled, voided, confirmed): no call.
     if (row.status !== 'claimed') return noCall();
+    // A "not found" that was kept pending (grace): once its window has closed or its calls are used
+    // up, the last 404 is the answer. No call is spent; counted once toward the cooldown.
+    if (
+      !manual.has(row.id) &&
+      row.slipVerifyCode === NOT_FOUND_CODE &&
+      (row.slipVerifyAttempts >= SLIP_NOT_FOUND_GRACE_MAX_CALLS ||
+        !inSlipNotFoundGrace(row.slipUploadedAt, ctx.now(), graceSeconds))
+    ) {
+      return {
+        outcome: {
+          kind: 'final' as const,
+          verdict: 'not_found' as const,
+          code: NOT_FOUND_CODE,
+          ref: null,
+          called: true,
+          receiversOk: false,
+          alert: null,
+        },
+        qrHash: null,
+      };
+    }
     // Calls already made for this picture that never reached a verdict (a commit that failed
-    // after the answer, or retries): at most MAX_VERIFY_ATTEMPTS in all, then unchecked.
-    if (row.slipVerifyAttempts >= attemptCeiling(row.id)) return noCall();
+    // after the answer, or retries): at most 3 (6 in its not-found grace), then unchecked.
+    if (row.slipVerifyAttempts >= attemptCeiling(row.id, row.slipVerifyCode)) return noCall();
     const mime = bytes ? sniffSlip(bytes) : null;
     // The QR text goes first (no picture leaves the machine); the picture only when no QR was read,
     // and only as JPEG or PNG (Slip2Go documents nothing else).
@@ -285,11 +320,11 @@ export function createSlipChecker(args: {
     const qrHash = keyText ? sha256(keyText) : null;
     if (decided.retry) return { outcome: { kind: 'retry', code, alert: null }, qrHash };
     // Banks can be slow to publish a transfer: a first "not found" of a fresh slip is asked again
-    // later. Only while calls remain (the last answer is always final) and never for staff's recheck.
+    // later, within the grace budget of its own (the last answer is always final), never for staff's recheck.
     if (
-      result.code === '200404' &&
+      result.code === NOT_FOUND_CODE &&
       !manual.has(row.id) &&
-      attempt < attemptCeiling(row.id) &&
+      attempt < SLIP_NOT_FOUND_GRACE_MAX_CALLS &&
       inSlipNotFoundGrace(row.slipUploadedAt, ctx.now(), graceSeconds)
     ) {
       return { outcome: { kind: 'retry', code, alert: null, grace: true }, qrHash };
@@ -434,8 +469,16 @@ export function createSlipChecker(args: {
           patch.slipVerifiedAt = previous.at;
         } else if (outcome.kind === 'retry') {
           // The attempt was counted before the call (`bumpSlipVerifyAttempts`).
-          if (outcome.grace) retryNotBefore.set(gate, ctx.now().getTime() + NOT_FOUND_RETRY_GAP_MS);
-          if (previous || locked.slipVerifyAttempts >= attemptCeiling(paymentId)) {
+          if (outcome.grace) {
+            retryNotBefore.set(gate, ctx.now().getTime() + NOT_FOUND_RETRY_GAP_MS);
+            // The mark that this picture is in its grace budget; it stays pending.
+            patch.slipVerifyCode = NOT_FOUND_CODE;
+          }
+          if (
+            previous ||
+            (!outcome.grace &&
+              locked.slipVerifyAttempts >= attemptCeiling(paymentId, locked.slipVerifyCode))
+          ) {
             patch.slipVerify = 'unchecked';
             patch.slipVerifyCode = outcome.code;
             patch.slipVerifiedAt = ctx.now();
@@ -585,7 +628,7 @@ export function createSlipChecker(args: {
       return ids.length;
     },
     async recheckBlocker(row, db = ctx.db) {
-      if (row.slipVerifyAttempts >= MAX_VERIFY_ATTEMPTS_STAFF) return 'attempts';
+      if (row.slipVerifyAttempts >= staffCeiling(row.slipVerifyCode)) return 'attempts';
       const day = await currentBusinessDate(db, ctx.now());
       return (await paymentsRepo.slipVerifyCallsOn(db, day)) >= dailyCap ? 'cap' : null;
     },

@@ -6,7 +6,9 @@ import {
   SLIP_COOLDOWN_SECONDS,
   SLIP_INVALID_FREE_TRIES,
   SLIP_INVALID_VERDICTS,
+  SLIP_NOT_FOUND_GRACE_MAX_CALLS,
   SLIP_NOT_FOUND_GRACE_SECONDS,
+  SLIP_RESEND_MIN_GAP_SECONDS,
   SLIP_VERIFY_VERDICTS,
   SLIP2GO_AUTOCONFIRM_ACCOUNT_TYPES,
   satangToSlip2goAmount,
@@ -17,6 +19,7 @@ import {
   slip2goVerdict,
   slipCooldownSeconds,
   slipQrKeyText,
+  slipResendRechecks,
 } from './slip-verify.ts';
 
 describe('amount converters', () => {
@@ -316,14 +319,48 @@ describe('the slip cooldown', () => {
 describe('the not-found grace window', () => {
   const up = new Date('2028-02-01T08:00:00.000Z');
   const at = (seconds: number) => new Date(up.getTime() + seconds * 1000);
-  test('is 180 seconds, open before the end and closed at it', () => {
-    expect(SLIP_NOT_FOUND_GRACE_SECONDS).toBe(180);
+  test('is 300 seconds, open before the end and closed at it, with its own budget of 6 calls', () => {
+    expect(SLIP_NOT_FOUND_GRACE_SECONDS).toBe(300);
+    expect(SLIP_NOT_FOUND_GRACE_MAX_CALLS).toBe(6);
     expect(inSlipNotFoundGrace(up, at(0))).toBe(true);
-    expect(inSlipNotFoundGrace(up, at(179))).toBe(true);
-    expect(inSlipNotFoundGrace(up, at(180))).toBe(false);
+    expect(inSlipNotFoundGrace(up, at(299))).toBe(true);
+    expect(inSlipNotFoundGrace(up, at(300))).toBe(false);
   });
   test('an unknown upload time, or a window of 0, is never in grace', () => {
     expect(inSlipNotFoundGrace(null, at(1))).toBe(false);
     expect(inSlipNotFoundGrace(up, at(0), 0)).toBe(false);
+  });
+});
+
+describe('a re-send of the same picture after a final "not found" or "unchecked"', () => {
+  const now = new Date('2028-02-01T08:10:00.000Z');
+  const ago = (seconds: number) => new Date(now.getTime() - seconds * 1000);
+  const base = {
+    verdict: 'not_found' as const,
+    verifiedAt: ago(60),
+    blockedAt: null,
+    reviewedAt: null,
+  };
+  test('is a fresh check at 60 seconds after the last call, not before', () => {
+    expect(SLIP_RESEND_MIN_GAP_SECONDS).toBe(60);
+    expect(slipResendRechecks(base, now)).toBe(true);
+    expect(slipResendRechecks({ ...base, verifiedAt: ago(59) }, now)).toBe(false);
+    expect(slipResendRechecks({ ...base, verdict: 'unchecked' }, now)).toBe(true);
+  });
+  test('never for another verdict, a block, a review, or an unknown call time', () => {
+    for (const verdict of [
+      null,
+      'pending',
+      'valid',
+      'fraud',
+      'amount_mismatch',
+      'receiver_mismatch',
+      'date_mismatch',
+    ] as const) {
+      expect(slipResendRechecks({ ...base, verdict }, now)).toBe(false);
+    }
+    expect(slipResendRechecks({ ...base, blockedAt: ago(5) }, now)).toBe(false);
+    expect(slipResendRechecks({ ...base, reviewedAt: ago(5) }, now)).toBe(false);
+    expect(slipResendRechecks({ ...base, verifiedAt: null }, now)).toBe(false);
   });
 });

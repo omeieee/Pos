@@ -1454,12 +1454,12 @@ describe('staff recheck of the bank check', () => {
     expect((await row(order.id))?.slip_verify_attempts).toBe(2);
   });
 
-  test('staff get 3 more attempts than the automatic 3: a 7th call is refused, nothing is written', async () => {
+  test('staff get 3 more attempts on top of the automatic ones (6 for a not-found picture): a 10th call is refused, nothing is written', async () => {
     const { order, paymentId } = await checked('200404');
-    await h.client.query('update payments set slip_verify_attempts = 5 where id = $1', [paymentId]);
+    await h.client.query('update payments set slip_verify_attempts = 8 where id = $1', [paymentId]);
     respond = () => ({ body: answer('200404', currentAmountBaht) });
     expect((await recheck(paymentId)).statusCode).toBe(200);
-    expect((await row(order.id))?.slip_verify_attempts).toBe(6);
+    expect((await row(order.id))?.slip_verify_attempts).toBe(9);
     const before = await row(order.id);
     const refused = await recheck(paymentId);
     expect(refused.statusCode).toBe(429);
@@ -2326,7 +2326,7 @@ describe('the owner lifts a block or a flag', () => {
 
 describe('a slow bank: "not found" inside the grace window is not final', () => {
   beforeEach(() => {
-    graceSeconds = 180;
+    graceSeconds = 300;
     dailyCap = 10_000;
     checker = buildChecker();
     installSlipChecker(checker);
@@ -2344,7 +2344,8 @@ describe('a slow bank: "not found" inside the grace window is not final', () => 
     const { order } = await sendAt404();
     expect(await row(order.id)).toMatchObject({
       slip_verify: 'pending',
-      slip_verify_code: null,
+      // The marker that this picture is in its grace budget (6 calls), not the 3 of an error.
+      slip_verify_code: '200404',
       slip_verify_attempts: 1,
       status: 'claimed',
     });
@@ -2361,7 +2362,7 @@ describe('a slow bank: "not found" inside the grace window is not final', () => 
       await checker.idle();
     }
     expect(calls).toHaveLength(1);
-    h.clock.advanceSeconds(19);
+    h.clock.advanceSeconds(29);
     await checker.sweep();
     await checker.idle();
     expect(calls).toHaveLength(1);
@@ -2396,8 +2397,14 @@ describe('a slow bank: "not found" inside the grace window is not final', () => 
     h.clock.advanceSeconds(200);
     await checker.sweep();
     await checker.idle();
+    expect((await payments(order.id))[0]).toMatchObject({ slip_verify: 'pending' });
+    expect(calls).toHaveLength(2);
+    h.clock.advanceSeconds(101);
+    await checker.sweep();
+    await checker.idle();
     const [payment] = await payments(order.id);
     expect(payment).toMatchObject({ slip_verify: 'not_found', slip_invalid_count: 1 });
+    // The window had passed: the last 404 became final without spending another call.
     expect(calls).toHaveLength(2);
     for (let i = 0; i < 3; i++) {
       h.clock.advanceSeconds(60);
@@ -2408,18 +2415,207 @@ describe('a slow bank: "not found" inside the grace window is not final', () => 
     expect((await payments(order.id))[0]?.slip_invalid_count).toBe(1);
   });
 
-  test('when the attempts run out inside the window the last 404 is final, counted once', async () => {
+  test('the live incident: 404 at 6, 50 and 100 seconds stays pending (the shared 3 no longer cut it)', async () => {
     const { order } = await sendAt404();
-    for (let i = 0; i < 6; i++) {
-      h.clock.advanceSeconds(25);
+    h.clock.advanceSeconds(44);
+    await checker.sweep();
+    await checker.idle();
+    h.clock.advanceSeconds(50);
+    await checker.sweep();
+    await checker.idle();
+    expect(calls).toHaveLength(3);
+    expect(await payments(order.id)).toMatchObject([
+      { slip_verify: 'pending', slip_invalid_count: 0, slip_verify_attempts: 3 },
+    ]);
+    // A later 200200 still lands as valid.
+    h.clock.advanceSeconds(40);
+    respond = () => ({ body: answer('200200', currentAmountBaht) });
+    await checker.sweep();
+    await checker.idle();
+    expect((await row(order.id))?.slip_verify).toBe('valid');
+    expect(calls).toHaveLength(4);
+  });
+
+  test('6 calls inside the window use the grace budget up: the last 404 is final, counted once', async () => {
+    const { order } = await sendAt404();
+    for (let i = 0; i < 12; i++) {
+      h.clock.advanceSeconds(30);
       await checker.sweep();
       await checker.idle();
     }
-    expect(calls).toHaveLength(3);
+    expect(calls).toHaveLength(6);
     expect((await payments(order.id))[0]).toMatchObject({
       slip_verify: 'not_found',
       slip_invalid_count: 1,
+      slip_verify_attempts: 6,
+    });
+  });
+
+  test('errors keep the normal 3 attempts; a 404 after two errors still gets the grace budget', async () => {
+    const placed = await start();
+    respond = () => new Error('connection reset');
+    await upload(placed.token, placed.order.id, picture(1));
+    await checker.idle();
+    await checker.sweep();
+    await checker.idle();
+    respond = notFound;
+    await checker.sweep();
+    await checker.idle();
+    expect(await row(placed.order.id)).toMatchObject({
+      slip_verify: 'pending',
       slip_verify_attempts: 3,
+      slip_verify_code: '200404',
+    });
+    // Errors alone stop at 3.
+    const other = await start();
+    respond = () => new Error('connection reset');
+    await upload(other.token, other.order.id, picture(2));
+    for (let i = 0; i < 4; i++) {
+      await checker.idle();
+      await checker.sweep();
+    }
+    await checker.idle();
+    expect(await row(other.order.id)).toMatchObject({
+      slip_verify: 'unchecked',
+      slip_verify_attempts: 3,
+    });
+  });
+
+  test('errors inside the grace budget are bounded by its 6 calls and settle as unchecked', async () => {
+    const { order } = await sendAt404();
+    respond = () => new Error('connection reset');
+    for (let i = 0; i < 10; i++) {
+      h.clock.advanceSeconds(30);
+      await checker.sweep();
+      await checker.idle();
+    }
+    expect(calls).toHaveLength(6);
+    expect(await row(order.id)).toMatchObject({
+      slip_verify: 'unchecked',
+      slip_verify_attempts: 6,
+    });
+  });
+
+  describe('the same picture sent again', () => {
+    /** A 404 that has become final (the window passed), then `gap` seconds on. */
+    async function finalNotFound(gap: number) {
+      const placed = await sendAt404();
+      h.clock.advanceSeconds(301);
+      await checker.sweep();
+      await checker.idle();
+      expect((await row(placed.order.id))?.slip_verify).toBe('not_found');
+      h.clock.advanceSeconds(gap);
+      return placed;
+    }
+
+    test('after 60 seconds it is a new check, and a later 200200 confirms by itself', async () => {
+      autoConfirm = { maxSatang: 100_000 };
+      checker = buildChecker();
+      installSlipChecker(checker);
+      const { token, order } = await finalNotFound(60);
+      const before = calls.length;
+      respond = () => ({ body: answer('200200', currentAmountBaht) });
+      expect((await upload(token, order.id, picture(1))).statusCode).toBe(200);
+      await checker.idle();
+      expect(calls.length).toBe(before + 1);
+      expect(await row(order.id)).toMatchObject({
+        slip_verify: 'valid',
+        slip_verify_attempts: 1,
+        status: 'confirmed',
+      });
+      // The earlier final answer was counted once and the new result adds nothing.
+      expect((await payments(order.id))[0]?.slip_invalid_count).toBe(1);
+    });
+
+    test('a new window opens: a 404 stays pending again and the cooldown count is not raised', async () => {
+      const { token, order } = await finalNotFound(60);
+      const before = calls.length;
+      await upload(token, order.id, picture(1));
+      await checker.idle();
+      expect(calls.length).toBe(before + 1);
+      expect(await row(order.id)).toMatchObject({
+        slip_verify: 'pending',
+        slip_verify_attempts: 1,
+      });
+      expect((await payments(order.id))[0]?.slip_invalid_count).toBe(1);
+    });
+
+    test('inside 60 seconds of the last call nothing is called and the verdict stays', async () => {
+      const { token, order } = await finalNotFound(59);
+      const before = calls.length;
+      expect((await upload(token, order.id, picture(1))).statusCode).toBe(200);
+      await checker.idle();
+      expect(calls.length).toBe(before);
+      expect(await row(order.id)).toMatchObject({ slip_verify: 'not_found' });
+    });
+
+    test('an unchecked verdict is re-checked the same way', async () => {
+      const { token, order } = await finalNotFound(0);
+      await h.client.query(
+        "update payments set slip_verify = 'unchecked', slip_verify_code = null where order_id = $1",
+        [order.id],
+      );
+      h.clock.advanceSeconds(60);
+      const before = calls.length;
+      await upload(token, order.id, picture(1));
+      await checker.idle();
+      expect(calls.length).toBe(before + 1);
+    });
+
+    test('after a valid answer, a fake-slip block or a mismatch it never calls', async () => {
+      const a = await start();
+      respond = () => ({ body: answer('200200', currentAmountBaht) });
+      await upload(a.token, a.order.id, picture(3));
+      await checker.idle();
+      const b = await start();
+      respond = () => ({ body: answer('200402', currentAmountBaht) });
+      await upload(b.token, b.order.id, picture(4));
+      await checker.idle();
+      const c = await start();
+      respond = () => ({ body: answer('200500', currentAmountBaht) });
+      await upload(c.token, c.order.id, picture(5));
+      await checker.idle();
+      h.clock.advanceSeconds(600);
+      const before = calls.length;
+      expect((await upload(a.token, a.order.id, picture(3))).statusCode).toBe(200);
+      expect((await upload(b.token, b.order.id, picture(4))).statusCode).toBe(200);
+      expect((await upload(c.token, c.order.id, picture(5))).statusCode).toBe(409);
+      await checker.idle();
+      expect(calls.length).toBe(before);
+      expect((await row(a.order.id))?.slip_verify).toBe('valid');
+      expect((await row(b.order.id))?.slip_verify).toBe('amount_mismatch');
+      expect((await row(c.order.id))?.slip_verify).toBe('fraud');
+    });
+
+    test('the cooldown refuses the upload first, with no call', async () => {
+      const { token, order } = await finalNotFound(60);
+      await h.client.query(
+        'update payments set slip_invalid_count = 3, slip_invalid_at = $2 where order_id = $1',
+        [order.id, h.clock.now().toISOString()],
+      );
+      const before = calls.length;
+      const res = await upload(token, order.id, picture(1));
+      expect(res.statusCode).toBe(429);
+      expect(res.json()).toMatchObject({ code: 'SLIP_COOLDOWN' });
+      await checker.idle();
+      expect(calls.length).toBe(before);
+      expect((await row(order.id))?.slip_verify).toBe('not_found');
+    });
+
+    test('the daily cap still applies: no call, nothing counted against the customer', async () => {
+      const used = await h.client.query<{ n: number }>(
+        "select coalesce(sum(n), 0)::int as n from slip_verify_daily where kind = 'calls' and business_date = '2028-02-01'",
+      );
+      dailyCap = (used.rows[0]?.n ?? 0) + 1;
+      checker = buildChecker();
+      installSlipChecker(checker);
+      const { token, order } = await finalNotFound(60);
+      const before = calls.length;
+      await upload(token, order.id, picture(1));
+      await checker.idle();
+      expect(calls.length).toBe(before);
+      expect(await row(order.id)).toMatchObject({ slip_verify: 'unchecked' });
+      expect((await payments(order.id))[0]?.slip_invalid_count).toBe(1);
     });
   });
 
