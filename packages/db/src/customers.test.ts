@@ -401,6 +401,50 @@ describe('anonymizeCustomer (PDPA erasure)', () => {
     });
   });
 
+  test("it clears the slip flag and the block and cooldown fields of the customer's payments", async () => {
+    const id = await seedCustomer(null);
+    const orderId = await seedOrder(id, 'entrance_delivery');
+    const other = await seedCustomer(null);
+    const otherOrder = await seedOrder(other, 'entrance_delivery');
+    await client.query(
+      "update customers set slip_flag_at = now(), slip_flag_reason = 'fake_slip', slip_flag_count = 2 where id = any($1)",
+      [[id, other]],
+    );
+    const pay = async (order: string) =>
+      String(
+        (
+          await client.query<{ id: string }>(
+            `insert into payments (order_id, method, status, amount_satang, void_reason, client_request_id,
+               slip_invalid_count, slip_invalid_at, slip_blocked_at, slip_block_reason, slip_reviewed_at)
+             values ($1, 'promptpay', 'cancelled', 5000, 'test', gen_random_uuid(), 3, now(), now(), 'fake_slip', now())
+             returning id`,
+            [order],
+          )
+        ).rows[0]?.id,
+      );
+    const mine = await pay(orderId);
+    const theirs = await pay(otherOrder);
+    await repo.anonymizeCustomer(db, id, at2);
+    expect(await one(id)).toMatchObject({
+      slip_flag_at: null,
+      slip_flag_reason: null,
+      slip_flag_count: 0,
+    });
+    expect(await one2('payments', mine)).toMatchObject({
+      slip_invalid_count: 0,
+      slip_invalid_at: null,
+      slip_blocked_at: null,
+      slip_block_reason: null,
+      slip_reviewed_at: null,
+    });
+    // Another customer is not touched.
+    expect(await one(other)).toMatchObject({ slip_flag_reason: 'fake_slip', slip_flag_count: 2 });
+    expect(await one2('payments', theirs)).toMatchObject({
+      slip_invalid_count: 3,
+      slip_block_reason: 'fake_slip',
+    });
+  });
+
   test('already anonymised: nothing changes and nothing is bumped', async () => {
     const id = await seedCustomer(null);
     await repo.anonymizeCustomer(db, id, at2);

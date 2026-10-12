@@ -55,7 +55,7 @@ import {
   currentShopPhone,
   lineOrderingNow,
 } from '../settings/service.ts';
-import { orderSlipBlocked, paymentSlipCooldown } from '../slips/guard.ts';
+import { orderSlipBlocked, orderSlipCooldown } from '../slips/guard.ts';
 import type { CoreContext } from '../tx.ts';
 import { CUSTOMER_SESSION_SECONDS, type CustomerPrincipal, signCustomerToken } from './session.ts';
 
@@ -249,7 +249,7 @@ export async function viewOrder(ctx: CoreContext, order: ordersRepo.OrderRow): P
   // A slip can be attached while a PromptPay payment is open (or was rejected and may be paid again).
   const slipOpen = !closed && (open?.method === 'promptpay' || rejected);
   const slipBlocked = slipOpen && orderSlipBlocked(payments);
-  const retryAfter = open?.method === 'promptpay' ? paymentSlipCooldown(open, ctx.now()) : 0;
+  const retryAfter = slipOpen ? orderSlipCooldown(payments, ctx.now()) : 0;
   return myOrderSchema.parse({
     id: order.id,
     orderNo: order.orderNo,

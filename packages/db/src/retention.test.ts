@@ -617,6 +617,36 @@ describe('slip images', () => {
     expect(await retention.clearSlipKeys(db, { slips: [], now: NOW })).toBe(0);
   });
 
+  test("clearing the slip also clears the block and cooldown fields; a live customer's flag stays", async () => {
+    const [cust] = await q<{ id: string }>(
+      `insert into customers (building, recipient_name, recipient_key, slip_flag_at, slip_flag_reason, slip_flag_count)
+       values ('B1', 'Test Flag', $1, now(), 'fake_slip', 1) returning id`,
+      [`test flag ${Math.random()}`],
+    );
+    const id = await payment({ status: 'cancelled', updatedDaysAgo: 120, key: KEY(11) });
+    await q(
+      "update payments set slip_invalid_count = 3, slip_invalid_at = now(), slip_blocked_at = now(), slip_block_reason = 'fake_slip', slip_reviewed_at = now() where id = $1",
+      [id],
+    );
+    await retention.clearSlipKeys(db, { slips: [{ id, key: KEY(11) }], now: NOW });
+    expect(
+      (
+        await q<Record<string, unknown>>(
+          'select slip_invalid_count c, slip_invalid_at a, slip_blocked_at b, slip_block_reason r, slip_reviewed_at v from payments where id = $1',
+          [id],
+        )
+      )[0],
+    ).toEqual({ c: 0, a: null, b: null, r: null, v: null });
+    expect(
+      (
+        await q<Record<string, unknown>>(
+          'select slip_flag_reason r, slip_flag_count c from customers where id = $1',
+          [cust?.id],
+        )
+      )[0],
+    ).toEqual({ r: 'fake_slip', c: 1 });
+  });
+
   test('clearing the slip also clears the duplicate-hint hashes (D-26)', async () => {
     const id = await payment({ status: 'cancelled', updatedDaysAgo: 120, key: KEY(10) });
     await q(

@@ -404,6 +404,11 @@ export async function clearSlipKeys(
           slipVerifyRef: null,
           slipVerifyAttempts: 0,
           slipVerifiedAt: null,
+          slipInvalidCount: 0,
+          slipInvalidAt: null,
+          slipBlockedAt: null,
+          slipBlockReason: null,
+          slipReviewedAt: null,
         })
         .where(and(eq(payments.id, slip.id), eq(payments.slipImageKey, slip.key)))
         .returning({ id: payments.id });

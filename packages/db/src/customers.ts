@@ -11,7 +11,7 @@
  * request. `listRecipients` returns nothing but the five fields staff need.
  */
 import { ANONYMIZED_RECIPIENT_NAME, type MemberProfile } from '@sds/shared';
-import { and, desc, eq, isNotNull, isNull, or, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm';
 import type { Db } from './client.ts';
 import { customers, orders, payments } from './schema.ts';
 
@@ -303,9 +303,37 @@ export async function anonymizeCustomer(db: Db, id: string, at: Date): Promise<A
       recipientName: null,
       deliveryNote: null,
       recipientKey: null,
+      slipFlagAt: null,
+      slipFlagReason: null,
+      slipFlagCount: 0,
     })
     .where(eq(customers.id, id))
     .returning({ version: customers.version });
+  // The slip block and cooldown history of the customer's payments goes too.
+  await db
+    .update(payments)
+    .set({
+      slipInvalidCount: 0,
+      slipInvalidAt: null,
+      slipBlockedAt: null,
+      slipBlockReason: null,
+      slipReviewedAt: null,
+    })
+    .where(
+      and(
+        inArray(
+          payments.orderId,
+          db.select({ id: orders.id }).from(orders).where(eq(orders.customerId, id)),
+        ),
+        or(
+          gt(payments.slipInvalidCount, 0),
+          isNotNull(payments.slipInvalidAt),
+          isNotNull(payments.slipBlockedAt),
+          isNotNull(payments.slipBlockReason),
+          isNotNull(payments.slipReviewedAt),
+        ),
+      ),
+    );
   const rewritten = await db
     .update(orders)
     .set({

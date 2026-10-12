@@ -1781,9 +1781,38 @@ describe('the slip cooldown', () => {
     expect(claim.json().payment.status).toBe('claimed');
   });
 
-  test('the count belongs to one payment: another order of the same customer starts clean', async () => {
-    const { token, order } = await threeInvalid();
+  test('the cooldown belongs to the order: it survives a staff reject and the new payment; a new order starts clean', async () => {
+    const { token, order, lastAt } = await threeInvalid();
+    const [first] = await payments(order.id);
+    const cancelled = await send('POST', `/v1/payments/${first?.id}/cancel-claimed`, staffToken, {
+      reason: 'ไม่พบยอดเงินเข้า',
+    });
+    expect(cancelled.statusCode).toBe(200);
+
+    // Rejected state: the customer's view still says how long to wait.
+    h.clock.set(new Date(lastAt + seconds(100)).toISOString());
+    const rejected = (await send('GET', `/v1/app/orders/${order.id}`, token)).json();
+    expect(rejected.slipRetryAfterSeconds).toBe(200);
+    expect(rejected.slipBlocked).toBeUndefined();
+
+    // The customer pays again: the new payment is still in the cooldown, for the remaining time.
+    expect((await send('POST', `/v1/app/orders/${order.id}/claim`, token)).statusCode).toBe(200);
+    expect((await payments(order.id)).length).toBe(2);
+    const refused = await upload(token, order.id, picture(4));
+    expect(refused.statusCode).toBe(429);
+    expect(refused.json()).toMatchObject({
+      code: 'SLIP_COOLDOWN',
+      details: { retryAfterSeconds: 200 },
+    });
+    expect(calls).toHaveLength(3);
+    h.clock.set(new Date(lastAt + seconds(300)).toISOString());
+    expect((await upload(token, order.id, picture(4))).statusCode).toBe(200);
+
+    // Another order of the same customer starts clean.
     const next = await place(token);
+    expect((await send('GET', `/v1/app/orders/${next.id}`, token)).json()).not.toHaveProperty(
+      'slipRetryAfterSeconds',
+    );
     expect((await upload(token, next.id, picture(7))).statusCode).toBe(200);
     expect(order.id).not.toBe(next.id);
   });

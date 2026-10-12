@@ -786,7 +786,6 @@ export async function movePayment(
     if (isCustomer(actor) && moveName === 'claim' && input.slip) {
       const refusal = slipUploadRefusal(
         await paymentsRepo.listPaymentsForOrder(tx, order.id),
-        row,
         ctx.now(),
       );
       if (refusal) throw refusal;
