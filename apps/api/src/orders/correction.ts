@@ -243,6 +243,7 @@ export async function correctOrder(
           meta,
         );
         patch.paymentStatus = retired.paymentStatus;
+        patch.claimWithoutSlip = retired.claimWithoutSlip;
         refundedSatang = retired.refundedSatang;
         // Money was held and is now out of play: the customer owes the whole new total again.
         if (payments.some((p) => p.status === 'confirmed')) {
@@ -371,6 +372,7 @@ export async function voidOrder(
       cancelledAt: ctx.now(),
       cancelReason: input.reason,
       paymentStatus: retired.paymentStatus,
+      claimWithoutSlip: retired.claimWithoutSlip,
     });
     if (!updated) throw versionConflict(row.version); // cannot happen under the row lock
     const dto = await dtoOf(tx, updated);

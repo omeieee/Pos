@@ -13,6 +13,7 @@
 import { ANONYMIZED_RECIPIENT_NAME, type MemberProfile } from '@sds/shared';
 import { and, desc, eq, gt, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm';
 import type { Db } from './client.ts';
+import { refreshClaimWithoutSlip } from './payments.ts';
 import { customers, orders, payments } from './schema.ts';
 
 export interface RecipientDetails {
@@ -238,12 +239,13 @@ export type AnonymizeResult =
  */
 export async function takeCustomerSlipKeys(db: Db, customerId: string): Promise<string[]> {
   const held = await db
-    .select({ id: payments.id, key: payments.slipImageKey })
+    .select({ id: payments.id, orderId: payments.orderId, key: payments.slipImageKey })
     .from(payments)
     .innerJoin(orders, eq(orders.id, payments.orderId))
     .where(and(eq(orders.customerId, customerId), isNotNull(payments.slipImageKey)))
     .for('update', { of: payments });
   const keys: string[] = [];
+  const orderIds = new Set<string>();
   for (const row of held) {
     if (row.key === null) continue;
     await db
@@ -267,7 +269,9 @@ export async function takeCustomerSlipKeys(db: Db, customerId: string): Promise<
       })
       .where(eq(payments.id, row.id));
     keys.push(row.key);
+    orderIds.add(row.orderId);
   }
+  await refreshClaimWithoutSlip(db, [...orderIds]);
   return keys;
 }
 

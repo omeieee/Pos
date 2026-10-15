@@ -500,6 +500,13 @@ export const orders = pgTable(
     linePictureUrl: text('line_picture_url'),
     status: text('status').notNull(),
     paymentStatus: text('payment_status').notNull().default('unpaid'),
+    /**
+     * True while a payment of the order is `claimed` ("โอนแล้ว") and has no slip picture, so the
+     * board can flag it without reading payments. Written by the payment code in the transaction
+     * that changes the payment (and by `refreshClaimWithoutSlip` where a slip key is cleared), so
+     * the order gets a new rev and the change reaches every device. A boolean only: no key leaves.
+     */
+    claimWithoutSlip: boolean('claim_without_slip').notNull().default(false),
     subtotalSatang: money('subtotal_satang').notNull(),
     discountSatang: money('discount_satang').notNull().default(0),
     discountReason: text('discount_reason'),

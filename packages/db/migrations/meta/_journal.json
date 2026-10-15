@@ -253,6 +253,13 @@
       "when": 1791787186060,
       "tag": "0035_friendly_echo",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1792027202550,
+      "tag": "0036_order_claim_without_slip",
+      "breakpoints": true
     }
   ]
 }

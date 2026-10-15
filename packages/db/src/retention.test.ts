@@ -663,4 +663,34 @@ describe('slip images', () => {
       )[0],
     ).toEqual({ i: null, r: null, q: null, c: null });
   });
+
+  describe('the board flag claim_without_slip follows a cleared slip key', () => {
+    const flagOf = async (paymentId: string) =>
+      (
+        await q<{ f: boolean; rev: string; version: number }>(
+          'select o.claim_without_slip f, o.rev, o.version from orders o join payments p on p.order_id = o.id where p.id = $1',
+          [paymentId],
+        )
+      )[0];
+
+    test('a claimed payment that loses its picture turns the flag on, with a new rev and version', async () => {
+      const id = await payment({ status: 'claimed', updatedDaysAgo: 120, key: KEY(20) });
+      const before = await flagOf(id);
+      expect(before?.f).toBe(false);
+      await retention.clearSlipKeys(db, { slips: [{ id, key: KEY(20) }], now: NOW });
+      const after = await flagOf(id);
+      expect(after?.f).toBe(true);
+      expect(Number(after?.rev)).toBeGreaterThan(Number(before?.rev));
+      expect(after?.version).toBeGreaterThan(before?.version ?? 0);
+    });
+
+    test('a cancelled payment that loses its picture leaves the order untouched', async () => {
+      const id = await payment({ status: 'cancelled', updatedDaysAgo: 120, key: KEY(21) });
+      const before = await flagOf(id);
+      await retention.clearSlipKeys(db, { slips: [{ id, key: KEY(21) }], now: NOW });
+      const after = await flagOf(id);
+      expect(after?.f).toBe(false);
+      expect(after?.rev).toBe(before?.rev);
+    });
+  });
 });

@@ -226,6 +226,14 @@ describe('where the verdict never goes', () => {
       slipVerifiedAt: null,
     });
     expect((await q('select 1 from payments where id = $1', [row.id])).length).toBe(1);
+    // The claim is still open and its picture is gone: the order's board flag says so.
+    expect(
+      (
+        await q<{ f: boolean }>('select claim_without_slip f from orders where id = $1', [
+          row.orderId,
+        ])
+      )[0]?.f,
+    ).toBe(true);
   });
 });
 

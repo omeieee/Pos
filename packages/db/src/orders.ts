@@ -51,6 +51,8 @@ export interface OrderPatch {
   totalSatang?: number;
   /** Derived from the order's payments by the payment service, in the payment's transaction. */
   paymentStatus?: OrderPaymentStatus;
+  /** Derived from the order's payments, written together with `paymentStatus`. */
+  claimWithoutSlip?: boolean;
 }
 
 export interface NewOrder {

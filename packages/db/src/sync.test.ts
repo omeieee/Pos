@@ -318,7 +318,10 @@ describe('readChanges', () => {
     }
     expect(json).not.toContain('MODIFIER-SENTINEL');
     expect(json).not.toContain('LINE-SECRET-SENTINEL');
-    expect(json).not.toMatch(/cost|hash|token|payload|slip/i);
+    // `claimWithoutSlip` is the one allowed key with "slip" in its name: a boolean, no slip data.
+    expect(json.replaceAll('claimWithoutSlip', '')).not.toMatch(/cost|hash|token|payload|slip/i);
+    const orderEntry = batch.entries.find((e) => e.kind === 'order');
+    expect(orderEntry?.kind === 'order' && orderEntry.order.claimWithoutSlip).toBe(false);
   });
 
   test('order lines come with their modifiers cut down to the known keys', async () => {

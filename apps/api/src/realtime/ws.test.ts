@@ -768,7 +768,8 @@ describe('what a device could ever have been sent', () => {
       const text = JSON.stringify(all[who].client.frames);
       for (const secret of secrets)
         expect(text, `${who} must not see a secret`).not.toContain(secret);
-      expect(text, who).not.toMatch(
+      // `claimWithoutSlip` is the one allowed key with "slip" in its name: a boolean, no slip data.
+      expect(text.replaceAll('claimWithoutSlip', ''), who).not.toMatch(
         /cost|pinHash|pin_hash|tokenHash|token_hash|requestHash|request_hash|qrPayload|qr_payload|idValue|lineUserId|line_user_id|failedPin|lockedUntil|stepUp|slip/i,
       );
     }

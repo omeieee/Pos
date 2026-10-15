@@ -208,6 +208,26 @@ export async function updatePaymentIfVersion(
 }
 
 /**
+ * Brings `orders.claim_without_slip` in line with the payments of these orders (a claimed payment
+ * with no slip key), writing only the orders where it changes: each of those gets a new rev and
+ * version from the sync trigger, so the change reaches the feed. For code that clears slip keys
+ * outside a payment move (retention, erasure); a payment move sets the column in `settleOrder`.
+ * Returns the ids of the orders that changed.
+ */
+export async function refreshClaimWithoutSlip(db: Db, orderIds: string[]): Promise<string[]> {
+  if (orderIds.length === 0) return [];
+  const held = sql`exists (select 1 from ${payments} where ${payments.orderId} = ${orders.id} and ${payments.status} = 'claimed' and ${payments.slipImageKey} is null)`;
+  const changed = await db
+    .update(orders)
+    .set({ claimWithoutSlip: held })
+    .where(
+      and(inArray(orders.id, orderIds), sql`${orders.claimWithoutSlip} is distinct from ${held}`),
+    )
+    .returning({ id: orders.id });
+  return changed.map((r) => r.id);
+}
+
+/**
  * Ids of payments whose slip is still waiting to be read, oldest change first (the sweep job).
  * `ocr` picks rows waiting for the amount reading (`slip_check`), `verify` rows waiting for the
  * bank check (`slip_verify`); each kind is switched on by its own setting, so a leftover

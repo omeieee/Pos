@@ -28,6 +28,7 @@ import { and, asc, eq, inArray, isNotNull, isNull, lt, or, sql } from 'drizzle-o
 import { insertAudit } from './audit.ts';
 import type { Db } from './client.ts';
 import { anonymizeCustomer } from './customers.ts';
+import { refreshClaimWithoutSlip } from './payments.ts';
 import {
   customers,
   lineButtonReplies,
@@ -388,6 +389,7 @@ export async function clearSlipKeys(
   if (args.slips.length === 0) return 0;
   return db.transaction(async (tx) => {
     let cleared = 0;
+    const orderIds = new Set<string>();
     for (const slip of args.slips) {
       const done = await tx
         .update(payments)
@@ -414,9 +416,12 @@ export async function clearSlipKeys(
           slipReviewedAt: null,
         })
         .where(and(eq(payments.id, slip.id), eq(payments.slipImageKey, slip.key)))
-        .returning({ id: payments.id });
+        .returning({ id: payments.id, orderId: payments.orderId });
       cleared += done.length;
+      for (const row of done) orderIds.add(row.orderId);
     }
+    // A claimed payment that lost its picture now counts as "no slip" on its order's board flag.
+    await refreshClaimWithoutSlip(tx, [...orderIds]);
     if (cleared > 0) {
       await insertAudit(tx, {
         actorType: 'system',

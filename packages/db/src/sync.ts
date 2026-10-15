@@ -61,6 +61,7 @@ const orderColumns = {
   linePictureUrl: orders.linePictureUrl,
   status: orders.status,
   paymentStatus: orders.paymentStatus,
+  claimWithoutSlip: orders.claimWithoutSlip,
   subtotalSatang: orders.subtotalSatang,
   discountSatang: orders.discountSatang,
   totalSatang: orders.totalSatang,

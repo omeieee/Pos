@@ -68,6 +68,12 @@ export const orderDtoSchema = z.object({
     .optional(),
   status: z.enum(ORDER_STATUSES),
   paymentStatus: z.enum(ORDER_PAYMENT_STATUSES),
+  /**
+   * True while a payment is `claimed` ("โอนแล้ว") and has no slip picture, so the board can flag
+   * the order without reading its payments. A boolean only: the slip itself is never in the DTO.
+   * Absent from an older server (treat as false).
+   */
+  claimWithoutSlip: z.boolean().optional(),
   subtotalSatang: nonNegativeSatangSchema,
   discountSatang: nonNegativeSatangSchema,
   totalSatang: nonNegativeSatangSchema,

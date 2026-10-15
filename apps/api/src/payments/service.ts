@@ -234,16 +234,21 @@ async function moneyOf(tx: Db, orderId: string) {
   return { rows, refunds, amounts: amountsOf(rows, refunds) };
 }
 
+/** The board flag: a claimed payment ("โอนแล้ว") that has no slip picture (`orders.claim_without_slip`). */
+export const claimWithoutSlipOf = (rows: readonly paymentsRepo.PaymentRow[]): boolean =>
+  rows.some((p) => p.status === 'claimed' && p.slipImageKey === null);
+
 /**
- * Recomputes the order's payment status from ALL its payments, writes it in this transaction
- * (the sync trigger bumps the order's version and rev, whether or not the value changed) and
- * emits `order.upserted`. The caller holds the order lock.
+ * Recomputes the order's payment status and its "claimed, no slip" flag from ALL its payments,
+ * writes them in this transaction (the sync trigger bumps the order's version and rev, whether or
+ * not the values changed) and emits `order.upserted`. The caller holds the order lock.
  */
 async function settleOrder(tx: Db, order: ordersRepo.OrderRow, emit: Emit): Promise<OrderDto> {
-  const { amounts } = await moneyOf(tx, order.id);
+  const { rows, amounts } = await moneyOf(tx, order.id);
   const status = derivePaymentStatus(satang(order.totalSatang), amounts);
   const updated = await ordersRepo.updateOrderIfVersion(tx, order.id, order.version, {
     paymentStatus: status,
+    claimWithoutSlip: claimWithoutSlipOf(rows),
   });
   if (!updated) throw versionConflict(order.version); // cannot happen under the row lock
   const dto = await orderDto(tx, updated);
@@ -827,7 +832,16 @@ export async function movePayment(
         });
         if (!swapped) throw versionConflict(row.version); // cannot happen under the row lock
         if (row.slipImageKey) input.slip.onReplaced?.(row.slipImageKey);
-        return { payment: emitPayment(emit, swapped), order: await orderDto(tx, order) };
+        const payment = emitPayment(emit, swapped);
+        // The first picture on a claim that had none clears the board flag: the order moves too.
+        const flag = claimWithoutSlipOf(await paymentsRepo.listPaymentsForOrder(tx, order.id));
+        return {
+          payment,
+          order:
+            flag === order.claimWithoutSlip
+              ? await orderDto(tx, order)
+              : await settleOrder(tx, order, emit),
+        };
       }
       return { payment: toPaymentDto(row), order: await orderDto(tx, order) };
     }
@@ -1226,7 +1240,11 @@ export async function retirePaymentsForOwnerChange(
   action: PastOrderPaymentAction | undefined,
   emit: Emit,
   meta: RequestMeta,
-): Promise<{ paymentStatus: OrderPaymentStatus; refundedSatang: number }> {
+): Promise<{
+  paymentStatus: OrderPaymentStatus;
+  claimWithoutSlip: boolean;
+  refundedSatang: number;
+}> {
   const { rows: all, refunds } = await moneyOf(tx, order.id);
   const returnedEarlier = refundedBy(refunds);
   let refundedSatang = 0;
@@ -1287,6 +1305,7 @@ export async function retirePaymentsForOwnerChange(
   }
   return {
     paymentStatus: derivePaymentStatus(satang(order.totalSatang), amountsOf(after)),
+    claimWithoutSlip: claimWithoutSlipOf(after),
     refundedSatang,
   };
 }

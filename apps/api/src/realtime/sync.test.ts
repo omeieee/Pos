@@ -500,7 +500,8 @@ describe('nothing forbidden, for any role', () => {
       const text = JSON.stringify({ changes, pages });
       for (const secret of sentinels)
         expect(text, `${role} must not see ${secret.slice(0, 12)}`).not.toContain(secret);
-      expect(text, role).not.toMatch(
+      // `claimWithoutSlip` is the one allowed key with "slip" in its name: a boolean, no slip data.
+      expect(text.replaceAll('claimWithoutSlip', ''), role).not.toMatch(
         /cost|pinHash|pin_hash|tokenHash|token_hash|requestHash|request_hash|qrPayload|qr_payload|idValue|lineUserId|line_user_id|failedPin|lockedUntil|stepUp|slip|clientRequestId|updatedBy|commission/i,
       );
       // The test numbers used for costs.
