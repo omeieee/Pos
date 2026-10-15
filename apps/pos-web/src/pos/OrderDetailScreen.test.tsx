@@ -205,6 +205,16 @@ describe('the order page', () => {
     await waitFor(() => expect(screen.getByRole('heading', { name: 'ออเดอร์ S-007' })).toBeTruthy());
   });
 
+  test('flags a claim with no slip in the header, only while the flag is true', async () => {
+    const flagged = await setup({ order: withItems({ claimWithoutSlip: true }) });
+    renderScreen(<OrderDetailScreen id={ID} />, flagged.services);
+    expect(screen.getAllByText(th['orders.flag.noSlip']).length).toBe(1);
+    cleanup();
+    const plain = await setup({ order: withItems({ claimWithoutSlip: false }) });
+    renderScreen(<OrderDetailScreen id={ID} />, plain.services);
+    expect(screen.queryByText(th['orders.flag.noSlip'])).toBeNull();
+  });
+
   test('shows why a cancelled order was cancelled', async () => {
     const { services } = await setup({
       order: withItems({ status: 'cancelled', cancelReason: 'ลูกค้าเปลี่ยนใจ' }),

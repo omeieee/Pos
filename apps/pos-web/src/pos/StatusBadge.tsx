@@ -32,6 +32,17 @@ export function PaymentStatusBadge({ status }: { status: OrderPaymentStatus }) {
   );
 }
 
+/** "Says paid, but no slip yet": the claim waits on the staff's own check of the bank app. */
+export function NoSlipFlag() {
+  const tr = useT();
+  return (
+    <span className="g-badge g-b-warn status">
+      <Gi n="info" />
+      {tr('orders.flag.noSlip')}
+    </span>
+  );
+}
+
 export function OrderStatusBadge({ status }: { status: OrderStatus }) {
   const tr = useT();
   const { tone, icon } = ORDER[status];

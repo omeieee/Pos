@@ -38,7 +38,7 @@ import {
   paidToday,
 } from './order-board.ts';
 import { QueuedOrders } from './QueuedOrders.tsx';
-import { OrderStatusBadge, PaymentStatusBadge } from './StatusBadge.tsx';
+import { NoSlipFlag, OrderStatusBadge, PaymentStatusBadge } from './StatusBadge.tsx';
 import { useLoadOrders } from './use-load-orders.ts';
 import { useStorefrontHours } from './use-storefront-hours.ts';
 
@@ -67,10 +67,13 @@ function nextStep(order: OrderDto): 'review' | 'charge' | 'open' {
 
 /** The payment badge; a cancelled order shows that instead, because it owes nothing. */
 function StateBadge({ order }: { order: OrderDto }) {
-  return order.status === 'cancelled' ? (
-    <OrderStatusBadge status="cancelled" />
-  ) : (
-    <PaymentStatusBadge status={order.paymentStatus} />
+  if (order.status === 'cancelled') return <OrderStatusBadge status="cancelled" />;
+  if (!order.claimWithoutSlip) return <PaymentStatusBadge status={order.paymentStatus} />;
+  return (
+    <span style={s('display:inline-flex;flex-direction:column;align-items:flex-end;gap:4px')}>
+      <PaymentStatusBadge status={order.paymentStatus} />
+      <NoSlipFlag />
+    </span>
   );
 }
 

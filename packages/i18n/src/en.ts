@@ -257,6 +257,7 @@ export const en = {
   'orders.cta.open': 'Open order',
   'orders.hint.awaiting':
     'The customer tapped “I have paid” · check the amount in your bank app before confirming',
+  'orders.flag.noSlip': 'Says paid, no slip yet',
   'orders.notifyCustomer': 'Money not found · tell the customer',
   'orders.auditNote':
     'Who confirmed and when is saved in the audit log · cancelling or refunding after confirmation asks for identity again',

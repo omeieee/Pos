@@ -248,6 +248,7 @@ export const th = {
   'orders.cta.charge': 'คิดเงิน',
   'orders.cta.open': 'เปิดออเดอร์',
   'orders.hint.awaiting': 'ลูกค้ากด “โอนแล้ว” · ตรวจยอดในแอปธนาคารก่อนยืนยัน',
+  'orders.flag.noSlip': 'โอนแล้ว แต่ยังไม่มีสลิป',
   'orders.notifyCustomer': 'ยังไม่พบเงินเข้า · แจ้งลูกค้า',
   'orders.auditNote': 'บันทึกผู้ยืนยันและเวลาใน audit log · การยกเลิกหรือคืนเงินหลังยืนยันต้องยืนยันตัวตนอีกครั้ง',
   'orders.paidToday': 'รับเงินแล้ววันนี้',

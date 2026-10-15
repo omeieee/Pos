@@ -23,7 +23,7 @@ import { OrderMoves } from './OrderMoves.tsx';
 import { OrderSummary, type SummaryLine } from './OrderSummary.tsx';
 import { PaymentPanel } from './PaymentPanel.tsx';
 import { PageNote, PayPage } from './PayParts.tsx';
-import { OrderStatusBadge, PaymentStatusBadge } from './StatusBadge.tsx';
+import { NoSlipFlag, OrderStatusBadge, PaymentStatusBadge } from './StatusBadge.tsx';
 
 type Load = { state: 'idle' | 'loading' | 'notFound' } | { state: 'error'; error: unknown };
 
@@ -172,6 +172,7 @@ export function OrderDetailScreen({ id }: { id: string }) {
           <>
             <OrderStatusBadge status={order.status} />
             <PaymentStatusBadge status={order.paymentStatus} />
+            {order.claimWithoutSlip && order.status !== 'cancelled' ? <NoSlipFlag /> : null}
           </>
         }
         recipient={to ? { headline: to.headline, note: to.note } : null}

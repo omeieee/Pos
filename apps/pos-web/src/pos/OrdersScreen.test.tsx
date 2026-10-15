@@ -139,6 +139,31 @@ describe('the orders table (iPad and laptop)', () => {
     expect(within(panel).getByText('฿75.00')).toBeTruthy();
   });
 
+  test('the table row flags a claim with no slip, only while it is true', async () => {
+    const flagged = today(1, {
+      paymentStatus: 'awaiting_confirmation',
+      claimWithoutSlip: true,
+    });
+    const orders = [
+      flagged,
+      today(2, { paymentStatus: 'awaiting_confirmation', claimWithoutSlip: false }),
+      today(3, { paymentStatus: 'awaiting_confirmation' }),
+      today(4, {
+        status: 'cancelled',
+        paymentStatus: 'awaiting_confirmation',
+        claimWithoutSlip: true,
+      }),
+    ];
+    renderScreen(<OrdersScreen />, setup(orders).services);
+    const text = th['orders.flag.noSlip'];
+    expect(within(rowOf('S-001')).getByText(text)).toBeTruthy();
+    expect(within(rowOf('S-002')).queryByText(text)).toBeNull();
+    expect(within(rowOf('S-003')).queryByText(text)).toBeNull();
+    // A cancelled order owes nothing, so the flag is not shown.
+    expect(within(rowOf('S-004')).queryByText(text)).toBeNull();
+    expect(en['orders.flag.noSlip']).toBeTruthy();
+  });
+
   test('leaves out other days, and the "all" view includes finished and cancelled orders', () => {
     const env = setup([
       today(1, { status: 'preparing' }),
@@ -369,6 +394,22 @@ describe('the orders list on an iPhone', () => {
     expect(within(unpaid as HTMLElement).getByText(th['orders.cta.charge'])).toBeTruthy();
     expect(done?.textContent).not.toContain(th['orders.cta.charge']);
     expect(done?.textContent).not.toContain(th['orders.cta.review']);
+  });
+
+  test('the phone card flags a claim with no slip, only while it is true', async () => {
+    const env = await phoneSetup([
+      today(1, { paymentStatus: 'awaiting_confirmation', claimWithoutSlip: true }),
+      today(2, { paymentStatus: 'awaiting_confirmation' }),
+      today(3, { status: 'cancelled', claimWithoutSlip: true }),
+    ]);
+    renderScreen(<OrdersScreen />, env.services);
+    const card = (no: string) => cards().find((c) => c.textContent?.includes(no));
+    const [flagged, plain, cancelled] = [card('S-001'), card('S-002'), card('S-003')];
+    expect(flagged && plain && cancelled).toBeTruthy();
+    const text = th['orders.flag.noSlip'];
+    expect(flagged?.textContent).toContain(text);
+    expect(plain?.textContent).not.toContain(text);
+    expect(cancelled?.textContent).not.toContain(text);
   });
 
   test('the chips are all, to pay, cooking and done', async () => {
