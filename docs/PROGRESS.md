@@ -36,6 +36,9 @@ Newest entries first. Add entries with `/checkpoint`. Each entry covers what cha
 - **Done:** checked `git` and the live API. `origin/main` = local `main` = `8856aae`, and `/healthz` reports `8856aae`. So the slip-status, recheck, cooldown, fake-slip-block and per-bank first-call-hold work (D-28, entries below) is deployed; their "NOT pushed" wording is out of date. `SLIP_AUTOCONFIRM` is still off.
 - **Next:** order-board flag for no-slip claims (backend field, then POS badge); owner: Slip2Go trial ends 2026-10-19, real-device checks, a few watched real transfers before auto-confirm.
 
+## 2026-10-15 · P4 · First E2E flow: no-slip flag (merged locally, NOT pushed)
+- **Done:** `apps/pos-web/e2e/no-slip-flag.e2e.ts` (claim PromptPay, board badge on A not B, no overflow, staff confirm, badge gone) plus the mock now derives `claimWithoutSlip` from a claimed payment. Run: `pnpm --filter @sds/pos-web e2e e2e/no-slip-flag.e2e.ts --project=ipad-chromium --project=iphone-chromium`. **Verified:** 2 passed (re-run on main), agent reported 18 passed across WebKit/Firefox projects; pos-web unit 1890, biome 0 errors, build 12/12. **Not covered:** customer LIFF flow, real slips, real iOS Safari.
+
 ## 2026-10-15 · P4 · Order-board flag for claimed-without-slip (DEPLOYED 71b4703)
 - **Done:** `OrderDto.claimWithoutSlip` (migration 0036, set in `settleOrder`/correction/retention/erasure, in sync feed and `order.upserted`; boolean only, no slip data) and a warn badge "โอนแล้ว แต่ยังไม่มีสลิป" on the orders table, phone cards, detail panel and order page header. QA fixes: orders are locked before payments in retention and erasure (deadlock risk), and retention/erasure now publish `order.upserted` for changed orders. Commits 0327432, 9e13e55, 49e5e36.
 - **Verified (on main):** biome 0 errors; build 12/12; shared 1117, db 299, api 1376, pos-web 1890, liff-web 114, i18n 22, line 69, ui 118, promptpay 1276. qa-security-reviewer: no blockers.
