@@ -41,7 +41,7 @@ Newest entries first. Add entries with `/checkpoint`. Each entry covers what cha
 - **Verified (on main):** biome 0 errors; build 12/12; shared 1117, db 299, api 1376, pos-web 1890, liff-web 114, i18n 22, line 69, ui 118, promptpay 1276. qa-security-reviewer: no blockers.
 - **Not verified:** real Postgres lock behaviour (PGlite is single-connection; lock order checked from the SQL log), real iPad/iPhone badge layout.
 - **Open owner question:** after 90 days retention deletes the slip of a still-claimed payment and the flag turns on. Default kept: show the flag.
-- **Deployed:** pushed with owner OK. First push 7056b86 failed CI on a flaky test (`menu.test.ts` grepped the menu JSON for "1234", which a random UUID can contain; now key-based), so its deploy was skipped; 71b4703 deployed, `/healthz` shows it, `/readyz` 200, `/v1/orders` 401 without a session. Migration 0036 ran with the deploy (not checked in Supabase).
+- **Deployed:** pushed with owner OK. First push 7056b86 failed CI on a flaky test (`menu.test.ts` grepped the menu JSON for "1234", which a random UUID can contain; now key-based), so its deploy was skipped; 71b4703 deployed, `/healthz` shows it, `/readyz` 200, `/v1/orders` 401 without a session. Migration 0036 is applied (Supabase read-only check 2026-10-15: `orders.claim_without_slip` boolean default false). Owner decision 2026-10-15: keep the 90-day retention flag default.
 - **Next:** owner device check of the badge on iPad and iPhone; Slip2Go trial ends 2026-10-19.
 
 ## 2026-10-12 · P4 · Slip status for customers, no-slip flag, recheck, cooldown, fake-slip block (D-28; merged locally, NOT pushed; privacy line + owner alert added, notice 2026-10-14)
