@@ -36,12 +36,13 @@ Newest entries first. Add entries with `/checkpoint`. Each entry covers what cha
 - **Done:** checked `git` and the live API. `origin/main` = local `main` = `8856aae`, and `/healthz` reports `8856aae`. So the slip-status, recheck, cooldown, fake-slip-block and per-bank first-call-hold work (D-28, entries below) is deployed; their "NOT pushed" wording is out of date. `SLIP_AUTOCONFIRM` is still off.
 - **Next:** order-board flag for no-slip claims (backend field, then POS badge); owner: Slip2Go trial ends 2026-10-19, real-device checks, a few watched real transfers before auto-confirm.
 
-## 2026-10-15 · P4 · Order-board flag for claimed-without-slip (merged locally, NOT pushed)
+## 2026-10-15 · P4 · Order-board flag for claimed-without-slip (DEPLOYED 71b4703)
 - **Done:** `OrderDto.claimWithoutSlip` (migration 0036, set in `settleOrder`/correction/retention/erasure, in sync feed and `order.upserted`; boolean only, no slip data) and a warn badge "โอนแล้ว แต่ยังไม่มีสลิป" on the orders table, phone cards, detail panel and order page header. QA fixes: orders are locked before payments in retention and erasure (deadlock risk), and retention/erasure now publish `order.upserted` for changed orders. Commits 0327432, 9e13e55, 49e5e36.
 - **Verified (on main):** biome 0 errors; build 12/12; shared 1117, db 299, api 1376, pos-web 1890, liff-web 114, i18n 22, line 69, ui 118, promptpay 1276. qa-security-reviewer: no blockers.
 - **Not verified:** real Postgres lock behaviour (PGlite is single-connection; lock order checked from the SQL log), real iPad/iPhone badge layout.
 - **Open owner question:** after 90 days retention deletes the slip of a still-claimed payment and the flag turns on. Default kept: show the flag.
-- **Next:** owner OK to push (auto-deploys, runs migration 0036 which backfills and bumps version of orders with an open slip-less claim), poll `/healthz`; device check of the badge.
+- **Deployed:** pushed with owner OK. First push 7056b86 failed CI on a flaky test (`menu.test.ts` grepped the menu JSON for "1234", which a random UUID can contain; now key-based), so its deploy was skipped; 71b4703 deployed, `/healthz` shows it, `/readyz` 200, `/v1/orders` 401 without a session. Migration 0036 ran with the deploy (not checked in Supabase).
+- **Next:** owner device check of the badge on iPad and iPhone; Slip2Go trial ends 2026-10-19.
 
 ## 2026-10-12 · P4 · Slip status for customers, no-slip flag, recheck, cooldown, fake-slip block (D-28; merged locally, NOT pushed; privacy line + owner alert added, notice 2026-10-14)
 - **Done:** Slip2Go deploy `a6b7ce0` is live (healthz ok, `SLIP_AUTOCONFIRM` off). On top, local `main`: customer neutral slip states + paid pop-up (no push), LINE replies asking for the slip, POS no-slip flag / matched-slip line / recheck button, 5-minute cooldown after 3 invalid slips, per-order fake-slip block, staff-only customer flag, owner-only clear endpoints (migration 0033). QA reviews: no blockers; fixes for PDPA erasure of flag/block fields and cooldown surviving a staff reject are in progress.
