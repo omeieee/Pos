@@ -726,7 +726,8 @@ describe('GET /v1/menu', () => {
     });
     const res = await call('GET', '/v1/menu', undefined);
     expect(res.body).not.toMatch(/cost/i);
-    expect(res.body).not.toContain('1234');
+    // A bare "1234" can occur inside a random UUID, so look for it only as a JSON number value.
+    expect(res.body).not.toMatch(/[:,[]1234[,}\]]/);
     const menu = publicMenuResponseSchema.parse(res.json());
     const found = menu.categories.flatMap((c) => c.items).find((i) => i.id === item.id);
     expect(found?.modifierGroups[0]?.options.map((o) => o.id)).toEqual([g.options[0]?.id]);
