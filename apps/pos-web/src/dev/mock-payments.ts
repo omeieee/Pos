@@ -166,10 +166,14 @@ export function createMockPayments(deps: Deps) {
       order.totalSatang,
       forOrder(order.id).map((p) => ({ status: p.status, amount: p.amountSatang })),
     );
+    // The mock takes no slip pictures, so every claimed payment "says paid, no slip yet" (the
+    // server derives the flag the same way: a claimed payment without a slip, `claimWithoutSlipOf`).
+    const claimWithoutSlip = forOrder(order.id).some((p) => p.status === 'claimed');
     const next: OrderDto = {
       ...order,
       ...extra,
       paymentStatus: status,
+      claimWithoutSlip,
       version: order.version + 1,
       rev: deps.nextRev(),
     };
