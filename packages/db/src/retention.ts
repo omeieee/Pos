@@ -28,7 +28,7 @@ import { and, asc, eq, inArray, isNotNull, isNull, lt, or, sql } from 'drizzle-o
 import { insertAudit } from './audit.ts';
 import type { Db } from './client.ts';
 import { anonymizeCustomer } from './customers.ts';
-import { refreshClaimWithoutSlip } from './payments.ts';
+import { lockOrders, refreshClaimWithoutSlip } from './payments.ts';
 import {
   customers,
   lineButtonReplies,
@@ -385,9 +385,21 @@ export async function findReferencedSlipKeys(db: Db, keys: string[]): Promise<Se
 export async function clearSlipKeys(
   db: Db,
   args: { slips: { id: string; key: string }[]; now: Date },
-): Promise<number> {
-  if (args.slips.length === 0) return 0;
+): Promise<{ cleared: number; changedOrderIds: string[] }> {
+  if (args.slips.length === 0) return { cleared: 0, changedOrderIds: [] };
   return db.transaction(async (tx) => {
+    // Lock the orders first, in id order: `settleOrder` takes the order and then its payment, so
+    // taking them in the other order here (payment, then the order's flag) could deadlock.
+    const owners = await tx
+      .select({ orderId: payments.orderId })
+      .from(payments)
+      .where(
+        inArray(
+          payments.id,
+          args.slips.map((s) => s.id),
+        ),
+      );
+    await lockOrders(tx, [...new Set(owners.map((r) => r.orderId))]);
     let cleared = 0;
     const orderIds = new Set<string>();
     for (const slip of args.slips) {
@@ -421,7 +433,7 @@ export async function clearSlipKeys(
       for (const row of done) orderIds.add(row.orderId);
     }
     // A claimed payment that lost its picture now counts as "no slip" on its order's board flag.
-    await refreshClaimWithoutSlip(tx, [...orderIds]);
+    const changedOrderIds = await refreshClaimWithoutSlip(tx, [...orderIds]);
     if (cleared > 0) {
       await insertAudit(tx, {
         actorType: 'system',
@@ -430,6 +442,6 @@ export async function clearSlipKeys(
         after: { deleted: cleared, afterDays: RETENTION_DAYS.slipImages },
       });
     }
-    return cleared;
+    return { cleared, changedOrderIds };
   });
 }

@@ -131,6 +131,46 @@ describe('POST /v1/customers/{id}/anonymize', () => {
     await expect(slipStore.get(key)).resolves.toBeNull();
   });
 
+  test('erasing turns the board flag on for a claimed payment that loses its picture, and publishes the order even when nothing else on it changed', async () => {
+    const id = await seedCustomer();
+    // No recipient, note or member text on this order: only the slip picture goes.
+    const [ord] = (
+      await h.client.query<{ id: string }>(
+        `insert into orders (order_no, business_date, channel, fulfillment, customer_id, status,
+           subtotal_satang, total_satang, client_request_id)
+         values ($1, '2026-10-02', 'storefront', 'pickup', $2, 'completed', 5000, 5000, gen_random_uuid())
+         returning id`,
+        [`T-${Math.floor(Math.random() * 1e9)}`, id],
+      )
+    ).rows;
+    const orderId = String(ord?.id);
+    const key = 'f'.repeat(32);
+    await slipStore.put(key, Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]));
+    await h.client.query(
+      `insert into payments (order_id, method, status, amount_satang, client_request_id, slip_image_key)
+       values ($1, 'promptpay', 'claimed', 5000, gen_random_uuid(), $2)`,
+      [orderId, key],
+    );
+    const before = h.events.length;
+    const res = await anonymize(await admin(), id);
+    expect(res.statusCode).toBe(200);
+    const row = (
+      await h.client.query<{ rev: string; claim_without_slip: boolean }>(
+        'select rev, claim_without_slip from orders where id = $1',
+        [orderId],
+      )
+    ).rows[0];
+    expect(row?.claim_without_slip).toBe(true);
+    const upserted = h.events
+      .slice(before)
+      .filter((e) => e.type === 'order.upserted' && e.id === orderId);
+    expect(upserted).toHaveLength(1);
+    const event = upserted[0];
+    if (event?.type !== 'order.upserted') throw new Error('expected order.upserted');
+    expect(event.rev).toBe(Number(row?.rev));
+    expect(orderDtoSchema.parse(event.data)).toMatchObject({ claimWithoutSlip: true });
+  });
+
   test('erases the person, keeps the orders as records, and tells the live feed', async () => {
     const token = await admin();
     const id = await seedCustomer();

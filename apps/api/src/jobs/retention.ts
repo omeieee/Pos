@@ -1,6 +1,7 @@
-import { insertAudit, retentionRepo } from '@sds/db';
+import { insertAudit, ordersRepo, retentionRepo } from '@sds/db';
 import { RETENTION_DAYS } from '@sds/shared';
 import { currentBusinessDate } from '../orders/business-day.ts';
+import { toOrderDto } from '../orders/dto.ts';
 import type { JobDeps } from './jobs.ts';
 
 /**
@@ -188,7 +189,21 @@ export async function purgeSlips(deps: JobDeps, bounds: Bounds = {}) {
         failed += 1;
       }
     }
-    deleted += await retentionRepo.clearSlipKeys(deps.db, { slips: gone, now: deps.now() });
+    const result = await retentionRepo.clearSlipKeys(deps.db, { slips: gone, now: deps.now() });
+    deleted += result.cleared;
+    // The batch has committed. An order whose "claimed, no slip" flag turned on got a new rev, so
+    // the screens that hold it must hear about it (the same event the erasure path publishes).
+    for (const orderId of result.changedOrderIds) {
+      const order = await ordersRepo.findOrderById(deps.db, orderId);
+      if (!order) continue;
+      const items = await ordersRepo.loadOrderItems(deps.db, [orderId]);
+      deps.events.publish({
+        type: 'order.upserted',
+        id: order.id,
+        rev: order.rev,
+        data: toOrderDto(order, items.get(orderId) ?? []),
+      });
+    }
     if (gone.length < size) break;
   }
   return { deleted, failed };

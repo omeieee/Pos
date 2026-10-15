@@ -208,6 +208,23 @@ export async function updatePaymentIfVersion(
 }
 
 /**
+ * Locks these orders (`select ... for update`, in id order) and waits for any other transaction
+ * holding them. Lock order across the code base is order first, then its payments (`settleOrder`,
+ * `movePayment`); code that starts from a payment (retention, erasure) calls this before it
+ * writes a payment, so the two can never wait on each other. Sorted ids keep two such callers
+ * from deadlocking each other too.
+ */
+export async function lockOrders(db: Db, orderIds: string[]): Promise<void> {
+  if (orderIds.length === 0) return;
+  await db
+    .select({ id: orders.id })
+    .from(orders)
+    .where(inArray(orders.id, orderIds))
+    .orderBy(asc(orders.id))
+    .for('update');
+}
+
+/**
  * Brings `orders.claim_without_slip` in line with the payments of these orders (a claimed payment
  * with no slip key), writing only the orders where it changes: each of those gets a new rev and
  * version from the sync trigger, so the change reaches the feed. For code that clears slip keys

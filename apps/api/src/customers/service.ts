@@ -46,7 +46,8 @@ export async function anonymizeCustomer(
       version: result.version,
     };
     if (!result.changed) return response;
-    slipKeys = await customersRepo.takeCustomerSlipKeys(tx, id);
+    const taken = await customersRepo.takeCustomerSlipKeys(tx, id);
+    slipKeys = taken.keys;
 
     await insertAudit(tx, {
       actorType: 'staff',
@@ -69,7 +70,8 @@ export async function anonymizeCustomer(
       }),
     );
     // Screens that hold these orders must not keep showing the name until their next catch-up.
-    for (const orderId of result.orderIds) {
+    // ...and so must the ones whose "claimed, no slip" flag moved when their picture went.
+    for (const orderId of new Set([...result.orderIds, ...taken.changedOrderIds])) {
       const order = await ordersRepo.findOrderById(tx, orderId);
       if (!order) continue;
       const items = await ordersRepo.loadOrderItems(tx, [orderId]);

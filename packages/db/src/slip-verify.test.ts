@@ -216,7 +216,7 @@ describe('where the verdict never goes', () => {
       slipVerifyAttempts: 1,
       slipVerifiedAt: new Date('2026-10-01T03:06:00Z'),
     });
-    const keys = await customersRepo.takeCustomerSlipKeys(db, customer?.id ?? '');
+    const { keys } = await customersRepo.takeCustomerSlipKeys(db, customer?.id ?? '');
     expect(keys).toEqual([row.slipImageKey]);
     expect(await repo.findPaymentById(db, row.id)).toMatchObject({
       slipVerify: null,

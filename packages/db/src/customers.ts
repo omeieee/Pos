@@ -13,7 +13,7 @@
 import { ANONYMIZED_RECIPIENT_NAME, type MemberProfile } from '@sds/shared';
 import { and, desc, eq, gt, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm';
 import type { Db } from './client.ts';
-import { refreshClaimWithoutSlip } from './payments.ts';
+import { lockOrders, refreshClaimWithoutSlip } from './payments.ts';
 import { customers, orders, payments } from './schema.ts';
 
 export interface RecipientDetails {
@@ -235,9 +235,15 @@ export type AnonymizeResult =
 /**
  * Clears the slip image key of every payment on the customer's orders and returns the keys, so the
  * caller can delete the files once the transaction has committed (a customer's erasure includes
- * the pictures they sent: they show a bank name and account number).
+ * the pictures they sent: they show a bank name and account number), and the ids of the orders
+ * whose board flag (`claim_without_slip`) changed, which the caller must publish. The orders are
+ * locked before the payments (see `lockOrders`).
  */
-export async function takeCustomerSlipKeys(db: Db, customerId: string): Promise<string[]> {
+export async function takeCustomerSlipKeys(
+  db: Db,
+  customerId: string,
+): Promise<{ keys: string[]; changedOrderIds: string[] }> {
+  await lockCustomerOrders(db, customerId);
   const held = await db
     .select({ id: payments.id, orderId: payments.orderId, key: payments.slipImageKey })
     .from(payments)
@@ -271,8 +277,19 @@ export async function takeCustomerSlipKeys(db: Db, customerId: string): Promise<
     keys.push(row.key);
     orderIds.add(row.orderId);
   }
-  await refreshClaimWithoutSlip(db, [...orderIds]);
-  return keys;
+  const changedOrderIds = await refreshClaimWithoutSlip(db, [...orderIds]);
+  return { keys, changedOrderIds };
+}
+
+async function lockCustomerOrders(db: Db, customerId: string): Promise<void> {
+  const rows = await db
+    .select({ id: orders.id })
+    .from(orders)
+    .where(eq(orders.customerId, customerId));
+  await lockOrders(
+    db,
+    rows.map((r) => r.id),
+  );
 }
 
 export async function anonymizeCustomer(db: Db, id: string, at: Date): Promise<AnonymizeResult> {
@@ -316,7 +333,9 @@ export async function anonymizeCustomer(db: Db, id: string, at: Date): Promise<A
     })
     .where(eq(customers.id, id))
     .returning({ version: customers.version });
-  // The slip block and cooldown history of the customer's payments goes too.
+  // The slip block and cooldown history of the customer's payments goes too. The orders are locked
+  // first: the payment writes below and the order writes after them must follow the lock order.
+  await lockCustomerOrders(db, id);
   await db
     .update(payments)
     .set({

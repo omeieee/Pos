@@ -1,4 +1,4 @@
-import { ANONYMIZED_BUILDING, ANONYMIZED_RECIPIENT_NAME } from '@sds/shared';
+import { ANONYMIZED_BUILDING, ANONYMIZED_RECIPIENT_NAME, orderDtoSchema } from '@sds/shared';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from 'vitest';
 import { createLineRuntime } from '../line/runtime.ts';
 import {
@@ -221,6 +221,58 @@ describe('retention jobs', () => {
       "select actor_type, after from audit_log where action = 'retention.member_profiles.expire'",
     );
     expect(audit.rows).toEqual([{ actor_type: 'system', after: { customers: 1, afterDays: 730 } }]);
+  });
+
+  test('the slip purge publishes order.upserted, after commit, for each order whose flag changed', async () => {
+    const seed = async (status: 'claimed' | 'cancelled', key: string) => {
+      const [ord] = (
+        await h.client.query<{ id: string }>(
+          `insert into orders (order_no, business_date, channel, fulfillment, delivery_building, recipient_name,
+             status, subtotal_satang, total_satang, client_request_id)
+           values ($1, '2026-09-10', 'storefront', 'entrance_delivery', 'D3', 'Slip Person',
+             'completed', 8000, 8000, gen_random_uuid()) returning id`,
+          [`JS-${Math.floor(Math.random() * 1e9)}`],
+        )
+      ).rows;
+      // The sync trigger stamps updated_at; replica mode skips it so the payment can be old.
+      await h.client.query("set session_replication_role = 'replica'");
+      await h.client.query(
+        `insert into payments (order_id, method, status, amount_satang, slip_image_key, void_reason, client_request_id, updated_at)
+         values ($1, 'promptpay', $2, 8000, $3, $4, gen_random_uuid(), $5)`,
+        [ord?.id, status, key, status === 'claimed' ? null : 'test', daysAgo(120)],
+      );
+      await h.client.query("set session_replication_role = 'origin'");
+      await slips.put(key, Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]));
+      return ord?.id as string;
+    };
+    const claimedOrder = await seed('claimed', 'q'.repeat(32));
+    const cancelledOrder = await seed('cancelled', 'r'.repeat(32));
+    const before = h.events.length;
+
+    expect(await job('retention-slips').run(deps)).toEqual({ deleted: 2, failed: 0 });
+
+    const upserted = h.events
+      .slice(before)
+      .filter((e) => e.type === 'order.upserted')
+      .map((e) => e.id);
+    expect(upserted).toEqual([claimedOrder]);
+    expect(upserted).not.toContain(cancelledOrder);
+    const event = h.events.slice(before).find((e) => e.type === 'order.upserted');
+    if (event?.type !== 'order.upserted') throw new Error('expected order.upserted');
+    const row = (
+      await h.client.query<{ rev: string; claim_without_slip: boolean }>(
+        'select rev, claim_without_slip from orders where id = $1',
+        [claimedOrder],
+      )
+    ).rows[0];
+    expect(row?.claim_without_slip).toBe(true);
+    expect(event.rev).toBe(Number(row?.rev));
+    expect(orderDtoSchema.parse(event.data)).toMatchObject({ claimWithoutSlip: true });
+    expect(JSON.stringify(event)).not.toContain('q'.repeat(32));
+    // Nothing left to clear: a second run publishes nothing.
+    const after = h.events.length;
+    expect(await job('retention-slips').run(deps)).toEqual({ deleted: 0, failed: 0 });
+    expect(h.events.length).toBe(after);
   });
 
   test('the default bounds are finite', () => {

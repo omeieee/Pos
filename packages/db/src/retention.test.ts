@@ -600,7 +600,7 @@ describe('slip images', () => {
       ],
       now: NOW,
     });
-    expect(cleared).toBe(1);
+    expect(cleared.cleared).toBe(1);
     expect(
       (await q<{ k: string | null }>('select slip_image_key k from payments where id = $1', [a]))[0]
         ?.k,
@@ -614,7 +614,10 @@ describe('slip images', () => {
     );
     expect(rows.length).toBe(Number(before?.n) + 1);
     expect(JSON.stringify(rows.at(-1)?.after)).toBe(JSON.stringify({ deleted: 1, afterDays: 90 }));
-    expect(await retention.clearSlipKeys(db, { slips: [], now: NOW })).toBe(0);
+    expect(await retention.clearSlipKeys(db, { slips: [], now: NOW })).toEqual({
+      cleared: 0,
+      changedOrderIds: [],
+    });
   });
 
   test("clearing the slip also clears the block and cooldown fields; a live customer's flag stays", async () => {
@@ -682,6 +685,48 @@ describe('slip images', () => {
       expect(after?.f).toBe(true);
       expect(Number(after?.rev)).toBeGreaterThan(Number(before?.rev));
       expect(after?.version).toBeGreaterThan(before?.version ?? 0);
+    });
+
+    test('returns the ids of the orders whose flag changed, so the job can publish them', async () => {
+      const claimed = await payment({ status: 'claimed', updatedDaysAgo: 120, key: KEY(22) });
+      const cancelled = await payment({ status: 'cancelled', updatedDaysAgo: 120, key: KEY(23) });
+      const claimedOrder = (
+        await q<{ order_id: string }>('select order_id from payments where id = $1', [claimed])
+      )[0]?.order_id;
+      const result = await retention.clearSlipKeys(db, {
+        slips: [
+          { id: claimed, key: KEY(22) },
+          { id: cancelled, key: KEY(23) },
+        ],
+        now: NOW,
+      });
+      expect(result.cleared).toBe(2);
+      expect(result.changedOrderIds).toEqual([claimedOrder]);
+    });
+
+    test('locks the affected orders (by id) before it updates any payment: same order as settleOrder', async () => {
+      // PGlite has one connection, so two transactions cannot truly wait on each other here. The
+      // proof is the order of the statements the transaction sends: lock orders, then payments.
+      const a = await payment({ status: 'claimed', updatedDaysAgo: 120, key: KEY(24) });
+      const b = await payment({ status: 'claimed', updatedDaysAgo: 120, key: KEY(25) });
+      const statements: string[] = [];
+      const logged = drizzle({
+        client,
+        schema,
+        logger: { logQuery: (query) => statements.push(query) },
+      });
+      await retention.clearSlipKeys(logged, {
+        slips: [
+          { id: a, key: KEY(24) },
+          { id: b, key: KEY(25) },
+        ],
+        now: NOW,
+      });
+      const lock = statements.findIndex((x) => /from "orders"/.test(x) && /for update/.test(x));
+      const firstPaymentWrite = statements.findIndex((x) => /^update "payments"/.test(x));
+      expect(lock).toBeGreaterThanOrEqual(0);
+      expect(firstPaymentWrite).toBeGreaterThan(lock);
+      expect(statements[lock]).toMatch(/order by "orders"\."id"/);
     });
 
     test('a cancelled payment that loses its picture leaves the order untouched', async () => {
