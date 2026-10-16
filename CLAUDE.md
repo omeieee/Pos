@@ -113,6 +113,7 @@ backend-engineer · pos-frontend-engineer · line-integration-engineer · paymen
 - `pnpm --filter @sds/db db:generate` (new migration from schema; never edit applied ones) · migrations + seed run on PGlite in tests (`createPgliteDb()` from `@sds/db/pglite`, `seed()` from `@sds/db/seed`)
 - `pnpm --filter @sds/ui tokens:css` (regenerate `design/wireframes/tokens.css`)
 - `node packages/promptpay/scripts/scan-test.ts <out.html> <promptpay-phone>` (bank-app QR scan page)
+- `pnpm --filter @sds/liff-web e2e --project=iphone-chromium` (customer-app E2E, no network; projects `iphone-chromium|iphone-webkit|iphone-firefox|android-chromium`; not in CI)
 - Later: dev, e2e, deploy (P2–P3)
 
 ## Glossary

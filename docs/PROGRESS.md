@@ -18,6 +18,15 @@
 > - **Maintenance:** the architecture refactor (code moved, behaviour unchanged) is deployed; see the entry "2026-10-16 · Maintenance · Architecture refactor". Not yet checked on a real iPad/iPhone. The as-built code index `ARCHITECTURE.md` (verified at `7ff9951`) is committed (`070e0b4`) and pushed with the owner's OK; see the newest entry.
 > - **Workflow (owner rule 2026-10-16):** after each completed part, ask the owner "save checkpoint or next step?" and wait for the answer (`CLAUDE.md` workflow, `3d8481c`).
 
+## 2026-10-17 · P4 · Customer-app (LIFF) E2E
+- **Summary:** first Playwright E2E for `apps/liff-web`, no network: a fake `window.liff` and an in-test fake `/v1/*` API on the Vite dev server. 5 tests: PromptPay flow (menu, required option, checkout, QR, "โอนแล้ว", slip, neutral checking/staff-review states), paid pop-up after staff confirm, missing name/building refused, cash order, shop closed. Each page is checked for sideways scroll. Owner choices: mock API, all browsers incl. Android, not in CI.
+- **Changed:** new `apps/liff-web/e2e/{support.ts,order-flow.e2e.ts}`, `playwright.config.ts`, `tsconfig.e2e.json`; `apps/liff-web/package.json` (`@playwright/test` 1.63.0, `e2e` script, typecheck also checks e2e), `pnpm-lock.yaml`; one line each in `CLAUDE.md` Commands and `ARCHITECTURE.md`. No app source changed.
+- **Verification:** `pnpm --filter @sds/liff-web e2e --project=<p>` on iphone-chromium, iphone-webkit, iphone-firefox, android-chromium (Pixel 7): 5/5 each; `--repeat-each=3` on all four: 15/15 each (60/60). Two deliberate app breaks (drop the noodle option; wrong staff-review words) made the matching test fail, then reverted. Biome 0 errors; `pnpm build` 12/12; liff-web unit 114/114; liff typecheck clean. Full workspace tests not re-run (no source change outside liff-web e2e).
+- **Decisions:** none.
+- **Open issues:** not covered: LINE's in-app browser, real iOS Safari/Android devices, the real API, real slips, real LINE login. Playwright WebKit is not iOS Safari. On a first visit the menu probably shows briefly before the privacy notice replaces it (not checked on a device, not changed). Not in CI.
+- **Next:** real-device check in LINE (iPhone and Android); Slip2Go package before 2026-10-19; owner decisions on the behaviour items from 2026-10-16.
+- **Commit:** see the checkpoint commit.
+
 ## 2026-10-17 · P4 · Offline amount due fix; decisions table; trial-end check
 - **Summary:** offline cash and offline PromptPay QR on a partly paid order now use the server's amount still due, not the order total (open item from the 2026-10-16 refactor). Checked in code that the Slip2Go trial ending does not break payments: `401xxx` gives verdict `unchecked` plus an owner alert, so payments stay `claimed`. Added the missing D-27 to D-29 rows to `docs/decisions.md`.
 - **Changed:** `apps/pos-web/src/pos/payments/PaymentPanel.tsx` (2 lines: `collectAmount(order, undefined, ledger?.dueSatang)` for the queued cash total and the offline QR amount); new `apps/pos-web/src/pos/payments/PaymentOfflineDue.test.tsx` (2 tests); `docs/decisions.md` (3 table rows, D-27 switched-on line).
