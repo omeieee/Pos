@@ -73,7 +73,7 @@ const PNG = Buffer.from(
 );
 
 /** The phone's fake LINE SDK: signed in, a plain browser tab (not LINE's own client). */
-function installFakeLiff() {
+function installFakeLiff(inClient: boolean) {
   // Records the size of every request body the page sends, measured here in the page: a browser's
   // test hook may not expose a Blob body (WebKit), but the page always knows what it sent.
   const sent: { url: string; method: string; bytes: number | null }[] = [];
@@ -97,7 +97,7 @@ function installFakeLiff() {
       getAccessToken: () => null,
       getDecodedIDToken: () => ({ exp: Math.floor(Date.now() / 1000) + 3600 }),
       getContext: () => ({ type: 'utou' }),
-      isInClient: () => false,
+      isInClient: () => inClient,
       sendMessages: async () => {},
       closeWindow: () => {},
     },
@@ -225,7 +225,16 @@ export class FakeApi {
       const path = url.pathname;
       const json = (body: unknown, status = 200) =>
         route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
-      const png = () => route.fulfill({ status: 200, contentType: 'image/png', body: PNG });
+      // Like the real server: `download=1` makes the picture an attachment (a file to save).
+      const png = () =>
+        route.fulfill({
+          status: 200,
+          contentType: 'image/png',
+          body: PNG,
+          ...(url.searchParams.get('download') === '1'
+            ? { headers: { 'content-disposition': 'attachment; filename="promptpay-qr.png"' } }
+            : {}),
+        });
       const method = request.method();
 
       if (path === '/v1/menu') return json(MENU);
@@ -285,14 +294,16 @@ export class FakeApi {
  * Every spec gets the fake LIFF SDK in the page before any app script runs, so nothing is fetched
  * from LINE's CDN. Motion is reduced so a test taps a settled page.
  */
-export const test = base.extend<{ api: FakeApi; fakeOptions: FakeOptions }>({
+export const test = base.extend<{ api: FakeApi; fakeOptions: FakeOptions; inLine: boolean }>({
   fakeOptions: [{}, { option: true }],
+  /** The page runs inside LINE's own browser (`liff.isInClient()` is true). */
+  inLine: [false, { option: true }],
   api: async ({ fakeOptions }, use) => {
     await use(new FakeApi(fakeOptions));
   },
-  page: async ({ page, api }, use) => {
+  page: async ({ page, api, inLine }, use) => {
     await page.emulateMedia({ reducedMotion: 'reduce' });
-    await page.addInitScript(installFakeLiff);
+    await page.addInitScript(installFakeLiff, inLine);
     await api.handle(page);
     await use(page);
   },

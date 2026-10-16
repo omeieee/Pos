@@ -52,6 +52,36 @@ describe('saveQrImage', () => {
     expect(e.download).not.toHaveBeenCalled();
   });
 
+  test('inside LINE the file link is followed, and the picture still opens for press and hold', async () => {
+    const downloadLink = vi.fn();
+    const e = env({ inLineClient: true, downloadLink });
+    expect(await saveQrImage(png, 'qr.png', e)).toBe('manual');
+    expect(downloadLink).toHaveBeenCalledOnce();
+    expect(e.download).not.toHaveBeenCalled();
+  });
+
+  test('a link that throws inside LINE still ends in the manual way', async () => {
+    const downloadLink = vi.fn(() => {
+      throw new Error('blocked');
+    });
+    expect(await saveQrImage(png, 'qr.png', env({ inLineClient: true, downloadLink }))).toBe(
+      'manual',
+    );
+  });
+
+  test('the file link is not followed when the share sheet took the picture, or in a normal browser', async () => {
+    const downloadLink = vi.fn();
+    const shared = env({
+      inLineClient: true,
+      canShare: () => true,
+      share: vi.fn().mockResolvedValue(undefined),
+      downloadLink,
+    });
+    expect(await saveQrImage(png, 'qr.png', shared)).toBe('shared');
+    expect(await saveQrImage(png, 'qr.png', env({ downloadLink }))).toBe('downloaded');
+    expect(downloadLink).not.toHaveBeenCalled();
+  });
+
   test('a download that throws ends in the manual way', async () => {
     const e = env({
       download: vi.fn(() => {

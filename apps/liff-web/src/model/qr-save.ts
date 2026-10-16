@@ -5,7 +5,8 @@
  * picture on the page is cross-origin (the API), so a long-press can save a file the bank app will
  * not read. So the picture is fetched once, redrawn as a PNG on this device, shown from a
  * `blob:` URL (a long-press saves that) and offered through the share sheet when the browser has
- * one. When nothing works the screen says "press and hold the picture".
+ * one. Inside LINE the server's file link is followed as well (an attachment, which the browser
+ * can download without leaving the page). When nothing works the screen says "press and hold the picture".
  */
 
 /** What happened when the customer pressed "บันทึก QR". */
@@ -21,6 +22,11 @@ export interface SaveEnv {
   share?: (data: { files: File[]; title?: string }) => Promise<void>;
   /** Saves through a link click. Not used inside LINE's own browser, which drops it. */
   download: (file: File) => void;
+  /**
+   * Follows the server's file link (`...?download=1`, sent as an attachment). LINE's browser drops
+   * a picture made in the page but can download a plain link; there is no way to see whether it did.
+   */
+  downloadLink?: () => void;
   /** `liff.isInClient()`: the app runs inside LINE's browser. */
   inLineClient: boolean;
 }
@@ -44,17 +50,35 @@ export async function saveQrImage(png: Blob, fileName: string, env: SaveEnv): Pr
     } catch {
       // fall through to the manual way
     }
+  } else {
+    try {
+      env.downloadLink?.();
+    } catch {
+      // the picture on screen is the way left
+    }
   }
   return 'manual';
 }
 
 /** The browser's own pieces, for `saveQrImage`. */
-export function browserSaveEnv(inLineClient: boolean): SaveEnv {
+export function browserSaveEnv(inLineClient: boolean, fileLink?: string): SaveEnv {
   const nav = typeof navigator === 'undefined' ? undefined : navigator;
   return {
     ...(nav?.canShare ? { canShare: (d: { files: File[] }) => nav.canShare(d) } : {}),
     ...(nav?.share ? { share: (d: { files: File[]; title?: string }) => nav.share(d) } : {}),
     inLineClient,
+    ...(fileLink
+      ? {
+          downloadLink() {
+            const link = document.createElement('a');
+            link.href = `${fileLink}${fileLink.includes('?') ? '&' : '?'}download=1`;
+            link.rel = 'noopener';
+            document.body.append(link);
+            link.click();
+            link.remove();
+          },
+        }
+      : {}),
     download(file) {
       const link = document.createElement('a');
       link.href = URL.createObjectURL(file);

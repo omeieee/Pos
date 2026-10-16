@@ -4,6 +4,7 @@ import {
   BUILDING,
   expect,
   expectNoSideScroll,
+  type FakeApi,
   IDS,
   MOCK_PROMPTPAY_ID,
   openMenu,
@@ -160,5 +161,59 @@ test.describe('checkout rules', () => {
       expect(api.placed).toHaveLength(0);
       await expectNoSideScroll(page);
     });
+  });
+});
+
+async function openPromptPayOrder(page: import('@playwright/test').Page, api: FakeApi) {
+  await openMenu(page, api);
+  await addDishAndCheckout(page);
+  await fillRecipient(page);
+  await page.getByRole('radio', { name: new RegExp(tr('payment.method.promptpay')) }).check();
+  await page.getByRole('button', { name: tr('liff.checkout.order') }).click();
+  await expect(page.getByRole('img', { name: /QR/ })).toBeVisible();
+}
+
+test.describe('saving the QR inside the LINE app', () => {
+  test.use({ inLine: true });
+
+  test('the save button downloads a real file, stays on the order page and shows a savable picture', async ({
+    page,
+    api,
+    browserName,
+  }) => {
+    await openPromptPayOrder(page, api);
+    const orderUrl = page.url();
+    // Playwright's WebKit raises no download event for an attachment link; the request is still seen.
+    const fileRequest = page.waitForRequest(
+      (r) => r.url().includes('/qr.png?') && r.url().includes('download=1'),
+    );
+    const download = browserName === 'webkit' ? null : page.waitForEvent('download');
+    await page.getByRole('button', { name: tr('liff.qr.save') }).click();
+    await fileRequest;
+    if (download) expect((await download).suggestedFilename()).toBe('promptpay-qr.png');
+    // Still on the order page; the large picture is the real https file, not a page-made blob.
+    expect(page.url()).toBe(orderUrl);
+    const viewer = page.getByRole('dialog', { name: tr('liff.qr.title') });
+    await expect(viewer.getByText(tr('liff.qr.holdToSave'))).toBeVisible();
+    const src = await viewer.getByRole('img').getAttribute('src');
+    expect(src).not.toMatch(/^blob:/);
+    expect(src).toContain('/qr.png?');
+    expect(src).not.toContain('download=1');
+    await viewer.getByRole('button', { name: tr('liff.close') }).click();
+    await expect(viewer).toBeHidden();
+    await expectNoSideScroll(page);
+  });
+});
+
+test.describe('saving the QR in a normal browser', () => {
+  test('the picture downloads from the page and no file link is followed', async ({
+    page,
+    api,
+  }) => {
+    await openPromptPayOrder(page, api);
+    const download = page.waitForEvent('download');
+    await page.getByRole('button', { name: tr('liff.qr.save') }).click();
+    expect((await download).suggestedFilename()).toBe('promptpay-S-001.png');
+    await expect(page.getByRole('dialog')).toHaveCount(0);
   });
 });

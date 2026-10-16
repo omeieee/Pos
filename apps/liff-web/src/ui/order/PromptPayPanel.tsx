@@ -110,7 +110,7 @@ export function PromptPayPanel({
     const outcome = await saveQrImage(
       image.png,
       qrFileName(order.orderNo),
-      browserSaveEnv(platform.inLineClient()),
+      browserSaveEnv(platform.inLineClient(), qr ? api.absolute(qr.url) : undefined),
     );
     if (outcome === 'manual') setViewing(true);
     else if (outcome === 'downloaded') setSaved('downloaded');
@@ -306,7 +306,10 @@ export function PromptPayPanel({
       ) : null}
       {viewing && qr ? (
         <QrViewer
-          src={image?.src ?? api.absolute(qr.url)}
+          // Inside LINE the real file link, so "Save image" gets a file and not a page-made blob.
+          src={
+            platform.inLineClient() ? api.absolute(qr.url) : (image?.src ?? api.absolute(qr.url))
+          }
           alt={tr('liff.qr.alt', { amount })}
           onClose={() => setViewing(false)}
         />
