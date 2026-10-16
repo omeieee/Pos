@@ -18,6 +18,15 @@
 > - **Maintenance:** the architecture refactor (code moved, behaviour unchanged) is deployed; see the entry "2026-10-16 · Maintenance · Architecture refactor". Not yet checked on a real iPad/iPhone. The as-built code index `ARCHITECTURE.md` (verified at `7ff9951`) is committed (`070e0b4`) and pushed with the owner's OK; see the newest entry.
 > - **Workflow (owner rule 2026-10-16):** after each completed part, ask the owner "save checkpoint or next step?" and wait for the answer (`CLAUDE.md` workflow, `3d8481c`).
 
+## 2026-10-17 · P4 · Session check-in (no code change)
+- **Summary:** read-only orientation. Nothing is half-built; every open item waits on the owner.
+- **Changed:** nothing in code. Docs only (this entry, one log line in the P4 checkpoint).
+- **Verification:** not run (`git status` shows no tracked changes; HEAD `a4d0b97`).
+- **Decisions:** none.
+- **Open issues:** Slip2Go package (trial ends 2026-10-19; unpaid, slips stay `claimed` for staff); QR save not retested on Android in LINE, iOS LINE save path unchecked; four behaviour items from 2026-10-16 (slip-reset patches, `customerExists`, liff-web prices, amount due); remaining P4 phone checks.
+- **Next:** owner picks: Slip2Go package, then QA review of P4, a device test page for the in-LINE QR save, or the four behaviour decisions.
+- **Commit:** uncommitted (docs only).
+
 ## 2026-10-17 · P4 · QR save inside LINE (Android): fix deployed, NOT confirmed on a phone
 - **Summary:** the owner's Android phone test (order and pay in LINE and the POS) worked, but the "บันทึก QR" button could not save the QR inside the LINE app: the large QR picture opened, press-and-hold did not save. Real users do not want screenshots and do not want to be sent out of LINE, so a first fix (an "open in browser" button) was built and thrown away before any commit. The deployed fix: inside LINE the save button also follows the server's file link (`...qr.png?...&download=1`, sent as an attachment, no page change), and the large QR shows the https file instead of the page-made blob so press-and-hold gets a real file. Outside LINE nothing changed.
 - **Changed:** `apps/api/src/payments/routes.ts` (`download=1` adds `Content-Disposition: attachment; filename="promptpay-qr.png"`; not part of the signed proof; a bad signature still gets 403); `apps/liff-web/src/model/qr-save.ts` (`downloadLink`, `browserSaveEnv(inLine, fileLink)`), `ui/order/PromptPayPanel.tsx`; tests in `payments.test.ts`, `qr-save.test.ts`, `e2e/order-flow.e2e.ts` + `e2e/support.ts` (fake LIFF `inLine` option; the fake server mirrors `download=1`). `ARCHITECTURE.md`: 3 rows (payments route, liff-web order page, QR trace) and the verified sha, now `ee9b3b0`.
