@@ -43,6 +43,7 @@ A cloud POS for a made-to-order noodle restaurant inside a condominium.
 | [07-limitations-risks](docs/07-limitations-risks.md) | Known limitations and the risk register |
 | [08-skills-knowledge](docs/08-skills-knowledge.md) | What to learn; how Claude Code is used on this repo |
 | [09-roadmap](docs/09-roadmap.md) | Phases P0–P10, MVP line, sizes |
+| [ARCHITECTURE](ARCHITECTURE.md) | Locating code (as built): files, exports, routes, stores, tables, traces. Read it before grepping. |
 | [decisions](docs/decisions.md) · [PROGRESS](docs/PROGRESS.md) · [checkpoints/](docs/checkpoints/) | Choices · log · per-phase goals, exit criteria and as-built notes |
 
 ## System map (planned; P1 creates the folders)

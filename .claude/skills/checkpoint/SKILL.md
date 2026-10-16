@@ -34,7 +34,7 @@ Summary given by the user (may be empty): $ARGUMENTS
    - set the checkpoint status to `✅ Done (date)`;
    - point the `docs/PROGRESS.md` header at the next phase;
    - set the next checkpoint's status to `🟡 In progress`.
-7. **CLAUDE.md.** Update only the sections that became outdated, e.g. a new package in the system map or new commands.
+7. **CLAUDE.md.** Update only the sections that became outdated, e.g. a new package in the system map or new commands. If files, exports, routes or tables were added, moved, renamed or removed, update the matching rows of `ARCHITECTURE.md` and its verified-sha line.
 8. **Tell the user** in 3–5 lines what was recorded and what comes next. **Do not commit** unless the user asks.
 
 ## Rules

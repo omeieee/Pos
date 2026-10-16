@@ -15,7 +15,18 @@
 > - **Not covered yet:** real iPad/iPhone checks, real Postgres lock behaviour (PGlite serialises), the customer LIFF flow end to end, real slips.
 > - **Next:** owner checks the claimed-without-slip badge on iPad and iPhone; owner picks the Slip2Go package before 2026-10-19; watch a few real transfers before turning auto-confirm on; owner decisions stay in [docs/10-open-questions.md](10-open-questions.md).
 > - **Before any push:** `pnpm lint` (CI gates on Biome, and a lint error skips the deploy), `pnpm build`, tests; `main` auto-deploys, so new env vars go into the VM `.env` first and migrations take the next free number. Check `/healthz` for the new sha after the push.
-> - **Maintenance:** the architecture refactor (code moved, behaviour unchanged) is deployed; see the newest entry. Not yet checked on a real iPad/iPhone.
+> - **Maintenance:** the architecture refactor (code moved, behaviour unchanged) is deployed; see the entry "2026-10-16 · Maintenance · Architecture refactor". Not yet checked on a real iPad/iPhone. The as-built code index `ARCHITECTURE.md` (verified at `7ff9951`) is new and uncommitted; see the newest entry.
+
+## 2026-10-16 · Maintenance · ARCHITECTURE.md as-built code index
+- **Summary:** new root `ARCHITECTURE.md` (197 lines, about 40 KB). It covers topology, a mermaid flow, a map of every module (6 packages, 11 api slices, 15 frontend modules), 5 execution traces, the Drizzle table map and cross-cutting helpers. It indexes only code that exists and is stamped "verified at `7ff9951`" with a `git diff --stat` drift rule.
+- **Changed:** `ARCHITECTURE.md` (new). `CLAUDE.md` docs map: +1 row ("read it before grepping"). `/checkpoint` step 7: +1 sentence (refresh its rows and sha when files, exports, routes or tables change). No code changed.
+- **Verification (one-off scratchpad verifier, not committed; final file):** 0 failures; 197 lines; 28/28 tables; all 111 registered routes match the doc both ways; 429 paths and all named symbols resolve; 55 source folders covered. A copy with 6 planted errors (path, file:symbol, route, table, bare fn, grouped symbol) failed on all 6. A hop check found one wrong hop, now fixed (`qr-worker.ts` calls `readSlipQrText()`, not `readSlipQr()`). Its 23 remaining warnings are sequences within one function, injected dependencies or HTTP boundaries. The mermaid diagram was not render-tested. Build and tests were not run (docs only).
+- **Decisions:** none. Owner choices 2026-10-16: load it on demand through the docs map, no `@`-import; sha stamp plus /checkpoint step; no committed checker and no CI step.
+- **Open issues:**
+  - `docs/02-architecture.md` §3 and §6 are out of date compared with the code. For example, `POST /v1/auth/line` is really `POST /v1/app/session`, the webhook is `POST /v1/line/webhook`, and `GET /v1/customers`, reports and expenses are not built. Left as written.
+  - The index has no automated drift check: it relies on the sha rule and /checkpoint step 7.
+- **Next:** unchanged (see the header).
+- **Commit:** uncommitted.
 
 ## 2026-10-16 · Maintenance · Architecture refactor started; PROGRESS.md trimmed
 - **Plan (owner-approved, moves only, no behaviour change):** step 0 docs diet; 1 split `apps/api/src/payments/service.ts`; 2 split `packages/db/src/schema.ts` (stays a barrel; `db:generate` must produce nothing); 3 split the i18n catalogs by key prefix; 4 split `apps/pos-web/src/api/client.ts` by resource; 5 `liff-web` `OrderScreen.tsx`; 6 api `menu/service.ts`; 7 api `auth/service.ts`; 8 regroup `apps/pos-web/src/pos/` into feature folders. Old paths stay as re-export barrels. Not merged on purpose: the three `request-hash.ts` files, and every duplicate whose copies differ (they go to the owner as questions).

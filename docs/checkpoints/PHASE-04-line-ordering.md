@@ -38,7 +38,9 @@ Customers order and pay through the shop's LINE OA, within the free message budg
 - Retention and retry: pg-boss jobs (`line-events-retry` every 5 min; nightly `retention-line-events`, `-orders`, `-recipients`, `-line-customers`), `line_events` keeps ids only, privacy ack stores the notice version.
 - Ordering: `/v1/app/*` (LIFF token login, own-orders only, order cap 3 open / 50 items), `apps/liff-web`, chat Flex replies, one completion push per LINE order, rich-menu CLI (`pnpm --filter @sds/api richmenu:upload`); rich menu `full` is default on the test OA; LIFF app `Order Menu` -> `sds-order.pages.dev`.
 - Not built or not verified: real-device E2E, slip storage and 90-day deletion, Playwright for liff-web.
+- Code index: `ARCHITECTURE.md` (as built, verified at `7ff9951`) maps every module, route, table and the LINE/payment traces; look things up there rather than copying them here.
 
 ## Log
 - 2026-10-04: kickoff, LINE package and webhook, reserved IP, webhook verified ([PROGRESS](../PROGRESS.md)).
 - 2026-10-04: retention jobs, ordering flow, rich menu ([PROGRESS](../PROGRESS.md)).
+- 2026-10-16: `ARCHITECTURE.md` as-built code index ([PROGRESS](../PROGRESS.md)).
