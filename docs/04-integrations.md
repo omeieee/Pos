@@ -43,7 +43,7 @@ Budget arithmetic: about 1 push per LINE order means **about 300 LINE orders a m
 
 The quota tracker reads LINE's quota and consumption endpoints, logs each push in `line_message_log`, warns at 80%, and switches the policy to `off` at 100%. Customers can still see status on the live status page and with the "สถานะ" button, both of which are free.
 
-### 1.3 Webhook handling (`api/modules/line`)
+### 1.3 Webhook handling (`api/line`)
 1. Check `X-Line-Signature`: HMAC-SHA256 of the **raw** body with the channel secret, base64-encoded. Reject if it doesn't match.
 2. Store the event in `line_events` keyed by `webhookEventId`. If it is already there, skip it, because redelivery can repeat events.
 3. Handle the event quickly and use the reply token right away. Reply tokens are single-use and expire soon after the event; see the [Messaging API reference](https://developers.line.biz/en/reference/messaging-api/). Anything slow goes to a pg-boss job that sends a push only if the policy allows.

@@ -6,7 +6,7 @@
  * Two areas:
  * - `kv`: small JSON values by key (a remembered choice, a cached setting).
  * - `outbox`: actions that still have to reach the server, each keyed by its idempotency key
- *   (`id`), oldest first. The offline outbox (`pos/outbox-store.ts`) writes and replays it; this
+ *   (`id`), oldest first. The offline outbox (`pos/outbox/outbox-store.ts`) writes and replays it; this
  *   seam only stores rows and never looks inside `payload`.
  *
  * `openLocalStore` loads Dexie only when it is called, so the first screen does not pay for it,

@@ -7,7 +7,7 @@
  * Nothing is shown as paid, claimed or confirmed from a click: the rows come only from the
  * server's answer (and from realtime frames), applied after the answer.
  *
- * Safely, in the same way as creating an order (cart-store.ts):
+ * Safely, in the same way as creating an order (`../cart/cart-store.ts`):
  * - one request at a time (`inFlight`, set in the same tick, so two taps before React re-renders
  *   send one call). A second call is refused as `busy`;
  * - `create` and `changeMethod` carry a `clientRequestId` (the idempotency key). It belongs to the

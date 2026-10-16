@@ -66,7 +66,7 @@ A cloud POS for a made-to-order noodle restaurant inside a condominium.
 **Dependency rules**
 - Apps import packages. An app never imports another app.
 - `shared`, `promptpay` and `finance` have no I/O.
-- Only `db` imports the ORM. Only `line` and `api/modules/line` talk to LINE.
+- Only `db` imports the ORM. Only `line` and `api/line` talk to LINE.
 - No business rules in React components.
 
 ## Domain rules (never break)

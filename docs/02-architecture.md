@@ -117,7 +117,7 @@ On Path B (a 1 GB Micro VM), `db` moves to managed Postgres (Supabase free) and 
 ### Dependency rules (enforced in P1 by lint and tsconfig references)
 - An app may import packages. **An app never imports another app.**
 - `shared`, `promptpay` and `finance` are **pure**: no network, database, DOM or env access, so they are 100% unit-testable.
-- Only `packages/db` imports the ORM. Only `packages/line` and `api/modules/line` talk to LINE.
+- Only `packages/db` imports the ORM. Only `packages/line` and `api/line` talk to LINE.
 - `ui` depends on `i18n` and `shared` types only. Business rules never live in React components.
 - Money and totals are computed only in `shared`/`finance` and run on the server. The UI only formats them.
 

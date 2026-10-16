@@ -1,6 +1,7 @@
 /**
  * Auth: the types every auth file shares (context, request meta, principal), the permission helpers and `securityAlert`.
- * Imports nothing from its siblings, so no import cycle can start here.
+ * Imports none of the other auth use-case files (only the types of crypto.ts and policy.ts), so no
+ * import cycle can start here.
  */
 import { hasPermission, PERMISSIONS, type SessionKind, type StaffRole } from '@sds/shared';
 import type { AppEvent, SecurityAlertEvent } from '../events.ts';

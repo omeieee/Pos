@@ -2,7 +2,7 @@ import { useEffect, useMemo } from 'react';
 import { qrPath } from '../outbox/local-qr.ts';
 
 /**
- * The QR as an inline SVG, drawn from the text on this device (see `local-qr.ts`). It is its own
+ * The QR as an inline SVG, drawn from the text on this device (see `../outbox/local-qr.ts`). It is its own
  * file so the drawing library loads only when an offline QR is shown (`LocalQr` imports it lazily);
  * the service worker still has it in its precache, so it is there with no connection.
  *

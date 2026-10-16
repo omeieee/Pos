@@ -1,6 +1,7 @@
 /**
  * Payments: what the other payment files share (actors, error mapping, money maths, order settling, audit).
- * Imports nothing from slips/ or its siblings, so no import cycle can start here.
+ * Imports nothing from slips/ and none of the other use-case files (only dto.ts), so no import
+ * cycle can start here.
  */
 import {
   type Db,

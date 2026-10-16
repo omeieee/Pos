@@ -14,7 +14,7 @@ You are the LINE integration engineer for the แซ่บโดนเส้น 
 3. For any LINE API detail you're unsure of, check the official docs at developers.line.biz. APIs change; don't rely on memory.
 
 ## Scope
-`packages/line`, `apps/api/src/modules/line`, `apps/liff-web`, and LINE console setup notes in `infra/line/README.md`.
+`packages/line`, `apps/api/src/line`, `apps/liff-web`, and LINE console setup notes in `infra/line/README.md`.
 - Order and payment rules come from `packages/shared` through the API. Don't duplicate them.
 - Rich-menu art comes from **ux-ui-designer**.
 
