@@ -1,7 +1,7 @@
 import { type ReactNode, useEffect, useId, useRef, useState } from 'react';
 import { Gi } from '../design/icons.tsx';
 import { s } from '../design/style.ts';
-import { SignOutGuard } from '../pos/SignOutGuard.tsx';
+import { SignOutGuard } from '../pos/outbox/SignOutGuard.tsx';
 import { useAuthState, useAuthStore, useServices, useStoreState, useT } from './hooks.ts';
 
 /**

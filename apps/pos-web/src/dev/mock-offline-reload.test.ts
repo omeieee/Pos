@@ -2,7 +2,7 @@
 import { describe, expect, test, vi } from 'vitest';
 import { createMemoryLocalStore } from '../platform/localStore.ts';
 import { createMemoryTokenStore } from '../platform/tokenStore.ts';
-import { CATALOGUE_KEY } from '../pos/catalogue-cache.ts';
+import { CATALOGUE_KEY } from '../pos/cart/catalogue-cache.ts';
 import { createServices } from '../services.ts';
 import { createFakeLifecycle } from '../test-support/fake-realtime.ts';
 import { createMockServer, MOCK_STAFF } from './mock-server.ts';

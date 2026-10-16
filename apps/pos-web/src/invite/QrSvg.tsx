@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { qrPath } from '../pos/local-qr.ts';
+import { qrPath } from '../pos/outbox/local-qr.ts';
 
 /**
  * A QR drawn on the device as one inline SVG path (no network, no image URL, nothing for the CSP

@@ -30,7 +30,7 @@ import { ApiClientError, isApiClientError } from '../api/errors.ts';
 import { createStore, type ReadableStore } from '../lib/store.ts';
 import { newUuid } from '../platform/ids.ts';
 import type { Lifecycle } from '../platform/lifecycle.ts';
-import { mayHaveBeenCreated } from '../pos/cart-store.ts';
+import { mayHaveBeenCreated } from '../pos/cart/cart-store.ts';
 import type { EntityStore } from '../realtime/entity-store.ts';
 import { groupsWithOptions } from '../realtime/selectors.ts';
 import type { GroupPatch, ItemPatch, OptionPatch } from './model.ts';

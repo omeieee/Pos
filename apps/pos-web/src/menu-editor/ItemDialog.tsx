@@ -1,7 +1,7 @@
 import { MENU_CHANNELS, type MenuChannel } from '@sds/shared';
 import { useEffect, useState } from 'react';
 import { s } from '../design/style.ts';
-import { localName } from '../pos/names.ts';
+import { localName } from '../pos/cart/names.ts';
 import { CheckChip, FieldGroup, FieldPair } from '../ui/FormParts.tsx';
 import { useEntities, useLocale, useServices, useT } from '../ui/hooks.ts';
 import { SelectField, TextField } from '../ui/TextField.tsx';

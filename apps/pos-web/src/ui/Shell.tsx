@@ -4,12 +4,12 @@ import { allowedRoutes, pathFromHash, type RouteDef, resolveRoute } from '../app
 import { Gi, type GiName } from '../design/icons.tsx';
 import { useLayout } from '../design/layout.ts';
 import { s } from '../design/style.ts';
-import { DashboardScreen } from '../pos/DashboardScreen.tsx';
-import { KitchenScreen } from '../pos/KitchenScreen.tsx';
-import { kitchenQueue } from '../pos/kitchen-model.ts';
-import { OrderDetailScreen } from '../pos/OrderDetailScreen.tsx';
-import { OrderEntryScreen } from '../pos/OrderEntryScreen.tsx';
-import { OrdersScreen } from '../pos/OrdersScreen.tsx';
+import { OrderEntryScreen } from '../pos/cart/OrderEntryScreen.tsx';
+import { KitchenScreen } from '../pos/kitchen/KitchenScreen.tsx';
+import { kitchenQueue } from '../pos/kitchen/kitchen-model.ts';
+import { DashboardScreen } from '../pos/orders/DashboardScreen.tsx';
+import { OrderDetailScreen } from '../pos/orders/OrderDetailScreen.tsx';
+import { OrdersScreen } from '../pos/orders/OrdersScreen.tsx';
 import { AccountMenu } from './AccountMenu.tsx';
 import { useAuthState, useEntities, useHash, useT } from './hooks.ts';
 import { OutboxStrip } from './SyncPill.tsx';

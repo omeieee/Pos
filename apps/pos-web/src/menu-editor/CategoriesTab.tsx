@@ -1,6 +1,6 @@
 import { Gi } from '../design/icons.tsx';
 import { s } from '../design/style.ts';
-import { localName } from '../pos/names.ts';
+import { localName } from '../pos/cart/names.ts';
 import { useEntities, useLocale, useServices, useT } from '../ui/hooks.ts';
 import { useEditorContext } from './editor-context.ts';
 import { categoryRows } from './lists.ts';

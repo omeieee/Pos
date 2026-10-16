@@ -6,7 +6,7 @@ import {
 } from '@sds/shared';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { createApiClient } from '../api/client.ts';
-import { buildMenu } from '../pos/menu-model.ts';
+import { buildMenu } from '../pos/cart/menu-model.ts';
 import { createConnection } from '../realtime/connection.ts';
 import { createEntityStore } from '../realtime/entity-store.ts';
 import { createFakeLifecycle } from '../test-support/fake-realtime.ts';

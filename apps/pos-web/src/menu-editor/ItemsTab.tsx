@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Gi } from '../design/icons.tsx';
 import { s } from '../design/style.ts';
 import { apiUrl } from '../platform/config.ts';
-import { localName } from '../pos/names.ts';
+import { localName } from '../pos/cart/names.ts';
 import { useEntities, useLocale, useServices, useT } from '../ui/hooks.ts';
 import { useEditorContext } from './editor-context.ts';
 import { categoryRows, itemRowsOf } from './lists.ts';

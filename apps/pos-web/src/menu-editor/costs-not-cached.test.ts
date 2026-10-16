@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { createApiClient } from '../api/client.ts';
 import { createStore } from '../lib/store.ts';
 import { createMemoryLocalStore, type LocalStore } from '../platform/localStore.ts';
-import { CATALOGUE_KEY, createCatalogueCache } from '../pos/catalogue-cache.ts';
+import { CATALOGUE_KEY, createCatalogueCache } from '../pos/cart/catalogue-cache.ts';
 import { createEntityStore } from '../realtime/entity-store.ts';
 import { createFakeLifecycle } from '../test-support/fake-realtime.ts';
 import { FAKE_DEVICE_TOKEN, FAKE_SESSION_TOKEN, mockFetch } from '../test-support/fixtures.ts';
