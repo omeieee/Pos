@@ -297,7 +297,7 @@ function PaymentPanelBody({ orderId }: { orderId: string }) {
                         outbox.enqueueCash({
                           target: { orderId: order.id },
                           tenderedSatang: tender,
-                          totalSatang: order.totalSatang,
+                          totalSatang: collectAmount(order, undefined, ledger?.dueSatang),
                           label: order.orderNo,
                         }),
                     },
@@ -307,9 +307,9 @@ function PaymentPanelBody({ orderId }: { orderId: string }) {
           ) : null}
           {choice === 'promptpay' ? (
             offline && !isUnsure ? (
-              // No server: the QR is drawn here from the saved ID, for the server's last known total.
+              // No server: the QR is drawn here from the saved ID, for the server's last known amount due.
               <OfflinePromptPay
-                amountSatang={order.totalSatang}
+                amountSatang={collectAmount(order, undefined, ledger?.dueSatang)}
                 amountKind="server"
                 submit={(qr) =>
                   outbox.enqueuePromptpay({
