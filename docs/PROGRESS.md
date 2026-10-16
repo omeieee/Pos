@@ -25,7 +25,7 @@
 - **Decisions:** none new (D-27 note: switched on).
 - **Open issues:** if the ledger is not loaded offline on a partly paid order, no QR is shown and cash shows loading (by design). `LocalOrderScreen.tsx` (an order the server lacks) correctly uses the whole estimate, since it has no earlier payments. Other items from the 2026-10-16 list (slip-reset patches, `customerExists`, liff-web prices) are unchanged.
 - **Next:** owner picks a Slip2Go package; watch the first real auto-confirms.
-- **Commit:** uncommitted.
+- **Commit / deploy:** `41e105a` (fix) and `1cdeefc` (docs), pushed 2026-10-17 with the owner's OK. CI, Deploy API and Deploy web all succeeded. The API sha stays `a0d5e87` on purpose (no API or package files changed, so the API deploy does not rebuild). Not seen on a real iPad/iPhone.
 
 ## 2026-10-17 · P4 · Auto-confirm on; badge device check passed
 - **Summary:** owner checked the "โอนแล้ว แต่ยังไม่มีสลิป" badge on a real iPad and iPhone: pass. `SLIP_AUTOCONFIRM=on` is set in the VM `.env` and in the running API container. Owner deferred the Slip2Go package choice (trial ends 2026-10-19).
