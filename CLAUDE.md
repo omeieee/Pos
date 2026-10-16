@@ -29,7 +29,7 @@ A cloud POS for a made-to-order noodle restaurant inside a condominium.
 - Keep diffs surgical.
 - Delegate to the matching agent when the task sits in its area.
 
-**At the end of every task:** run `/checkpoint "<summary>"`. It logs progress, updates the phase checkpoint's as-built notes, and updates decisions if needed. Commit only when the owner asks.
+**At the end of every task (owner rule 2026-10-16):** ask the owner whether to save a checkpoint or go to the next step, and wait for the answer. "Checkpoint" means running `/checkpoint "<summary>"`. It logs progress, updates the phase checkpoint's as-built notes and `ARCHITECTURE.md`, and updates decisions if needed. Commit only when the owner asks.
 
 ## Docs map
 | Doc | Read when working on |
