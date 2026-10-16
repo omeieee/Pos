@@ -1430,6 +1430,24 @@ describe('PromptPay QR (signed link)', () => {
     expect(order.id).not.toBe(second.id);
   });
 
+  test('`download=1` makes it a file to save; without it the picture is shown inline', async () => {
+    const { cashier, payment } = await pendingPromptpay();
+    const { url } = await urlOf(cashier, payment.id);
+    const plain = await fetchPng(url);
+    expect(plain.statusCode).toBe(200);
+    expect(plain.headers['content-disposition']).toBeUndefined();
+    const saved = await fetchPng(`${url}&download=1`);
+    expect(saved.statusCode).toBe(200);
+    expect(saved.headers['content-type']).toBe('image/png');
+    expect(saved.headers['content-disposition']).toBe('attachment; filename="promptpay-qr.png"');
+    expect(saved.rawPayload.equals(plain.rawPayload)).toBe(true);
+    // The flag is not part of the proof: a bad signature is still refused with it.
+    const forged = await fetchPng(
+      `${url.replace(/sig=[^&]+/, `sig=${'A'.repeat(43)}`)}&download=1`,
+    );
+    expect(forged.statusCode).toBe(403);
+  });
+
   test('cash and other methods have no QR link', async () => {
     const cashier = await sign('cashier');
     const order = await place(cashier);

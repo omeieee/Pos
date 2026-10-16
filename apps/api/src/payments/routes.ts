@@ -290,6 +290,11 @@ export async function registerPaymentRoutes(
     },
     async (request, reply) => {
       const png = await renderPaymentQr(ctx, paymentIdOf(request));
+      // `download=1` (not part of the signed proof) asks for a file to save: a phone's in-app
+      // browser can download a plain link, but not a picture made inside the page.
+      if ((request.query as { download?: unknown }).download === '1') {
+        reply.header('content-disposition', 'attachment; filename="promptpay-qr.png"');
+      }
       return reply
         .header('content-type', 'image/png')
         .header('x-content-type-options', 'nosniff')
