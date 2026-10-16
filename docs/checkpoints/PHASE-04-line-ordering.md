@@ -56,3 +56,4 @@ Customers order and pay through the shop's LINE OA, within the free message budg
 - 2026-10-17: auto-confirm switched on, badge device check passed ([PROGRESS](../PROGRESS.md)).
 - 2026-10-17: offline amount due fix, decisions table rows ([PROGRESS](../PROGRESS.md)).
 - 2026-10-17: customer-app (LIFF) E2E ([PROGRESS](../PROGRESS.md)).
+- 2026-10-17: QR save inside LINE (Android) fix deployed, not yet confirmed on a phone ([PROGRESS](../PROGRESS.md)).
