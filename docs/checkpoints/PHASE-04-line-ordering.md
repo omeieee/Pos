@@ -23,11 +23,20 @@ Customers order and pay through the shop's LINE OA, within the free message budg
 
 ## Exit criteria
 - [ ] End-to-end on real iOS and Android LINE apps: order → free reply with the exact-amount QR → pay → slip → staff confirm → status updates → "ready" push
-- [ ] Choosing gov co-pay in LINE sends the "pay at storefront" instructions and **never a QR**
+- [ ] Choosing gov co-pay in LINE sends the "pay at storefront" instructions and **never a QR** (automated: `packages/line/src/flex.test.ts` co-pay card has no image/QR/URL; `customer-app.test.ts` co-pay order has `showQr` false, `/qr` answers 409, no `qr_payload` stored; left open until seen once on a real phone)
 - [ ] Changing the payment method from chat buttons and from the app both update the POS in < 1 s
-- [ ] The same webhook delivered twice doesn't double-process; a bad signature is rejected
-- [ ] The quota tracker shows the current month's usage; policy `off` stops pushes
-- [ ] The privacy notice is shown and its acknowledgement stored
+- [x] The same webhook delivered twice doesn't double-process; a bad signature is rejected (`apps/api/src/line/line.test.ts`: "the same webhookEventId delivered twice is handled once", bad signature 403)
+- [x] The quota tracker shows the current month's usage; policy `off` stops pushes (`line.test.ts` quota: used equals counted push rows; `packages/line/src/sender.test.ts` "policy off sends nothing and takes no quota")
+- [x] The privacy notice is shown and its acknowledgement stored (`line.test.ts` follow stores `privacy_ack_at/version`; liff-web E2E `order-flow.e2e.ts` shows the notice and accepts it on a first visit)
+
+### Still to do on real phones (owner, LINE app on iPhone and on Android)
+1. Order in LINE: menu, option, checkout with PromptPay. Check the QR amount matches the total and the shop's PromptPay ID is the real one.
+2. Tap "โอนแล้ว", then send a real small slip. Check the neutral wording (checking, then staff reviewing) and that nothing says "paid" before staff or Slip2Go confirm.
+3. On the POS, confirm the payment; the customer's open page should show the paid pop-up within a few seconds.
+4. Choose ไทยช่วยไทย: only "pay at the entrance" text, never a QR, in the app and in the chat.
+5. Change the payment method from the app and from the chat buttons; watch the POS update (target under 1 s, measure with a stopwatch).
+6. Finish the order on the POS and check the single "ready" push arrives (quota policy `essential` or `all`).
+7. Send the same slip on a second order: it must not auto-confirm.
 
 ## As built
 - `packages/line`: signature check, event schemas, Thai Flex builders (co-pay card has no QR input), quota-aware sender (replies free; pushes by policy `off`/`essential`/`all`), rich-menu loader. Text in `packages/i18n` `lineBot.*`.
