@@ -225,7 +225,7 @@ describe('the customer uploads a slip', () => {
     const html = Buffer.from('<html><script>alert(1)</script></html> and some more bytes');
     const cases: [string, Buffer | string, string | null][] = [
       ['a page sent as a PNG', html, 'image/png'],
-      ['a GIF', Buffer.from('GIF89a' + 'x'.repeat(40)), 'image/png'],
+      ['a GIF', Buffer.from(`GIF89a${'x'.repeat(40)}`), 'image/png'],
       ['a too-short file', Buffer.from([0xff, 0xd8, 0xff]), 'image/jpeg'],
       [
         'a RIFF that is not WebP',

@@ -63,7 +63,7 @@ export async function sendOrderChange(
 ): Promise<OrderChangePushResult> {
   const skipped = { sent: false, reason: 'skipped' } as const;
   const row = await ordersRepo.findOrderById(deps.db, notice.orderId);
-  if (!row || row.channel !== 'line' || !row.customerId) return skipped;
+  if (row?.channel !== 'line' || !row.customerId) return skipped;
   const customer = await lineRepo.findLiveCustomer(deps.db, row.customerId);
   if (!customer) return skipped;
   const sender = buildSender({

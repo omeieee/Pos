@@ -333,11 +333,11 @@ describe('the not-found grace window', () => {
   test('the retry schedule gives one call fewer retries than the budget, the last inside the window', () => {
     expect(SLIP_GRACE_RETRY_DELAYS_MS).toEqual([20_000, 30_000, 60_000]);
     expect(SLIP_GRACE_RETRY_DELAYS_MS).toHaveLength(SLIP_NOT_FOUND_GRACE_MAX_CALLS - 1);
-    const times = (first: number) =>
-      SLIP_GRACE_RETRY_DELAYS_MS.reduce<number[]>(
-        (acc, d) => [...acc, (acc[acc.length - 1] ?? first) + d],
-        [first],
-      ).map((t) => t / 1000);
+    const times = (first: number) => {
+      const out = [first];
+      for (const d of SLIP_GRACE_RETRY_DELAYS_MS) out.push((out[out.length - 1] ?? first) + d);
+      return out.map((t) => t / 1000);
+    };
     expect(times(SLIP_FIRST_CALL_DELAY_MS)).toEqual([10, 30, 60, 120]);
     expect(times(SLIP_FIRST_CALL_DELAY_BY_BANK_MS['002'] ?? 0)).toEqual([50, 70, 100, 160]);
     expect(inSlipNotFoundGrace(up, at(160))).toBe(true);

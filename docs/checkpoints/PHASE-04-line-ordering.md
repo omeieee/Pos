@@ -46,7 +46,7 @@ Customers order and pay through the shop's LINE OA, within the free message budg
 - Design: `design/logo/`, `design/rich-menu/` (full and compact), `design/privacy-notice-th.md` (draft, not published).
 - Retention and retry: pg-boss jobs (`line-events-retry` every 5 min; nightly `retention-line-events`, `-orders`, `-recipients`, `-line-customers`), `line_events` keeps ids only, privacy ack stores the notice version.
 - Ordering: `/v1/app/*` (LIFF token login, own-orders only, order cap 3 open / 50 items), `apps/liff-web`, chat Flex replies, one completion push per LINE order, rich-menu CLI (`pnpm --filter @sds/api richmenu:upload`); rich menu `full` is default on the test OA; LIFF app `Order Menu` -> `sds-order.pages.dev`.
-- Not built or not verified: real-device E2E (LINE in-app browser, iOS, Android), slip storage and 90-day deletion. Playwright for liff-web exists (mock API, 4 browser targets, not in CI).
+- Not built or not verified: real-device E2E (LINE in-app browser, iOS, Android), slip 90-day deletion on a real database (the jobs `retention-slips` and `retention-slip-orphans` exist and are tested, `apps/api/src/jobs/jobs.ts`). Playwright for liff-web exists (mock API, 4 browser targets, not in CI).
 - Code index: `ARCHITECTURE.md` (as built, verified at `7ff9951`) maps every module, route, table and the LINE/payment traces; look things up there rather than copying them here.
 
 ## Log

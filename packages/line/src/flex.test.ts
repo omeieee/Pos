@@ -53,7 +53,7 @@ describe('orderConfirmation', () => {
 describe('paymentInstructions', () => {
   const common = { orderNo: 'L-012', orderId: ORDER_ID, totalSatang: 12050 };
 
-  const ORDER_URL = 'https://liff.line.me/1234567890-abcdefgh/orders/' + ORDER_ID;
+  const ORDER_URL = `https://liff.line.me/1234567890-abcdefgh/orders/${ORDER_ID}`;
 
   test('promptpay: ID and exact amount in the text, a button to the order page, and NO image', () => {
     const msg = paymentInstructions({

@@ -41,7 +41,7 @@ export async function sendReady(
 ): Promise<CompletionPushResult> {
   const skipped = { sent: false, reason: 'skipped' } as const;
   const row = await ordersRepo.findOrderById(deps.db, orderId);
-  if (!row || row.channel !== 'line' || row.status !== 'ready' || !row.customerId) {
+  if (row?.channel !== 'line' || row.status !== 'ready' || !row.customerId) {
     return skipped;
   }
   const customer = await lineRepo.findLiveCustomer(deps.db, row.customerId);
