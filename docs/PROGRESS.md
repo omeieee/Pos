@@ -15,7 +15,8 @@
 > - **Not covered yet:** real iPad/iPhone checks, real Postgres lock behaviour (PGlite serialises), the customer LIFF flow end to end, real slips.
 > - **Next:** owner checks the claimed-without-slip badge on iPad and iPhone; owner picks the Slip2Go package before 2026-10-19; watch a few real transfers before turning auto-confirm on; owner decisions stay in [docs/10-open-questions.md](10-open-questions.md).
 > - **Before any push:** `pnpm lint` (CI gates on Biome, and a lint error skips the deploy), `pnpm build`, tests; `main` auto-deploys, so new env vars go into the VM `.env` first and migrations take the next free number. Check `/healthz` for the new sha after the push.
-> - **Maintenance:** the architecture refactor (code moved, behaviour unchanged) is deployed; see the entry "2026-10-16 · Maintenance · Architecture refactor". Not yet checked on a real iPad/iPhone. The as-built code index `ARCHITECTURE.md` (verified at `7ff9951`) is new and uncommitted; see the newest entry.
+> - **Maintenance:** the architecture refactor (code moved, behaviour unchanged) is deployed; see the entry "2026-10-16 · Maintenance · Architecture refactor". Not yet checked on a real iPad/iPhone. The as-built code index `ARCHITECTURE.md` (verified at `7ff9951`) is committed (`070e0b4`) and pushed with the owner's OK; see the newest entry.
+> - **Workflow (owner rule 2026-10-16):** after each completed part, ask the owner "save checkpoint or next step?" and wait for the answer (`CLAUDE.md` workflow, `3d8481c`).
 
 ## 2026-10-16 · Maintenance · ARCHITECTURE.md as-built code index
 - **Summary:** new root `ARCHITECTURE.md` (197 lines, about 40 KB). It covers topology, a mermaid flow, a map of every module (6 packages, 11 api slices, 15 frontend modules), 5 execution traces, the Drizzle table map and cross-cutting helpers. It indexes only code that exists and is stamped "verified at `7ff9951`" with a `git diff --stat` drift rule.
@@ -25,8 +26,9 @@
 - **Open issues:**
   - `docs/02-architecture.md` §3 and §6 are out of date compared with the code. For example, `POST /v1/auth/line` is really `POST /v1/app/session`, the webhook is `POST /v1/line/webhook`, and `GET /v1/customers`, reports and expenses are not built. Left as written.
   - The index has no automated drift check: it relies on the sha rule and /checkpoint step 7.
+- **Also:** the owner's new rule is in `CLAUDE.md` ("At the end of every task": ask "checkpoint or next step?" instead of running `/checkpoint` unasked) and in memory.
 - **Next:** unchanged (see the header).
-- **Commit:** uncommitted.
+- **Commit:** `070e0b4` (index), `3d8481c` (`CLAUDE.md` rule) and the checkpoint commit after them; pushed 2026-10-16 with the owner's OK, together with `7ff9951` (all docs only).
 
 ## 2026-10-16 · Maintenance · Architecture refactor started; PROGRESS.md trimmed
 - **Plan (owner-approved, moves only, no behaviour change):** step 0 docs diet; 1 split `apps/api/src/payments/service.ts`; 2 split `packages/db/src/schema.ts` (stays a barrel; `db:generate` must produce nothing); 3 split the i18n catalogs by key prefix; 4 split `apps/pos-web/src/api/client.ts` by resource; 5 `liff-web` `OrderScreen.tsx`; 6 api `menu/service.ts`; 7 api `auth/service.ts`; 8 regroup `apps/pos-web/src/pos/` into feature folders. Old paths stay as re-export barrels. Not merged on purpose: the three `request-hash.ts` files, and every duplicate whose copies differ (they go to the owner as questions).
