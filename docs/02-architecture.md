@@ -60,7 +60,7 @@ On Path B (a 1 GB Micro VM), `db` moves to managed Postgres (Supabase free) and 
 ├─ CLAUDE.md                 project guide for Claude (read first)
 ├─ apps/
 │  ├─ api/                   Fastify: REST /v1, WebSocket, LINE webhook, jobs (pg-boss)
-│  │  └─ src/modules/        auth · menu · orders · payments · customers · reports ·
+│  │  └─ src/<feature>/      auth · menu · orders · payments · customers · reports ·
 │  │                         expenses · settings · line · sync · print (P8)
 │  ├─ pos-web/               staff PWA: POS · order board · kitchen · menu · payments ·
 │  │                         customers · back office · settings (role-gated)
@@ -103,7 +103,7 @@ On Path B (a 1 GB Micro VM), `db` moves to managed Postgres (Supabase free) and 
 | `apps/backend` | `apps/api` |
 | `apps/pos-web` | `apps/pos-web` |
 | `ux/ui` | `design/` (design work) + `packages/ui` (component code) |
-| `line` | `packages/line` (SDK wrapper) + `apps/api/src/modules/line` (webhook) + `apps/liff-web` (customer app) |
+| `line` | `packages/line` (SDK wrapper) + `apps/api/src/line` (webhook) + `apps/liff-web` (customer app) |
 
 **Components the brief did not list:**
 - `packages/db`, `packages/promptpay`, `packages/finance`, `packages/i18n`
