@@ -14,7 +14,7 @@ A cloud POS for a made-to-order noodle restaurant inside a condominium.
 
 ## Workflow
 **At the start of every session**
-1. Read `docs/PROGRESS.md`: current phase, last entry, next step.
+1. Read `docs/PROGRESS.md`: its header (current phase, live state, next step) and the newest entry only. Older entries are archived in `docs/progress/`; open one only when the task needs that history.
 2. Read the current phase file in `docs/checkpoints/`.
 3. Load only the docs the task needs (map below).
 
