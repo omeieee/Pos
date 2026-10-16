@@ -10,13 +10,31 @@
 
 > **State (from the entries below; git checked 2026-10-16):**
 > - **Deployed and live:** `a0d5e87` (pushed and deployed 2026-10-16: CI, API deploy and web deploy all succeeded; `/healthz` shows `a0d5e87`, `/readyz` 200, `/v1/orders` 401 without a session). It includes the architecture refactor and the earlier docs/test commits. No new migration since 0036.
-> - **Slip checking:** Slip2Go (D-27) and the slip status, cooldown, fake-slip block and customer flag (D-28) are deployed. `SLIP_AUTOCONFIRM` is still **off**. The Slip2Go trial ends **2026-10-19**.
+> - **Slip checking:** Slip2Go (D-27) and the slip status, cooldown, fake-slip block and customer flag (D-28) are deployed. `SLIP_AUTOCONFIRM` is **on** (VM `.env` and running API, checked 2026-10-17; default ceiling 1,000 THB). The Slip2Go trial ends **2026-10-19**; package not chosen yet.
 > - **Last full verification (2026-10-15, on main):** biome 0 errors; build 12/12; tests shared 1117, db 299, api 1376, pos-web 1890, liff-web 114, i18n 22, line 69, ui 118, promptpay 1276.
 > - **Not covered yet:** real iPad/iPhone checks, real Postgres lock behaviour (PGlite serialises), the customer LIFF flow end to end, real slips.
-> - **Next:** owner checks the claimed-without-slip badge on iPad and iPhone; owner picks the Slip2Go package before 2026-10-19; watch a few real transfers before turning auto-confirm on; owner decisions stay in [docs/10-open-questions.md](10-open-questions.md).
+> - **Next:** claimed-without-slip badge checked on iPad and iPhone (pass, 2026-10-17); owner picks the Slip2Go package (trial ends 2026-10-19); watch the first real auto-confirms; owner decisions stay in [docs/10-open-questions.md](10-open-questions.md).
 > - **Before any push:** `pnpm lint` (CI gates on Biome, and a lint error skips the deploy), `pnpm build`, tests; `main` auto-deploys, so new env vars go into the VM `.env` first and migrations take the next free number. Check `/healthz` for the new sha after the push.
 > - **Maintenance:** the architecture refactor (code moved, behaviour unchanged) is deployed; see the entry "2026-10-16 · Maintenance · Architecture refactor". Not yet checked on a real iPad/iPhone. The as-built code index `ARCHITECTURE.md` (verified at `7ff9951`) is committed (`070e0b4`) and pushed with the owner's OK; see the newest entry.
 > - **Workflow (owner rule 2026-10-16):** after each completed part, ask the owner "save checkpoint or next step?" and wait for the answer (`CLAUDE.md` workflow, `3d8481c`).
+
+## 2026-10-17 · P4 · Offline amount due fix; decisions table; trial-end check
+- **Summary:** offline cash and offline PromptPay QR on a partly paid order now use the server's amount still due, not the order total (open item from the 2026-10-16 refactor). Checked in code that the Slip2Go trial ending does not break payments: `401xxx` gives verdict `unchecked` plus an owner alert, so payments stay `claimed`. Added the missing D-27 to D-29 rows to `docs/decisions.md`.
+- **Changed:** `apps/pos-web/src/pos/payments/PaymentPanel.tsx` (2 lines: `collectAmount(order, undefined, ledger?.dueSatang)` for the queued cash total and the offline QR amount); new `apps/pos-web/src/pos/payments/PaymentOfflineDue.test.tsx` (2 tests); `docs/decisions.md` (3 table rows, D-27 switched-on line).
+- **Verification:** new tests written first and failed with 15000 instead of 5000; then `pnpm --filter @sds/pos-web test` 127 files, 1892 tests pass; `tsc --noEmit` clean; `biome check` on `payments/` clean. Then, on the same tree: `biome check apps packages design` 0 errors; `pnpm build` 12/12; `pnpm test` 9/9 packages (shared 1117, db 299, api 1376, pos-web 1892, liff-web 114, i18n 26, line 69, ui 118, promptpay 1276). No real-device check.
+- **Decisions:** none new (D-27 note: switched on).
+- **Open issues:** if the ledger is not loaded offline on a partly paid order, no QR is shown and cash shows loading (by design). `LocalOrderScreen.tsx` (an order the server lacks) correctly uses the whole estimate, since it has no earlier payments. Other items from the 2026-10-16 list (slip-reset patches, `customerExists`, liff-web prices) are unchanged.
+- **Next:** owner picks a Slip2Go package; watch the first real auto-confirms.
+- **Commit:** uncommitted.
+
+## 2026-10-17 · P4 · Auto-confirm on; badge device check passed
+- **Summary:** owner checked the "โอนแล้ว แต่ยังไม่มีสลิป" badge on a real iPad and iPhone: pass. `SLIP_AUTOCONFIRM=on` is set in the VM `.env` and in the running API container. Owner deferred the Slip2Go package choice (trial ends 2026-10-19).
+- **Changed:** nothing in the repo. VM `.env` was already set by the owner; this session only read it.
+- **Verification:** read-only over SSH: `.env` has `SLIP_VERIFIER=slip2go`, `SLIP_OCR=off`, `SLIP_QR=on`, `SLIP_AUTOCONFIRM=on`, key present (value not read); `printenv` in the api container shows `on`; container healthy; `/healthz` shows `a0d5e87`. `SLIP_AUTOCONFIRM_MAX_SATANG` is unset, so the default ceiling (1,000 THB) applies. No tests run.
+- **Decisions:** none (D-27 switch-on).
+- **Open issues:** after the trial ends, Slip2Go calls may fail without a package; behaviour in that case not checked in code. Not known whether the real PromptPay ID is set in Settings (receiver check depends on it). No real transfer was watched before switching on.
+- **Next:** owner picks a Slip2Go package; watch the first real auto-confirms and void any wrong one.
+- **Commit:** uncommitted (docs only).
 
 ## 2026-10-16 · Maintenance · ARCHITECTURE.md as-built code index
 - **Summary:** new root `ARCHITECTURE.md` (197 lines, about 40 KB). It covers topology, a mermaid flow, a map of every module (6 packages, 11 api slices, 15 frontend modules), 5 execution traces, the Drizzle table map and cross-cutting helpers. It indexes only code that exists and is stamped "verified at `7ff9951`" with a `git diff --stat` drift rule.

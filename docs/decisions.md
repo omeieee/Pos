@@ -34,6 +34,9 @@ This is the **single source of truth for technology and design choices**. Other 
 | D-23 | Co-owners and staff by e-mail invite: single-use invite link, any role, owners only | **Accepted** | 2026-10-04 |
 | D-24 | Transfer slip images are files on the Oracle VM disk behind a `SlipStore` seam, deleted 90 days after the payment ends | **Accepted** (owner delegated the choice) | 2026-10-11 |
 | D-26 | The amount on a slip is read by Tesseract on the VM, as a hint for staff only; the text is never stored | **Accepted** (owner decision) | 2026-10-11 |
+| D-27 | PromptPay slips are checked by Slip2Go; a payment is auto-confirmed only on code `200200` with the exact receiver, amount and date, no duplicate, under the ceiling and with `SLIP_AUTOCONFIRM` on; staff can void it | **Accepted** (owner decision; switched on 2026-10-17) | 2026-10-12 |
+| D-28 | Customers see a neutral slip status; cooldown after 3 invalid slips, per-order fake-slip block, staff-only customer flag, owner-only clearing | **Accepted** (owner decision) | 2026-10-12 |
+| D-29 | A feature folder in `apps/api/src/<feature>/` is routes, use-case files and a `service.ts` barrel; the refactor only moves code | **Accepted** (owner-approved plan) | 2026-10-16 |
 
 ---
 
@@ -274,6 +277,7 @@ This is the **single source of truth for technology and design choices**. Other 
 - **Kept:** verdict, Slip2Go code, `referenceId`, attempts, time. No names, accounts, QR text or response body. Same purge, erasure and sync exclusion as other slip columns.
 - **Limits (honest):** a `200200` proves the bank has a transfer to the configured receiver with that amount after the date, not that it belongs to THIS order: a customer could reuse a real slip that was never claimed on another order of the same amount (the local and Slip2Go-reference duplicate checks cover only slips we have seen) or send a slip from a friend's earlier transfer to the shop. The date condition (after the order was created) and the duplicate check bound this. The shop's personal-vs-business PromptPay ID is the owner's setting; changing it needs the owner, step-up, audit and alert (rule 3).
 - **Added after the QA review (2026-10-12):** auto-confirm refuses when ANY other payment, in any status, holds the same slip (image, ref or QR key), so a cancelled or voided slip never confirms again; it needs Slip2Go's own transaction reference as the key; and it works only for a phone-number PromptPay receiver (type `02001`, the only form proven live; every receiver sent must be of that type). Other receivers still get the bank check and a one-tap confirm. **Accepted risk:** another customer's real slip can confirm a same-amount order if it is uploaded first; the original owner then sees a duplicate and staff handle it. Bounded by the ceiling, the date condition and the duplicate rules.
+- **Switched on (2026-10-17):** `SLIP_AUTOCONFIRM=on` in the VM `.env` and in the running API; ceiling is the default 1,000 THB. The Slip2Go trial ends 2026-10-19; the package is not chosen yet. When the account runs out, Slip2Go answers `401xxx`, the verdict is `unchecked` with an owner alert, and payments stay `claimed` for staff.
 - **Revisit if:** a wrong auto-confirm happens, tokens or the package run out (everything falls back to the staff tick), or the owner wants a different ceiling.
 
 ## D-28 · Slip status for customers, cooldown, fake-slip block and customer flag — Accepted (owner decision, 2026-10-12)

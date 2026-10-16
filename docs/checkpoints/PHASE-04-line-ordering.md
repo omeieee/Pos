@@ -44,3 +44,5 @@ Customers order and pay through the shop's LINE OA, within the free message budg
 - 2026-10-04: kickoff, LINE package and webhook, reserved IP, webhook verified ([PROGRESS](../PROGRESS.md)).
 - 2026-10-04: retention jobs, ordering flow, rich menu ([PROGRESS](../PROGRESS.md)).
 - 2026-10-16: `ARCHITECTURE.md` as-built code index ([PROGRESS](../PROGRESS.md)).
+- 2026-10-17: auto-confirm switched on, badge device check passed ([PROGRESS](../PROGRESS.md)).
+- 2026-10-17: offline amount due fix, decisions table rows ([PROGRESS](../PROGRESS.md)).
