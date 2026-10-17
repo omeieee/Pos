@@ -8,6 +8,7 @@ import { enMenuEditor } from './en/menu-editor.ts';
 import { enOrders } from './en/orders.ts';
 import { enPayment } from './en/payment.ts';
 import { enPos } from './en/pos.ts';
+import { enReports } from './en/reports.ts';
 import { enSettings } from './en/settings.ts';
 import { enSettingsAccess } from './en/settings-access.ts';
 import { enSettingsPayments } from './en/settings-payments.ts';
@@ -22,6 +23,7 @@ import { thMenuEditor } from './th/menu-editor.ts';
 import { thOrders } from './th/orders.ts';
 import { thPayment } from './th/payment.ts';
 import { thPos } from './th/pos.ts';
+import { thReports } from './th/reports.ts';
 import { thSettings } from './th/settings.ts';
 import { thSettingsAccess } from './th/settings-access.ts';
 import { thSettingsPayments } from './th/settings-payments.ts';
@@ -44,6 +46,7 @@ const thParts: Record<string, Record<string, string>> = {
   orders: thOrders,
   payment: thPayment,
   pos: thPos,
+  reports: thReports,
   settings: thSettings,
   'settings-access': thSettingsAccess,
   'settings-payments': thSettingsPayments,
@@ -59,6 +62,7 @@ const enParts: Record<string, Record<string, string>> = {
   orders: enOrders,
   payment: enPayment,
   pos: enPos,
+  reports: enReports,
   settings: enSettings,
   'settings-access': enSettingsAccess,
   'settings-payments': enSettingsPayments,

@@ -19,6 +19,7 @@ import { registerRecipientRoutes } from './orders/recipients.ts';
 import { registerOrderRoutes } from './orders/routes.ts';
 import { registerPaymentRoutes } from './payments/routes.ts';
 import { type RealtimeOptions, registerRealtimeRoutes, setupRealtime } from './realtime/routes.ts';
+import { registerReportRoutes } from './reports/routes.ts';
 import { registerSettingsRoutes } from './settings/routes.ts';
 import { createMemorySlipStore, type SlipStore } from './slips/store.ts';
 
@@ -145,6 +146,9 @@ export async function registerV1(app: FastifyInstance, deps: V1Deps): Promise<vo
       );
       await v1.register((scope) => registerMenuRoutes(scope, context.auth, context.guard), {
         prefix: '/menu',
+      });
+      await v1.register((scope) => registerReportRoutes(scope, context.auth, context.guard), {
+        prefix: '/reports',
       });
       await v1.register((scope) => registerSettingsRoutes(scope, context.auth, context.guard), {
         prefix: '/settings',

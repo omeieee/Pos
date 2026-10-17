@@ -37,6 +37,7 @@ import type { SocketFactory, SocketHandlers } from '../platform/socket.ts';
 import { createMockMenuAdmin, type RawBody } from './mock-menu-admin.ts';
 import { createAttribution, originalStaffGate, originalStaffKnown } from './mock-original-staff.ts';
 import { createMockPayments, type MockCaller } from './mock-payments.ts';
+import { createMockReports } from './mock-reports.ts';
 import { createMockSettings } from './mock-settings.ts';
 
 export interface MockShopOptions {
@@ -284,6 +285,9 @@ export function createMockShop(options: MockShopOptions = {}) {
     }
   }
   seedMenu();
+
+  // The overview's report calls, computed from the orders above (see mock-reports.ts).
+  const reports = createMockReports({ orders, now });
 
   // Order moves, payments and the payment settings (see mock-payments.ts).
   const payments = createMockPayments({
@@ -718,6 +722,8 @@ export function createMockShop(options: MockShopOptions = {}) {
     if (settled) return settled;
     if (method === 'POST' && path === '/v1/orders') return createOrder(body, caller);
     if (method === 'GET' && path === '/v1/orders/summary') return summarizeMonth(query);
+    const reported = reports.handle(method, path, query, caller);
+    if (reported) return reported;
     const one = /^\/v1\/orders\/([^/]+)$/.exec(path);
     if (method === 'GET' && one) {
       const params = orderIdParamSchema.safeParse({ id: one[1] });
@@ -782,6 +788,7 @@ export function createMockShop(options: MockShopOptions = {}) {
     handle,
     createSocket,
     simulateIncomingOrder,
+    seedDemoOrders: reports.seedDemoOrders,
     setOffline,
     isOffline: () => offline,
     /** Dev and tests: who made each order and cash payment, and who it was named for. */

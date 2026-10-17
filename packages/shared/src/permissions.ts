@@ -35,6 +35,8 @@ export const PERMISSIONS = [
   'customer.anonymize',
   /** Clear a customer's slip flag, with a reason. Owner only. */
   'customer.slip_flag_clear',
+  /** The customer list with spending, segments and favourite items (PDPA). Owner only. */
+  'customer.report',
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 

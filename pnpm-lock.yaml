@@ -196,6 +196,12 @@ importers:
       '@sds/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@sds/finance':
+        specifier: workspace:*
+        version: link:../../packages/finance
+      '@sds/i18n':
+        specifier: workspace:*
+        version: link:../../packages/i18n
       '@sds/line':
         specifier: workspace:*
         version: link:../../packages/line
@@ -385,6 +391,16 @@ importers:
       drizzle-kit:
         specifier: 0.31.11
         version: 0.31.11
+
+  packages/finance:
+    dependencies:
+      '@sds/shared':
+        specifier: workspace:*
+        version: link:../shared
+    devDependencies:
+      '@sds/config':
+        specifier: workspace:*
+        version: link:../config
 
   packages/i18n:
     devDependencies:

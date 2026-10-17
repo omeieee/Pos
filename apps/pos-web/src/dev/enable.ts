@@ -57,6 +57,8 @@ export async function devBackend(): Promise<
     Object.assign(globalThis, {
       __sdsMock: {
         incomingOrder: () => server.simulateIncomingOrder(),
+        // Two weeks of paid orders for the overview (the report API reads the mock's orders).
+        demoOrders: () => server.seedDemoOrders(),
         setOffline,
         bumpPrices: server.bumpPrices,
         soldOut: server.soldOut,

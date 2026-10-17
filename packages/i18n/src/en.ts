@@ -7,6 +7,7 @@ import { enMenuEditor } from './en/menu-editor.ts';
 import { enOrders } from './en/orders.ts';
 import { enPayment } from './en/payment.ts';
 import { enPos } from './en/pos.ts';
+import { enReports } from './en/reports.ts';
 import { enSettings } from './en/settings.ts';
 import { enSettingsAccess } from './en/settings-access.ts';
 import { enSettingsPayments } from './en/settings-payments.ts';
@@ -28,4 +29,5 @@ export const en = {
   ...enSettingsPayments,
   ...enLine,
   ...enLiff,
+  ...enReports,
 } as const satisfies Record<MessageKey, string>;

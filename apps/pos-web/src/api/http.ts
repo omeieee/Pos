@@ -34,6 +34,8 @@ interface RequestSpec<T> {
   /** A file sent as it is (a menu photo): sent with `contentType` instead of JSON. */
   rawBody?: { data: Blob; contentType: string };
   schema?: Schema<T>;
+  /** `'text'`: hand back the body as it is (a CSV file) instead of parsing JSON. */
+  as?: 'text';
   /** `true`: bearer from the store. A string: use this token (logout, after local clear). */
   session?: boolean | string;
   device?: DeviceHeader;
@@ -193,6 +195,7 @@ export function createTransport(options: ApiClientOptions) {
       throw error;
     }
 
+    if (spec.as === 'text') return { data: text as T, status };
     if (!spec.schema) return { data: undefined as T, status };
     const parsed = spec.schema.safeParse(parseJson(text));
     if (!parsed.success) throw new ApiClientError('RESPONSE_INVALID', { status });

@@ -1,0 +1,68 @@
+/** Thai catalog: back-office reports and their exports (P6). Params use `{name}` placeholders. */
+export const thReports = {
+  // CSV columns for the accountant (the payment and channel columns reuse payment.method.* and orders.channel.*)
+  'report.export.date': 'วันที่ทำการ',
+  'report.export.orders': 'จำนวนออเดอร์',
+  'report.export.revenue': 'ยอดขาย (บาท)',
+  'report.export.avgTicket': 'เฉลี่ยต่อออเดอร์ (บาท)',
+  'report.export.commission': 'ค่าคอมมิชชันแพลตฟอร์ม (บาท)',
+  'report.export.total': 'รวม',
+  'report.export.itemName': 'เมนู',
+  'report.export.itemUnits': 'จำนวนที่ขาย',
+  'report.export.itemRevenue': 'ยอดขาย (บาท)',
+  'report.export.itemShare': 'สัดส่วนจำนวน (%)',
+  // Overview screen: states
+  'dash.loading': 'กำลังโหลดรายงาน…',
+  'dash.error': 'โหลดรายงานไม่สำเร็จ ตรวจสอบอินเทอร์เน็ตแล้วลองใหม่',
+  'dash.empty': 'ยังไม่มียอดขายในช่วงนี้',
+  'dash.live': 'ตัวเลขจริงจากออเดอร์ที่ชำระเงินและยืนยันแล้ว หักคืนเงินแล้ว',
+  // Overview screen: comparison with the period before
+  'dash.vs.today': 'จากเมื่อวาน {value}',
+  'dash.vs.week': 'จากสัปดาห์ก่อน {value}',
+  'dash.vs.month': 'จากเดือนก่อน {value}',
+  'dash.vs.year': 'จากปีก่อน {value}',
+  'dash.vs.none': 'ยังไม่มีข้อมูลช่วงก่อนหน้า',
+  'dash.delta.up': 'เพิ่มขึ้น {value}',
+  'dash.delta.down': 'ลดลง {value}',
+  'dash.delta.flat': 'เท่าเดิม',
+  // Overview screen: channels
+  'dash.channels.summary': 'สัดส่วนช่องทางขาย: {parts}',
+  'dash.channels.part': '{name} {percent}%',
+  'dash.table.show': 'ดูเป็นตาราง',
+  'dash.table.channel': 'ช่องทาง',
+  'dash.table.amount': 'ยอดขาย',
+  'dash.table.share': 'สัดส่วน',
+  // Overview screen: items
+  'dash.items.bottom': 'เมนูขายน้อยที่สุด',
+  'dash.items.none': 'ยังไม่มีเมนูที่ขายได้ในช่วงนี้',
+  'dash.items.unit': '{count} ที่',
+  // Overview screen: weekday x hour grid
+  'dash.heat.title': 'ช่วงเวลาที่ลูกค้าสั่ง',
+  'dash.heat.hint': 'จำนวนออเดอร์ตามวันทำการและชั่วโมงที่สั่ง',
+  'dash.heat.cell': '{day} {hour}:00 น. · {count} ใบ',
+  'dash.heat.less': 'น้อย',
+  'dash.heat.more': 'มาก',
+  'dash.heat.alt': 'ตารางจำนวนออเดอร์ตามวันในสัปดาห์และชั่วโมง คึกคักที่สุดคือ {day} {hour}:00 น. {count} ใบ',
+  // Overview screen: customers (owner only)
+  'dash.customers.title': 'ลูกค้า',
+  'dash.customers.ownerOnly': 'เห็นเฉพาะเจ้าของร้าน',
+  'dash.customers.new': 'ใหม่',
+  'dash.customers.regular': 'ประจำ',
+  'dash.customers.lapsed': 'หายไป',
+  'dash.customers.rule': 'หายไป = ไม่สั่งเกิน 30 วัน · ประจำ = สั่งตั้งแต่ 2 ครั้ง',
+  'dash.customers.col.name': 'ลูกค้า',
+  'dash.customers.col.segment': 'กลุ่ม',
+  'dash.customers.col.orders': 'ครั้ง',
+  'dash.customers.col.spent': 'ใช้จ่ายรวม',
+  'dash.customers.col.favourites': 'เมนูโปรด',
+  'dash.customers.noName': 'ลูกค้า LINE (ไม่ระบุชื่อ)',
+  'dash.customers.none': 'ยังไม่มีลูกค้า',
+  // Overview screen: waiting list
+  'dash.pending.none': 'ไม่มีออเดอร์ค้างชำระ',
+  'dash.pending.unpaidDetail': '{amount} · {status}',
+  // Overview screen: export
+  'dash.export.revenue': 'ยอดขาย (CSV)',
+  'dash.export.items': 'เมนู (CSV)',
+  'dash.export.done': 'บันทึกไฟล์ {name} แล้ว',
+  'dash.export.failed': 'ส่งออกไม่สำเร็จ ลองใหม่อีกครั้ง',
+} as const;

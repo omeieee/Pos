@@ -43,6 +43,24 @@ export interface ColorTokens {
   overlay: string;
 }
 
+/**
+ * Chart colours (P6). `series1..5` are the categorical slots in a FIXED order, one per entity (a
+ * sales channel keeps its slot whatever else is on screen); they pass the data-viz validator
+ * (adjacent colour-blind separation, lightness band, chroma) in both themes. `heat1..4` are one
+ * hue, light to dark, for magnitude (the weekday x hour grid). Text and grid use the colour tokens.
+ */
+export interface ChartTokens {
+  series1: string;
+  series2: string;
+  series3: string;
+  series4: string;
+  series5: string;
+  heat1: string;
+  heat2: string;
+  heat3: string;
+  heat4: string;
+}
+
 export interface FontTokens {
   /** UI text: Thai-capable, tabular figures available. */
   sans: string;
@@ -185,6 +203,7 @@ export interface MotionTokens {
 
 export interface Tokens {
   color: ColorTokens;
+  chart: ChartTokens;
   font: FontTokens;
   fontSize: FontSizeTokens;
   lineHeight: LineHeightTokens;
@@ -236,6 +255,17 @@ export const baseTokens: Tokens = {
     dangerSubtle: '#FDECEA',
     dangerText: '#B3261E',
     overlay: 'rgba(31, 26, 23, 0.48)',
+  },
+  chart: {
+    series1: '#2A78D6',
+    series2: '#EB6834',
+    series3: '#1BAF7A',
+    series4: '#EDA100',
+    series5: '#E87BA4',
+    heat1: '#7FB2EE',
+    heat2: '#3F8AE0',
+    heat3: '#1F5FAE',
+    heat4: '#123A70',
   },
   font: {
     sans: '"Anuphan Variable", "Anuphan", "IBM Plex Sans Thai", "Noto Sans Thai", "Sukhumvit Set", "Leelawadee UI", Tahoma, system-ui, sans-serif',
@@ -341,6 +371,17 @@ export const baseTokens: Tokens = {
  * in contrast.test.ts.
  */
 export const darkOverrides: TokenOverrides = {
+  chart: {
+    series1: '#3987E5',
+    series2: '#D95926',
+    series3: '#199E70',
+    series4: '#C98500',
+    series5: '#D55181',
+    heat1: '#2D548C',
+    heat2: '#4378BE',
+    heat3: '#6B9FE0',
+    heat4: '#A9CBF5',
+  },
   color: {
     bg: '#150E0C',
     surface: '#211815',

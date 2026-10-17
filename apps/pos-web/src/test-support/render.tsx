@@ -111,6 +111,7 @@ export function createFakeApi(
     recipients?: Partial<ApiClient['recipients']>;
     settings?: Partial<ApiClient['settings']>;
     devices?: Partial<ApiClient['devices']>;
+    reports?: Partial<ApiClient['reports']>;
   } = {},
 ) {
   const orders = {
@@ -185,7 +186,25 @@ export function createFakeApi(
         })),
     ),
   };
-  return { orders, payments, auth, recipients, settings, devices };
+  // The overview reads these; every call fails the test unless it was given an answer.
+  const reports = {
+    revenue: vi.fn<ApiClient['reports']['revenue']>(
+      overrides.reports?.revenue ?? unexpected('reports.revenue'),
+    ),
+    items: vi.fn<ApiClient['reports']['items']>(
+      overrides.reports?.items ?? unexpected('reports.items'),
+    ),
+    heatmap: vi.fn<ApiClient['reports']['heatmap']>(
+      overrides.reports?.heatmap ?? unexpected('reports.heatmap'),
+    ),
+    customers: vi.fn<ApiClient['reports']['customers']>(
+      overrides.reports?.customers ?? unexpected('reports.customers'),
+    ),
+    exportCsv: vi.fn<ApiClient['reports']['exportCsv']>(
+      overrides.reports?.exportCsv ?? unexpected('reports.exportCsv'),
+    ),
+  };
+  return { orders, payments, auth, recipients, settings, devices, reports };
 }
 
 export function createTestServices(
@@ -218,6 +237,8 @@ export function createTestServices(
      * connection, so nothing changes).
      */
     promptpay?: TestPromptpay;
+    /** What the overview's report calls answer (every other call fails the test). */
+    reports?: Partial<ApiClient['reports']>;
     /** What the menu editor's calls answer (every other call fails the test). */
     menuApi?: Partial<ApiClient['menu']>;
     /** What the settings screens' calls answer (every other call fails the test). */
@@ -241,6 +262,7 @@ export function createTestServices(
     },
     payments: options.payments ?? {},
     ...(options.devices ? { devices: options.devices } : {}),
+    ...(options.reports ? { reports: options.reports } : {}),
   });
   const create = api.orders.create;
   const getOrder = api.orders.get;

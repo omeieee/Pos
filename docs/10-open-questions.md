@@ -223,3 +223,16 @@ On 2026-10-01 the owner authorized Claude to proceed automatically; for each que
 - **PromptPay ID:** the one in use for the trial is a personal number; the owner sets the real shop ID later in Settings (owner, step-up, audit, alert, already built).
 - **Server access:** read-only SSH to the VM allowed (all permissions granted for this work); egress IP is 161.118.211.42.
 - **Still open:** the bank account with its bank in Settings; the paid package after the trial (money, owner only); the real ID type if not a phone number (13-digit and e-wallet receiver types are untested).
+
+## Answers 2026-10-17 · P6 analytics kickoff (defaults, owner may add ideas later)
+The owner answered "set these as defaults". Each default below is the working answer until changed.
+1. **Phase order:** start P6 now; the P5 operational items (device UAT, SOPs, training, soft launch, carried VM and Oracle checks) stay parked until the P4 phone checks are done.
+2. **Business-day cutoff:** use the cutoff already in Settings. A void or refund after midnight counts against the original order's `business_date` (owner, 2026-10-02; `03-data-model.md` §6).
+3. **Revenue:** follow `docs/03-data-model.md` §6 as written (paid orders only, net of partial refunds, cancelled orders excluded). Claimed, unconfirmed payments are not revenue. The earlier wording "confirmed payments only" was replaced by this so the two rules do not differ.
+4. **Comparisons:** previous period only (day, week, month, year).
+5. **Menu-engineering matrix:** popularity only in P6; margin comes in P7 with item costs.
+6. **Customer list:** owner role only; names and rooms anonymised 30 days after completion show as anonymous.
+7. **Exports:** CSV and XLSX, owner role only, step-up auth and an `audit_log` row.
+8. **Hand-check sample:** a synthetic day and month; the owner checks its totals by hand.
+9. **Screens:** laptop dashboard first, iPhone-friendly layouts throughout.
+- **Not decided:** nothing blocks P6. Still open, not P6: the items listed under 2026-10-17 in `docs/PROGRESS.md` (Slip2Go package, PromptPay ID masking for customers, phone checks, four behaviour items).

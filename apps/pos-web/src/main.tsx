@@ -22,6 +22,7 @@ import './outbox.css';
 import './menu-editor.css';
 import './settings.css';
 import './glass-theme.css';
+import './reports.css';
 // Last, so the redesign ("Hot bowl, calm glass") wins over older rules of the same weight.
 import '@sds/ui/design.css';
 

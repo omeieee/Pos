@@ -1,0 +1,237 @@
+/*
+ * The overview's charts (P6). Same rules as the other stylesheets: every colour, size and radius
+ * is a --sds-* token (nothing typed in), and nothing depends on hover. Series colours are the
+ * chart tokens, one fixed slot per sales channel, always paired with a text label so colour is
+ * never the only carrier of meaning. Grid and axes stay quiet (border token); text wears the
+ * text tokens, never a series colour.
+ */
+
+.rpt-card {
+  flex: 1 1 300px;
+  min-width: 0;
+  padding: 22px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.rpt-note {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  flex: none;
+}
+
+/* ---------- Channels: one stacked bar, a 2 px gap between segments ---------- */
+.rpt-stack {
+  display: flex;
+  gap: 2px;
+  height: 22px;
+  border-radius: var(--sds-radius-sm);
+  overflow: hidden;
+}
+.rpt-stack__seg {
+  min-width: 4px;
+  background: var(--sds-chart-series1);
+}
+.rpt-stack__seg--1 {
+  background: var(--sds-chart-series1);
+}
+.rpt-stack__seg--2 {
+  background: var(--sds-chart-series2);
+}
+.rpt-stack__seg--3 {
+  background: var(--sds-chart-series3);
+}
+.rpt-stack__seg--4 {
+  background: var(--sds-chart-series4);
+}
+.rpt-stack__seg--5 {
+  background: var(--sds-chart-series5);
+}
+
+.rpt-legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.rpt-legend__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.rpt-legend__name {
+  flex-grow: 1;
+  color: var(--sds-color-text);
+}
+.rpt-swatch {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  border-radius: var(--sds-radius-sm);
+  background: var(--sds-chart-series1);
+}
+.rpt-swatch--1 {
+  background: var(--sds-chart-series1);
+}
+.rpt-swatch--2 {
+  background: var(--sds-chart-series2);
+}
+.rpt-swatch--3 {
+  background: var(--sds-chart-series3);
+}
+.rpt-swatch--4 {
+  background: var(--sds-chart-series4);
+}
+.rpt-swatch--5 {
+  background: var(--sds-chart-series5);
+}
+
+/* ---------- Tables behind a chart ("show as a table") ---------- */
+.rpt-details > summary {
+  min-height: var(--sds-touch-min);
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  color: var(--sds-color-text-muted);
+}
+.rpt-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+.rpt-table th,
+.rpt-table td {
+  padding: 8px 6px;
+  text-align: left;
+  border-bottom: 1px solid var(--sds-color-border);
+}
+.rpt-table .rpt-num {
+  text-align: right;
+}
+
+/* ---------- Items: a horizontal bar per item, one hue ---------- */
+.rpt-bars {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+}
+.rpt-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.rpt-bar__name {
+  width: 128px;
+  flex: none;
+  color: var(--sds-color-text);
+}
+.rpt-bar__track {
+  flex-grow: 1;
+  height: 12px;
+  border-radius: var(--sds-radius-sm);
+  background: var(--sds-color-surface-sunken);
+  overflow: hidden;
+}
+.rpt-bar__fill {
+  display: block;
+  height: 100%;
+  border-radius: var(--sds-radius-sm);
+  background: var(--sds-chart-series1);
+}
+.rpt-bar__value {
+  flex: none;
+  min-width: 34px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Heatmap: weekday x hour, one hue from light to dark ---------- */
+.rpt-heat-wrap {
+  overflow-x: auto;
+}
+.rpt-heat {
+  border-collapse: separate;
+  border-spacing: 2px;
+  font-variant-numeric: tabular-nums;
+}
+.rpt-heat th {
+  font-weight: var(--sds-font-weight-regular);
+  color: var(--sds-color-text-muted);
+  padding: 0 4px;
+  text-align: center;
+  white-space: nowrap;
+}
+.rpt-heat th[scope="row"] {
+  text-align: right;
+}
+.rpt-heat td {
+  min-width: 26px;
+  height: 30px;
+  text-align: center;
+  border-radius: var(--sds-radius-sm);
+  background: var(--sds-color-surface-sunken);
+  color: var(--sds-color-text);
+}
+.rpt-ramp__step.rpt-heat__1,
+.rpt-heat td.rpt-heat__1 {
+  background: var(--sds-chart-heat1);
+  color: var(--sds-color-text);
+}
+.rpt-ramp__step.rpt-heat__2,
+.rpt-heat td.rpt-heat__2 {
+  background: var(--sds-chart-heat2);
+  color: var(--sds-color-text);
+}
+.rpt-ramp__step.rpt-heat__3,
+.rpt-heat td.rpt-heat__3 {
+  background: var(--sds-chart-heat3);
+  color: var(--sds-color-text-inverse);
+}
+.rpt-ramp__step.rpt-heat__4,
+.rpt-heat td.rpt-heat__4 {
+  background: var(--sds-chart-heat4);
+  color: var(--sds-color-text-inverse);
+}
+
+.rpt-ramp {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.rpt-ramp__step {
+  width: 22px;
+  height: 12px;
+  border-radius: var(--sds-radius-sm);
+  background: var(--sds-color-surface-sunken);
+}
+
+/* ---------- Customers ---------- */
+.rpt-segments {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.rpt-segment {
+  flex: 1 1 90px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+@media (max-width: 719px) {
+  .rpt-card {
+    padding: 18px 16px;
+  }
+  .rpt-bar__name {
+    width: 96px;
+  }
+}

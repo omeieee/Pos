@@ -1,0 +1,19 @@
+{
+  "name": "@sds/finance",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@sds/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@sds/config": "workspace:*"
+  }
+}

@@ -463,6 +463,7 @@ export function createMockServer(options: MockServerOptions = {}) {
     createSocket: shop.createSocket,
     /** Dev: a LINE order arrives by itself (a new-order frame and an alert on every open socket). */
     simulateIncomingOrder: shop.simulateIncomingOrder,
+    seedDemoOrders: shop.seedDemoOrders,
     /** Dev and tests: the network goes away or comes back (requests fail like a lost connection). */
     setOffline: shop.setOffline,
     /** Dev: change prices or sell a dish out on the server only, as if done while a counter was offline. */

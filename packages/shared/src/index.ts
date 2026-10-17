@@ -22,6 +22,7 @@ export * from './permissions.ts';
 export * from './pricing.ts';
 export * from './realtime.ts';
 export * from './receipt.ts';
+export * from './reports.ts';
 export * from './schemas.ts';
 export * from './settings.ts';
 export * from './slip-amount.ts';

@@ -12,6 +12,7 @@ import { thMenuEditor } from './th/menu-editor.ts';
 import { thOrders } from './th/orders.ts';
 import { thPayment } from './th/payment.ts';
 import { thPos } from './th/pos.ts';
+import { thReports } from './th/reports.ts';
 import { thSettings } from './th/settings.ts';
 import { thSettingsAccess } from './th/settings-access.ts';
 import { thSettingsPayments } from './th/settings-payments.ts';
@@ -31,6 +32,7 @@ export const th = {
   ...thSettingsPayments,
   ...thLine,
   ...thLiff,
+  ...thReports,
 } as const;
 
 export type MessageKey = keyof typeof th;
