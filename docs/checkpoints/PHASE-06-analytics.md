@@ -30,3 +30,4 @@ The owner understands sales, menu performance and customers at a glance, on the 
 - 2026-10-17: part 1, revenue core ([PROGRESS](../PROGRESS.md)).
 - 2026-10-17: parts 2–5, queries and API for revenue, items, heatmap, customers ([PROGRESS](../PROGRESS.md)).
 - 2026-10-17: parts 6–8, CSV export, overview on real data, chart tokens ([PROGRESS](../PROGRESS.md)).
+- 2026-10-17: deployed (`da7dfd7`). QA follow-ups settled without code: a refund larger than its payment still makes the report fail loudly (the report must not clamp money silently; the correction service is what prevents it); the overview's items card shows units only, so no "items total is not revenue" note is needed on screen (the items CSV carries revenue and is labelled by its header). Still open and owner- or VM-dependent: year-view timing on real Postgres, hand-checked sample day, XLSX decision, Excel/Sheets and iPad/iPhone checks, D-30 approval.
