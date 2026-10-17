@@ -9,7 +9,7 @@
 > - Keep this file short: when it holds more than about 8 entries, move the oldest into the matching month archive unchanged.
 
 > **State (from the entries below; git checked 2026-10-16):**
-> - **Deployed and live:** `a0d5e87` (pushed and deployed 2026-10-16: CI, API deploy and web deploy all succeeded; `/healthz` shows `a0d5e87`, `/readyz` 200, `/v1/orders` 401 without a session). It includes the architecture refactor and the earlier docs/test commits. No new migration since 0036.
+> - **Deployed and live:** `da7dfd7` (pushed and deployed 2026-10-17: CI and both deploys succeeded; `/healthz` shows `da7dfd7`). It includes all of P6 (`010510d`). Live report routes and the dashboard are not yet checked on the server. No new migration since 0036.
 > - **Slip checking:** Slip2Go (D-27) and the slip status, cooldown, fake-slip block and customer flag (D-28) are deployed. `SLIP_AUTOCONFIRM` is **on** (VM `.env` and running API, checked 2026-10-17; default ceiling 1,000 THB). The Slip2Go trial ends **2026-10-19**; package not chosen yet.
 > - **Last full verification (2026-10-15, on main):** biome 0 errors; build 12/12; tests shared 1117, db 299, api 1376, pos-web 1890, liff-web 114, i18n 22, line 69, ui 118, promptpay 1276.
 > - **Not covered yet:** real iPad/iPhone checks, real Postgres lock behaviour (PGlite serialises), the customer LIFF flow end to end, real slips.
@@ -28,7 +28,7 @@
 - **QA review (`qa-security-reviewer`, read-only, P6):** no must-fix security or PDPA defect. Fixed after it: the CSV formula guard no longer puts a quote in front of a negative amount (`-2.50`), and the customer list sends at most 50 customers (`CUSTOMERS_LISTED`, most recent first; the segment counts still cover everyone). Left as follow-ups: the year view loads all of a year's paid orders into Node four times (two revenue calls, items, heatmap), so the <300 ms target is at risk and must be measured on the VM; one order whose refunds exceed its payment makes the whole report a 500; reading the customer list writes no audit row (rule 9 does not require one); the items total is not revenue (discounts and refunds are not spread over items) and the screen has no note saying so. Counts after this: finance 56, shared 1120, api 1395, pos-web 1959.
 - **Open issues:** no hand-checked sample day/month by the owner yet (exit criterion); <300 ms on a year of data unmeasured on real Postgres; no real-device check; the old `ordersRepo.summarizeMonth` (month calendar) still sums full order totals without refund netting; CSV opened in real Excel/Google Sheets not checked.
 - **Next:** owner checks a synthetic or real day by hand; decide XLSX library; QA review of P6; P6 phone/iPad check.
-- **Commit:** uncommitted.
+- **Commit:** `010510d` (all of P6, parts 1 to 8); CI then failed on an unrelated flaky LINE test, fixed in `da7dfd7`. Pushed and deployed 2026-10-17; `/healthz` shows `da7dfd7`.
 
 ## 2026-10-17 · P6 · Parts 2–5: report queries and API (revenue, items, heatmap, customers)
 - **Summary:** the owner went to sleep and said to continue without stopping (commits, pushes, money, Oracle and secrets stay off limits). Built, tests first each time: `packages/db` `reportsRepo` (`listReportOrders`, `listReportCustomers`, `listCustomerItemUnits`); `@sds/finance` `itemSales`, `heatmap`, `segmentOf`/`segmentSummary`/`favouriteItems`; shared `reports.ts` schemas; API slice `apps/api/src/reports`: `GET /v1/reports/{revenue,items,heatmap}?from&to` (`report.view`, range up to 366 days) and `GET /v1/reports/customers` (new owner-only permission `customer.report`; no phone or LINE id in the answer).
@@ -38,7 +38,7 @@
 - **Decisions:** none recorded in `decisions.md`. Still open: XLSX library (needs an entry first), screens, CSV/XLSX export (step-up + audit).
 - **Open issues:** the old `ordersRepo.summarizeMonth` still sums full order totals (no refund netting), unlike §6; not changed.
 - **Next:** CSV export, then the back-office screens in `apps/pos-web`.
-- **Commit:** uncommitted.
+- **Commit:** `010510d` (see Parts 6–8).
 
 ## 2026-10-17 · P6 · Part 1: revenue core (`packages/finance`)
 - **Summary:** owner chose to leave the P4 owner-side items for later and go on with the main project. P6 kickoff answers (all defaults) are in `docs/10-open-questions.md`. New pure package with `revenueByDay()` following `03-data-model.md` §6: paid, non-cancelled orders only; revenue = confirmed payments minus partial refunds; grouped by the order's own `business_date`; platform commission shown beside, not netted; co-pay at the full amount due. P4 review by `qa-security-reviewer` found no must-fix defects; its lint and doc-drift items were fixed and pushed (`9c684cf`, live).
@@ -47,7 +47,7 @@
 - **Decisions:** none new. Not yet decided: the XLSX library (needs a decision entry before it is added), and whether the heatmap weekday follows `business_date` or the calendar day.
 - **Open issues:** the <300 ms query target on a year of data is unmeasured; PGlite timings will not stand in for real Postgres. Owner-side items from the P4 entries are untouched.
 - **Next:** DB queries that load orders with payments and refunds, then items, heatmap (hour from `placed_at` in Asia/Bangkok), customer segments, API, screens, exports (step-up + audit).
-- **Commit:** uncommitted.
+- **Commit:** `010510d` (see Parts 6–8).
 
 ## 2026-10-17 · P4 · Session check-in (no code change)
 - **Summary:** read-only orientation. Nothing is half-built; every open item waits on the owner.
