@@ -380,9 +380,11 @@ describe('stored events keep no raw payload or chat text', () => {
     for (const r of rows.rows) {
       expect(r.payload).toBeNull();
       expect(r.user_id).toBe(U2);
-      expect(JSON.stringify(r)).not.toContain('1203');
-      expect(JSON.stringify(r)).not.toContain('0812345678');
-      expect(JSON.stringify(r)).not.toContain('rt-'); // reply tokens are not kept either
+      // the event id embeds Date.now(), so its digits can match by chance; check the rest
+      const kept = JSON.stringify({ ...r, webhook_event_id: undefined });
+      expect(kept).not.toContain('1203');
+      expect(kept).not.toContain('0812345678');
+      expect(kept).not.toContain('rt-'); // reply tokens are not kept either
     }
     expect(byId.get(text)?.route).toEqual({ kind: 'ignore' });
     expect(byId.get(image)?.route).toEqual({ kind: 'slip_image', userId: U2, messageId: 'm2' });
