@@ -9,7 +9,7 @@
 > - Keep this file short: when it holds more than about 8 entries, move the oldest into the matching month archive unchanged.
 
 > **State (from the entries below; git checked 2026-10-16):**
-> - **Deployed and live:** `da7dfd7` (pushed and deployed 2026-10-17: CI and both deploys succeeded; `/healthz` shows `da7dfd7`). It includes all of P6 (`010510d`). Live report routes and the dashboard are not yet checked on the server. No new migration since 0036.
+> - **Deployed and live:** `9aaf0b6` (pushed and deployed 2026-10-21: CI, Deploy API and Deploy web succeeded; `/healthz` shows `9aaf0b6`, `/readyz` 200). It includes the P6 follow-ups and all of P7 (parts 1 to 6, migrations 0037 and 0038). The new P6/P7 screens and routes have not been used on the live server or on a real iPad/iPhone. P7 stays open for one exit criterion: the owner agreeing a sample-month P&L ([checkpoint](checkpoints/PHASE-07-costs-pnl-tax.md)).
 > - **Slip checking:** Slip2Go (D-27) and the slip status, cooldown, fake-slip block and customer flag (D-28) are deployed. `SLIP_AUTOCONFIRM` is **on** (VM `.env` and running API, checked 2026-10-17; default ceiling 1,000 THB). The Slip2Go trial ends **2026-10-19**; package not chosen yet.
 > - **Last full verification (2026-10-15, on main):** biome 0 errors; build 12/12; tests shared 1117, db 299, api 1376, pos-web 1890, liff-web 114, i18n 22, line 69, ui 118, promptpay 1276.
 > - **Not covered yet:** real iPad/iPhone checks, real Postgres lock behaviour (PGlite serialises), the customer LIFF flow end to end, real slips.
