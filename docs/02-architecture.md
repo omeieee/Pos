@@ -60,8 +60,9 @@ On Path B (a 1 GB Micro VM), `db` moves to managed Postgres (Supabase free) and 
 ├─ CLAUDE.md                 project guide for Claude (read first)
 ├─ apps/
 │  ├─ api/                   Fastify: REST /v1, WebSocket, LINE webhook, jobs (pg-boss)
-│  │  └─ src/<feature>/      auth · menu · orders · payments · customers · reports ·
-│  │                         expenses · settings · line · sync · print (P8)
+│  │  └─ src/<feature>/      auth · admin · menu · orders · payments · slips · customers ·
+│  │                         reports · settings · line · app (customer) · realtime ·
+│  │                         expenses (P7) · print (P8)
 │  ├─ pos-web/               staff PWA: POS · order board · kitchen · menu · payments ·
 │  │                         customers · back office · settings (role-gated)
 │  ├─ liff-web/              customer app in LINE: menu · cart · checkout · pay · status
@@ -202,16 +203,17 @@ The pending payment is cancelled and a new pending payment is created for the ne
 ## 6. API surface (v1, summary)
 | Area | Endpoints |
 |---|---|
-| Auth | `POST /v1/auth/device` (owner registers device) · `POST /v1/auth/pin` · `POST /v1/auth/owner` (password + TOTP) · `POST /v1/auth/step-up` · `GET /v1/auth/staff` (tiles for the PIN screen, device token) · `POST /v1/auth/invite/preview` · `POST /v1/auth/invite/accept` (public, token from the invite link) · `GET /v1/auth/me` · `POST /v1/auth/logout` · `POST /v1/auth/line` (LINE ID token → customer session) |
+| Auth | `POST /v1/auth/device` (owner registers device) · `POST /v1/auth/pin` · `POST /v1/auth/owner` (password + TOTP) · `POST /v1/auth/step-up` · `GET /v1/auth/staff` (tiles for the PIN screen, device token) · `POST /v1/auth/invite/preview` · `POST /v1/auth/invite/accept` (public, token from the invite link) · `GET /v1/auth/me` · `POST /v1/auth/logout` · `GET/POST /v1/devices…` and `/v1/staff…` are listed under Settings. The customer app signs in with `POST /v1/app/session` (LINE ID token → customer session), listed under Customer app |
 | Menu | `GET /v1/menu?channel=` (public, no session: available items with the channel price, groups and options; never a cost) · staff lists `GET /v1/menu/{categories,items,modifier-groups}` (`menu.availability`, every role) · CRUD (`menu.edit`: managers, owner) on `/v1/menu/{categories,items,modifier-groups}` and options at `/v1/menu/modifier-groups/{id}/options`, `/v1/menu/modifier-options/{id}`; `DELETE` archives (past orders keep their snapshots); photos are an https URL · `PATCH /v1/menu/items/{id}/availability` and `/v1/menu/modifier-options/{id}/availability` (`menu.availability`: the kitchen's "หมด" toggle; `expectedVersion` optional there) |
-| Orders | `POST /v1/orders` · `GET /v1/orders?day=&status=&channel=` · `GET/PATCH /v1/orders/{id}` · `POST /v1/orders/{id}/transition` · `POST /v1/orders/{id}/cancel` |
-| Payments | `POST /v1/orders/{id}/payments` · `POST /v1/payments/{id}/{claim,confirm,change-method,void,refund}` · `GET /v1/payments/{id}/qr.png` (signed, short-lived) |
-| Customers | `GET /v1/customers` · `GET /v1/customers/{id}` · `POST /v1/customers/{id}/anonymize` |
-| Reports | `GET /v1/reports/{summary,items,heatmap,customers,pnl}?from=&to=&granularity=` · `GET /v1/reports/tax?year=` · `GET /v1/exports/{kind}` |
-| Expenses | CRUD `/v1/expenses` |
+| Orders | `POST /v1/orders` · `GET /v1/orders?day=&status=&channel=` · `GET /v1/orders/summary?month=` (per-day counts and revenue for the calendar) · `GET/PATCH /v1/orders/{id}` · `POST /v1/orders/{id}/{transition,cancel,receipt,void}` · `PATCH /v1/orders/{id}/correction` (owner, D-25) · `GET /v1/recipients` |
+| Payments | `POST/GET /v1/orders/{id}/payments` · `POST /v1/payments/{id}/{claim,confirm,cancel-claimed,change-method,void,refund,slip-recheck}` · `GET /v1/payments/{id}/{slip,qr-url}` · `GET /v1/payments/{id}/qr.png` (signed, short-lived) |
+| Customers | built: `GET /v1/customers/{id}/slip-flag` · `POST /v1/customers/{id}/{slip-flag/clear,anonymize}`. Not built: `GET /v1/customers` and `GET /v1/customers/{id}` (the owner's customer list is `GET /v1/reports/customers`) |
+| Reports | built (P6): `GET /v1/reports/{revenue,items,heatmap}?from=&to=` (`report.view`, at most 366 days; answers also carry `excludedOrderIds`) · `GET /v1/reports/customers` (owner, `customer.report`) · `GET /v1/reports/export/{revenue,items}.csv` (owner, step-up, audited). Planned (P7): `GET /v1/reports/pnl`, `GET /v1/reports/tax?year=` |
+| Expenses | planned (P7, not built): CRUD `/v1/expenses` |
 | Settings | `GET/PATCH /v1/settings/{shop,opening-hours,numbering,payments,promptpay,gov-copay}` (`line` comes with P4). Read: `settings.view` (not the kitchen). Write: `settings.edit` (manager, owner); PromptPay ID and the co-pay scheme: owner + step-up + audit + alert (`settings.promptpay`, `settings.gov_copay`). `numbering` is the business-day cutoff the order numbers reset at. A PATCH carries `expectedVersion` (0 = never saved; GET then returns the default) · `/v1/staff`, `/v1/devices` (list, create staff, revoke, PIN) · `GET/POST /v1/staff/invites`, `POST /v1/staff/invites/:id/revoke`, `POST /v1/staff/:id/role` (owner + step-up + audit + alert, D-23) |
 | Sync | `GET /v1/sync?since=` · `WS /v1/ws` |
-| LINE | `POST /line/webhook` (signature-verified, raw body) |
+| LINE | `POST /v1/line/webhook` (signature-verified, raw body) · `GET /v1/line/quota` |
+| Customer app | `POST /v1/app/session` · `GET /v1/app/checkout` · `GET/PUT /v1/app/member` · `POST /v1/app/privacy-ack` · `POST/GET /v1/app/orders` · `GET /v1/app/orders/{id}` · `POST /v1/app/orders/{id}/{payment,claim,slip}` · `GET /v1/app/orders/{id}/{slip,qr}` |
 | Ops | `GET /healthz` · `GET /readyz` · (P8) `WS /v1/agents/print` |
 
 Errors use one JSON shape: `{code, message, details}`, with Thai and English messages chosen by the client locale.

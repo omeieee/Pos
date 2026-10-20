@@ -19,7 +19,7 @@ import {
   type Period,
   periodRanges,
 } from '../reports/report-model.ts';
-import { useCustomersReport, useReportData } from '../reports/use-report-data.ts';
+import { excludedOrders, useCustomersReport, useReportData } from '../reports/use-report-data.ts';
 import { SAMPLE_VAT } from './dashboard-sample.ts';
 import { currentBusinessDay } from './order-board.ts';
 
@@ -110,6 +110,16 @@ export function DashboardScreen() {
 
       {data && current && (
         <>
+          {excludedOrders(data).length > 0 && (
+            <div
+              data-testid="excluded-orders"
+              className="g-sunk rpt-note"
+              style={s('color:var(--amber-ink);background:var(--amber-soft)')}
+            >
+              <Gi n="warn" size="sm" />
+              <span>{tr('dash.excluded', { count: excludedOrders(data).length })}</span>
+            </div>
+          )}
           <div
             style={s(
               'display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:16px',

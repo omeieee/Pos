@@ -46,7 +46,7 @@ flowchart LR
   - **Used by:** `apps/api` (`apps/api/src/payments/{create,read}.ts`), `apps/pos-web` (`apps/pos-web/src/pos/outbox/offline-promptpay-model.ts` only)
 - `@sds/finance` (`packages/finance/src`)
   - **Purpose:** report maths, pure, no I/O (P6 started; costs, P&L and tax come in P7).
-  - **Key Files & Exports:** `revenue.ts` (`revenueByDay`, `isCounted`, `keptPayments`, `netPaidSatang`, types `ReportOrder`, `ReportItem`, `ReportPayment`, `ReportRefund`, `DayRevenue`), `items.ts` (`itemSales`), `heatmap.ts` (`heatmap`; weekday from `business_date`, hour from `placed_at` in Asia/Bangkok), `customers.ts` (`segmentOf`, `segmentSummary`, `favouriteItems`, `LAPSED_AFTER_DAYS`, `REGULAR_MIN_ORDERS`), `csv.ts` (`toCsv`, `CSV_BOM`, `satangDecimal`, `revenueCsvRows`, `itemsCsvRows`); barrel `index.ts`
+  - **Key Files & Exports:** `revenue.ts` (`revenueByDay`, `isCounted`, `keptPayments`, `netPaidSatang`, types `ReportOrder`, `ReportItem`, `ReportPayment`, `ReportRefund`, `DayRevenue`), `items.ts` (`itemSales`), `heatmap.ts` (`heatmap`; weekday from `business_date`, hour from `placed_at` in Asia/Bangkok), `consistency.ts` (`splitInconsistent`: sets aside orders whose refunds exceed their payment), `customers.ts` (`segmentOf`, `segmentSummary`, `favouriteItems`, `LAPSED_AFTER_DAYS`, `REGULAR_MIN_ORDERS`), `csv.ts` (`toCsv`, `CSV_BOM`, `satangDecimal`, `revenueCsvRows`, `itemsCsvRows`); barrel `index.ts`
   - **Used by:** `apps/api` (`apps/api/src/reports/service.ts`)
 - `@sds/line` (`packages/line/src`)
   - **Purpose:** LINE wire layer: signature, events, router, Flex, sender.
@@ -92,8 +92,8 @@ flowchart LR
   - **Depends on:** `@sds/db` (`menuRepo`, `syncRepo`, `insertAudit`), `@sds/shared` (`menu.ts`, `image.ts`), `request-hash.ts:menuRequestHash()`, `dto.ts:itemDto()`; import surface `service.ts` (also used by `realtime/frames.ts`)
 - `Reports` (`apps/api/src/reports`)
   - **Purpose:** Read-only report endpoints (P6), `report.view` only.
-  - **Routes/Entry:** `routes.ts` (`GET /v1/reports/{revenue,items,heatmap}?from&to`, range at most 366 days, `report.view`; `GET /v1/reports/customers`, owner only via `customer.report`; `GET /v1/reports/export/{revenue,items}.csv`, owner only via `data.export` with step-up, audited) -> **Logic:** `service.ts:revenueReport()`, `itemsReport()`, `heatmapReport()`, `customersReport()`, `export.ts:exportCsv()`
-  - **Depends on:** `@sds/db` (`reportsRepo.listReportOrders`), `@sds/finance` (`revenueByDay`), `@sds/shared` (`reports.ts`: `revenueReportQuerySchema`, `revenueReportSchema`, `reportRangeDays`, `REPORT_MAX_DAYS`)
+  - **Routes/Entry:** `routes.ts` (`GET /v1/reports/{revenue,items,heatmap}?from&to`, range at most 366 days, `report.view`; `GET /v1/reports/customers`, owner only via `customer.report`; `GET /v1/reports/export/{revenue,items}.csv`, owner only via `data.export` with step-up, audited) -> **Logic:** `service.ts:loadReportOrders()` (one shared load per range while it runs, minus inconsistent orders), `revenueReport()`, `itemsReport()`, `heatmapReport()`, `customersReport()`, `export.ts:exportCsv()`
+  - **Depends on:** `@sds/db` (`reportsRepo.listReportOrders`), `@sds/finance` (`revenueByDay`, `splitInconsistent`), `@sds/shared` (`reports.ts`: `revenueReportQuerySchema`, `revenueReportSchema`, `reportRangeDays`, `REPORT_MAX_DAYS`)
 - `Settings` (`apps/api/src/settings`)
   - **Purpose:** Versioned shop settings resources and the co-pay scheme.
   - **Routes/Entry:** `routes.ts` (`GET|PATCH /v1/settings/{shop,opening-hours,line-ordering,numbering,payments,delivery,promptpay,receipt,bank-account,gov-copay}`, `PUT /v1/settings/delivery`) -> **Logic:** `service.ts:RESOURCES`, `readSetting()`, `patchSetting()`, `readGovCopay()`, `patchGovCopay()`, `currentPromptpayId()`, `currentOpeningHours()`, `lineOrderingNow()` -> **DB Tables:** `settings`, `gov_copay_schemes`, `audit_log`

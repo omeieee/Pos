@@ -3,11 +3,12 @@
  * only and a step-up permission; every export writes one audit row (kind, range, row count, no
  * figures). Headers are Thai, from the i18n catalog.
  */
-import { type Db, insertAudit, reportsRepo } from '@sds/db';
+import { type Db, insertAudit } from '@sds/db';
 import { itemSales, itemsCsvRows, revenueByDay, revenueCsvRows, toCsv } from '@sds/finance';
 import { th } from '@sds/i18n';
 import { ORDER_CHANNELS, PAYMENT_METHODS, type RevenueReportQuery } from '@sds/shared';
 import type { Principal } from '../auth/service.ts';
+import { loadReportOrders } from './service.ts';
 
 export type ExportKind = 'revenue' | 'items';
 
@@ -40,7 +41,7 @@ export async function exportCsv(
   kind: ExportKind,
   query: RevenueReportQuery,
 ): Promise<CsvFile> {
-  const orders = await reportsRepo.listReportOrders(db, query.from, query.to);
+  const { usable: orders, excludedOrderIds } = await loadReportOrders(db, query);
   const rows =
     kind === 'revenue'
       ? revenueCsvRows(revenueByDay(orders), revenueHeaders, th['report.export.total'])
@@ -54,7 +55,13 @@ export async function exportCsv(
     action: 'report.export',
     entity: 'report_export',
     entityId: `${kind}:${query.from}:${query.to}`,
-    after: { kind, from: query.from, to: query.to, rows: dataRows },
+    after: {
+      kind,
+      from: query.from,
+      to: query.to,
+      rows: dataRows,
+      excludedOrders: excludedOrderIds.length,
+    },
   });
   return { filename: `${kind}-${query.from}-${query.to}.csv`, body: toCsv(rows) };
 }

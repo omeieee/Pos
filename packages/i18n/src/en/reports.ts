@@ -15,6 +15,8 @@ export const enReports = {
   'dash.loading': 'Loading the report…',
   'dash.error': 'Could not load the report. Check the internet and try again.',
   'dash.empty': 'No sales in this period yet',
+  'dash.excluded':
+    '{count} orders are left out of these figures because their refunds exceed what was paid. Please check them.',
   'dash.live': 'Real figures from orders that are paid and confirmed, after refunds',
   'dash.vs.today': 'vs yesterday {value}',
   'dash.vs.week': 'vs last week {value}',

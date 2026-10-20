@@ -51,12 +51,14 @@ const totals = (revenue: number, orders: number) => ({
 const TODAY: RevenueReport = {
   from: '2030-10-15',
   to: '2030-10-15',
+  excludedOrderIds: [],
   days: [day('2030-10-15')],
   totals: totals(486000, 38),
 };
 const YESTERDAY: RevenueReport = {
   from: '2030-10-14',
   to: '2030-10-14',
+  excludedOrderIds: [],
   days: [day('2030-10-14', { revenueSatang: satang(466000), orderCount: 35 })],
   totals: totals(466000, 35),
 };
@@ -72,6 +74,7 @@ const item = (name: string, qty: number) => ({
 const ITEMS: ItemsReport = {
   from: '2030-10-15',
   to: '2030-10-15',
+  excludedOrderIds: [],
   items: [
     item('ชาเย็น', 17),
     item('ก๋วยเตี๋ยวต้มยำ', 14),
@@ -85,6 +88,7 @@ const ITEMS: ItemsReport = {
 const HEAT: HeatmapReport = {
   from: '2030-10-15',
   to: '2030-10-15',
+  excludedOrderIds: [],
   cells: [
     { weekday: 2, hour: 11, orderCount: 6, revenueSatang: satang(60000) },
     { weekday: 2, hour: 12, orderCount: 11, revenueSatang: satang(154000) },
@@ -301,6 +305,26 @@ describe('periods', () => {
       }),
     );
     expect(await screen.findAllByText(/จากปีก่อน/)).toHaveLength(3);
+  });
+});
+
+describe('orders left out of the figures', () => {
+  test('a warning counts the orders the server set aside, once', async () => {
+    await open('manager', {
+      revenue: vi.fn(async (range) => ({
+        ...answerFor(range),
+        excludedOrderIds: ['order-a', 'order-b'],
+      })),
+      items: vi.fn(async () => ({ ...ITEMS, excludedOrderIds: ['order-b', 'order-c'] })),
+    });
+    const note = await screen.findByTestId('excluded-orders');
+    expect(note.textContent).toContain(th['dash.excluded'].replace('{count}', '3'));
+  });
+
+  test('no warning when nothing was left out', async () => {
+    await open('manager');
+    await screen.findByText('฿4,860');
+    expect(screen.queryByTestId('excluded-orders')).toBeNull();
   });
 });
 

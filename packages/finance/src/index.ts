@@ -1,3 +1,4 @@
+export * from './consistency.ts';
 export * from './csv.ts';
 export * from './customers.ts';
 export * from './heatmap.ts';

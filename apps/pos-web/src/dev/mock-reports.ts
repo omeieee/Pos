@@ -94,6 +94,7 @@ export function createMockReports(deps: {
     return {
       from,
       to,
+      excludedOrderIds: [],
       days: rows,
       totals: {
         revenueSatang: satang(rows.reduce((sum, d) => sum + d.revenueSatang, 0)),
@@ -124,7 +125,7 @@ export function createMockReports(deps: {
         popular: r.qty * byItem.size * 10 >= total * 7,
       }))
       .sort((a, b) => b.qty - a.qty || b.revenueSatang - a.revenueSatang);
-    return { from, to, items: rows };
+    return { from, to, excludedOrderIds: [], items: rows };
   }
 
   function heatmap(from: string, to: string): HeatmapReport {
@@ -146,6 +147,7 @@ export function createMockReports(deps: {
     return {
       from,
       to,
+      excludedOrderIds: [],
       cells: [...cells.values()].sort((a, b) => a.weekday - b.weekday || a.hour - b.hour),
     };
   }

@@ -3,6 +3,7 @@ import { satang } from '@sds/shared';
 import { eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 import * as repo from './orders.ts';
+import * as paymentsRepo from './payments.ts';
 import { createPgliteDb, type PgliteDb } from './pglite.ts';
 import {
   menuCategories,
@@ -13,6 +14,7 @@ import {
   modifierOptions,
   orders,
   settings,
+  staff,
 } from './schema.ts';
 import { getSettingValue } from './settings.ts';
 
@@ -326,6 +328,42 @@ async function anyMenuItem(): Promise<string> {
 }
 
 describe('summarizeMonth', () => {
+  let staffId = '';
+  /** A confirmed payment (and optional partial refunds) on an order, as the till writes them. */
+  async function pay(
+    orderId: string,
+    amount: number,
+    over: { status?: 'confirmed' | 'voided'; refunds?: number[] } = {},
+  ) {
+    if (!staffId) {
+      const [row] = await db
+        .insert(staff)
+        .values({ displayName: 'cashier', role: 'cashier', pinHash: 'x' })
+        .returning({ id: staff.id });
+      staffId = row?.id ?? '';
+    }
+    const row = await paymentsRepo.insertPayment(db, {
+      orderId,
+      method: 'cash',
+      status: over.status ?? 'confirmed',
+      amountSatang: amount,
+      confirmedByStaffId: staffId,
+      confirmedAt: placedAt,
+      clientRequestId: unique(),
+      requestHash: unique(),
+    });
+    for (const back of over.refunds ?? []) {
+      await paymentsRepo.insertRefund(db, {
+        orderId,
+        paymentId: row?.id ?? '',
+        amountSatang: back,
+        method: 'cash',
+        reason: 'test',
+        refundedByStaffId: staffId,
+      });
+    }
+  }
+
   test('per business date: orders that are not cancelled, and paid revenue only', async () => {
     const at = (businessDate: string, over: Partial<repo.NewOrder> = {}) =>
       repo.insertOrder(db, newOrder({ businessDate, ...over }));
@@ -336,6 +374,7 @@ describe('summarizeMonth', () => {
         .update(orders)
         .set({ paymentStatus: 'paid' })
         .where(eq(orders.id, row?.id ?? ''));
+      await pay(row?.id ?? '', totalSatang);
     };
     await paid('2031-02-01', 5000);
     await paid('2031-02-01', 7000);
@@ -351,6 +390,30 @@ describe('summarizeMonth', () => {
       { date: '2031-02-27', orderCount: 1, paidCount: 1, paidSatang: 100 },
     ]);
     expect(await repo.summarizeMonth(db, '2031-12')).toEqual([]);
+  });
+
+  test('paid revenue follows 03-data-model §6: confirmed payments minus partial refunds', async () => {
+    // 2031-04: one order paid 10,000 with 2,500 + 500 handed back, one with a voided payment
+    // beside the confirmed one, and a paid order that has no confirmed payment (counts 0).
+    const make = async (total: number) => {
+      const row = await repo.insertOrder(
+        db,
+        newOrder({ businessDate: '2031-04-10', totalSatang: total, subtotalSatang: total }),
+      );
+      await db
+        .update(orders)
+        .set({ paymentStatus: 'paid' })
+        .where(eq(orders.id, row?.id ?? ''));
+      return row?.id ?? '';
+    };
+    await pay(await make(10000), 10000, { refunds: [2500, 500] });
+    const second = await make(6000);
+    await pay(second, 6000, { status: 'voided' });
+    await pay(second, 6000);
+    await make(4000);
+    expect(await repo.summarizeMonth(db, '2031-04')).toEqual([
+      { date: '2031-04-10', orderCount: 3, paidCount: 3, paidSatang: 7000 + 6000 },
+    ]);
   });
 
   test('December ends at the year boundary', async () => {

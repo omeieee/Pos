@@ -174,8 +174,15 @@ export async function summarizeMonth(
       date: orders.businessDate,
       orderCount: sql<number>`count(*)`.mapWith(Number),
       paidCount: sql<number>`count(*) filter (where ${paid})`.mapWith(Number),
-      paidSatang:
-        sql<number>`coalesce(sum(${orders.totalSatang}) filter (where ${paid}), 0)`.mapWith(Number),
+      // Revenue as in 03-data-model §6: what confirmed payments kept after partial refunds. Written
+      // out in SQL because the query builder drops the table name inside a subquery.
+      paidSatang: sql<number>`coalesce(sum(
+        (select coalesce(sum(p.amount_satang), 0) from payments p
+          where p.order_id = orders.id and p.status = 'confirmed')
+        - (select coalesce(sum(r.amount_satang), 0) from payment_refunds r
+          join payments rp on rp.id = r.payment_id
+          where r.order_id = orders.id and rp.status = 'confirmed')
+      ) filter (where ${paid}), 0)`.mapWith(Number),
     })
     .from(orders)
     .where(

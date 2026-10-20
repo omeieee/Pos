@@ -3,14 +3,14 @@
  * synthetic week worked out by hand (03-data-model §6). Dates are far in the future so no other
  * test's orders fall inside the range.
  */
-import { ordersRepo, paymentsRepo, schema } from '@sds/db';
+import { ordersRepo, paymentsRepo, reportsRepo, schema } from '@sds/db';
 import {
   heatmapReportSchema,
   itemsReportSchema,
   type RevenueReport,
   revenueReportSchema,
 } from '@sds/shared';
-import { afterAll, beforeAll, describe, expect, test } from 'vitest';
+import { afterAll, beforeAll, describe, expect, test, vi } from 'vitest';
 import { createHarness, type Harness } from '../test-support/harness.ts';
 
 let h: Harness;
@@ -231,6 +231,7 @@ describe('GET /v1/reports/revenue', () => {
     expect(res.json()).toEqual({
       from: '2034-06-01',
       to: '2034-06-07',
+      excludedOrderIds: [],
       days: [],
       totals: { revenueSatang: 0, orderCount: 0, commissionSatang: 0 },
     });
@@ -370,5 +371,47 @@ describe('GET /v1/reports/items and /heatmap', () => {
       { weekday: 4, hour: 0, orderCount: 1, revenueSatang: 5000 },
       { weekday: 4, hour: 12, orderCount: 2, revenueSatang: 13000 },
     ]);
+  });
+});
+
+describe('an order whose refunds exceed its payment', () => {
+  test('is left out and named, the rest of the report still works, in all three reports', async () => {
+    const good = { method: 'cash' as const, status: 'confirmed' as const, amount: 6000 };
+    await seed({ date: '2038-03-03', total: 6000, pays: [good] });
+    await seed({
+      date: '2038-03-03',
+      total: 5000,
+      pays: [{ method: 'cash', status: 'confirmed', amount: 5000, refund: 5001 }],
+    });
+    const token = await as('manager');
+    const q = '?from=2038-03-01&to=2038-03-07';
+    const revenue = revenueReportSchema.parse((await report(token, q)).json());
+    expect(revenue.totals).toEqual({ revenueSatang: 6000, orderCount: 1, commissionSatang: 0 });
+    expect(revenue.excludedOrderIds).toHaveLength(1);
+    const items = itemsReportSchema.parse((await reportGet(token, 'items', q)).json());
+    expect(items.excludedOrderIds).toEqual(revenue.excludedOrderIds);
+    const heat = heatmapReportSchema.parse((await reportGet(token, 'heatmap', q)).json());
+    expect(heat.excludedOrderIds).toEqual(revenue.excludedOrderIds);
+    expect(heat.cells.reduce((n, c) => n + c.orderCount, 0)).toBe(1);
+  });
+});
+
+describe('the overview asks for the same range three times at once', () => {
+  test('shares one load of the orders, and a later request loads again', async () => {
+    const spy = vi.spyOn(reportsRepo, 'listReportOrders');
+    try {
+      const token = await as('manager');
+      const q = '?from=2039-01-01&to=2039-01-07';
+      await Promise.all([
+        report(token, q),
+        reportGet(token, 'items', q),
+        reportGet(token, 'heatmap', q),
+      ]);
+      expect(spy).toHaveBeenCalledTimes(1);
+      await report(token, q);
+      expect(spy).toHaveBeenCalledTimes(2);
+    } finally {
+      spy.mockRestore();
+    }
   });
 });

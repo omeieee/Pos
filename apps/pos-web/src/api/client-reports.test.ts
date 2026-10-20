@@ -40,13 +40,16 @@ describe('reports reads', () => {
           status: 200,
           json: {
             ...range,
+            excludedOrderIds: [],
             days: [day],
             totals: { revenueSatang: 20050, orderCount: 2, commissionSatang: 0 },
           },
         };
       }
-      if (call.url.includes('/items')) return { status: 200, json: { ...range, items: [] } };
-      if (call.url.includes('/heatmap')) return { status: 200, json: { ...range, cells: [] } };
+      if (call.url.includes('/items'))
+        return { status: 200, json: { ...range, excludedOrderIds: [], items: [] } };
+      if (call.url.includes('/heatmap'))
+        return { status: 200, json: { ...range, excludedOrderIds: [], cells: [] } };
       return {
         status: 200,
         json: { summary: { new: 0, regular: 0, lapsed: 0 }, customers: [] },

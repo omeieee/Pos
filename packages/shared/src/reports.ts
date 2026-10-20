@@ -25,6 +25,12 @@ export const revenueReportQuerySchema = z
   });
 export type RevenueReportQuery = z.infer<typeof revenueReportQuerySchema>;
 
+/**
+ * Orders left out of the figures because their refunds exceed their payment (a data fault). The
+ * screen shows a warning so the owner can look at them; the rest of the report is still right.
+ */
+export const excludedOrderIdsSchema = z.array(z.string());
+
 export const dayRevenueSchema = z.object({
   businessDate: isoDateSchema,
   revenueSatang: nonNegativeSatangSchema,
@@ -40,6 +46,7 @@ export type DayRevenueDto = z.infer<typeof dayRevenueSchema>;
 export const revenueReportSchema = z.object({
   from: isoDateSchema,
   to: isoDateSchema,
+  excludedOrderIds: excludedOrderIdsSchema,
   days: z.array(dayRevenueSchema),
   totals: z.object({
     revenueSatang: nonNegativeSatangSchema,
@@ -63,6 +70,7 @@ export type ItemSalesDto = z.infer<typeof itemSalesSchema>;
 export const itemsReportSchema = z.object({
   from: isoDateSchema,
   to: isoDateSchema,
+  excludedOrderIds: excludedOrderIdsSchema,
   items: z.array(itemSalesSchema),
 });
 export type ItemsReport = z.infer<typeof itemsReportSchema>;
@@ -80,6 +88,7 @@ export type HeatCellDto = z.infer<typeof heatCellSchema>;
 export const heatmapReportSchema = z.object({
   from: isoDateSchema,
   to: isoDateSchema,
+  excludedOrderIds: excludedOrderIdsSchema,
   cells: z.array(heatCellSchema),
 });
 export type HeatmapReport = z.infer<typeof heatmapReportSchema>;

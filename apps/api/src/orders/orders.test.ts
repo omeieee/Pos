@@ -878,6 +878,13 @@ describe('GET /v1/orders/summary', () => {
     const later = await sign('cashier');
     await place(later);
     await h.client.query("update orders set payment_status = 'paid' where id = $1", [paid.id]);
+    // revenue is what confirmed payments kept (03-data-model §6), so the paid order needs one
+    await h.client.query(
+      `insert into payments (order_id, method, status, amount_satang, confirmed_at, auto_confirmed,
+         client_request_id, request_hash)
+       values ($1, 'cash', 'confirmed', $2, now(), true, gen_random_uuid(), 'h')`,
+      [paid.id, paid.totalSatang],
+    );
     await h.client.query("update orders set status = 'cancelled' where id = $1", [cancelled.id]);
 
     const res = await summary(later, '2029-03');

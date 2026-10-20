@@ -15,6 +15,7 @@ export const thReports = {
   'dash.loading': 'กำลังโหลดรายงาน…',
   'dash.error': 'โหลดรายงานไม่สำเร็จ ตรวจสอบอินเทอร์เน็ตแล้วลองใหม่',
   'dash.empty': 'ยังไม่มียอดขายในช่วงนี้',
+  'dash.excluded': 'ไม่รวม {count} ออเดอร์ในตัวเลข เพราะยอดคืนเงินมากกว่ายอดที่ชำระ โปรดตรวจสอบข้อมูลออเดอร์',
   'dash.live': 'ตัวเลขจริงจากออเดอร์ที่ชำระเงินและยืนยันแล้ว หักคืนเงินแล้ว',
   // Overview screen: comparison with the period before
   'dash.vs.today': 'จากเมื่อวาน {value}',

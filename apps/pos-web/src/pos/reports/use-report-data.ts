@@ -5,6 +5,18 @@ import { type Period, periodRanges } from './report-model.ts';
 
 export type ReportLoad = 'loading' | 'ok' | 'error';
 
+/** Orders any of the loaded reports set aside (refunds above the payment), each counted once. */
+export function excludedOrders(data: ReportData): string[] {
+  return [
+    ...new Set([
+      ...data.revenue.excludedOrderIds,
+      ...data.previous.excludedOrderIds,
+      ...data.items.excludedOrderIds,
+      ...data.heatmap.excludedOrderIds,
+    ]),
+  ];
+}
+
 export interface ReportData {
   revenue: RevenueReport;
   /** The same stretch one step back (the day before, last week, ...), for the comparison. */
