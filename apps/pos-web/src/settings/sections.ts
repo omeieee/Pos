@@ -20,6 +20,7 @@ export const SECTION_IDS = [
   'bank-account',
   'receipt',
   'gov-copay',
+  'platform-commission',
   'devices',
   'staff',
 ] as const;
@@ -116,6 +117,14 @@ export const SECTIONS: readonly SectionDef[] = [
     descKey: 'settings.copay.desc',
     view: 'settings.view',
     edit: 'settings.gov_copay',
+    stepUpToOpen: false,
+  },
+  {
+    id: 'platform-commission',
+    titleKey: 'settings.commission.title',
+    descKey: 'settings.commission.desc',
+    view: 'settings.platform_commission',
+    edit: 'settings.platform_commission',
     stepUpToOpen: false,
   },
   {

@@ -34,6 +34,7 @@ import {
   ZERO,
 } from '@sds/shared';
 import type { SocketFactory, SocketHandlers } from '../platform/socket.ts';
+import { createMockFinance } from './mock-finance.ts';
 import { createMockMenuAdmin, type RawBody } from './mock-menu-admin.ts';
 import { createAttribution, originalStaffGate, originalStaffKnown } from './mock-original-staff.ts';
 import { createMockPayments, type MockCaller } from './mock-payments.ts';
@@ -288,6 +289,9 @@ export function createMockShop(options: MockShopOptions = {}) {
 
   // The overview's report calls, computed from the orders above (see mock-reports.ts).
   const reports = createMockReports({ orders, now });
+
+  // Expenses, profit and loss, tax and the commission rates (see mock-finance.ts).
+  const finance = createMockFinance({ now });
 
   // Order moves, payments and the payment settings (see mock-payments.ts).
   const payments = createMockPayments({
@@ -718,6 +722,8 @@ export function createMockShop(options: MockShopOptions = {}) {
     if (paid) return paid;
     if (method === 'GET' && path === '/v1/sync') return sync(query);
     if (method === 'GET' && path === '/v1/recipients') return listRecipients(query);
+    const money = finance.handle(method, path, query, body, caller);
+    if (money) return money;
     const settled = settings.handle(method, path, body, caller);
     if (settled) return settled;
     if (method === 'POST' && path === '/v1/orders') return createOrder(body, caller);

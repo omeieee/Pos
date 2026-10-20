@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { enAuth } from './en/auth.ts';
 import { enCommon } from './en/common.ts';
 import { enErrors } from './en/errors.ts';
+import { enFinance } from './en/finance.ts';
 import { enLiff } from './en/liff.ts';
 import { enLine } from './en/line.ts';
 import { enMenuEditor } from './en/menu-editor.ts';
@@ -17,6 +18,7 @@ import { en } from './en.ts';
 import { thAuth } from './th/auth.ts';
 import { thCommon } from './th/common.ts';
 import { thErrors } from './th/errors.ts';
+import { thFinance } from './th/finance.ts';
 import { thLiff } from './th/liff.ts';
 import { thLine } from './th/line.ts';
 import { thMenuEditor } from './th/menu-editor.ts';
@@ -40,6 +42,7 @@ const thParts: Record<string, Record<string, string>> = {
   auth: thAuth,
   common: thCommon,
   errors: thErrors,
+  finance: thFinance,
   liff: thLiff,
   line: thLine,
   'menu-editor': thMenuEditor,
@@ -56,6 +59,7 @@ const enParts: Record<string, Record<string, string>> = {
   auth: enAuth,
   common: enCommon,
   errors: enErrors,
+  finance: enFinance,
   liff: enLiff,
   line: enLine,
   'menu-editor': enMenuEditor,

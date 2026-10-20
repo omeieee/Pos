@@ -1,0 +1,386 @@
+/*
+ * The money pages (P7): expenses, profit and loss, tax. Same rules as reports.css: every colour,
+ * size and radius is a --sds-* token (nothing typed in), nothing depends on hover, and meaning is
+ * never carried by colour or a strike-through alone (a word sits beside it). Built for a laptop
+ * first and checked down to 390 px: rows wrap, wide tables turn into stacked cards under 640 px,
+ * and nothing makes the page scroll sideways.
+ */
+
+.fin-page {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 10px 12px 8px 8px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.fin-card {
+  min-width: 0;
+  padding: 22px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.fin-card__head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.fin-card__title {
+  flex-grow: 1;
+  min-width: 0;
+}
+
+.fin-quiet {
+  margin: 0;
+}
+.fin-info {
+  flex-wrap: wrap;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  color: var(--sds-color-text-muted);
+}
+.fin-fieldset {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+.fin-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+.fin-disclaimer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.fin-banner {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.fin-loss {
+  margin-left: 8px;
+  vertical-align: middle;
+}
+.fin-error {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px 14px;
+  color: var(--sds-color-danger-text);
+  background: var(--sds-color-danger-subtle);
+}
+
+/* ---------- Period picker ---------- */
+.fin-range {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+.fin-seg {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+.fin-dates {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 220px));
+  gap: 12px;
+}
+
+/* ---------- Label and amount lines (profit and loss, tax) ---------- */
+.fin-lines {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+}
+.fin-line {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 4px 16px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--sds-color-border);
+}
+.fin-line > dt {
+  flex: 1 1 200px;
+  min-width: 0;
+  color: var(--sds-color-text);
+}
+.fin-line > dd {
+  margin: 0;
+  min-width: 0;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.fin-line--sub {
+  padding-left: 18px;
+  color: var(--sds-color-text-muted);
+}
+.fin-line--sub > dt {
+  color: var(--sds-color-text-muted);
+}
+.fin-line--total {
+  border-bottom: 0;
+  padding-top: 14px;
+}
+.fin-line--total > dt {
+  font-weight: var(--sds-font-weight-bold);
+}
+.fin-big {
+  font-size: var(--sds-font-size-xxl);
+  font-weight: var(--sds-font-weight-bold);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.fin-note {
+  margin: 0;
+  color: var(--sds-color-text-muted);
+}
+.fin-bullets {
+  margin: 6px 0 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.fin-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+/* ---------- Expense rows ---------- */
+.fin-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.fin-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--sds-color-border);
+}
+.fin-item__main {
+  flex: 1 1 280px;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 14px;
+}
+.fin-item__what {
+  flex: 1 1 160px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.fin-item__amount {
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--sds-font-weight-medium);
+  white-space: nowrap;
+}
+.fin-item__actions {
+  display: flex;
+  gap: 8px;
+  flex: none;
+}
+.fin-item__voided {
+  flex: 1 0 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.fin-struck {
+  text-decoration: line-through;
+  color: var(--sds-color-text-muted);
+}
+
+/* ---------- Categories ---------- */
+.fin-cats {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.fin-cat {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--sds-color-border);
+}
+.fin-cat__name {
+  flex: 1 1 180px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.fin-cat__add {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  align-items: start;
+}
+
+/* ---------- Tables: columns on a laptop, stacked cards on a phone ---------- */
+.fin-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+.fin-table th,
+.fin-table td {
+  padding: 8px 6px;
+  text-align: right;
+  border-bottom: 1px solid var(--sds-color-border);
+}
+.fin-table th:first-child,
+.fin-table td:first-child {
+  text-align: left;
+}
+
+/* ---------- Method comparison (tax): three columns at every width ---------- */
+.fin-cmp {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+.fin-cmp th,
+.fin-cmp td {
+  padding: 8px 4px;
+  text-align: right;
+  border-bottom: 1px solid var(--sds-color-border);
+  overflow-wrap: anywhere;
+}
+.fin-cmp th[scope="row"] {
+  width: 34%;
+  text-align: left;
+  font-weight: var(--sds-font-weight-regular);
+}
+.fin-cmp__head {
+  font-weight: var(--sds-font-weight-bold);
+}
+.fin-cmp__head > span {
+  display: block;
+  margin-bottom: var(--sds-space-xs);
+}
+.fin-cmp__strong th,
+.fin-cmp__strong td {
+  font-weight: var(--sds-font-weight-bold);
+}
+
+/* ---------- Tax: sources and the allowance editor ---------- */
+.fin-sources {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.fin-source {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.fin-source a {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--sds-touch-min);
+  color: var(--sds-color-info-text);
+}
+.fin-allow {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.fin-allow__row {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+}
+.fin-allow__remove {
+  align-self: end;
+}
+
+@media (max-width: 640px) {
+  .fin-card {
+    padding: 18px 16px;
+  }
+  .fin-dates,
+  .fin-cat__add {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .fin-allow__row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .fin-allow__remove {
+    justify-self: start;
+  }
+  .fin-line--sub {
+    padding-left: 10px;
+  }
+  .fin-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+  }
+  .fin-table tr {
+    display: block;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--sds-color-border);
+  }
+  .fin-table th,
+  .fin-table td {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    border: 0;
+    padding: 3px 0;
+    text-align: right;
+  }
+  .fin-table th:first-child,
+  .fin-table td:first-child {
+    text-align: right;
+  }
+  .fin-table td::before {
+    content: attr(data-label);
+    color: var(--sds-color-text-muted);
+    text-align: left;
+  }
+}

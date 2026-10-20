@@ -3,8 +3,11 @@ import {
   customersReportSchema,
   heatmapReportSchema,
   itemsReportSchema,
+  pnlReportSchema,
   revenueReportQuerySchema,
   revenueReportSchema,
+  taxReportQuerySchema,
+  taxReportSchema,
 } from '@sds/shared';
 import type { z } from 'zod';
 import { checked, type Transport } from '../http.ts';
@@ -34,6 +37,22 @@ export function makeReports({ get }: Transport) {
     items: (range: ReportRange) => read('/v1/reports/items', itemsReportSchema, range),
     /** Orders and revenue by weekday and Bangkok hour. `report.view`. */
     heatmap: (range: ReportRange) => read('/v1/reports/heatmap', heatmapReportSchema, range),
+    /** Profit and loss for the range. Owner only (`finance.pnl`). */
+    pnl: (range: ReportRange) => read('/v1/reports/pnl', pnlReportSchema, range),
+    /**
+     * The income tax estimate for a Buddhist Era year, annual (ภ.ง.ด.90) or half-year (ภ.ง.ด.94).
+     * Owner only. A year with no rules file is 422 TAX_RULES_NOT_AVAILABLE.
+     */
+    tax: async (query: z.output<typeof taxReportQuerySchema>) =>
+      (
+        await get({
+          path: '/v1/reports/tax',
+          query: checked(taxReportQuerySchema, query) as unknown as Record<string, string>,
+          schema: taxReportSchema,
+          session: true,
+          device: 'optional',
+        })
+      ).data,
     /** The customer list with segments and favourites. Owner only (PDPA). */
     customers: async () =>
       (

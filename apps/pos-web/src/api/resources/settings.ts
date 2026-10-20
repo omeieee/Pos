@@ -15,16 +15,24 @@ import {
   openingHoursSchema,
   paymentsPatchInputSchema,
   paymentsSettingsSchema,
+  platformCommissionPatchInputSchema,
+  platformCommissionSettingsSchema,
   promptpayPatchInputSchema,
   promptpaySettingsSchema,
+  putTaxProfileInputSchema,
   receiptPatchInputSchema,
   receiptSettingsSchema,
   settingResponseSchema,
   shopPatchInputSchema,
   shopSettingsSchema,
+  taxProfileResponseSchema,
+  taxReportQuerySchema,
 } from '@sds/shared';
 import type { z } from 'zod';
 import { checked, type Transport } from '../http.ts';
+
+const yearQuery = (year: number) =>
+  checked(taxReportQuerySchema.pick({ year: true }), { year }) as unknown as Record<string, string>;
 
 export function makeSettings({ get, patch, put }: Transport) {
   /**
@@ -107,6 +115,39 @@ export function makeSettings({ get, patch, put }: Transport) {
       lineOrderingPatchInputSchema,
     ),
     promptpayMasked,
+    /** What Grab and LINE MAN keep, in basis points (null: not set). Owner only, with a step-up. */
+    platformCommission: settingsResource(
+      'platform-commission',
+      platformCommissionSettingsSchema,
+      platformCommissionPatchInputSchema,
+    ),
+    /**
+     * The owner's tax inputs for one Buddhist Era year (extra allowances, method preference).
+     * Read: owner only. Save replaces the whole profile of the year, owner only, with a step-up.
+     */
+    taxProfile: {
+      read: async (year: number) =>
+        (
+          await get({
+            path: '/v1/settings/tax-profile',
+            query: yearQuery(year),
+            schema: taxProfileResponseSchema,
+            session: true,
+            device: 'optional',
+          })
+        ).data,
+      save: async (year: number, body: z.input<typeof putTaxProfileInputSchema>) =>
+        (
+          await put({
+            path: '/v1/settings/tax-profile',
+            query: yearQuery(year),
+            body: checked(putTaxProfileInputSchema, body),
+            schema: taxProfileResponseSchema,
+            session: true,
+            device: 'optional',
+          })
+        ).data,
+    },
     /** The tax ID and address printed on receipts. Owner only to change, with a step-up. */
     receipt: settingsResource('receipt', receiptSettingsSchema, receiptPatchInputSchema),
     /** The receiving bank account, masked view only. Owner only to change, with a step-up. */

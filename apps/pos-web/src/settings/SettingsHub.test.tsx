@@ -38,6 +38,10 @@ describe('the hub', () => {
       '#/settings/bank-account',
       '#/settings/receipt',
       '#/settings/gov-copay',
+      '#/settings/platform-commission',
+      '#/expenses',
+      '#/pnl',
+      '#/tax',
       '#/settings/devices',
       '#/settings/staff',
     ]);
@@ -58,6 +62,7 @@ describe('the hub', () => {
       '#/settings/promptpay',
       '#/settings/receipt',
       '#/settings/gov-copay',
+      '#/expenses',
     ]);
     const card = screen.getByText(th['settings.promptpay.title']).closest('a') as HTMLElement;
     expect(within(card).getByText(th['settings.hub.readOnly'])).toBeTruthy();
@@ -70,6 +75,10 @@ describe('the hub', () => {
     expect(links()).not.toContain('#/settings/menu');
     expect(links()).not.toContain('#/settings/devices');
     expect(screen.getAllByText(th['settings.hub.readOnly']).length).toBe(9);
+    // A cashier has no money pages either.
+    expect(links()).not.toContain('#/expenses');
+    expect(links()).not.toContain('#/pnl');
+    expect(links()).not.toContain('#/tax');
   });
 });
 

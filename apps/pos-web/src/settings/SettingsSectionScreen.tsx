@@ -3,6 +3,7 @@ import { s } from '../design/style.ts';
 import { useAuthState, useT } from '../ui/hooks.ts';
 import { Callout } from '../ui/Notice.tsx';
 import { BankAccountForm } from './BankAccountForm.tsx';
+import { CommissionForm } from './CommissionForm.tsx';
 import { CopayForm } from './CopayForm.tsx';
 import { DeliveryForm } from './DeliveryForm.tsx';
 import { DevicesScreen } from './DevicesScreen.tsx';
@@ -90,6 +91,12 @@ function SectionBody({ def, editable }: { def: SectionDef; editable: boolean }) 
       return (
         <SettingSection name="copay" editable={editable}>
           {(p) => <CopayForm {...p} />}
+        </SettingSection>
+      );
+    case 'platform-commission':
+      return (
+        <SettingSection name="platformCommission" editable={editable}>
+          {(p) => <CommissionForm {...p} />}
         </SettingSection>
       );
     case 'devices':

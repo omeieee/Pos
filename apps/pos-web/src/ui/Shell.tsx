@@ -20,6 +20,17 @@ const MenuEditorScreen = lazy(async () => ({
   default: (await import('../menu-editor/MenuEditorScreen.tsx')).MenuEditorScreen,
 }));
 
+// The money pages (P7) are for the owner and managers on a laptop, so they load on first use too.
+const ExpensesScreen = lazy(async () => ({
+  default: (await import('../pos/finance/ExpensesScreen.tsx')).ExpensesScreen,
+}));
+const PnlScreen = lazy(async () => ({
+  default: (await import('../pos/finance/PnlScreen.tsx')).PnlScreen,
+}));
+const TaxScreen = lazy(async () => ({
+  default: (await import('../pos/finance/TaxScreen.tsx')).TaxScreen,
+}));
+
 const SettingsHub = lazy(async () => ({
   default: (await import('../settings/SettingsHub.tsx')).SettingsHub,
 }));
@@ -36,10 +47,13 @@ const NAV_ICON: Record<RouteDef['id'], GiName> = {
   menu: 'bowl',
   settings: 'sliders',
   dashboard: 'dashboard',
+  expenses: 'receipt2',
+  pnl: 'dollar',
+  tax: 'doc',
 };
 
 /** Not in the rail or the tab bar: Grab / LINE MAN is reached from the cart, the overview is a laptop page. */
-const RAIL_HIDDEN = new Set<RouteDef['id']>(['platform', 'dashboard']);
+const RAIL_HIDDEN = new Set<RouteDef['id']>(['platform', 'dashboard', 'expenses', 'pnl', 'tax']);
 const TAB_ITEMS = new Set<RouteDef['id']>(['new', 'kitchen', 'orders', 'settings']);
 
 const initial = (name: string) => Array.from(name.trim())[0] ?? '';
@@ -126,7 +140,12 @@ export function Shell() {
           }`,
         )}
       >
-        {route?.id === 'settings' || route?.id === 'menu' || route?.id === 'dashboard' ? (
+        {route?.id === 'settings' ||
+        route?.id === 'menu' ||
+        route?.id === 'dashboard' ||
+        route?.id === 'expenses' ||
+        route?.id === 'pnl' ||
+        route?.id === 'tax' ? (
           <OutboxStrip />
         ) : null}
         {page}
@@ -342,8 +361,9 @@ function SideNav({
         )}
         {link('menu', tr('nav.menuPrices'), 'bowl')}
         {later(tr('nav.customers'), 'people')}
-        {later(tr('nav.costProfit'), 'dollar')}
-        {later(tr('nav.tax'), 'doc')}
+        {link('expenses', tr('nav.expenses'), 'receipt2')}
+        {link('pnl', tr('nav.costProfit'), 'dollar')}
+        {link('tax', tr('nav.tax'), 'doc')}
         <div style={s('flex-grow:1')} />
         {link('settings', tr('nav.settings'), 'sliders')}
       </nav>
@@ -394,6 +414,26 @@ function PageSwitch({
       return <KitchenScreen />;
     case 'dashboard':
       return <DashboardScreen />;
+    case 'expenses':
+    case 'pnl':
+    case 'tax':
+      return (
+        <Suspense
+          fallback={
+            <p className="muted" role="status">
+              {tr('common.loading')}
+            </p>
+          }
+        >
+          {resolved.page === 'expenses' ? (
+            <ExpensesScreen />
+          ) : resolved.page === 'pnl' ? (
+            <PnlScreen />
+          ) : (
+            <TaxScreen />
+          )}
+        </Suspense>
+      );
     case 'menu':
       return (
         <Suspense

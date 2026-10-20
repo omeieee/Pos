@@ -109,9 +109,12 @@ export function createFakeApi(
     orders?: Partial<Orders>;
     payments?: Partial<Payments>;
     recipients?: Partial<ApiClient['recipients']>;
-    settings?: Partial<ApiClient['settings']>;
+    settings?: Partial<Omit<ApiClient['settings'], 'taxProfile'>> & {
+      taxProfile?: Partial<ApiClient['settings']['taxProfile']>;
+    };
     devices?: Partial<ApiClient['devices']>;
     reports?: Partial<ApiClient['reports']>;
+    expenses?: Partial<ApiClient['expenses']>;
   } = {},
 ) {
   const orders = {
@@ -165,6 +168,14 @@ export function createFakeApi(
     ),
   };
   const settings = {
+    taxProfile: {
+      read: vi.fn<ApiClient['settings']['taxProfile']['read']>(
+        overrides.settings?.taxProfile?.read ?? unexpected('settings.taxProfile.read'),
+      ),
+      save: vi.fn<ApiClient['settings']['taxProfile']['save']>(
+        overrides.settings?.taxProfile?.save ?? unexpected('settings.taxProfile.save'),
+      ),
+    },
     delivery: vi.fn<ApiClient['settings']['delivery']>(
       overrides.settings?.delivery ??
         (async () => ({
@@ -203,8 +214,33 @@ export function createFakeApi(
     exportCsv: vi.fn<ApiClient['reports']['exportCsv']>(
       overrides.reports?.exportCsv ?? unexpected('reports.exportCsv'),
     ),
+    pnl: vi.fn<ApiClient['reports']['pnl']>(overrides.reports?.pnl ?? unexpected('reports.pnl')),
+    tax: vi.fn<ApiClient['reports']['tax']>(overrides.reports?.tax ?? unexpected('reports.tax')),
   };
-  return { orders, payments, auth, recipients, settings, devices, reports };
+  // The expense ledger and its category list (P7); every call fails the test unless answered.
+  const expenses = {
+    list: vi.fn<ApiClient['expenses']['list']>(
+      overrides.expenses?.list ?? unexpected('expenses.list'),
+    ),
+    create: vi.fn<ApiClient['expenses']['create']>(
+      overrides.expenses?.create ?? unexpected('expenses.create'),
+    ),
+    patch: vi.fn<ApiClient['expenses']['patch']>(
+      overrides.expenses?.patch ?? unexpected('expenses.patch'),
+    ),
+    void: vi.fn<ApiClient['expenses']['void']>(
+      overrides.expenses?.void ?? unexpected('expenses.void'),
+    ),
+    categories: {
+      read: vi.fn<ApiClient['expenses']['categories']['read']>(
+        overrides.expenses?.categories?.read ?? unexpected('expenses.categories.read'),
+      ),
+      save: vi.fn<ApiClient['expenses']['categories']['save']>(
+        overrides.expenses?.categories?.save ?? unexpected('expenses.categories.save'),
+      ),
+    },
+  };
+  return { orders, payments, auth, recipients, settings, devices, reports, expenses };
 }
 
 export function createTestServices(
@@ -239,6 +275,10 @@ export function createTestServices(
     promptpay?: TestPromptpay;
     /** What the overview's report calls answer (every other call fails the test). */
     reports?: Partial<ApiClient['reports']>;
+    /** What the expense ledger's calls answer (every other call fails the test). */
+    expenses?: Partial<ApiClient['expenses']>;
+    /** What the tax profile read and save answer (every other call fails the test). */
+    taxProfile?: Partial<ApiClient['settings']['taxProfile']>;
     /** What the menu editor's calls answer (every other call fails the test). */
     menuApi?: Partial<ApiClient['menu']>;
     /** What the settings screens' calls answer (every other call fails the test). */
@@ -263,6 +303,8 @@ export function createTestServices(
     payments: options.payments ?? {},
     ...(options.devices ? { devices: options.devices } : {}),
     ...(options.reports ? { reports: options.reports } : {}),
+    ...(options.expenses ? { expenses: options.expenses } : {}),
+    ...(options.taxProfile ? { settings: { taxProfile: options.taxProfile } } : {}),
   });
   const create = api.orders.create;
   const getOrder = api.orders.get;

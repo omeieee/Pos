@@ -38,6 +38,7 @@ const DEFAULT_READS = {
   bankAccount: { bankCode: null, accountMasked: null, configured: false },
   promptpayMasked: { idType: 'phone', idMasked: '******1234' },
   govCopay: { scheme: null },
+  platformCommission: { grabRateBp: null, linemanRateBp: null },
 } as const;
 
 export function createFakeSettingsApi(overrides: SettingsOverrides = {}) {

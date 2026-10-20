@@ -18,6 +18,7 @@ import { type ApiClientOptions, createTransport } from './http.ts';
 import { makeAdmin } from './resources/admin.ts';
 import { makeAuth } from './resources/auth.ts';
 import { makeDevices } from './resources/devices.ts';
+import { makeExpenses } from './resources/expenses.ts';
 import { makeMenu } from './resources/menu.ts';
 import { makeOrders } from './resources/orders.ts';
 import { makePayments } from './resources/payments.ts';
@@ -29,6 +30,7 @@ import { makeSync } from './resources/sync.ts';
 export type { ApiClientOptions, Schema } from './http.ts';
 export { newClientRequestId } from './http.ts';
 export type { OwnerLoginRequest, OwnerStepUpRequest } from './resources/auth.ts';
+export type { ExpenseRange, NewExpenseInput } from './resources/expenses.ts';
 export type {
   NewCategoryInput,
   NewGroupInput,
@@ -48,6 +50,7 @@ export function createApiClient(options: ApiClientOptions) {
     payments: makePayments(transport),
     recipients: makeRecipients(transport),
     reports: makeReports(transport),
+    expenses: makeExpenses(transport),
     settings: makeSettings(transport),
     admin: makeAdmin(transport),
     devices: makeDevices(transport),

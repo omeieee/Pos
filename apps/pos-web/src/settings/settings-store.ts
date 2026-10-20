@@ -28,6 +28,8 @@ import type {
   OpeningHoursPatchInput,
   PaymentsPatchInput,
   PaymentsSettings,
+  PlatformCommissionPatchInput,
+  PlatformCommissionSettings,
   PromptpayMasked,
   PromptpayPatchInput,
   ReceiptPatchInput,
@@ -57,6 +59,8 @@ export interface SettingsResources {
   bankAccount: { value: BankAccountView; input: BankAccountPatchInput };
   /** The saved scheme, or null when none was ever saved. Owner only. */
   copay: { value: GovCopayDto | null; input: GovCopayPatchInput };
+  /** Grab and LINE MAN rates in basis points (null: not set). Owner only, step-up first. */
+  platformCommission: { value: PlatformCommissionSettings; input: PlatformCommissionPatchInput };
 }
 export type ResourceName = keyof SettingsResources;
 export type ValueOf<K extends ResourceName> = SettingsResources[K]['value'];
@@ -130,6 +134,7 @@ const initial = (): SettingsState => ({
     receipt: emptySlot(),
     bankAccount: emptySlot(),
     copay: emptySlot(),
+    platformCommission: emptySlot(),
   },
   pending: [],
 });
@@ -173,6 +178,7 @@ export function createSettingsStore(deps: SettingsDeps): SettingsStore {
     promptpay: resource(s.promptpayMasked, true),
     receipt: resource(s.receipt, true),
     bankAccount: resource(s.bankAccount, true),
+    platformCommission: resource(s.platformCommission, true),
     // The scheme answers `{ scheme }`; its version is the row's (0: none saved yet).
     copay: resource(
       {

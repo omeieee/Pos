@@ -19,6 +19,8 @@ const FEED_KEY: Record<ResourceName, string> = {
   // Never on the realtime feed either.
   bankAccount: 'bank_account',
   copay: 'gov_copay',
+  // Never on the realtime feed either (the server alerts the owner instead).
+  platformCommission: 'platform_commission',
 };
 
 export interface SectionBodyProps<K extends ResourceName> {

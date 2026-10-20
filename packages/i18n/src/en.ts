@@ -1,6 +1,7 @@
 import { enAuth } from './en/auth.ts';
 import { enCommon } from './en/common.ts';
 import { enErrors } from './en/errors.ts';
+import { enFinance } from './en/finance.ts';
 import { enLiff } from './en/liff.ts';
 import { enLine } from './en/line.ts';
 import { enMenuEditor } from './en/menu-editor.ts';
@@ -30,4 +31,5 @@ export const en = {
   ...enLine,
   ...enLiff,
   ...enReports,
+  ...enFinance,
 } as const satisfies Record<MessageKey, string>;

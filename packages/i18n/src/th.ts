@@ -6,6 +6,7 @@
 import { thAuth } from './th/auth.ts';
 import { thCommon } from './th/common.ts';
 import { thErrors } from './th/errors.ts';
+import { thFinance } from './th/finance.ts';
 import { thLiff } from './th/liff.ts';
 import { thLine } from './th/line.ts';
 import { thMenuEditor } from './th/menu-editor.ts';
@@ -33,6 +34,7 @@ export const th = {
   ...thLine,
   ...thLiff,
   ...thReports,
+  ...thFinance,
 } as const;
 
 export type MessageKey = keyof typeof th;

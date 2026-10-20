@@ -1,5 +1,6 @@
 import type { MessageKey } from '@sds/i18n';
 import { useState } from 'react';
+import { ROUTES, type RouteId } from '../app/routes.ts';
 import { Gi, type GiName } from '../design/icons.tsx';
 import { s } from '../design/style.ts';
 import { AccountMenu } from '../ui/AccountMenu.tsx';
@@ -8,7 +9,19 @@ import { SettingsPage } from './SettingsPage.tsx';
 import { hubEntries, MENU_PATH, type SectionId, sectionPath, showsMenuLink } from './sections.ts';
 
 /** The icon chip of each row: the canvas icon and its colour (iphone-settings). */
-const CHIP: Record<SectionId | 'menu', { icon: GiName; color: string }> = {
+/** A row of the hub: a settings section, the menu editor, or a back-office money page. */
+type RowId = SectionId | 'menu' | BackOfficeId;
+
+/** The money pages (P7) the hub links to, so they are one tap away on an iPad or iPhone. */
+const BACK_OFFICE = {
+  expenses: { descKey: 'settings.link.expenses.desc' },
+  pnl: { descKey: 'settings.link.pnl.desc' },
+  tax: { descKey: 'settings.link.tax.desc' },
+} as const satisfies Partial<Record<RouteId, { descKey: MessageKey }>>;
+type BackOfficeId = keyof typeof BACK_OFFICE;
+const isBackOffice = (id: RowId): id is BackOfficeId => Object.hasOwn(BACK_OFFICE, id);
+
+const CHIP: Record<RowId, { icon: GiName; color: string }> = {
   menu: { icon: 'bowl', color: '#c62828' },
   shop: { icon: 'shop', color: '#d63a2e' },
   hours: { icon: 'clock', color: '#5b6fd6' },
@@ -20,6 +33,10 @@ const CHIP: Record<SectionId | 'menu', { icon: GiName; color: string }> = {
   'bank-account': { icon: 'bank', color: '#2457b8' },
   receipt: { icon: 'receipt2', color: '#7a5af5' },
   'gov-copay': { icon: 'bank', color: '#c7691a' },
+  'platform-commission': { icon: 'store', color: '#c7691a' },
+  expenses: { icon: 'receipt2', color: '#c7691a' },
+  pnl: { icon: 'dollar', color: '#1b7a43' },
+  tax: { icon: 'doc', color: '#2457b8' },
   devices: { icon: 'monitor', color: '#3a3330' },
   staff: { icon: 'people', color: '#1b7a43' },
 };
@@ -28,7 +45,7 @@ const CHIP: Record<SectionId | 'menu', { icon: GiName; color: string }> = {
 const GROUPS: readonly {
   id: string;
   titleKey: MessageKey;
-  rows: readonly (SectionId | 'menu')[];
+  rows: readonly RowId[];
 }[] = [
   {
     id: 'shop',
@@ -38,8 +55,9 @@ const GROUPS: readonly {
   {
     id: 'payments',
     titleKey: 'settings.group.payments',
-    rows: ['payments', 'promptpay', 'bank-account', 'receipt', 'gov-copay'],
+    rows: ['payments', 'promptpay', 'bank-account', 'receipt', 'gov-copay', 'platform-commission'],
   },
+  { id: 'backOffice', titleKey: 'settings.group.backOffice', rows: ['expenses', 'pnl', 'tax'] },
   { id: 'people', titleKey: 'settings.group.people', rows: ['devices', 'staff'] },
 ];
 
@@ -70,7 +88,7 @@ const DESIGN_ONLY = [
   on: boolean;
 }[];
 
-function Chip({ id }: { id: SectionId | 'menu' }) {
+function Chip({ id }: { id: RowId }) {
   const chip = CHIP[id];
   return (
     <div className="g-ico" style={s(`background:${chip.color}`)}>
@@ -106,6 +124,15 @@ export function SettingsHub() {
     rows: group.rows.filter((id) => {
       if (id === 'menu')
         return withMenu && matches(tr('settings.menu.title'), tr('settings.menu.desc'));
+      if (isBackOffice(id)) {
+        const page = ROUTES.find((r) => r.id === id);
+        return (
+          page !== undefined &&
+          page.permission !== null &&
+          permissions.includes(page.permission) &&
+          matches(tr(page.labelKey), tr(BACK_OFFICE[id].descKey))
+        );
+      }
       const entry = entries.get(id);
       return entry !== undefined && matches(tr(entry.section.titleKey), tr(entry.section.descKey));
     }),
@@ -134,7 +161,23 @@ export function SettingsHub() {
   ];
   const nothing = blocks.length === 0;
 
-  function renderRow(id: SectionId | 'menu') {
+  function renderRow(id: RowId) {
+    if (isBackOffice(id)) {
+      const page = ROUTES.find((r) => r.id === id);
+      if (!page) return null;
+      return (
+        <a key={id} className="g-row" href={`#${page.path}`}>
+          <Chip id={id} />
+          <div style={s('flex-grow:1;min-width:0')}>
+            <div className="g-t-3" style={s('font-weight:500')}>
+              {tr(page.labelKey)}
+            </div>
+            <div className="g-t-c gset-oneline">{tr(BACK_OFFICE[id].descKey)}</div>
+          </div>
+          <Gi n="chevronRight" className="gset-chev" />
+        </a>
+      );
+    }
     if (id === 'menu') {
       return (
         <a key={id} className="g-row" href={`#${MENU_PATH}`}>

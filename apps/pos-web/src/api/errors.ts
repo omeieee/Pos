@@ -76,6 +76,9 @@ export const API_ERROR_KEYS = {
   UNKNOWN_CATEGORY: 'error.unknownMenuRow',
   UNKNOWN_GROUP: 'error.unknownMenuRow',
   REORDER_SET_MISMATCH: 'error.reorderMismatch',
+  // Expenses and the tax estimate (P7)
+  UNKNOWN_EXPENSE_CATEGORY: 'error.unknownExpenseCategory',
+  TAX_RULES_NOT_AVAILABLE: 'error.taxRulesNotAvailable',
   // Menu photos. The two FST_ codes are Fastify's own answers (body over the cap, other type).
   PHOTO_EMPTY: 'error.photoEmpty',
   PHOTO_TOO_LARGE: 'error.photoTooLarge',

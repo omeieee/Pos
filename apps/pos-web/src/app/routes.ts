@@ -39,7 +39,17 @@ export type IconName =
   | 'volume-off';
 
 /** The entries of the navigation: one per top-level page. */
-export type RouteId = 'new' | 'platform' | 'kitchen' | 'orders' | 'menu' | 'settings' | 'dashboard';
+export type RouteId =
+  | 'new'
+  | 'platform'
+  | 'kitchen'
+  | 'orders'
+  | 'menu'
+  | 'settings'
+  | 'dashboard'
+  | 'expenses'
+  | 'pnl'
+  | 'tax';
 
 /** Everything the address bar can show; `order` is a page inside `orders`, `settingsSection` one inside `settings`. */
 export type PageId = RouteId | 'order' | 'settingsSection';
@@ -97,6 +107,17 @@ export const ROUTES: readonly RouteDef[] = [
     icon: 'grid',
     permission: 'report.view',
   },
+  // Back-office money pages (P7), after the overview so they are never the first page. Expenses:
+  // owner and manager. Profit and tax: the owner only (a manager enters expenses, never sees profit).
+  {
+    id: 'expenses',
+    path: '/expenses',
+    labelKey: 'nav.expenses',
+    icon: 'note',
+    permission: 'expense.edit',
+  },
+  { id: 'pnl', path: '/pnl', labelKey: 'nav.costProfit', icon: 'cash', permission: 'finance.pnl' },
+  { id: 'tax', path: '/tax', labelKey: 'nav.tax', icon: 'note', permission: 'finance.pnl' },
 ];
 
 /** Pages with a parameter in the address. They open when their parent page is allowed. */
