@@ -37,6 +37,12 @@ export const expenseCategorySchema = z.strictObject({
   nameEn: text(80).nullable().default(null),
   /** Off = not offered for new expenses; rows already on the key stay valid. */
   active: z.boolean().default(true),
+  /**
+   * Counts as "buying goods" (ซื้อสินค้า) on the cash receipts-payments report (D-35). Optional so
+   * a list saved before the flag existed still parses; read it with `isBuyingGoods`, which falls back
+   * to the default for the key. Kept when the category is switched off, so old expenses still count.
+   */
+  buyingGoods: z.boolean().optional(),
 });
 export type ExpenseCategoryEntry = z.infer<typeof expenseCategorySchema>;
 
@@ -64,6 +70,21 @@ const DEFAULT_NAMES_TH: Record<(typeof EXPENSE_CATEGORIES)[number], string> = {
   other: 'อื่น ๆ',
 };
 
+/** The seeded categories that are goods; every other default, and a key the shop never flagged, is not. */
+export const DEFAULT_BUYING_GOODS_KEYS: readonly string[] = ['ingredients', 'packaging'];
+
+/** The flag as saved, else the default for the key (an unknown key is not goods until flagged). */
+export function isBuyingGoods(c: { key: string; buyingGoods?: boolean | undefined }): boolean {
+  return c.buyingGoods ?? DEFAULT_BUYING_GOODS_KEYS.includes(c.key);
+}
+
+/** The keys that count as buying goods, in list order (active or not). */
+export function buyingGoodsKeys(
+  list: readonly { key: string; buyingGoods?: boolean | undefined }[],
+): string[] {
+  return list.filter(isBuyingGoods).map((c) => c.key);
+}
+
 /** What GET shows before the owner ever saves a list (version 0): the nine seeded categories. */
 export const DEFAULT_EXPENSE_CATEGORIES: ExpenseCategories = {
   categories: EXPENSE_CATEGORIES.map((key) => ({
@@ -71,6 +92,7 @@ export const DEFAULT_EXPENSE_CATEGORIES: ExpenseCategories = {
     nameTh: DEFAULT_NAMES_TH[key],
     nameEn: null,
     active: true,
+    buyingGoods: DEFAULT_BUYING_GOODS_KEYS.includes(key),
   })),
 };
 

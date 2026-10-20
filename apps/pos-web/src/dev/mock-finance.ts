@@ -11,13 +11,22 @@
  *   (so adding or voiding an expense moves the profit). The tax answer is worksheet A of
  *   `docs/p7-tax-sample.md`; only rule year 2569 exists (any other year is 422), like a real shop
  *   before a rules file is added.
+ * - `/v1/reports/cash`: owner only. The sample fortnight's receipts (`SAMPLE_RECEIPTS`) plus the live
+ *   ledger, worked out with the same rules as `cashReport`; `/v1/settings/cash-opening` sets the
+ *   start amount (owner, fresh step-up). The CSV export is not mocked (as for the P6 files).
  * - `/v1/settings/tax-profile` and `/v1/settings/platform-commission`: owner only to change, and
  *   a change needs a fresh step-up (403 STEP_UP_REQUIRED), as on the server. Neither goes on the feed.
  *
  * Nothing here is persisted and nothing here is real shop data.
  */
 import {
+  buyingGoodsKeys,
+  type CashReport,
+  cashOpeningPatchInputSchema,
+  cashOpeningSettingsSchema,
+  cashReportQuerySchema,
   createExpenseInputSchema,
+  DEFAULT_CASH_OPENING,
   DEFAULT_EXPENSE_CATEGORIES,
   DEFAULT_PLATFORM_COMMISSION,
   type ExpenseCategoryEntry,
@@ -25,6 +34,8 @@ import {
   expenseCategoriesSchema,
   listExpensesQuerySchema,
   missingCategoryKeys,
+  PAYMENT_METHODS,
+  type PaymentMethod,
   type Permission,
   type PnlReport,
   patchExpenseInputSchema,
@@ -40,7 +51,7 @@ import {
   taxReportQuerySchema,
   voidExpenseInputSchema,
 } from '@sds/shared';
-import { SAMPLE_EXPENSES, SAMPLE_PNL, sampleTax } from './mock-finance-data.ts';
+import { SAMPLE_EXPENSES, SAMPLE_PNL, SAMPLE_RECEIPTS, sampleTax } from './mock-finance-data.ts';
 
 interface Answer {
   status: number;
@@ -73,6 +84,7 @@ export function createMockFinance(deps: { now: () => number }) {
   };
   const profiles = new Map<number, TaxProfileResponse>();
   let commission = { value: DEFAULT_PLATFORM_COMMISSION, version: 0, rev: 0 };
+  let opening = { value: DEFAULT_CASH_OPENING, version: 0, rev: 0 };
 
   const has = (caller: Caller, permission: Permission) =>
     ROLE_PERMISSIONS[caller.role].has(permission);
@@ -284,6 +296,140 @@ export function createMockFinance(deps: { now: () => number }) {
     return ok(sampleTax(parsed.data.period, parsed.data.year));
   }
 
+  /** Same rules as `@sds/finance` `cashReport`, on the sample receipts and the live ledger (dev only). */
+  function cash(query: URLSearchParams): Answer {
+    const parsed = cashReportQuerySchema.safeParse(Object.fromEntries(query));
+    if (!parsed.success) return error(400, 'VALIDATION_ERROR');
+    const { from, to } = parsed.data;
+    interface Figures {
+      methods: Record<PaymentMethod, number>;
+      purchases: number;
+      other: number;
+      orders: number;
+      expenses: number;
+    }
+    const blank = (): Figures => ({
+      methods: { cash: 0, promptpay: 0, gov_copay: 0, platform: 0, other: 0 },
+      purchases: 0,
+      other: 0,
+      orders: 0,
+      expenses: 0,
+    });
+    const goods = new Set(buyingGoodsKeys(categories.list));
+    const byDate = new Map<string, Figures>();
+    const at = (date: string) => {
+      const found = byDate.get(date) ?? blank();
+      byDate.set(date, found);
+      return found;
+    };
+    for (const r of SAMPLE_RECEIPTS) {
+      const f = at(r.date);
+      f.methods[r.method] += r.satang;
+      f.orders += 1;
+    }
+    for (const e of rows.values()) {
+      if (e.voided) continue;
+      const f = at(e.businessDate);
+      f.expenses += 1;
+      if (goods.has(e.category)) f.purchases += e.amountSatang;
+      else f.other += e.amountSatang;
+    }
+    const receipts = (f: Figures) => PAYMENT_METHODS.reduce((n, m) => n + f.methods[m], 0);
+    const brandedMethods = (f: Figures) =>
+      Object.fromEntries(
+        PAYMENT_METHODS.map((m) => [m, satang(f.methods[m])]),
+      ) as CashReport['totals']['receiptsByMethod'];
+    const figures = (f: Figures) => ({
+      receiptsByMethod: brandedMethods(f),
+      receiptsSatang: satang(receipts(f)),
+      cashInSatang: satang(f.methods.cash),
+      purchasesSatang: satang(f.purchases),
+      otherExpensesSatang: satang(f.other),
+      paymentsSatang: satang(f.purchases + f.other),
+    });
+    const net = (f: Figures) => receipts(f) - f.purchases - f.other;
+
+    const { asOf, amountSatang: base } = opening.value;
+    const isSet = asOf !== null && base !== null;
+    // The net from the start day up to the day before `from` is the carry.
+    let carry = 0;
+    if (isSet) for (const [date, f] of byDate) if (date >= asOf && date < from) carry += net(f);
+    const runningStart = isSet && asOf <= from ? base + carry : null;
+
+    const dates: string[] = [];
+    if (parsed.data.emptyDays === 'true') {
+      for (
+        let d = Date.parse(`${from}T00:00:00Z`);
+        d <= Date.parse(`${to}T00:00:00Z`);
+        d += 86_400_000
+      ) {
+        dates.push(new Date(d).toISOString().slice(0, 10));
+      }
+    } else {
+      for (const date of [...byDate.keys()].sort())
+        if (date >= from && date <= to) dates.push(date);
+    }
+    let running: number | null = null;
+    const days = dates.map((businessDate) => {
+      const f = byDate.get(businessDate) ?? blank();
+      let runningNet: number | null = null;
+      if (isSet && businessDate >= asOf) {
+        running ??= runningStart ?? base;
+        running += net(f);
+        runningNet = running;
+      }
+      return {
+        businessDate,
+        ...figures(f),
+        orderCount: f.orders,
+        expenseCount: f.expenses,
+        netSatang: satang(net(f)),
+        runningNetSatang: runningNet === null ? null : satang(runningNet),
+      };
+    });
+
+    const inRange = [...byDate].filter(([date]) => date >= from && date <= to);
+    const sumOf = (list: readonly (readonly [string, Figures])[]) => {
+      const total = blank();
+      for (const [, f] of list) {
+        for (const m of PAYMENT_METHODS) total.methods[m] += f.methods[m];
+        total.purchases += f.purchases;
+        total.other += f.other;
+        total.orders += f.orders;
+        total.expenses += f.expenses;
+      }
+      return total;
+    };
+    const total = sumOf(inRange);
+    const months =
+      from.slice(0, 7) === to.slice(0, 7)
+        ? []
+        : [...new Set(inRange.map(([date]) => date.slice(0, 7)))].sort().map((month) => ({
+            month,
+            ...figures(sumOf(inRange.filter(([date]) => date.startsWith(month)))),
+          }));
+    const answer: CashReport = {
+      from,
+      to,
+      opening: isSet ? { amountSatang: satang(base), asOf } : null,
+      openingNotSet: !isSet,
+      runningStartSatang: runningStart === null ? null : satang(runningStart),
+      runningEndSatang: isSet && asOf <= to ? satang(running ?? runningStart ?? base) : null,
+      days,
+      totals: {
+        ...figures(total),
+        orderCount: total.orders,
+        expenseCount: total.expenses,
+        receiptsMinusPaymentsSatang: satang(receipts(total) - total.purchases - total.other),
+      },
+      months,
+      excludedOrderIds: [],
+      complete: true,
+      reconciliation: { revenueReportSatang: satang(receipts(total)), differenceSatang: satang(0) },
+    };
+    return ok(answer);
+  }
+
   // ---------- Settings ----------
 
   function taxProfile(method: string, query: URLSearchParams, body: unknown, caller: Caller) {
@@ -347,6 +493,34 @@ export function createMockFinance(deps: { now: () => number }) {
     return ok(answer());
   }
 
+  function cashOpening(method: string, body: unknown, caller: Caller): Answer {
+    const answer = () => ({
+      value: opening.value,
+      version: opening.version,
+      rev: opening.rev,
+      updatedAt: opening.version === 0 ? null : nowIso(),
+    });
+    if (method === 'GET') {
+      return has(caller, 'finance.pnl') ? ok(answer()) : error(403, 'FORBIDDEN');
+    }
+    if (!has(caller, 'settings.cash_opening')) return error(403, 'FORBIDDEN');
+    if (!caller.stepUpFresh) return error(403, 'STEP_UP_REQUIRED');
+    const input = cashOpeningPatchInputSchema.safeParse(body);
+    if (!input.success) return error(400, 'VALIDATION_ERROR');
+    if (input.data.expectedVersion !== opening.version) {
+      return error(409, 'VERSION_CONFLICT', { currentVersion: opening.version });
+    }
+    const { expectedVersion: _version, ...given } = input.data;
+    const next = cashOpeningSettingsSchema.safeParse({
+      ...opening.value,
+      ...Object.fromEntries(Object.entries(given).filter(([, v]) => v !== undefined)),
+    });
+    if (!next.success) return error(400, 'VALIDATION_ERROR');
+    rev += 1;
+    opening = { value: next.data, version: opening.version + 1, rev };
+    return ok(answer());
+  }
+
   /** Answers the routes of this file, or null for any other path. */
   function handle(
     method: string,
@@ -361,8 +535,15 @@ export function createMockFinance(deps: { now: () => number }) {
     if (path === '/v1/settings/platform-commission' && (method === 'GET' || method === 'PATCH')) {
       return platformCommission(method, body, caller);
     }
-    if (method === 'GET' && (path === '/v1/reports/pnl' || path === '/v1/reports/tax')) {
+    if (path === '/v1/settings/cash-opening' && (method === 'GET' || method === 'PATCH')) {
+      return cashOpening(method, body, caller);
+    }
+    if (
+      method === 'GET' &&
+      (path === '/v1/reports/pnl' || path === '/v1/reports/tax' || path === '/v1/reports/cash')
+    ) {
       if (!has(caller, 'finance.pnl')) return error(403, 'FORBIDDEN');
+      if (path === '/v1/reports/cash') return cash(query);
       return path === '/v1/reports/pnl' ? pnl(query) : tax(query);
     }
     if (path !== '/v1/expenses' && !path.startsWith('/v1/expenses/')) return null;

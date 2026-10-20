@@ -302,12 +302,12 @@ describe('profitAndLoss', () => {
     expect(m10?.foodCostNotDeductedSatang).toBe(1000);
   });
 
-  test('gov co-pay: revenue on the sale date at the full amount; the receivable is not built', () => {
+  test('gov co-pay: revenue on the sale date at the full amount; the receivable is not tracked', () => {
     const copay = order(6000, [line(1, 6000, 2200)], { method: 'gov_copay' });
     const cash = order(1000, [line(1, 1000, 400)]);
     const p = profitAndLoss(input({ orders: [copay, cash] }));
     expect(p.revenueSatang).toBe(7000);
-    expect(p.govCopay).toEqual({ revenueSatang: 6000, receivable: 'not_built' });
+    expect(p.govCopay).toEqual({ revenueSatang: 6000, receivable: 'not_tracked' });
   });
 
   test('a partial refund lowers revenue but not cost', () => {

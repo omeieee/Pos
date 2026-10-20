@@ -148,7 +148,7 @@ export type PnlMonthDto = z.infer<typeof pnlMonthSchema>;
  * Profit and loss for a range, owner only (`finance.pnl`). An estimate for the owner, not a filing.
  * `missing` lists what is not in the figures; nothing is guessed. `months` has one row per calendar
  * month with data, only when the range touches more than one month (the end months may be partial).
- * `govCopay.receivable` is 'not_built': when the government's share arrives is not tracked yet.
+ * `govCopay.receivable` is 'not_tracked': when the government's share arrives is not tracked (owner decision 2026-10-21).
  */
 export const pnlReportSchema = z.object({
   from: isoDateSchema,
@@ -180,7 +180,7 @@ export const pnlReportSchema = z.object({
   platformFeesExpensesSatang: nonNegativeSatangSchema,
   govCopay: z.object({
     revenueSatang: nonNegativeSatangSchema,
-    receivable: z.literal('not_built'),
+    receivable: z.literal('not_tracked'),
   }),
   months: z.array(pnlMonthSchema),
 });
@@ -275,3 +275,80 @@ export const customersReportSchema = z.object({
   customers: z.array(customerReportRowSchema),
 });
 export type CustomersReport = z.infer<typeof customersReportSchema>;
+
+/** The cash report's query: a range like the other reports, and `emptyDays=true` to list days with no activity too. */
+export const cashReportQuerySchema = z
+  .object({
+    from: isoDateSchema,
+    to: isoDateSchema,
+    emptyDays: z.enum(['true', 'false']).optional(),
+  })
+  .refine((q) => q.from <= q.to, { message: 'from must not be after to', path: ['to'] })
+  .refine((q) => reportRangeDays(q.from, q.to) <= REPORT_MAX_DAYS, {
+    message: `the range must not exceed ${REPORT_MAX_DAYS} days`,
+    path: ['to'],
+  });
+export type CashReportQuery = z.infer<typeof cashReportQuerySchema>;
+
+const receiptsByMethodSchema = z.object({
+  cash: nonNegativeSatangSchema,
+  promptpay: nonNegativeSatangSchema,
+  gov_copay: nonNegativeSatangSchema,
+  platform: nonNegativeSatangSchema,
+  other: nonNegativeSatangSchema,
+});
+
+const cashFiguresShape = {
+  receiptsByMethod: receiptsByMethodSchema,
+  /** All methods; equals the revenue report's figure for the same days. */
+  receiptsSatang: nonNegativeSatangSchema,
+  /** The cash column only: confirmed cash payments minus cash refunds (0 while every sale is a transfer). */
+  cashInSatang: nonNegativeSatangSchema,
+  /** The "buying goods" column of the Revenue Department form (the categories the owner flagged as goods). */
+  purchasesSatang: nonNegativeSatangSchema,
+  /** Every other unvoided expense. */
+  otherExpensesSatang: nonNegativeSatangSchema,
+  paymentsSatang: nonNegativeSatangSchema,
+};
+
+/**
+ * Receipts and payments (D-35), owner only (`finance.pnl`). A working record behind the Revenue
+ * Department's รายงานเงินสดรับ-จ่าย, not a filed document. Receipts are all payment methods; expenses
+ * are assumed paid from the same account. `runningNetSatang` = the owner's start amount + receipts
+ * minus payments since the start date; it is null before that day or when no start amount is set
+ * (`openingNotSet`), never 0 for "unknown". It is not a bank statement.
+ */
+export const cashReportSchema = z.object({
+  from: isoDateSchema,
+  to: isoDateSchema,
+  opening: z.object({ amountSatang: nonNegativeSatangSchema, asOf: isoDateSchema }).nullable(),
+  openingNotSet: z.boolean(),
+  runningStartSatang: satangSchema.nullable(),
+  runningEndSatang: satangSchema.nullable(),
+  days: z.array(
+    z.object({
+      businessDate: isoDateSchema,
+      ...cashFiguresShape,
+      orderCount: z.number().int().min(0),
+      expenseCount: z.number().int().min(0),
+      /** Receipts minus payments of the day. */
+      netSatang: satangSchema,
+      runningNetSatang: satangSchema.nullable(),
+    }),
+  ),
+  totals: z.object({
+    ...cashFiguresShape,
+    orderCount: z.number().int().min(0),
+    expenseCount: z.number().int().min(0),
+    receiptsMinusPaymentsSatang: satangSchema,
+  }),
+  months: z.array(z.object({ month: z.string().regex(/^\d{4}-\d{2}$/), ...cashFiguresShape })),
+  excludedOrderIds: excludedOrderIdsSchema,
+  /** False when orders were set aside as inconsistent (in the range, or between the opening day and it). */
+  complete: z.boolean(),
+  reconciliation: z.object({
+    revenueReportSatang: nonNegativeSatangSchema,
+    differenceSatang: satangSchema,
+  }),
+});
+export type CashReport = z.infer<typeof cashReportSchema>;

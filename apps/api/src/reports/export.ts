@@ -4,13 +4,26 @@
  * figures). Headers are Thai, from the i18n catalog.
  */
 import { type Db, insertAudit } from '@sds/db';
-import { itemSales, itemsCsvRows, revenueByDay, revenueCsvRows, toCsv } from '@sds/finance';
+import {
+  cashCsvRows,
+  itemSales,
+  itemsCsvRows,
+  revenueByDay,
+  revenueCsvRows,
+  toCsv,
+} from '@sds/finance';
 import { th } from '@sds/i18n';
-import { ORDER_CHANNELS, PAYMENT_METHODS, type RevenueReportQuery } from '@sds/shared';
+import {
+  type CashReportQuery,
+  ORDER_CHANNELS,
+  PAYMENT_METHODS,
+  type RevenueReportQuery,
+} from '@sds/shared';
 import type { Principal } from '../auth/service.ts';
+import { cashReport } from './cash.ts';
 import { loadReportOrders } from './service.ts';
 
-export type ExportKind = 'revenue' | 'items';
+export type ExportKind = 'revenue' | 'items' | 'cash';
 
 export interface CsvFile {
   filename: string;
@@ -34,19 +47,42 @@ const itemHeaders = [
   th['report.export.itemShare'],
 ];
 
+const cashHeaders = [
+  th['report.export.date'],
+  ...PAYMENT_METHODS.map((m) =>
+    th['report.export.cash.receiptFrom'].replace('{method}', th[`payment.method.${m}`]),
+  ),
+  th['report.export.cash.receipts'],
+  th['report.export.cash.purchases'],
+  th['report.export.cash.otherExpenses'],
+  th['report.export.cash.payments'],
+  th['report.export.cash.running'],
+];
+
 export async function exportCsv(
   db: Db,
   actor: Principal,
   meta: { ip: string | null },
   kind: ExportKind,
-  query: RevenueReportQuery,
+  query: RevenueReportQuery | CashReportQuery,
 ): Promise<CsvFile> {
-  const { usable: orders, excludedOrderIds } = await loadReportOrders(db, query);
-  const rows =
-    kind === 'revenue'
-      ? revenueCsvRows(revenueByDay(orders), revenueHeaders, th['report.export.total'])
-      : itemsCsvRows(itemSales(orders), itemHeaders);
-  const dataRows = rows.length - 1 - (kind === 'revenue' && rows.length > 2 ? 1 : 0);
+  let rows: ReturnType<typeof itemsCsvRows>;
+  let dataRows: number;
+  let excludedOrders: number;
+  if (kind === 'cash') {
+    const report = await cashReport(db, query);
+    rows = cashCsvRows(report, cashHeaders, th['report.export.total']);
+    dataRows = report.days.length;
+    excludedOrders = report.excludedOrderIds.length;
+  } else {
+    const { usable: orders, excludedOrderIds } = await loadReportOrders(db, query);
+    rows =
+      kind === 'revenue'
+        ? revenueCsvRows(revenueByDay(orders), revenueHeaders, th['report.export.total'])
+        : itemsCsvRows(itemSales(orders), itemHeaders);
+    dataRows = rows.length - 1 - (kind === 'revenue' && rows.length > 2 ? 1 : 0);
+    excludedOrders = excludedOrderIds.length;
+  }
   await insertAudit(db, {
     actorType: 'staff',
     actorId: actor.staffId,
@@ -60,7 +96,7 @@ export async function exportCsv(
       from: query.from,
       to: query.to,
       rows: dataRows,
-      excludedOrders: excludedOrderIds.length,
+      excludedOrders,
     },
   });
   return { filename: `${kind}-${query.from}-${query.to}.csv`, body: toCsv(rows) };

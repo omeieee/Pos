@@ -11,6 +11,7 @@ import {
   emptyExpenseForm,
   expenseFormFrom,
   setCategoryActive,
+  setCategoryBuyingGoods,
   validateExpenseForm,
 } from './expense-model.ts';
 import { expenseRows, incompleteDetails } from './pnl-model.ts';
@@ -142,6 +143,12 @@ describe('expense categories', () => {
     const thaiOnly = addCategory(categories, { nameTh: 'น้ำแข็ง', nameEn: '' });
     expect(thaiOnly?.at(-1)?.key).toMatch(/^[a-z][a-z0-9_]{0,39}$/);
     expect(thaiOnly?.at(-1)).toMatchObject({ nameTh: 'น้ำแข็ง', nameEn: null, active: true });
+    // An owner-added category counts as buying goods unless the form says otherwise.
+    expect(thaiOnly?.at(-1)?.buyingGoods).toBe(true);
+    expect(
+      addCategory(categories, { nameTh: 'ค่าตรวจสลิป', nameEn: '', buyingGoods: false })?.at(-1)
+        ?.buyingGoods,
+    ).toBe(false);
     expect(addCategory(categories, { nameTh: '  ', nameEn: '' })).toBeNull();
     expect(addCategory(categories, { nameTh: 'x', nameEn: 'y'.repeat(200) })?.at(-1)?.key).toMatch(
       /^[a-z][a-z0-9_]{0,39}$/,
@@ -153,6 +160,28 @@ describe('expense categories', () => {
     expect(off).toHaveLength(2);
     expect(off.find((c) => c.key === 'gas')?.active).toBe(false);
     expect(setCategoryActive(off, 'gas', true).find((c) => c.key === 'gas')?.active).toBe(true);
+  });
+});
+
+describe('the buying goods flag of a category', () => {
+  const list = [
+    { key: 'ingredients', nameTh: 'วัตถุดิบ', nameEn: null, active: true },
+    { key: 'gas', nameTh: 'แก๊ส', nameEn: null, active: true, buyingGoods: false },
+  ];
+
+  test('is set in place, for one key, and nothing else changes', () => {
+    const next = setCategoryBuyingGoods(list, 'gas', true);
+    expect(next.map((c) => c.key)).toEqual(['ingredients', 'gas']);
+    expect(next.find((c) => c.key === 'gas')?.buyingGoods).toBe(true);
+    expect(next.find((c) => c.key === 'ingredients')).toEqual(list[0]);
+    expect(list[1]?.buyingGoods).toBe(false);
+  });
+
+  test('an old row without the flag is saved with an explicit value when it is toggled', () => {
+    expect(
+      setCategoryBuyingGoods(list, 'ingredients', false).find((c) => c.key === 'ingredients')
+        ?.buyingGoods,
+    ).toBe(false);
   });
 });
 

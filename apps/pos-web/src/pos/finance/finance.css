@@ -384,3 +384,15 @@
     text-align: left;
   }
 }
+
+/* ---------- Cash receipts and payments ---------- */
+.fin-check {
+  display: flex;
+  align-items: center;
+  gap: var(--sds-space-sm);
+  min-height: var(--sds-touch-min);
+}
+.fin-table tfoot th,
+.fin-table tfoot td {
+  font-weight: var(--sds-font-weight-bold);
+}

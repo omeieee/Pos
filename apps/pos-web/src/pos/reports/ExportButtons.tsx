@@ -4,7 +4,13 @@ import { s } from '../../design/style.ts';
 import { useAuthStore, useServices, useT } from '../../ui/hooks.ts';
 import type { DateRange } from './report-model.ts';
 
-type Kind = 'revenue' | 'items';
+type Kind = 'revenue' | 'items' | 'cash';
+
+const LABEL = {
+  revenue: 'dash.export.revenue',
+  items: 'dash.export.items',
+  cash: 'cash.export',
+} as const;
 type Outcome = { kind: 'done'; name: string } | { kind: 'failed' } | null;
 
 /**
@@ -12,7 +18,14 @@ type Outcome = { kind: 'done'; name: string } | { kind: 'failed' } | null;
  * asks the owner to confirm first and again if the server says so; cancelling it says nothing. The
  * file is saved through the platform's file output, and the API writes the audit row.
  */
-export function ExportButtons({ range }: { range: DateRange }) {
+export function ExportButtons({
+  range,
+  kinds = ['revenue', 'items'],
+}: {
+  range: DateRange;
+  /** Which files to offer (default: the overview's two). */
+  kinds?: readonly Kind[];
+}) {
   const tr = useT();
   const auth = useAuthStore();
   const { api, files } = useServices();
@@ -34,7 +47,7 @@ export function ExportButtons({ range }: { range: DateRange }) {
 
   return (
     <>
-      {(['revenue', 'items'] as const).map((kind) => (
+      {kinds.map((kind) => (
         <button
           key={kind}
           type="button"
@@ -43,7 +56,7 @@ export function ExportButtons({ range }: { range: DateRange }) {
           onClick={() => void run(kind)}
         >
           <Gi n="download" size="sm" />
-          {tr(kind === 'revenue' ? 'dash.export.revenue' : 'dash.export.items')}
+          {tr(LABEL[kind])}
         </button>
       ))}
       <span role="status" className="g-t-c" style={s('align-self:center')}>

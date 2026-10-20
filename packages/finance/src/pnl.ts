@@ -33,7 +33,7 @@
  * The commission is never inside `expensesSatang`.
  *
  * Gov co-pay is revenue at the full amount on the sale date (it is inside `revenueSatang`). The
- * receivable until the next-day settlement is not tracked anywhere yet: `govCopay.receivable` says so.
+ * receivable until the next-day settlement is not tracked (owner decision 2026-10-21: no settlement mark in P7): `govCopay.receivable` says so.
  */
 import {
   type CommissionSummary,
@@ -120,7 +120,7 @@ export interface Pnl extends PnlFigures {
   /** Of commission and the `platform_fees` expense, which one is deducted (`only_one` = no overlap). */
   platformFeesBasis: PlatformFeesBasis;
   platformFeesExpensesSatang: number;
-  govCopay: { revenueSatang: number; receivable: 'not_built' };
+  govCopay: { revenueSatang: number; receivable: 'not_tracked' };
   missing: {
     excludedOrderIds: string[];
     uncostedOrderIds: string[];
@@ -276,7 +276,7 @@ export function profitAndLoss(input: PnlInput): Pnl {
     ingredientsExpensesSatang: ingredients,
     platformFeesBasis: fees.basis,
     platformFeesExpensesSatang: feesExpense,
-    govCopay: { revenueSatang: govCopay, receivable: 'not_built' },
+    govCopay: { revenueSatang: govCopay, receivable: 'not_tracked' },
     missing: {
       excludedOrderIds: excluded,
       uncostedOrderIds: margin.uncostedOrderIds,

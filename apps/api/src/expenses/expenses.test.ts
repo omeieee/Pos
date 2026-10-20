@@ -432,6 +432,23 @@ describe('categories', () => {
     expect(used.res.statusCode).toBe(201);
   });
 
+  test('changing the buying goods flag is saved and audited by key', async () => {
+    const cur = await read();
+    const res = await put(manager, {
+      expectedVersion: cur.version,
+      categories: cur.value.categories.map((c) =>
+        c.key === 'lunch_boxes' ? { ...c, buyingGoods: true } : c,
+      ),
+    });
+    expect(res.statusCode).toBe(200);
+    const saved = (res.json() as ExpenseCategoriesResponse).value.categories;
+    expect(saved.find((c) => c.key === 'lunch_boxes')?.buyingGoods).toBe(true);
+    const audits = (await h.auditRows('expense_categories')).filter(
+      (a) => a.action === 'expense.categories_update',
+    );
+    expect(audits[audits.length - 1]?.after).toMatchObject({ buyingGoodsChanged: ['lunch_boxes'] });
+  });
+
   test('a list may not drop a key; it may switch one off', async () => {
     const cur = await read();
     const dropped = await put(manager, {

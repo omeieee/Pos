@@ -150,6 +150,7 @@ stateDiagram-v2
 - Platform orders count the platform price as revenue and the commission as an expense.
 - Cost of goods = Σ(`unit_cost_satang × qty`) from item snapshots, until P7 adds recipes. `est_cost_satang` and `unit_cost_satang` are nullable: `NULL` = no cost entered, `0` = a real zero cost. Margins cover only costed lines/orders and name the rest (D-32).
 - Profit and loss (owner only, D-33): revenue - cost of goods (costed orders) - platform commission - unvoided `expenses` (by `business_date`) = net profit before income tax; the `platform_fees` expense category and the per-order commission are separate lines, both deducted. The answer says `complete: false` and lists what is missing instead of guessing.
+- Receipts and payments (owner only, D-35): per business day, receipts by payment method (the same net-paid rule as revenue, so the columns add up to revenue; every method is a receipt, the shop has no cash drawer) beside unvoided `expenses`, split into buying goods (categories flagged `buyingGoods` in the `expense_categories` setting; defaults ingredients and packaging) and other expenses. The running net = the owner's start amount (`settings.cash_opening`) + receipts - payments since its date; it is not a bank statement. A working record after the Revenue Department's รายงานเงินสดรับ-จ่าย, not a filing.
 
 ## 7. Retention (defaults, all configurable; confirm legal periods in [06-legal-compliance.md](06-legal-compliance.md))
 | Data | Keep |

@@ -189,7 +189,7 @@ describe('the owner P&L sample (docs/p7-pnl-sample.md)', () => {
       complete: false,
       incompleteReasons: ['orders_uncosted'],
       voidedExpenseCount: 1,
-      govCopay: { revenueSatang: 6000, receivable: 'not_built' },
+      govCopay: { revenueSatang: 6000, receivable: 'not_tracked' },
     });
     expect(p.commission).toMatchObject({ recordedSatang: 300, estimatedSatang: 4250 });
     expect(p.margin).toMatchObject({

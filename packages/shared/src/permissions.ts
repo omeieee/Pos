@@ -30,6 +30,8 @@ export const PERMISSIONS = [
   'settings.bank_account',
   /** The per-platform commission rates (Grab, LINE MAN) that reports use. Owner only. */
   'settings.platform_commission',
+  /** The start amount (amount and as-of date) of the receipts and payments report. Owner only, with step-up. */
+  'settings.cash_opening',
   'staff.manage',
   'device.manage',
   'data.export',
@@ -83,6 +85,7 @@ export const STEP_UP_PERMISSIONS: ReadonlySet<Permission> = new Set<Permission>(
   'settings.receipt',
   'settings.bank_account',
   'settings.platform_commission',
+  'settings.cash_opening',
   'settings.tax_profile',
   'payment.void_refund',
   'order.edit_past',

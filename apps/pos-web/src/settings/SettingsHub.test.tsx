@@ -41,6 +41,7 @@ describe('the hub', () => {
       '#/settings/platform-commission',
       '#/expenses',
       '#/pnl',
+      '#/cash',
       '#/tax',
       '#/settings/devices',
       '#/settings/staff',
@@ -79,6 +80,7 @@ describe('the hub', () => {
     expect(links()).not.toContain('#/expenses');
     expect(links()).not.toContain('#/pnl');
     expect(links()).not.toContain('#/tax');
+    expect(links()).not.toContain('#/cash');
   });
 });
 

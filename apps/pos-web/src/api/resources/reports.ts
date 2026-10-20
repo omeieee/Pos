@@ -1,5 +1,7 @@
 /** Typed API client: back-office reports and the accountant's CSV files (P6). */
 import {
+  cashReportQuerySchema,
+  cashReportSchema,
   customersReportSchema,
   heatmapReportSchema,
   itemsReportSchema,
@@ -16,7 +18,7 @@ import { checked, type Transport } from '../http.ts';
 const BOM = String.fromCharCode(0xfeff);
 
 export type ReportRange = z.input<typeof revenueReportQuerySchema>;
-export type ExportKind = 'revenue' | 'items';
+export type ExportKind = 'revenue' | 'items' | 'cash';
 
 export function makeReports({ get }: Transport) {
   const read = async <S extends z.ZodType>(path: string, schema: S, range: ReportRange) =>
@@ -39,6 +41,23 @@ export function makeReports({ get }: Transport) {
     heatmap: (range: ReportRange) => read('/v1/reports/heatmap', heatmapReportSchema, range),
     /** Profit and loss for the range. Owner only (`finance.pnl`). */
     pnl: (range: ReportRange) => read('/v1/reports/pnl', pnlReportSchema, range),
+    /**
+     * Receipts and payments per day with a running net from the start amount (D-35). Owner only
+     * (`finance.pnl`). `emptyDays` also lists the days with no activity.
+     */
+    cash: async (range: ReportRange, options: { emptyDays?: boolean } = {}) =>
+      (
+        await get({
+          path: '/v1/reports/cash',
+          query: checked(cashReportQuerySchema, {
+            ...range,
+            ...(options.emptyDays ? { emptyDays: 'true' } : {}),
+          }) as unknown as Record<string, string>,
+          schema: cashReportSchema,
+          session: true,
+          device: 'optional',
+        })
+      ).data,
     /**
      * The income tax estimate for a Buddhist Era year, annual (ภ.ง.ด.90) or half-year (ภ.ง.ด.94).
      * Owner only. A year with no rules file is 422 TAX_RULES_NOT_AVAILABLE.

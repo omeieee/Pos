@@ -31,7 +31,11 @@ import {
   bankAccountPatchInputSchema,
   bankAccountSettingsSchema,
   businessDaySettingsSchema,
+  type CashOpeningSettings,
+  cashOpeningPatchInputSchema,
+  cashOpeningSettingsSchema,
   DEFAULT_BANK_ACCOUNT,
+  DEFAULT_CASH_OPENING,
   DEFAULT_CUTOFF_MINUTES,
   DEFAULT_DELIVERY_SETTINGS,
   DEFAULT_LINE_ORDERING,
@@ -114,6 +118,11 @@ interface Resource {
    * response is masked to "not set" for any other role as a second line of defence.
    */
   platformCommission?: true;
+  /**
+   * The start amount of the receipts-payments report (D-35, stored as `cash_opening`): handled like the commission rates. Owner only to read
+   * (`finance.pnl`) and to change (step-up), audited, alerted, never on the realtime feed.
+   */
+  cashOpening?: true;
   /** Who may read it. Defaults to `settings.view`. */
   viewPermission?: Permission;
   /** The change also answers PUT (a whole-value replacement) besides PATCH. Same handler. */
@@ -219,6 +228,18 @@ export const RESOURCES: readonly Resource[] = [
     platformCommission: true,
     viewPermission: 'finance.pnl',
   },
+  {
+    // The owner's start amount at the start of a business day, from which the report keeps a
+    // running net (receipts minus payments). Stored key kept as `cash_opening` (D-35). No built-in value: both null until the owner sets them.
+    route: 'cash-opening',
+    key: 'cash_opening',
+    schema: cashOpeningSettingsSchema,
+    defaults: DEFAULT_CASH_OPENING,
+    patch: cashOpeningPatchInputSchema,
+    editPermission: 'settings.cash_opening',
+    cashOpening: true,
+    viewPermission: 'finance.pnl',
+  },
 ];
 
 export interface SettingResponse {
@@ -246,8 +267,8 @@ function toResponse(
   const shown = (value: unknown) =>
     resource.bankAccount
       ? bankAccountView(value as BankAccountSettings, role)
-      : resource.platformCommission && role !== 'owner'
-        ? DEFAULT_PLATFORM_COMMISSION
+      : (resource.platformCommission || resource.cashOpening) && role !== 'owner'
+        ? resource.defaults
         : value;
   if (!row) return { value: shown(resource.defaults), version: 0, rev: 0, updatedAt: null };
   return {
@@ -279,6 +300,12 @@ export async function currentPromptpayId(db: Db): Promise<PromptpaySettings | nu
 export async function currentPlatformCommission(db: Db): Promise<PlatformCommissionSettings> {
   const row = await getSettingRow(db, 'platform_commission');
   return row ? platformCommissionSettingsSchema.parse(row.value) : DEFAULT_PLATFORM_COMMISSION;
+}
+
+/** The start amount for the receipts-payments report, read from settings every time. Never saved = both `null`. */
+export async function currentCashOpening(db: Db): Promise<CashOpeningSettings> {
+  const row = await getSettingRow(db, 'cash_opening');
+  return row ? cashOpeningSettingsSchema.parse(row.value) : DEFAULT_CASH_OPENING;
 }
 
 /**
@@ -429,7 +456,9 @@ export async function patchSetting(
             ? 'settings.bank_account_change'
             : resource.platformCommission
               ? 'settings.platform_commission_change'
-              : 'settings.update',
+              : resource.cashOpening
+                ? 'settings.cash_opening_change'
+                : 'settings.update',
       entity: 'settings',
       entityId: resource.key,
       before: view.before,
@@ -445,14 +474,21 @@ export async function patchSetting(
         }),
       );
     }
-    if (resource.receipt || resource.bankAccount || resource.platformCommission) {
+    if (
+      resource.receipt ||
+      resource.bankAccount ||
+      resource.platformCommission ||
+      resource.cashOpening
+    ) {
       // The tax ID, the address and the account number never ride the realtime feed; the
       // commission rates are not a synced setting either.
       const kind = resource.bankAccount
         ? 'settings.bank_account_changed'
         : resource.platformCommission
           ? 'settings.platform_commission_changed'
-          : 'settings.receipt_changed';
+          : resource.cashOpening
+            ? 'settings.cash_opening_changed'
+            : 'settings.receipt_changed';
       emit(securityAlert(ctx, kind, 'warn', { staffId: actor.staffId, deviceId: actor.deviceId }));
       return toResponse(resource, saved, actor.role);
     }

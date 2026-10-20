@@ -3,6 +3,8 @@ import {
   bankAccountPatchInputSchema,
   bankAccountViewSchema,
   businessDaySettingsSchema,
+  cashOpeningPatchInputSchema,
+  cashOpeningSettingsSchema,
   deliveryPatchInputSchema,
   deliverySettingsSchema,
   govCopayPatchInputSchema,
@@ -120,6 +122,15 @@ export function makeSettings({ get, patch, put }: Transport) {
       'platform-commission',
       platformCommissionSettingsSchema,
       platformCommissionPatchInputSchema,
+    ),
+    /**
+     * The start amount at the start of a business day (amount and date, null until set), the
+     * start of the receipts-payments report's running net. Owner only to read, and to change with a step-up.
+     */
+    cashOpening: settingsResource(
+      'cash-opening',
+      cashOpeningSettingsSchema,
+      cashOpeningPatchInputSchema,
     ),
     /**
      * The owner's tax inputs for one Buddhist Era year (extra allowances, method preference).

@@ -46,6 +46,26 @@ export const SAMPLE_EXPENSES: readonly ExpenseDto[] = expenseDtoSchema.array().p
   }),
 );
 
+/**
+ * What was received in the P&L sample fortnight, one row per paid order (`docs/p7-cash-sample.md`):
+ * the cash report of the dev mock adds the live expense ledger to these. Not computed, not real.
+ */
+export const SAMPLE_RECEIPTS: readonly {
+  date: string;
+  method: 'cash' | 'promptpay' | 'gov_copay' | 'platform' | 'other';
+  satang: number;
+}[] = [
+  { date: '2026-09-24', method: 'cash', satang: 13000 },
+  { date: '2026-09-25', method: 'promptpay', satang: 13000 },
+  { date: '2026-09-26', method: 'cash', satang: 6000 },
+  { date: '2026-09-27', method: 'platform', satang: 8000 },
+  { date: '2026-09-28', method: 'cash', satang: 5000 }, // 60.00 less 10.00 handed back
+  { date: '2026-09-30', method: 'gov_copay', satang: 6000 },
+  { date: '2026-10-01', method: 'cash', satang: 2500 },
+  { date: '2026-10-03', method: 'promptpay', satang: 12000 },
+  { date: '2026-10-07', method: 'cash', satang: 3000 },
+];
+
 const margin = (costedRevenue: number, cost: number) => ({
   costedOrderCount: 10,
   costedRevenueSatang: costedRevenue,
@@ -107,7 +127,7 @@ export const SAMPLE_PNL: PnlReport = pnlReportSchema.parse({
   ingredientsExpensesSatang: 25000,
   platformFeesBasis: 'commission',
   platformFeesExpensesSatang: 1500,
-  govCopay: { revenueSatang: 6000, receivable: 'not_built' },
+  govCopay: { revenueSatang: 6000, receivable: 'not_tracked' },
   months: [
     {
       month: '2026-09',

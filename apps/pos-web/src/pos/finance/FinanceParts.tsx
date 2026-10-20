@@ -1,4 +1,4 @@
-import { formatDate } from '@sds/i18n';
+import { DISPLAY_TIME_ZONE, formatDate } from '@sds/i18n';
 import type { ReactNode } from 'react';
 import { errorText } from '../../api/errors.ts';
 import { PageHeader } from '../../design/PageHeader.tsx';
@@ -37,6 +37,18 @@ export function FinancePage({
 export function useDayText() {
   const locale = useLocale();
   return (isoDate: string) => formatDate(`${isoDate}T12:00:00+07:00`, locale);
+}
+
+/** "ต.ค. 2569" / "Oct 2026" for a `YYYY-MM` month. */
+export function useMonthText() {
+  const locale = useLocale();
+  const tag = locale === 'th' ? 'th-TH-u-ca-buddhist' : 'en-GB-u-ca-gregory';
+  const format = new Intl.DateTimeFormat(tag, {
+    month: 'short',
+    year: 'numeric',
+    timeZone: DISPLAY_TIME_ZONE,
+  });
+  return (month: string) => format.format(new Date(`${month}-15T12:00:00+07:00`));
 }
 
 /**

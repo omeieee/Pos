@@ -462,3 +462,32 @@ export const platformCommissionPatchInputSchema = z
   })
   .refine(needsAField, needsAFieldMessage);
 export type PlatformCommissionPatchInput = z.infer<typeof platformCommissionPatchInputSchema>;
+
+// ---------- Start amount (receipts and payments report, D-35; the stored key stays `cash_opening`) ----------
+
+/**
+ * The owner's start amount at the START of the business day `asOf`; the report's running net counts
+ * receipts minus payments from there. The shop has no cash drawer, so it is not a cash count. Both
+ * are `null` until set (no built-in value: the report then says the start amount is not set and
+ * shows no running net). They are set together or cleared together.
+ */
+export const cashOpeningSettingsSchema = z
+  .strictObject({
+    amountSatang: nonNegativeSatangSchema.nullable().default(null),
+    asOf: isoDateSchema.nullable().default(null),
+  })
+  .refine((v) => (v.amountSatang === null) === (v.asOf === null), {
+    message: 'the amount and the date are set together',
+    path: ['asOf'],
+  });
+export type CashOpeningSettings = z.infer<typeof cashOpeningSettingsSchema>;
+export const DEFAULT_CASH_OPENING: CashOpeningSettings = { amountSatang: null, asOf: null };
+
+export const cashOpeningPatchInputSchema = z
+  .strictObject({
+    expectedVersion,
+    amountSatang: nonNegativeSatangSchema.nullable().optional(),
+    asOf: isoDateSchema.nullable().optional(),
+  })
+  .refine(needsAField, needsAFieldMessage);
+export type CashOpeningPatchInput = z.infer<typeof cashOpeningPatchInputSchema>;

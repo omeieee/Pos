@@ -356,9 +356,61 @@ describe('the categories', () => {
       expectedVersion: 4,
       categories: [
         ...DEFAULT_EXPENSE_CATEGORIES.categories,
-        { key: 'lunch_boxes', nameTh: 'กล่องข้าว', nameEn: 'Lunch boxes', active: true },
+        {
+          key: 'lunch_boxes',
+          nameTh: 'กล่องข้าว',
+          nameEn: 'Lunch boxes',
+          active: true,
+          buyingGoods: true, // the add form ticks "buying goods" by default
+        },
       ],
     });
+  });
+
+  test('the add form can untick buying goods (a verification fee is not goods)', async () => {
+    const save = vi.fn(async () => categoryAnswer());
+    await open({
+      categories: { read: async () => categoryAnswer(DEFAULT_EXPENSE_CATEGORIES, 4), save },
+    });
+    const box = within(panel()).getByRole('checkbox', {
+      name: th['exp.cat.addBuyingGoods'],
+    }) as HTMLInputElement;
+    expect(box.checked).toBe(true);
+    fireEvent.click(box);
+    fireEvent.change(within(panel()).getByLabelText(th['exp.cat.nameTh']), {
+      target: { value: 'ค่าตรวจสลิป' },
+    });
+    fireEvent.click(within(panel()).getByRole('button', { name: th['exp.cat.add'] }));
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+    const sent = (
+      save.mock.calls[0] as unknown as [{ categories: { nameTh: string; buyingGoods?: boolean }[] }]
+    )[0];
+    expect(sent.categories.at(-1)).toMatchObject({ nameTh: 'ค่าตรวจสลิป', buyingGoods: false });
+  });
+
+  test('each category shows whether it counts as buying goods (the default for an old list) and the box saves a change', async () => {
+    const save = vi.fn(async () => categoryAnswer());
+    const old = {
+      categories: DEFAULT_EXPENSE_CATEGORIES.categories.map(({ buyingGoods: _, ...c }) => c),
+    };
+    await open({ categories: { read: async () => categoryAnswer(old, 2), save } });
+    const boxOf = (name: string) =>
+      within(panel()).getByRole('checkbox', {
+        name: tr('exp.cat.buyingGoodsOf', { name }),
+      }) as HTMLInputElement;
+    expect(boxOf('วัตถุดิบ').checked).toBe(true);
+    expect(boxOf('บรรจุภัณฑ์').checked).toBe(true);
+    expect(boxOf('แก๊ส').checked).toBe(false);
+    fireEvent.click(boxOf('บรรจุภัณฑ์'));
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+    const sent = (
+      save.mock.calls[0] as unknown as [
+        { expectedVersion: number; categories: { key: string; buyingGoods?: boolean }[] },
+      ]
+    )[0];
+    expect(sent.expectedVersion).toBe(2);
+    expect(sent.categories.find((c) => c.key === 'packaging')?.buyingGoods).toBe(false);
+    expect(sent.categories.find((c) => c.key === 'ingredients')?.buyingGoods).toBeUndefined();
   });
 
   test('a category without a Thai name is refused', async () => {

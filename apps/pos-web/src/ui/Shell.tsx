@@ -27,6 +27,9 @@ const ExpensesScreen = lazy(async () => ({
 const PnlScreen = lazy(async () => ({
   default: (await import('../pos/finance/PnlScreen.tsx')).PnlScreen,
 }));
+const CashScreen = lazy(async () => ({
+  default: (await import('../pos/finance/CashScreen.tsx')).CashScreen,
+}));
 const TaxScreen = lazy(async () => ({
   default: (await import('../pos/finance/TaxScreen.tsx')).TaxScreen,
 }));
@@ -50,10 +53,18 @@ const NAV_ICON: Record<RouteDef['id'], GiName> = {
   expenses: 'receipt2',
   pnl: 'dollar',
   tax: 'doc',
+  cash: 'cash',
 };
 
 /** Not in the rail or the tab bar: Grab / LINE MAN is reached from the cart, the overview is a laptop page. */
-const RAIL_HIDDEN = new Set<RouteDef['id']>(['platform', 'dashboard', 'expenses', 'pnl', 'tax']);
+const RAIL_HIDDEN = new Set<RouteDef['id']>([
+  'platform',
+  'dashboard',
+  'expenses',
+  'pnl',
+  'tax',
+  'cash',
+]);
 const TAB_ITEMS = new Set<RouteDef['id']>(['new', 'kitchen', 'orders', 'settings']);
 
 const initial = (name: string) => Array.from(name.trim())[0] ?? '';
@@ -145,6 +156,7 @@ export function Shell() {
         route?.id === 'dashboard' ||
         route?.id === 'expenses' ||
         route?.id === 'pnl' ||
+        route?.id === 'cash' ||
         route?.id === 'tax' ? (
           <OutboxStrip />
         ) : null}
@@ -363,6 +375,7 @@ function SideNav({
         {later(tr('nav.customers'), 'people')}
         {link('expenses', tr('nav.expenses'), 'receipt2')}
         {link('pnl', tr('nav.costProfit'), 'dollar')}
+        {link('cash', tr('nav.cash'), 'cash')}
         {link('tax', tr('nav.tax'), 'doc')}
         <div style={s('flex-grow:1')} />
         {link('settings', tr('nav.settings'), 'sliders')}
@@ -416,6 +429,7 @@ function PageSwitch({
       return <DashboardScreen />;
     case 'expenses':
     case 'pnl':
+    case 'cash':
     case 'tax':
       return (
         <Suspense
@@ -429,6 +443,8 @@ function PageSwitch({
             <ExpensesScreen />
           ) : resolved.page === 'pnl' ? (
             <PnlScreen />
+          ) : resolved.page === 'cash' ? (
+            <CashScreen />
           ) : (
             <TaxScreen />
           )}

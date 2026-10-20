@@ -67,6 +67,11 @@ export const enFinance = {
   'exp.cat.add': 'Add category',
   'exp.cat.error.nameTh': 'Enter the Thai name of the category',
   'exp.cat.saved': 'Categories saved',
+  'exp.cat.buyingGoodsHead': 'Counts as “buying goods”',
+  'exp.cat.buyingGoodsHint':
+    'Ticked categories go in the “buying goods” column of the receipts-payments report; unticked ones go in “other expenses” (for example, a payment-verification fee is not goods)',
+  'exp.cat.buyingGoodsOf': 'Count {name} as buying goods',
+  'exp.cat.addBuyingGoods': 'Counts as buying goods',
 
   // Profit and loss
   'pnl.title': 'Cost and profit',
@@ -111,7 +116,7 @@ export const enFinance = {
   'pnl.voidedExpenses': '{count} voided expenses are not counted',
   'pnl.copay.title': 'Government co-pay',
   'pnl.copay.revenue': 'Included in revenue: {amount} (counted on the sale date)',
-  'pnl.copay.receivable': 'The government share still to receive: not built yet',
+  'pnl.copay.receivable': 'The government share still to receive: not tracked',
   'pnl.months.title': 'Month by month',
   'pnl.months.partial': 'The first and last month count only the part inside the chosen dates',
   'pnl.months.col.month': 'Month',
@@ -221,4 +226,58 @@ export const enFinance = {
   'settings.link.expenses.desc': 'Record and void expenses, manage categories',
   'settings.link.pnl.desc': 'Revenue, cost, commission, expenses, net profit',
   'settings.link.tax.desc': 'Estimated income tax, ภ.ง.ด.94 and ภ.ง.ด.90',
+  // Cash receipts and payments (D-35)
+  'cash.title': 'Receipts and payments',
+  'cash.subtitle':
+    'Daily receipts and payments, laid out like the Revenue Department cash receipts-payments report',
+  'cash.workingRecord':
+    'This is a working record for the shop and your accountant, not a document filed with the Revenue Department. A sole proprietor must keep their own cash receipts-payments report in the prescribed form (Revenue Department announcement on income tax No. 161).',
+  'cash.assumptions':
+    'Receipts are every payment method (transfer, PromptPay, co-pay, platform and cash if any). Every expense counts as paid from the same account (expenses have no payment method yet). Co-pay and platform receipts show on the sale date even if the money arrives later.',
+  'cash.notBank':
+    'The running net is not a bank statement: platform and co-pay money arrives later, and the system does not track the day it reaches the account.',
+  'cash.purchasesNote':
+    'Buying goods = expenses in categories ticked “Counts as buying goods” (set on the Expenses screen, Expense categories). Every other category is in Other expenses.',
+  'cash.emptyDays': 'Show days with no activity',
+  'cash.empty': 'No receipts or payments in this period.',
+  'cash.incomplete':
+    '{count} orders were left out because their data is inconsistent. The figures may be short; please check.',
+  'cash.opening.title': 'Start amount (for the running net)',
+  'cash.opening.notSet': 'The start amount is not set, so no running net is shown.',
+  'cash.opening.value': '{amount} at the start of {date}',
+  'cash.opening.edit': 'Set the start amount',
+  'cash.opening.amount': 'Start amount (baht)',
+  'cash.opening.asOf': 'Counting from the start of',
+  'cash.opening.save': 'Save start amount',
+  'cash.opening.clear': 'Clear',
+  'cash.opening.invalid': 'Enter an amount of 0 or more and pick a date.',
+  'cash.opening.saved': 'Start amount saved.',
+  'cash.opening.failed': 'Could not save. Try again.',
+  'cash.running.start': 'Running net at the start',
+  'cash.running.end': 'Running net at the end',
+  'cash.running.none': 'None',
+  'cash.col.date': 'Date',
+  'cash.col.receipts': 'Total received',
+  'cash.col.purchases': 'Buying goods',
+  'cash.col.otherExpenses': 'Other expenses',
+  'cash.col.payments': 'Total paid',
+  'cash.col.running': 'Running net',
+  'cash.group.receipts': 'Receipts (baht)',
+  'cash.group.payments': 'Payments (baht)',
+  'cash.table': 'Daily receipts and payments',
+  'cash.total': 'Total for the period',
+  'cash.months.title': 'Month totals',
+  'cash.summary.title': 'Summary (as on the Revenue Department form)',
+  'cash.summary.receipts': 'Total receipts',
+  'cash.summary.payments': 'Total payments',
+  'cash.summary.paymentsSplit': 'Buying goods {goods} + other expenses {other}',
+  'cash.summary.difference': 'Receipts less payments',
+  'cash.reconcile.ok':
+    'Total receipts {amount} match the sales in the revenue report for the same period.',
+  'cash.reconcile.bad':
+    'Total receipts {amount} do not match sales of {revenue} (difference {difference}). Please tell the system administrator.',
+  'cash.export': 'Export receipts-payments (CSV)',
+  'nav.cash': 'Receipts-payments',
+  'settings.link.cash.desc':
+    'Daily receipts and payments, running net from a start amount, CSV export',
 } as const satisfies Record<keyof typeof thFinance, string>;

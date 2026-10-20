@@ -230,7 +230,7 @@ describe('flags and the rest of the answer', () => {
     expect(screen.getByText(tr('pnl.voidedExpenses', { count: 1 }))).toBeTruthy();
   });
 
-  test('the government co-pay share is in the revenue, and the receivable is "not built yet"', async () => {
+  test('the government co-pay share is in the revenue, and the receivable is "not tracked"', async () => {
     await open();
     expect(screen.getByText(tr('pnl.copay.revenue', { amount: money(6000) }))).toBeTruthy();
     expect(screen.getByText(th['pnl.copay.receivable'])).toBeTruthy();

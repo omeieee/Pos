@@ -12,7 +12,7 @@ describe('who may open what (from the shared role permissions)', () => {
   test('owner and manager see the same pages, except the owner-only ones', () => {
     const all = ['new', 'platform', 'kitchen', 'orders', 'menu', 'settings', 'dashboard'];
     // Managers enter expenses but do not see profit or tax (owner decision 2026-10-20).
-    expect(ids('owner')).toEqual([...all, 'expenses', 'pnl', 'tax']);
+    expect(ids('owner')).toEqual([...all, 'expenses', 'pnl', 'tax', 'cash']);
     expect(ids('manager')).toEqual([...all, 'expenses']);
   });
 
@@ -21,10 +21,12 @@ describe('who may open what (from the shared role permissions)', () => {
     expect(permissionOf('expenses')).toBe('expense.edit');
     expect(permissionOf('pnl')).toBe('finance.pnl');
     expect(permissionOf('tax')).toBe('finance.pnl');
+    expect(permissionOf('cash')).toBe('finance.pnl');
     for (const role of ['cashier', 'kitchen'] as const) {
       expect(ids(role)).not.toContain('expenses');
       expect(ids(role)).not.toContain('pnl');
       expect(ids(role)).not.toContain('tax');
+      expect(ids(role)).not.toContain('cash');
     }
   });
 
@@ -32,6 +34,7 @@ describe('who may open what (from the shared role permissions)', () => {
     const manager = allowedRoutes(permissionsOf('manager'));
     expect(resolveRoute('#/pnl', manager)?.page).toBe('new');
     expect(resolveRoute('#/tax', manager)?.page).toBe('new');
+    expect(resolveRoute('#/cash', manager)?.page).toBe('new');
     expect(resolveRoute('#/expenses', manager)?.page).toBe('expenses');
   });
 

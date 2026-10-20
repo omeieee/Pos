@@ -6,6 +6,7 @@
  * Dates are ISO (Gregorian) on purpose: they sort and import the same everywhere.
  */
 import { ORDER_CHANNELS, PAYMENT_METHODS } from '@sds/shared';
+import type { CashReport } from './cash.ts';
 import type { ItemSales } from './items.ts';
 import type { DayRevenue } from './revenue.ts';
 
@@ -106,4 +107,43 @@ export function itemsCsvRows(items: readonly ItemSales[], headers: readonly stri
       satangDecimal(i.unitShareBp),
     ]),
   ];
+}
+
+const CASH_COLUMNS = PAYMENT_METHODS.length + 6;
+
+/**
+ * Cash receipts and payments (D-35): date, receipts per payment method (cash, promptpay, gov_copay,
+ * platform, other), total receipts, buying goods, other expenses, total payments, running net from the
+ * start amount. The running cell is empty when there is none (no start amount, or a day before it):
+ * never 0.00. The total row (only with `totalLabel` and more than one day) leaves it empty: a running
+ * figure is not a sum.
+ */
+export function cashCsvRows(
+  report: CashReport,
+  headers: readonly string[],
+  totalLabel?: string,
+): CsvCell[][] {
+  if (headers.length !== CASH_COLUMNS) {
+    throw new RangeError(`expected ${CASH_COLUMNS} headers, got ${headers.length}`);
+  }
+  const row = (
+    label: string,
+    f: Omit<CashReport['totals'], 'orderCount'>,
+    running: number | null,
+  ): CsvCell[] => [
+    label,
+    ...PAYMENT_METHODS.map((m) => satangDecimal(f.receiptsByMethod[m])),
+    satangDecimal(f.receiptsSatang),
+    satangDecimal(f.purchasesSatang),
+    satangDecimal(f.otherExpensesSatang),
+    satangDecimal(f.paymentsSatang),
+    running === null ? '' : satangDecimal(running),
+  ];
+  const rows: CsvCell[][] = [[...headers]];
+  if (report.days.length === 0) return rows;
+  for (const d of report.days)
+    rows.push(row(d.businessDate, { ...report.totals, ...d }, d.runningNetSatang));
+  if (totalLabel !== undefined && report.days.length > 1)
+    rows.push(row(totalLabel, report.totals, null));
+  return rows;
 }

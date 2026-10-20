@@ -109,8 +109,9 @@ export function createFakeApi(
     orders?: Partial<Orders>;
     payments?: Partial<Payments>;
     recipients?: Partial<ApiClient['recipients']>;
-    settings?: Partial<Omit<ApiClient['settings'], 'taxProfile'>> & {
+    settings?: Partial<Omit<ApiClient['settings'], 'taxProfile' | 'cashOpening'>> & {
       taxProfile?: Partial<ApiClient['settings']['taxProfile']>;
+      cashOpening?: Partial<ApiClient['settings']['cashOpening']>;
     };
     devices?: Partial<ApiClient['devices']>;
     reports?: Partial<ApiClient['reports']>;
@@ -176,6 +177,14 @@ export function createFakeApi(
         overrides.settings?.taxProfile?.save ?? unexpected('settings.taxProfile.save'),
       ),
     },
+    cashOpening: {
+      read: vi.fn<ApiClient['settings']['cashOpening']['read']>(
+        overrides.settings?.cashOpening?.read ?? unexpected('settings.cashOpening.read'),
+      ),
+      save: vi.fn<ApiClient['settings']['cashOpening']['save']>(
+        overrides.settings?.cashOpening?.save ?? unexpected('settings.cashOpening.save'),
+      ),
+    },
     delivery: vi.fn<ApiClient['settings']['delivery']>(
       overrides.settings?.delivery ??
         (async () => ({
@@ -215,6 +224,9 @@ export function createFakeApi(
       overrides.reports?.exportCsv ?? unexpected('reports.exportCsv'),
     ),
     pnl: vi.fn<ApiClient['reports']['pnl']>(overrides.reports?.pnl ?? unexpected('reports.pnl')),
+    cash: vi.fn<ApiClient['reports']['cash']>(
+      overrides.reports?.cash ?? unexpected('reports.cash'),
+    ),
     tax: vi.fn<ApiClient['reports']['tax']>(overrides.reports?.tax ?? unexpected('reports.tax')),
   };
   // The expense ledger and its category list (P7); every call fails the test unless answered.
@@ -279,6 +291,8 @@ export function createTestServices(
     expenses?: Partial<ApiClient['expenses']>;
     /** What the tax profile read and save answer (every other call fails the test). */
     taxProfile?: Partial<ApiClient['settings']['taxProfile']>;
+    /** What the cash screen's opening-cash read and save answer (every other call fails the test). */
+    cashOpening?: Partial<ApiClient['settings']['cashOpening']>;
     /** What the menu editor's calls answer (every other call fails the test). */
     menuApi?: Partial<ApiClient['menu']>;
     /** What the settings screens' calls answer (every other call fails the test). */
@@ -304,7 +318,14 @@ export function createTestServices(
     ...(options.devices ? { devices: options.devices } : {}),
     ...(options.reports ? { reports: options.reports } : {}),
     ...(options.expenses ? { expenses: options.expenses } : {}),
-    ...(options.taxProfile ? { settings: { taxProfile: options.taxProfile } } : {}),
+    ...(options.taxProfile || options.cashOpening
+      ? {
+          settings: {
+            ...(options.taxProfile ? { taxProfile: options.taxProfile } : {}),
+            ...(options.cashOpening ? { cashOpening: options.cashOpening } : {}),
+          },
+        }
+      : {}),
   });
   const create = api.orders.create;
   const getOrder = api.orders.get;

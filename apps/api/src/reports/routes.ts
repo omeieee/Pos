@@ -1,8 +1,9 @@
-import { revenueReportQuerySchema, taxReportQuerySchema } from '@sds/shared';
+import { cashReportQuerySchema, revenueReportQuerySchema, taxReportQuerySchema } from '@sds/shared';
 import type { FastifyInstance } from 'fastify';
 import { type GuardFactory, principalOf } from '../auth/guards.ts';
 import type { CoreContext } from '../tx.ts';
 import { parse } from '../validate.ts';
+import { cashReport } from './cash.ts';
 import { exportCsv } from './export.ts';
 import {
   customersReport,
@@ -50,15 +51,22 @@ export async function registerReportRoutes(
       .send(await taxReport(ctx.db, parse(taxReportQuerySchema, request.query), ctx.now())),
   );
 
+  // Cash receipts and payments (P7, D-35): owner only (`finance.pnl`), read only, never cached. A working record, not a filing.
+  app.get('/cash', { onRequest: guard('finance.pnl') }, async (request, reply) =>
+    reply
+      .header('cache-control', 'no-store')
+      .send(await cashReport(ctx.db, parse(cashReportQuerySchema, request.query))),
+  );
+
   // The accountant's files. `data.export` is owner only and needs a fresh step-up; each export is audited.
-  for (const kind of ['revenue', 'items'] as const) {
+  for (const kind of ['revenue', 'items', 'cash'] as const) {
     app.get(`/export/${kind}.csv`, { onRequest: guard('data.export') }, async (request, reply) => {
       const file = await exportCsv(
         ctx.db,
         principalOf(request),
         { ip: request.ip ?? null },
         kind,
-        parse(revenueReportQuerySchema, request.query),
+        parse(kind === 'cash' ? cashReportQuerySchema : revenueReportQuerySchema, request.query),
       );
       return reply
         .header('content-type', 'text/csv; charset=utf-8')

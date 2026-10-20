@@ -1,19 +1,28 @@
+import { isBuyingGoods } from '@sds/shared';
 import { useState } from 'react';
 import { errorText } from '../../api/errors.ts';
 import { useLocale, useT } from '../../ui/hooks.ts';
 import { TextField } from '../../ui/TextField.tsx';
-import { addCategory, categoryName, setCategoryActive } from './expense-model.ts';
+import {
+  addCategory,
+  categoryName,
+  setCategoryActive,
+  setCategoryBuyingGoods,
+} from './expense-model.ts';
 import type { CategoryState } from './use-finance.ts';
 
 /**
  * The shop's expense categories. A category is added with a Thai name (and an English one if
  * wished) and can be switched off or on again, but never removed: an old expense always has a
- * category to point at. Every change replaces the whole list with the version the screen read.
+ * category to point at. Each one has a "counts as buying goods" box (the receipts-payments report
+ * puts ticked categories in its goods column). Every change replaces the whole list with the version
+ * the screen read.
  */
 export function CategoriesPanel({ state }: { state: CategoryState }) {
   const tr = useT();
   const locale = useLocale();
   const [names, setNames] = useState({ nameTh: '', nameEn: '' });
+  const [addGoods, setAddGoods] = useState(true);
   const [tried, setTried] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
@@ -34,9 +43,10 @@ export function CategoriesPanel({ state }: { state: CategoryState }) {
 
   async function add() {
     setTried(true);
-    const next = addCategory(state.categories, names);
+    const next = addCategory(state.categories, { ...names, buyingGoods: addGoods });
     if (next && (await change(next))) {
       setNames({ nameTh: '', nameEn: '' });
+      setAddGoods(true);
       setTried(false);
     }
   }
@@ -46,6 +56,7 @@ export function CategoriesPanel({ state }: { state: CategoryState }) {
       <div className="g-t-2">{tr('exp.cat.title')}</div>
       <fieldset aria-label={tr('exp.cat.title')} className="fin-stack fin-fieldset">
         <p className="g-t-s fin-note">{tr('exp.cat.hint')}</p>
+        <p className="g-t-s fin-note">{tr('exp.cat.buyingGoodsHint')}</p>
         {state.load === 'error' ? (
           <div role="alert" className="g-sunk fin-error">
             <span>{tr('fin.error')}</span>
@@ -61,6 +72,20 @@ export function CategoriesPanel({ state }: { state: CategoryState }) {
               <li key={c.key} className="fin-cat">
                 <span className={`fin-cat__name${c.active ? '' : ' fin-struck'}`}>{name}</span>
                 {c.active ? null : <span className="g-badge g-b-mute">{tr('exp.cat.off')}</span>}
+                <label className="fin-check">
+                  <input
+                    type="checkbox"
+                    checked={isBuyingGoods(c)}
+                    disabled={saving}
+                    aria-label={tr('exp.cat.buyingGoodsOf', { name })}
+                    onChange={(event) =>
+                      void change(
+                        setCategoryBuyingGoods(state.categories, c.key, event.target.checked),
+                      )
+                    }
+                  />
+                  {tr('exp.cat.buyingGoodsHead')}
+                </label>
                 <button
                   type="button"
                   className="g-btn"
@@ -90,6 +115,15 @@ export function CategoriesPanel({ state }: { state: CategoryState }) {
             onChange={(nameEn) => setNames({ ...names, nameEn })}
           />
         </div>
+        <label className="fin-check">
+          <input
+            type="checkbox"
+            checked={addGoods}
+            aria-label={tr('exp.cat.addBuyingGoods')}
+            onChange={(event) => setAddGoods(event.target.checked)}
+          />
+          {tr('exp.cat.addBuyingGoods')}
+        </label>
         <div className="fin-actions">
           <button
             type="button"

@@ -1,24 +1,12 @@
-import { DISPLAY_TIME_ZONE, formatBaht } from '@sds/i18n';
+import { formatBaht } from '@sds/i18n';
 import type { PnlReport } from '@sds/shared';
 import { Gi } from '../../design/icons.tsx';
 import { useEntities, useLocale, useNow, useT } from '../../ui/hooks.ts';
 import { Callout } from '../../ui/Notice.tsx';
 import { currentBusinessDay } from '../orders/order-board.ts';
-import { FinancePage, LoadState, RangePicker } from './FinanceParts.tsx';
+import { FinancePage, LoadState, RangePicker, useMonthText } from './FinanceParts.tsx';
 import { expenseRows, incompleteDetails, overlapNotes } from './pnl-model.ts';
 import { useExpenseCategories, usePnl, useRange } from './use-finance.ts';
-
-/** "ต.ค. 2569" / "Oct 2026" for a `YYYY-MM` month. */
-function useMonthText() {
-  const locale = useLocale();
-  const tag = locale === 'th' ? 'th-TH-u-ca-buddhist' : 'en-GB-u-ca-gregory';
-  const format = new Intl.DateTimeFormat(tag, {
-    month: 'short',
-    year: 'numeric',
-    timeZone: DISPLAY_TIME_ZONE,
-  });
-  return (month: string) => format.format(new Date(`${month}-15T12:00:00+07:00`));
-}
 
 function IncompleteBanner({ pnl }: { pnl: PnlReport }) {
   const tr = useT();

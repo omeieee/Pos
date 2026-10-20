@@ -13,10 +13,12 @@ import {
   updateSettingRowIfVersion,
 } from '@sds/db';
 import {
+  buyingGoodsKeys,
   DEFAULT_EXPENSE_CATEGORIES,
   type ExpenseCategories,
   type ExpenseCategoriesResponse,
   expenseCategoriesSchema,
+  isBuyingGoods,
   missingCategoryKeys,
   type PutExpenseCategoriesInput,
 } from '@sds/shared';
@@ -50,6 +52,13 @@ export async function assertCategoryActive(db: Db, key: string): Promise<void> {
   if (!list.categories.some((c) => c.key === key && c.active)) throw unknownCategory();
 }
 
+/** The keys flagged "buying goods" now (the saved list, else the defaults), for the cash report. */
+export async function currentBuyingGoodsKeys(db: Db): Promise<string[]> {
+  const row = await getSettingRow(db, SETTING_KEY);
+  const list = row ? expenseCategoriesSchema.parse(row.value) : DEFAULT_EXPENSE_CATEGORIES;
+  return buyingGoodsKeys(list.categories);
+}
+
 /** Keys by what changed, for the audit row (names are the owner's own words, not personal data). */
 function listChanges(before: ExpenseCategories, after: ExpenseCategories) {
   const old = new Map(before.categories.map((c) => [c.key, c]));
@@ -57,6 +66,7 @@ function listChanges(before: ExpenseCategories, after: ExpenseCategories) {
   const deactivated: string[] = [];
   const reactivated: string[] = [];
   const renamed: string[] = [];
+  const buyingGoodsChanged: string[] = [];
   for (const c of after.categories) {
     const was = old.get(c.key);
     if (!was) {
@@ -66,8 +76,9 @@ function listChanges(before: ExpenseCategories, after: ExpenseCategories) {
     if (was.active && !c.active) deactivated.push(c.key);
     if (!was.active && c.active) reactivated.push(c.key);
     if (was.nameTh !== c.nameTh || was.nameEn !== c.nameEn) renamed.push(c.key);
+    if (isBuyingGoods(was) !== isBuyingGoods(c)) buyingGoodsChanged.push(c.key);
   }
-  return { added, deactivated, reactivated, renamed };
+  return { added, deactivated, reactivated, renamed, buyingGoodsChanged };
 }
 
 export async function putCategories(

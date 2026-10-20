@@ -11,15 +11,14 @@ The owner sees real profit and a trustworthy tax estimate, and can hand clean nu
   - optional recipe/ingredient costing;
   - expense ledger with receipt photos;
   - platform commissions and payout reconciliation;
-  - gov co-pay receivables and settlement check;
   - P&L;
   - pricing helper;
   - tax estimator: 60% flat vs actual expenses, allowances, brackets, 0.5% method;
   - ภ.ง.ด.94 estimate;
   - VAT threshold and e-Payment watches;
-  - cash receipts–payments report;
+  - receipts–payments report (all methods; running net from an owner-set start amount, D-35);
   - tax rules file for the current year.
-- **Out:** filing returns, e-Tax invoices.
+- **Out:** filing returns, e-Tax invoices; gov co-pay receivables and a settlement mark (owner decision 2026-10-21: not needed, the P&L says "not tracked").
 
 ## Exit criteria
 - [x] Tax estimator reproduces the accountant's worked examples (or rd.go.th examples) exactly
@@ -38,3 +37,4 @@ Part 1 (2026-10-20): `expenses` ledger (migration 0037, void not delete), `/v1/e
 - 2026-10-20: part 4 tax estimator backend; see PROGRESS "P7 · Part 4".
 - 2026-10-21: part 5 screens; see PROGRESS "P7 · Part 5".
 - 2026-10-21: QA review and fixes (larger-of rules, owner-only rates); see PROGRESS "P7 · QA review and fixes".
+- 2026-10-21: part 6 receipts-payments report; see PROGRESS "P7 · Part 6".

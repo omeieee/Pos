@@ -5,6 +5,8 @@
  * and an answer that arrives after that is dropped. Nothing here computes money.
  */
 import type {
+  CashOpeningSettings,
+  CashReport,
   ExpenseCategoryEntry,
   ExpenseList,
   PnlReport,
@@ -126,6 +128,25 @@ export function usePnl(range: DateRange | null) {
   const key = range ? `${range.from}~${range.to}` : null;
   return useRequest<PnlReport>(key, () =>
     range ? api.reports.pnl(range) : Promise.reject(new ApiClientError('REQUEST_INVALID')),
+  );
+}
+
+/** Cash receipts and payments for the range (owner only); `emptyDays` also lists days with no activity. */
+export function useCash(range: DateRange | null, emptyDays: boolean) {
+  const { api } = useServices();
+  const key = range ? `${range.from}~${range.to}~${emptyDays}` : null;
+  return useRequest<CashReport>(key, () =>
+    range
+      ? api.reports.cash(range, { emptyDays })
+      : Promise.reject(new ApiClientError('REQUEST_INVALID')),
+  );
+}
+
+/** The start amount setting (`cash_opening`) with the version a save must name. */
+export function useCashOpening() {
+  const { api } = useServices();
+  return useRequest<{ value: CashOpeningSettings; version: number }>('cash-opening', () =>
+    api.settings.cashOpening.read(),
   );
 }
 

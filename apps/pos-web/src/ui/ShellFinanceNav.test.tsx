@@ -35,10 +35,13 @@ const sidebarLinks = () =>
 describe('the sidebar entries of the money pages', () => {
   test('the owner has expenses, cost and profit, and tax, as links and no longer as "not ready" rows', async () => {
     await open('owner');
-    expect(sidebarLinks()).toEqual(expect.arrayContaining(['#/expenses', '#/pnl', '#/tax']));
+    expect(sidebarLinks()).toEqual(
+      expect.arrayContaining(['#/expenses', '#/pnl', '#/tax', '#/cash']),
+    );
     expect(screen.getByRole('link', { name: th['nav.expenses'] })).toBeTruthy();
     expect(screen.getByRole('link', { name: th['nav.costProfit'] })).toBeTruthy();
     expect(screen.getByRole('link', { name: th['nav.tax'] })).toBeTruthy();
+    expect(screen.getByRole('link', { name: th['nav.cash'] })).toBeTruthy();
   });
 
   test('a manager has expenses only: no profit, no tax', async () => {
@@ -46,12 +49,13 @@ describe('the sidebar entries of the money pages', () => {
     expect(sidebarLinks()).toContain('#/expenses');
     expect(sidebarLinks()).not.toContain('#/pnl');
     expect(sidebarLinks()).not.toContain('#/tax');
+    expect(sidebarLinks()).not.toContain('#/cash');
     expect(screen.queryByRole('link', { name: th['nav.costProfit'] })).toBeNull();
   });
 
   test('a cashier has none of them', async () => {
     await open('cashier');
-    for (const href of ['#/expenses', '#/pnl', '#/tax']) {
+    for (const href of ['#/expenses', '#/pnl', '#/tax', '#/cash']) {
       expect(sidebarLinks()).not.toContain(href);
     }
   });

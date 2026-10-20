@@ -1,10 +1,12 @@
 import { describe, expect, test } from 'vitest';
 import { EXPENSE_CATEGORIES } from './enums.ts';
 import {
+  buyingGoodsKeys,
   createExpenseInputSchema,
   DEFAULT_EXPENSE_CATEGORIES,
   expenseCategoriesSchema,
   expenseCategoryKeySchema,
+  isBuyingGoods,
   missingCategoryKeys,
   patchExpenseInputSchema,
   putExpenseCategoriesInputSchema,
@@ -60,6 +62,69 @@ describe('expense categories', () => {
     const before = DEFAULT_EXPENSE_CATEGORIES.categories;
     expect(missingCategoryKeys(before, before)).toEqual([]);
     expect(missingCategoryKeys(before, before.slice(2))).toEqual(['ingredients', 'packaging']);
+  });
+});
+
+describe('buying goods flag (D-35)', () => {
+  test('the defaults flag ingredients and packaging as goods and the other seven as not', () => {
+    const flags = Object.fromEntries(
+      DEFAULT_EXPENSE_CATEGORIES.categories.map((c) => [c.key, c.buyingGoods]),
+    );
+    expect(flags).toEqual({
+      ingredients: true,
+      packaging: true,
+      gas: false,
+      utilities: false,
+      rent: false,
+      staff: false,
+      platform_fees: false,
+      equipment: false,
+      other: false,
+    });
+    expect(buyingGoodsKeys(DEFAULT_EXPENSE_CATEGORIES.categories)).toEqual([
+      'ingredients',
+      'packaging',
+    ]);
+  });
+
+  test('an old stored category without the flag falls back to the default for its key', () => {
+    const old = expenseCategoriesSchema.parse({
+      categories: [
+        { key: 'ingredients', nameTh: 'a' },
+        { key: 'packaging', nameTh: 'b' },
+        { key: 'gas', nameTh: 'c' },
+        { key: 'lunch_boxes', nameTh: 'd' }, // owner-added before the flag existed
+      ],
+    }).categories;
+    expect(old.map(isBuyingGoods)).toEqual([true, true, false, false]);
+    expect(buyingGoodsKeys(old)).toEqual(['ingredients', 'packaging']);
+  });
+
+  test('a saved flag wins over the default, either way', () => {
+    const list = expenseCategoriesSchema.parse({
+      categories: [
+        { key: 'ingredients', nameTh: 'a', buyingGoods: false },
+        { key: 'verify_fee', nameTh: 'b', buyingGoods: false },
+        { key: 'lunch_boxes', nameTh: 'c', buyingGoods: true },
+        { key: 'gas', nameTh: 'd', buyingGoods: true },
+      ],
+    }).categories;
+    expect(buyingGoodsKeys(list)).toEqual(['lunch_boxes', 'gas']);
+  });
+
+  test('a switched-off category keeps its flag (its old expenses still count)', () => {
+    const list = expenseCategoriesSchema.parse({
+      categories: [{ key: 'lunch_boxes', nameTh: 'c', buyingGoods: true, active: false }],
+    }).categories;
+    expect(buyingGoodsKeys(list)).toEqual(['lunch_boxes']);
+  });
+
+  test('the flag must be a boolean', () => {
+    expect(
+      expenseCategoriesSchema.safeParse({
+        categories: [{ key: 'gas', nameTh: 'x', buyingGoods: 'yes' }],
+      }).success,
+    ).toBe(false);
   });
 });
 

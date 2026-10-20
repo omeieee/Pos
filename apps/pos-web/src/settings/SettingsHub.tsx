@@ -16,6 +16,7 @@ type RowId = SectionId | 'menu' | BackOfficeId;
 const BACK_OFFICE = {
   expenses: { descKey: 'settings.link.expenses.desc' },
   pnl: { descKey: 'settings.link.pnl.desc' },
+  cash: { descKey: 'settings.link.cash.desc' },
   tax: { descKey: 'settings.link.tax.desc' },
 } as const satisfies Partial<Record<RouteId, { descKey: MessageKey }>>;
 type BackOfficeId = keyof typeof BACK_OFFICE;
@@ -36,6 +37,7 @@ const CHIP: Record<RowId, { icon: GiName; color: string }> = {
   'platform-commission': { icon: 'store', color: '#c7691a' },
   expenses: { icon: 'receipt2', color: '#c7691a' },
   pnl: { icon: 'dollar', color: '#1b7a43' },
+  cash: { icon: 'cash', color: '#1b7a43' },
   tax: { icon: 'doc', color: '#2457b8' },
   devices: { icon: 'monitor', color: '#3a3330' },
   staff: { icon: 'people', color: '#1b7a43' },
@@ -57,7 +59,11 @@ const GROUPS: readonly {
     titleKey: 'settings.group.payments',
     rows: ['payments', 'promptpay', 'bank-account', 'receipt', 'gov-copay', 'platform-commission'],
   },
-  { id: 'backOffice', titleKey: 'settings.group.backOffice', rows: ['expenses', 'pnl', 'tax'] },
+  {
+    id: 'backOffice',
+    titleKey: 'settings.group.backOffice',
+    rows: ['expenses', 'pnl', 'cash', 'tax'],
+  },
   { id: 'people', titleKey: 'settings.group.people', rows: ['devices', 'staff'] },
 ];
 

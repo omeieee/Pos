@@ -4,7 +4,10 @@ import {
   bankAccountPatchInputSchema,
   bankAccountSettingsSchema,
   bankAccountViewSchema,
+  cashOpeningPatchInputSchema,
+  cashOpeningSettingsSchema,
   DEFAULT_BANK_ACCOUNT,
+  DEFAULT_CASH_OPENING,
   DEFAULT_DELIVERY_SETTINGS,
   DEFAULT_LINE_ORDERING,
   DEFAULT_PLATFORM_COMMISSION,
@@ -481,5 +484,50 @@ describe('platform commission', () => {
     expect(
       platformCommissionPatchInputSchema.safeParse({ expectedVersion: 1, phoneRateBp: 5 }).success,
     ).toBe(false);
+  });
+});
+
+describe('cash opening (D-35)', () => {
+  test('nothing is set by default: no opening amount, never 0', () => {
+    expect(DEFAULT_CASH_OPENING).toEqual({ amountSatang: null, asOf: null });
+    expect(cashOpeningSettingsSchema.parse({})).toEqual(DEFAULT_CASH_OPENING);
+  });
+  test('the amount and the date are set together or both cleared', () => {
+    expect(
+      cashOpeningSettingsSchema.safeParse({ amountSatang: 50000, asOf: '2026-09-24' }).success,
+    ).toBe(true);
+    expect(
+      cashOpeningSettingsSchema.safeParse({ amountSatang: 0, asOf: '2026-09-24' }).success,
+    ).toBe(true);
+    expect(cashOpeningSettingsSchema.safeParse({ amountSatang: 50000, asOf: null }).success).toBe(
+      false,
+    );
+    expect(
+      cashOpeningSettingsSchema.safeParse({ amountSatang: null, asOf: '2026-09-24' }).success,
+    ).toBe(false);
+  });
+  test('whole non-negative satang and an ISO date only', () => {
+    for (const amountSatang of [-1, 1.5, '500']) {
+      expect(
+        cashOpeningSettingsSchema.safeParse({ amountSatang, asOf: '2026-09-24' }).success,
+        String(amountSatang),
+      ).toBe(false);
+    }
+    expect(
+      cashOpeningSettingsSchema.safeParse({ amountSatang: 1, asOf: '24/09/2026' }).success,
+    ).toBe(false);
+  });
+  test('a patch names the version, changes something and takes no other keys', () => {
+    expect(
+      cashOpeningPatchInputSchema.safeParse({
+        expectedVersion: 0,
+        amountSatang: 100,
+        asOf: '2026-10-01',
+      }).success,
+    ).toBe(true);
+    expect(cashOpeningPatchInputSchema.safeParse({ expectedVersion: 1 }).success).toBe(false);
+    expect(cashOpeningPatchInputSchema.safeParse({ expectedVersion: 1, note: 'x' }).success).toBe(
+      false,
+    );
   });
 });

@@ -142,13 +142,15 @@ function keyBase(nameEn: string): string {
 }
 
 /**
- * The list with one more category, or null when the Thai name is empty. The key is made here (the
+ * The list with one more category, or null when the Thai name is empty. `buyingGoods` is the add
+ * form's checkbox: an owner-added category counts as "buying goods" unless unticked (D-35).
+ * The key is made here (the
  * server wants a short Latin slug and Thai names cannot give one): from the English name, else
  * `custom`, with `_2`, `_3` added until it is unique. It is stored on every expense and never changes.
  */
 export function addCategory(
   list: readonly ExpenseCategoryEntry[],
-  names: { nameTh: string; nameEn: string },
+  names: { nameTh: string; nameEn: string; buyingGoods?: boolean },
 ): ExpenseCategoryEntry[] | null {
   const nameTh = names.nameTh.trim();
   if (nameTh === '') return null;
@@ -159,7 +161,13 @@ export function addCategory(
   for (let n = 2; taken.has(key); n += 1) key = `${base}_${n}`;
   return [
     ...list,
-    { key, nameTh, nameEn: nameEn === '' ? null : nameEn.slice(0, 80), active: true },
+    {
+      key,
+      nameTh,
+      nameEn: nameEn === '' ? null : nameEn.slice(0, 80),
+      active: true,
+      buyingGoods: names.buyingGoods ?? true,
+    },
   ];
 }
 
@@ -169,3 +177,10 @@ export const setCategoryActive = (
   key: string,
   active: boolean,
 ): ExpenseCategoryEntry[] => list.map((c) => (c.key === key ? { ...c, active } : c));
+
+/** Sets whether a category counts as "buying goods" on the receipts-payments report. */
+export const setCategoryBuyingGoods = (
+  list: readonly ExpenseCategoryEntry[],
+  key: string,
+  buyingGoods: boolean,
+): ExpenseCategoryEntry[] => list.map((c) => (c.key === key ? { ...c, buyingGoods } : c));

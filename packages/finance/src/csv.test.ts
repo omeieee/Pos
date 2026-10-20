@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
-import { CSV_BOM, itemsCsvRows, revenueCsvRows, satangDecimal, toCsv } from './csv.ts';
+import { cashReport } from './cash.ts';
+import { CSV_BOM, cashCsvRows, itemsCsvRows, revenueCsvRows, satangDecimal, toCsv } from './csv.ts';
 import type { ItemSales } from './items.ts';
 import type { DayRevenue } from './revenue.ts';
 
@@ -171,5 +172,133 @@ describe('itemsCsvRows', () => {
       ['ต้มยำ', 3, '180.00', '75.00'],
       ['ชา, เย็น', 1, '30.00', '25.00'],
     ]);
+  });
+});
+
+describe('cashCsvRows (cash receipts and payments)', () => {
+  const headers = Array.from({ length: 11 }, (_, i) => `h${i}`);
+  const report = cashReport({
+    from: '2026-10-01',
+    to: '2026-10-02',
+    orders: [],
+    excludedOrderIds: [],
+    expenses: [
+      { id: 'e1', businessDate: '2026-10-02', category: 'gas', amountSatang: 5000, voided: false },
+    ],
+    opening: { amountSatang: 1000, asOf: '2026-10-01' },
+    includeEmptyDays: true,
+  });
+
+  test('a header, a row per day in baht with two decimals, and a total row; a negative running net keeps its minus', () => {
+    const rows = cashCsvRows(report, headers, 'total');
+    expect(rows).toHaveLength(4);
+    expect(rows[0]).toEqual(headers);
+    // date, cash, promptpay, gov_copay, platform, other, receipts, buying goods, other expenses, payments, running net
+    expect(rows[1]).toEqual([
+      '2026-10-01',
+      '0.00',
+      '0.00',
+      '0.00',
+      '0.00',
+      '0.00',
+      '0.00',
+      '0.00',
+      '0.00',
+      '0.00',
+      '10.00',
+    ]);
+    expect(rows[2]).toEqual([
+      '2026-10-02',
+      '0.00',
+      '0.00',
+      '0.00',
+      '0.00',
+      '0.00',
+      '0.00',
+      '0.00',
+      '50.00',
+      '50.00',
+      '-40.00',
+    ]);
+    expect(rows[3]).toEqual([
+      'total',
+      '0.00',
+      '0.00',
+      '0.00',
+      '0.00',
+      '0.00',
+      '0.00',
+      '0.00',
+      '50.00',
+      '50.00',
+      '',
+    ]);
+    expect(toCsv(rows)).toContain(',-40.00' + String.fromCharCode(13, 10));
+  });
+
+  test('no running net is an empty cell, not 0.00', () => {
+    const none = cashReport({
+      ...report,
+      opening: null,
+      expenses: [],
+      orders: [],
+      from: '2026-10-01',
+      to: '2026-10-01',
+      excludedOrderIds: [],
+    });
+    expect(cashCsvRows(none, headers)).toEqual([headers]);
+    const open = cashReport({
+      from: '2026-10-01',
+      to: '2026-10-01',
+      orders: [],
+      excludedOrderIds: [],
+      opening: null,
+      expenses: [
+        { id: 'e', businessDate: '2026-10-01', category: 'gas', amountSatang: 1, voided: false },
+      ],
+    });
+    expect(cashCsvRows(open, headers)[1]?.[10]).toBe('');
+  });
+
+  test('a transfer receipt moves the running net column (every method is a receipt)', () => {
+    const paid = cashReport({
+      from: '2026-10-01',
+      to: '2026-10-01',
+      orders: [
+        {
+          id: 'o1',
+          businessDate: '2026-10-01',
+          channel: 'line',
+          status: 'completed',
+          paymentStatus: 'paid',
+          totalSatang: 12000,
+          platformCommissionSatang: null,
+          placedAt: new Date('2026-10-01T05:00:00Z'),
+          payments: [{ id: 'p1', method: 'promptpay', status: 'confirmed', amountSatang: 12000 }],
+          refunds: [],
+          items: [],
+        },
+      ],
+      excludedOrderIds: [],
+      opening: { amountSatang: 1000, asOf: '2026-10-01' },
+      expenses: [],
+    });
+    expect(cashCsvRows(paid, headers)[1]).toEqual([
+      '2026-10-01',
+      '0.00',
+      '120.00',
+      '0.00',
+      '0.00',
+      '0.00',
+      '120.00',
+      '0.00',
+      '0.00',
+      '0.00',
+      '130.00',
+    ]);
+  });
+
+  test('refuses the wrong number of headers', () => {
+    expect(() => cashCsvRows(report, ['a'])).toThrow(RangeError);
   });
 });

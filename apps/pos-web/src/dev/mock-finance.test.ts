@@ -1,5 +1,7 @@
 import type { StaffRole } from '@sds/shared';
 import {
+  cashOpeningSettingsSchema,
+  cashReportSchema,
   expenseCategoriesResponseSchema,
   expenseDtoSchema,
   expenseListSchema,
@@ -289,6 +291,98 @@ describe('the dev mock of profit and loss and tax', () => {
       call(m, 'GET', '/v1/reports/tax', undefined, owner, q({ year: '2026', period: 'annual' }))
         ?.status,
     ).toBe(400);
+  });
+});
+
+describe('the dev mock of the receipts-payments report and the start amount', () => {
+  const OPENING = '/v1/settings/cash-opening';
+  const cashQuery = (extra: Record<string, string> = {}) => q({ ...RANGE, ...extra });
+
+  test('the report is the owner alone and parses with the shared schema; with no start amount there is no running net', () => {
+    const m = mock();
+    expect(call(m, 'GET', '/v1/reports/cash', undefined, manager, cashQuery())?.status).toBe(403);
+    const report = cashReportSchema.parse(
+      call(m, 'GET', '/v1/reports/cash', undefined, owner, cashQuery())?.body,
+    );
+    expect(report.openingNotSet).toBe(true);
+    expect(report.days.every((d) => d.runningNetSatang === null)).toBe(true);
+    // the sample fortnight: 685.00 received, 375.00 paid (the voided 999.00 is out); goods =
+    // ingredients 250.00 + packaging 20.00 (both are goods by default)
+    expect(report.totals).toMatchObject({
+      receiptsSatang: 68500,
+      paymentsSatang: 37500,
+      purchasesSatang: 27000,
+      otherExpensesSatang: 10500,
+    });
+    expect(report.reconciliation.differenceSatang).toBe(0);
+  });
+
+  test('the start amount reads as not set, changes with the owner and a fresh step-up, and gives a running net', () => {
+    const m = mock();
+    const read = (caller: Caller = owner) => call(m, 'GET', OPENING, undefined, caller);
+    expect(read(manager)?.status).toBe(403);
+    expect(settingResponseSchema(cashOpeningSettingsSchema).parse(read()?.body)).toMatchObject({
+      version: 0,
+      value: { amountSatang: null, asOf: null },
+    });
+    const body = { expectedVersion: 0, amountSatang: 50000, asOf: '2026-09-24' };
+    expect(call(m, 'PATCH', OPENING, body, manager)?.status).toBe(403);
+    expect(call(m, 'PATCH', OPENING, body, ownerNoStepUp)).toMatchObject({
+      status: 403,
+      body: { code: 'STEP_UP_REQUIRED' },
+    });
+    expect(call(m, 'PATCH', OPENING, { expectedVersion: 0, amountSatang: 5 }, owner)?.status).toBe(
+      400,
+    );
+    expect(call(m, 'PATCH', OPENING, body, owner)?.status).toBe(200);
+    expect(call(m, 'PATCH', OPENING, body, owner)?.status).toBe(409);
+    const report = cashReportSchema.parse(
+      call(m, 'GET', '/v1/reports/cash', undefined, owner, cashQuery())?.body,
+    );
+    expect(report.runningStartSatang).toBe(50000);
+    expect(report.runningEndSatang).toBe(81000); // 500.00 + 685.00 - 375.00
+    const october = cashReportSchema.parse(
+      call(
+        m,
+        'GET',
+        '/v1/reports/cash',
+        undefined,
+        owner,
+        q({ from: '2026-10-01', to: '2026-10-07' }),
+      )?.body,
+    );
+    expect(october.runningStartSatang).toBe(76500);
+    expect(october.runningEndSatang).toBe(81000);
+  });
+
+  test('the goods column follows the category flag (unticking packaging moves it to other expenses)', () => {
+    const m = mock();
+    const read = expenseCategoriesResponseSchema.parse(
+      call(m, 'GET', '/v1/expenses/categories', undefined)?.body,
+    );
+    call(m, 'PUT', '/v1/expenses/categories', {
+      expectedVersion: 0,
+      categories: read.value.categories.map((c) =>
+        c.key === 'packaging' ? { ...c, buyingGoods: false } : c,
+      ),
+    });
+    const report = cashReportSchema.parse(
+      call(m, 'GET', '/v1/reports/cash', undefined, owner, cashQuery())?.body,
+    );
+    expect(report.totals).toMatchObject({ purchasesSatang: 25000, otherExpensesSatang: 12500 });
+  });
+
+  test('empty days are listed only when asked for, and a bad range is a validation error', () => {
+    const m = mock();
+    const sparse = cashReportSchema.parse(
+      call(m, 'GET', '/v1/reports/cash', undefined, owner, cashQuery())?.body,
+    );
+    const all = cashReportSchema.parse(
+      call(m, 'GET', '/v1/reports/cash', undefined, owner, cashQuery({ emptyDays: 'true' }))?.body,
+    );
+    expect(sparse.days.length).toBeLessThan(all.days.length);
+    expect(all.days).toHaveLength(14);
+    expect(call(m, 'GET', '/v1/reports/cash', undefined, owner, q())?.status).toBe(400);
   });
 });
 

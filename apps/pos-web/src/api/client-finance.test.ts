@@ -1,4 +1,6 @@
+import { satang } from '@sds/shared';
 import { describe, expect, test } from 'vitest';
+import { createMockFinance } from '../dev/mock-finance.ts';
 import { SAMPLE_EXPENSES, SAMPLE_PNL, sampleTax } from '../dev/mock-finance-data.ts';
 import {
   apiError,
@@ -137,7 +139,7 @@ describe('profit and loss and tax reads', () => {
     const { api, calls } = clientWith(() => ({ status: 200, json: SAMPLE_PNL }));
     const pnl = await api.reports.pnl(range);
     expect(pnl.netProfitSatang).toBe(36850);
-    expect(pnl.govCopay.receivable).toBe('not_built');
+    expect(pnl.govCopay.receivable).toBe('not_tracked');
     expect(calls[0]).toMatchObject({
       method: 'GET',
       url: `${BASE}/v1/reports/pnl?from=2026-10-01&to=2026-10-07`,
@@ -245,6 +247,79 @@ describe('tax profile and platform commission settings', () => {
     expect(bodyOf(calls[1])).toEqual({ expectedVersion: 2, linemanRateBp: 2000 });
     await expect(
       api.settings.platformCommission.save({ expectedVersion: 2, grabRateBp: 10001 }),
+    ).rejects.toMatchObject({ code: 'REQUEST_INVALID' });
+  });
+});
+
+describe('cash receipts and payments', () => {
+  const mock = createMockFinance({ now: () => Date.parse(NOW) });
+  const sample = mock.handle('GET', '/v1/reports/cash', new URLSearchParams(range), undefined, {
+    role: 'owner',
+  })?.body;
+
+  test('the report is a GET with the range; emptyDays is sent only when asked for', async () => {
+    const { api, calls } = clientWith(() => ({ status: 200, json: sample }));
+    const report = await api.reports.cash(range);
+    expect(report.totals.receiptsSatang).toBeGreaterThan(0);
+    await api.reports.cash(range, { emptyDays: true });
+    expect(calls.map((c) => c.url)).toEqual([
+      `${BASE}/v1/reports/cash?from=2026-10-01&to=2026-10-07`,
+      `${BASE}/v1/reports/cash?from=2026-10-01&to=2026-10-07&emptyDays=true`,
+    ]);
+    expect(calls[0]?.headers.authorization).toBe(`Bearer ${FAKE_SESSION_TOKEN}`);
+  });
+
+  test('a bad range never reaches the network, and an answer that is not a cash report is RESPONSE_INVALID', async () => {
+    const { api, calls } = clientWith(() => ({ status: 200, json: { days: 'no' } }));
+    await expect(api.reports.cash({ from: '2026-10-07', to: '2026-10-01' })).rejects.toMatchObject({
+      code: 'REQUEST_INVALID',
+    });
+    expect(calls).toEqual([]);
+    await expect(api.reports.cash(range)).rejects.toMatchObject({ code: 'RESPONSE_INVALID' });
+  });
+
+  test('the CSV file is a step-up call with the cash file name', async () => {
+    const { api, calls } = clientWith(() => ({ status: 200, text: 'x\r\n' }));
+    const file = await api.reports.exportCsv('cash', range);
+    expect(file.filename).toBe('cash-2026-10-01-2026-10-07.csv');
+    expect(calls[0]?.url).toBe(`${BASE}/v1/reports/export/cash.csv?from=2026-10-01&to=2026-10-07`);
+    const denied = clientWith(() => apiError(403, 'STEP_UP_REQUIRED'));
+    await expect(denied.api.reports.exportCsv('cash', range)).rejects.toMatchObject({
+      code: 'STEP_UP_REQUIRED',
+    });
+  });
+
+  test('the opening cash is a versioned setting changed with PATCH; a half-set or negative one fails first', async () => {
+    const { api, calls } = clientWith(() => ({
+      status: 200,
+      json: {
+        value: { amountSatang: 50000, asOf: '2026-09-24' },
+        version: 1,
+        rev: 3,
+        updatedAt: NOW,
+      },
+    }));
+    expect((await api.settings.cashOpening.read()).value.amountSatang).toBe(50000);
+    await api.settings.cashOpening.save({
+      expectedVersion: 1,
+      amountSatang: satang(60000),
+      asOf: '2026-09-25',
+    });
+    expect(calls.map((c) => `${c.method} ${c.url}`)).toEqual([
+      `GET ${BASE}/v1/settings/cash-opening`,
+      `PATCH ${BASE}/v1/settings/cash-opening`,
+    ]);
+    expect(bodyOf(calls[1])).toEqual({
+      expectedVersion: 1,
+      amountSatang: 60000,
+      asOf: '2026-09-25',
+    });
+    await expect(
+      api.settings.cashOpening.save({
+        expectedVersion: 1,
+        amountSatang: satang(-1),
+        asOf: '2026-09-25',
+      }),
     ).rejects.toMatchObject({ code: 'REQUEST_INVALID' });
   });
 });

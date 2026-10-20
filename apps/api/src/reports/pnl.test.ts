@@ -182,7 +182,7 @@ describe('GET /v1/reports/pnl access and range', () => {
       complete: true,
       incompleteReasons: [],
       months: [],
-      govCopay: { revenueSatang: 0, receivable: 'not_built' },
+      govCopay: { revenueSatang: 0, receivable: 'not_tracked' },
     });
   });
 });

@@ -49,7 +49,8 @@ export type RouteId =
   | 'dashboard'
   | 'expenses'
   | 'pnl'
-  | 'tax';
+  | 'tax'
+  | 'cash';
 
 /** Everything the address bar can show; `order` is a page inside `orders`, `settingsSection` one inside `settings`. */
 export type PageId = RouteId | 'order' | 'settingsSection';
@@ -118,6 +119,8 @@ export const ROUTES: readonly RouteDef[] = [
   },
   { id: 'pnl', path: '/pnl', labelKey: 'nav.costProfit', icon: 'cash', permission: 'finance.pnl' },
   { id: 'tax', path: '/tax', labelKey: 'nav.tax', icon: 'note', permission: 'finance.pnl' },
+  // Cash receipts and payments (D-35): owner only, like profit and tax.
+  { id: 'cash', path: '/cash', labelKey: 'nav.cash', icon: 'cash', permission: 'finance.pnl' },
 ];
 
 /** Pages with a parameter in the address. They open when their parent page is allowed. */
