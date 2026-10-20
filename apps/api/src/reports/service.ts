@@ -2,13 +2,14 @@
  * Reports (P6). Read-only: `@sds/db` loads the orders, `@sds/finance` does the maths, and this
  * only joins the two and shapes the response.
  */
-import { type Db, reportsRepo } from '@sds/db';
+import { type Db, expensesRepo, reportsRepo } from '@sds/db';
 import {
   favouriteItems,
   heatmap,
   itemSales,
   periodMargin,
   platformCommission,
+  profitAndLoss,
   revenueByDay,
   segmentOf,
   segmentSummary,
@@ -20,6 +21,7 @@ import {
   FAVOURITE_ITEMS_PER_CUSTOMER,
   type HeatmapReport,
   type ItemsReport,
+  type PnlReport,
   type RevenueReport,
   type RevenueReportQuery,
   type Satang,
@@ -103,6 +105,83 @@ export async function revenueReport(db: Db, query: RevenueReportQuery): Promise<
       estimatedSatang: satang(commissionSummary.estimatedSatang),
       totalSatang: satang(commissionSummary.totalSatang),
     },
+  };
+}
+
+/**
+ * Profit and loss (P7, D-33). Owner only. The maths is `profitAndLoss` in `@sds/finance`; this loads
+ * the orders (minus inconsistent ones), the expense rows of the range and the commission rates.
+ */
+export async function pnlReport(db: Db, query: RevenueReportQuery): Promise<PnlReport> {
+  const [{ usable, excludedOrderIds }, expenseRows, rates] = await Promise.all([
+    loadReportOrders(db, query),
+    expensesRepo.listExpenses(db, query.from, query.to),
+    currentPlatformCommission(db),
+  ]);
+  const p = profitAndLoss({
+    from: query.from,
+    to: query.to,
+    orders: usable,
+    excludedOrderIds,
+    expenses: expenseRows.map((e) => ({
+      id: e.id,
+      businessDate: e.businessDate,
+      category: e.category,
+      amountSatang: e.amountSatang,
+      voided: e.voidedAt !== null,
+    })),
+    rates,
+  });
+  return {
+    from: query.from,
+    to: query.to,
+    revenueSatang: satang(p.revenueSatang),
+    orderCount: p.orderCount,
+    costOfGoodsSatang: satang(p.costOfGoodsSatang),
+    uncostedRevenueSatang: satang(p.uncostedRevenueSatang),
+    grossProfitSatang: satang(p.grossProfitSatang),
+    commissionSatang: satang(p.commissionSatang),
+    expensesSatang: satang(p.expensesSatang),
+    netProfitSatang: satang(p.netProfitSatang),
+    complete: p.complete,
+    incompleteReasons: p.incompleteReasons,
+    missing: p.missing,
+    margin: {
+      ...p.margin,
+      costedRevenueSatang: satang(p.margin.costedRevenueSatang),
+      costSatang: satang(p.margin.costSatang),
+      grossProfitSatang:
+        p.margin.grossProfitSatang === null ? null : satang(p.margin.grossProfitSatang),
+      uncostedRevenueSatang: satang(p.margin.uncostedRevenueSatang),
+    },
+    commission: {
+      ...p.commission,
+      recordedSatang: satang(p.commission.recordedSatang),
+      estimatedSatang: satang(p.commission.estimatedSatang),
+      totalSatang: satang(p.commission.totalSatang),
+    },
+    expensesByCategory: p.expensesByCategory.map((c) => ({
+      ...c,
+      totalSatang: satang(c.totalSatang),
+    })),
+    voidedExpenseCount: p.voidedExpenseCount,
+    platformFeesAlsoCommission: p.platformFeesAlsoCommission,
+    govCopay: {
+      revenueSatang: satang(p.govCopay.revenueSatang),
+      receivable: p.govCopay.receivable,
+    },
+    months: p.months.map((m) => ({
+      month: m.month,
+      revenueSatang: satang(m.revenueSatang),
+      orderCount: m.orderCount,
+      costOfGoodsSatang: satang(m.costOfGoodsSatang),
+      uncostedRevenueSatang: satang(m.uncostedRevenueSatang),
+      grossProfitSatang: satang(m.grossProfitSatang),
+      commissionSatang: satang(m.commissionSatang),
+      expensesSatang: satang(m.expensesSatang),
+      netProfitSatang: satang(m.netProfitSatang),
+      complete: m.complete,
+    })),
   };
 }
 

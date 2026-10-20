@@ -141,6 +141,7 @@ describe('the real /v1 routes', () => {
       'GET /v1/reports/revenue',
       'GET /v1/reports/items',
       'GET /v1/reports/heatmap',
+      'GET /v1/reports/pnl',
       'GET /v1/reports/customers',
       'GET /v1/reports/export/revenue.csv',
       'GET /v1/reports/export/items.csv',

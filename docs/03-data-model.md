@@ -149,6 +149,7 @@ stateDiagram-v2
 - Gov co-pay money counts as revenue on the sale date and as a receivable until it is settled the next day.
 - Platform orders count the platform price as revenue and the commission as an expense.
 - Cost of goods = Σ(`unit_cost_satang × qty`) from item snapshots, until P7 adds recipes. `est_cost_satang` and `unit_cost_satang` are nullable: `NULL` = no cost entered, `0` = a real zero cost. Margins cover only costed lines/orders and name the rest (D-32).
+- Profit and loss (owner only, D-33): revenue - cost of goods (costed orders) - platform commission - unvoided `expenses` (by `business_date`) = net profit before income tax; the `platform_fees` expense category and the per-order commission are separate lines, both deducted. The answer says `complete: false` and lists what is missing instead of guessing.
 
 ## 7. Retention (defaults, all configurable; confirm legal periods in [06-legal-compliance.md](06-legal-compliance.md))
 | Data | Keep |

@@ -97,6 +97,76 @@ export const revenueReportSchema = z.object({
 });
 export type RevenueReport = z.infer<typeof revenueReportSchema>;
 
+/** Why a profit and loss answer is not complete (D-33). */
+export const PNL_INCOMPLETE_REASONS = [
+  'orders_excluded',
+  'orders_uncosted',
+  'commission_rate_not_set',
+] as const;
+
+const pnlFiguresShape = {
+  revenueSatang: nonNegativeSatangSchema,
+  orderCount: z.number().int().min(0),
+  /** Cost of the fully costed orders only; an order with an uncosted line has none here. */
+  costOfGoodsSatang: nonNegativeSatangSchema,
+  /** Net paid of the counted orders left out of `costOfGoodsSatang`. */
+  uncostedRevenueSatang: nonNegativeSatangSchema,
+  /** Revenue - cost of goods. Negative for a loss. */
+  grossProfitSatang: satangSchema,
+  /** Recorded plus estimated platform commission; orders with "rate not set" are not in it. */
+  commissionSatang: nonNegativeSatangSchema,
+  /** Unvoided expense rows, every category (platform_fees included, commission not). */
+  expensesSatang: nonNegativeSatangSchema,
+  /** Gross profit - commission - expenses, before income tax. Negative for a loss. */
+  netProfitSatang: satangSchema,
+  /** False when anything is missing; the profit is then at most this high, never lower. */
+  complete: z.boolean(),
+};
+
+export const pnlMonthSchema = z.object({
+  month: z.string().regex(/^\d{4}-\d{2}$/),
+  ...pnlFiguresShape,
+});
+export type PnlMonthDto = z.infer<typeof pnlMonthSchema>;
+
+/**
+ * Profit and loss for a range, owner only (`finance.pnl`). An estimate for the owner, not a filing.
+ * `missing` lists what is not in the figures; nothing is guessed. `months` has one row per calendar
+ * month with data, only when the range touches more than one month (the end months may be partial).
+ * `govCopay.receivable` is 'not_built': when the government's share arrives is not tracked yet.
+ */
+export const pnlReportSchema = z.object({
+  from: isoDateSchema,
+  to: isoDateSchema,
+  ...pnlFiguresShape,
+  incompleteReasons: z.array(z.enum(PNL_INCOMPLETE_REASONS)),
+  missing: z.object({
+    excludedOrderIds: z.array(z.string()),
+    uncostedOrderIds: z.array(z.string()),
+    uncostedMenuItemIds: z.array(z.string()),
+    rateNotSetOrderIds: z.array(z.string()),
+    ratesNotSet: z.array(z.enum(RATED_PLATFORMS)),
+  }),
+  margin: periodMarginSchema,
+  commission: commissionSummarySchema,
+  expensesByCategory: z.array(
+    z.object({
+      category: z.string(),
+      totalSatang: nonNegativeSatangSchema,
+      count: z.number().int().min(1),
+    }),
+  ),
+  voidedExpenseCount: z.number().int().min(0),
+  /** Both a platform commission and a `platform_fees` expense are present: check they are not the same fee. */
+  platformFeesAlsoCommission: z.boolean(),
+  govCopay: z.object({
+    revenueSatang: nonNegativeSatangSchema,
+    receivable: z.literal('not_built'),
+  }),
+  months: z.array(pnlMonthSchema),
+});
+export type PnlReport = z.infer<typeof pnlReportSchema>;
+
 export const itemSalesSchema = z.object({
   menuItemId: z.uuid(),
   name: z.string(),

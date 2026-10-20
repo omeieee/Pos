@@ -22,6 +22,7 @@ test('only the owner can change the PromptPay ID, the co-pay scheme, staff or de
       'payment.slip_block_clear',
       'customer.slip_flag_clear',
       'customer.report',
+      'finance.pnl',
     ] as const) {
       expect(hasPermission(role, p)).toBe(role === 'owner');
     }

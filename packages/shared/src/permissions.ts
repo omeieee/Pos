@@ -39,6 +39,8 @@ export const PERMISSIONS = [
   'customer.slip_flag_clear',
   /** The customer list with spending, segments and favourite items (PDPA). Owner only. */
   'customer.report',
+  /** Profit and loss (revenue, costs, commission, expenses, net profit). Owner only; managers enter expenses but do not see it (owner, 2026-10-20). */
+  'finance.pnl',
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 

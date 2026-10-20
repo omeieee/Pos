@@ -18,6 +18,15 @@
 > - **Maintenance:** the architecture refactor (code moved, behaviour unchanged) is deployed; see the entry "2026-10-16 · Maintenance · Architecture refactor". Not yet checked on a real iPad/iPhone. The as-built code index `ARCHITECTURE.md` (verified at `7ff9951`) is committed (`070e0b4`) and pushed with the owner's OK; see the newest entry.
 > - **Workflow (owner rule 2026-10-16):** after each completed part, ask the owner "save checkpoint or next step?" and wait for the answer (`CLAUDE.md` workflow, `3d8481c`).
 
+## 2026-10-20 · P7 · Part 3: profit and loss (backend)
+- **Summary:** built by payments-finance-engineer, tests first. `GET /v1/reports/pnl?from&to` (owner only, new permission `finance.pnl`) over a pure `profitAndLoss` in `@sds/finance`: revenue (net paid), cost of goods (fully costed orders only), gross profit, platform commission, unvoided expenses by category, net profit before income tax, per-month rows, `complete` flag with named missing items.
+- **Changed:** `@sds/finance` `pnl.ts` (+ tests); `@sds/shared` permissions and `pnlReportSchema`; `apps/api/src/reports`; `docs/p7-pnl-sample.md` + pinning test; D-33 (Proposed); `ARCHITECTURE.md`; route-inventory test.
+- **Verification (engineer's report, not re-run by me):** biome 0 errors; build 13/13; finance 111, shared 1152; api only reports/auth/expenses/settings folders (313), full api suite not run.
+- **Decisions:** D-33 Proposed. Owner confirmed 2026-10-20: expenses count on the date entered (no accrual); cost of goods covers fully costed orders only. `platform_fees` expense and commission are both deducted, with a flag.
+- **Open issues:** gov co-pay receivable returns `not_built` (no settlement mark on payments); no P&L screen, CSV or PDF; no tax yet; sample test does not read the markdown.
+- **Next:** part 4: tax estimator (actual-expenses method, rules as yearly data; 0.5% threshold still unconfirmed).
+- **Commit:** see git log (committed 2026-10-20, not pushed).
+
 ## 2026-10-20 · P7 · Part 2: item costs, gross profit, margin, commission estimate
 - **Summary:** built by payments-finance-engineer, tests first. `NULL` item cost = "no cost entered" (migration 0038 also turns stored zeros into NULL); reports read the cost snapshot on `order_items`; per-item and per-period cost, gross profit, margin (whole costed orders only, others listed); platform commission = recorded amount, else net paid x per-platform rate from settings, else "rate not set". Future-dated expenses now allowed.
 - **Changed:** migration 0038; `@sds/shared` (`marginBasisPoints`, `priceOrder`); `@sds/finance` (`items.ts`, new `margin.ts`, `commission.ts`); reports API and schemas; menu editor cost hints; `docs/p7-margin-sample.md` + pinning test; D-32 (Proposed); D-31 text.
