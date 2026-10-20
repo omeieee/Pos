@@ -24,7 +24,7 @@
 - **Decisions:** none new. Open: audit rows of the start amount keep the amounts (policy question to the owner).
 - **Open issues:** owner hand-check of a sample month (P7 exit criterion); ภ.ง.ด.94 2569 filed?; real iPad/iPhone check of the P6/P7 screens; migrations 0037 and 0038 go live with this push; 0.5% threshold, tax rounding, half-year allowance rule unverified; Slip2Go package; carry-cap message wording.
 - **Next:** check `/healthz` and CI after the push; owner checks on a real device.
-- **Commit:** see git log; push result in the next line of this entry once known.
+- **Commit / deploy:** pushed 2026-10-21 (`da7dfd7..9aaf0b6`, includes P6 follow-ups and all of P7); CI, Deploy API and Deploy web succeeded; `/healthz` shows `9aaf0b6`. New screens and routes not yet exercised on the live server.
 
 ## 2026-10-21 · P7 · Part 6: receipts-payments report (รายงานรับ-จ่าย)
 - **Summary:** built by payments-finance-engineer, tests first. Daily table modelled on the RD receipts-payments form (rd.go.th announcement No. 161): receipts by method (all methods, reconciled to the revenue report), payments split into buying goods and other expenses, difference, and a running net from an owner-set start amount and date. Owner answers: no cash drawer (100% bank transfers), so no cash-balance framing; `packaging` and owner-added categories count as buying goods via a per-category `buyingGoods` flag; co-pay receivable dropped from P7 (P&L says "not tracked"); CSV per-day ISO rows accepted.
