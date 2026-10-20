@@ -16,3 +16,4 @@ export * as retentionRepo from './retention.ts';
 export * as schema from './schema.ts';
 export * from './settings.ts';
 export * as syncRepo from './sync.ts';
+export * as taxProfilesRepo from './tax-profiles.ts';

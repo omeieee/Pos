@@ -18,6 +18,15 @@
 > - **Maintenance:** the architecture refactor (code moved, behaviour unchanged) is deployed; see the entry "2026-10-16 · Maintenance · Architecture refactor". Not yet checked on a real iPad/iPhone. The as-built code index `ARCHITECTURE.md` (verified at `7ff9951`) is committed (`070e0b4`) and pushed with the owner's OK; see the newest entry.
 > - **Workflow (owner rule 2026-10-16):** after each completed part, ask the owner "save checkpoint or next step?" and wait for the answer (`CLAUDE.md` workflow, `3d8481c`).
 
+## 2026-10-20 · P7 · Part 4: income tax estimator (backend)
+- **Summary:** built by payments-finance-engineer, tests first. Pure `estimateTax` in `@sds/finance` with the 2569 rules as a yearly data file (`tax-rules/th-pit-2569.ts` + registry); half-year (ภ.ง.ด.94) and annual (ภ.ง.ด.90) basis, actual expenses (default) vs 60% flat, brackets, 0.5% comparison shown only when it applies, VAT and e-Payment watches. Routes: `GET /v1/reports/tax?year&period=annual|half` (owner, `finance.pnl`), `GET|PUT /v1/settings/tax-profile?year` (PUT owner, step-up, audit, permission `settings.tax_profile`).
+- **Changed:** `@sds/finance` `tax.ts` + `tax-rules/*`; `@sds/shared` `tax.ts`, permissions; `@sds/db` `tax-profiles.ts` (no migration); `apps/api` reports/tax, settings/tax-profile; th/en strings; `docs/06`, `docs/10`, `docs/p7-tax-sample.md`; D-34 (Proposed); `ARCHITECTURE.md`.
+- **Verification (engineer's report, not re-run by me):** biome 0 errors; build 13/13; full tests api 1448, finance 168, shared 1155, db 322, i18n 26, pos-web 1964. RD worked examples in tests: 520,000 gives 30,500 (rd.go.th/61549.html); ภ.ง.ด.94 2569 instruction rate table; three s.48 cases (31847.html).
+- **Decisions:** D-34 Proposed (P&L to taxable income mapping).
+- **Open issues:** URGENT owner question: was ภ.ง.ด.94 for 2569 filed (window reported as 1 Jul to 30 Sep 2026)? 0.5% threshold still `conflict` (120,000 used, 60,000 recorded; Revenue Code s.48 text not reached); rounding rule, half-year allowance rule, ภ.ง.ด.90 dates, VAT and e-Payment limits unverified; cost of goods + `ingredients` expenses may double count food cost (flagged in every answer, owner has not chosen); ภ.ง.ด.94 amount paid not stored.
+- **Next:** P7 screens (expenses, P&L, tax), then cash report and co-pay receivable.
+- **Commit:** see git log (committed 2026-10-20, not pushed).
+
 ## 2026-10-20 · P7 · Part 3: profit and loss (backend)
 - **Summary:** built by payments-finance-engineer, tests first. `GET /v1/reports/pnl?from&to` (owner only, new permission `finance.pnl`) over a pure `profitAndLoss` in `@sds/finance`: revenue (net paid), cost of goods (fully costed orders only), gross profit, platform commission, unvoided expenses by category, net profit before income tax, per-month rows, `complete` flag with named missing items.
 - **Changed:** `@sds/finance` `pnl.ts` (+ tests); `@sds/shared` permissions and `pnlReportSchema`; `apps/api/src/reports`; `docs/p7-pnl-sample.md` + pinning test; D-33 (Proposed); `ARCHITECTURE.md`; route-inventory test.

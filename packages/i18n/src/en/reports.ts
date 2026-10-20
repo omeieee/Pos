@@ -61,4 +61,29 @@ export const enReports = {
   'dash.export.items': 'Items (CSV)',
   'dash.export.done': 'Saved {name}',
   'dash.export.failed': 'The export did not work. Try again.',
+  'tax.disclaimer':
+    'This is an estimate for planning, not a tax return or tax advice. Status: proposed, not yet confirmed with the Revenue Department. Rules of tax year {year}.',
+  'tax.status.proposed': 'Proposed - confirm with the Revenue Department',
+  'tax.note.pnlIncomplete':
+    'The profit and loss is not complete (an order has no cost, or a commission rate is not set). Expenses may be too low, so the estimated tax may be too high.',
+  'tax.note.foodCostTwice':
+    'Food cost may be counted twice: there is a cost per dish from the menu and an "ingredients" expense. Check the same purchase is not in both.',
+  'tax.note.costOfGoodsEstimated':
+    'Cost of goods comes from the costs the owner estimated in the menu, not from receipts.',
+  'tax.note.expensesNeedRecords':
+    'Deducting actual expenses needs records (receipts, vouchers), and the expenses must be necessary and reasonable.',
+  'tax.note.allowancesUnchecked':
+    'Allowances you entered are not checked against caps or eligibility. Check them with the Revenue Department.',
+  'tax.note.halfYearAllowancesHalved':
+    'On ภ.ง.ด.94 only half of the allowances can be used. Every item is halved here, but some (home loan interest, life insurance) are counted by what was actually paid Jan-Jun, which is not checked.',
+  'tax.note.halfPercentThresholdSources':
+    'The 0.5% method: Revenue Department pages disagree on the threshold (60,000 and 120,000 baht). The current form instruction (120,000 baht) is used. The result is the same either way, because the method only matters when income is over 1,000,000 baht.',
+  'tax.note.halfPercentNotApplied':
+    'The 0.5% method might apply, but the Revenue Department threshold is unclear, so it is not used in the tax shown.',
+  'tax.note.yearNotFinished':
+    'The tax year is not over. The figures run only to the date in the result.',
+  'tax.note.halfYearCredit':
+    'Tax paid with ภ.ง.ด.94 is credited in the ภ.ง.ด.90 calculation. This is not worked out here.',
+  'tax.note.filingLate':
+    'The filing window has passed. If the return is not filed, 1.5% a month of the tax is added, plus a fine of up to 2,000 baht. Ask the Revenue Department.',
 } as const satisfies Record<keyof typeof thReports, string>;

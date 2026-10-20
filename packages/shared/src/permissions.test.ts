@@ -23,6 +23,7 @@ test('only the owner can change the PromptPay ID, the co-pay scheme, staff or de
       'customer.slip_flag_clear',
       'customer.report',
       'finance.pnl',
+      'settings.tax_profile',
     ] as const) {
       expect(hasPermission(role, p)).toBe(role === 'owner');
     }
@@ -79,6 +80,7 @@ test('sensitive actions need step-up', () => {
       'settings.receipt',
       'settings.bank_account',
       'settings.platform_commission',
+      'settings.tax_profile',
       'staff.manage',
     ].sort(),
   );

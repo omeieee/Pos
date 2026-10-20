@@ -7,3 +7,6 @@ export * from './items.ts';
 export * from './margin.ts';
 export * from './pnl.ts';
 export * from './revenue.ts';
+export * from './tax.ts';
+export * from './tax-rules/registry.ts';
+export type * from './tax-rules/types.ts';

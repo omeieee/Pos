@@ -1,4 +1,4 @@
-import { revenueReportQuerySchema } from '@sds/shared';
+import { revenueReportQuerySchema, taxReportQuerySchema } from '@sds/shared';
 import type { FastifyInstance } from 'fastify';
 import { type GuardFactory, principalOf } from '../auth/guards.ts';
 import type { CoreContext } from '../tx.ts';
@@ -11,8 +11,9 @@ import {
   pnlReport,
   revenueReport,
 } from './service.ts';
+import { taxReport } from './tax.ts';
 
-/** Mounted at /v1/reports. Revenue, items and heatmap need `report.view` (owner and manager); customers needs `customer.report` (owner); pnl needs `finance.pnl` (owner). */
+/** Mounted at /v1/reports. Revenue, items and heatmap need `report.view` (owner and manager); customers needs `customer.report` (owner); pnl and tax need `finance.pnl` (owner). */
 export async function registerReportRoutes(
   app: FastifyInstance,
   ctx: CoreContext,
@@ -40,6 +41,13 @@ export async function registerReportRoutes(
     reply
       .header('cache-control', 'no-store')
       .send(await pnlReport(ctx.db, parse(revenueReportQuerySchema, request.query))),
+  );
+
+  // Income tax estimate (P7): owner only (`finance.pnl`), read only, never cached. Not a filing.
+  app.get('/tax', { onRequest: guard('finance.pnl') }, async (request, reply) =>
+    reply
+      .header('cache-control', 'no-store')
+      .send(await taxReport(ctx.db, parse(taxReportQuerySchema, request.query), ctx.now())),
   );
 
   // The accountant's files. `data.export` is owner only and needs a fresh step-up; each export is audited.

@@ -41,6 +41,8 @@ export const PERMISSIONS = [
   'customer.report',
   /** Profit and loss (revenue, costs, commission, expenses, net profit). Owner only; managers enter expenses but do not see it (owner, 2026-10-20). */
   'finance.pnl',
+  /** The owner's tax inputs (extra allowances, method preference) per year. Owner only, with step-up. */
+  'settings.tax_profile',
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 
@@ -81,6 +83,7 @@ export const STEP_UP_PERMISSIONS: ReadonlySet<Permission> = new Set<Permission>(
   'settings.receipt',
   'settings.bank_account',
   'settings.platform_commission',
+  'settings.tax_profile',
   'payment.void_refund',
   'order.edit_past',
   'staff.manage',

@@ -261,3 +261,9 @@ Written while the owner slept. Per the standing rule, no P7 code is written unti
 8. **ไทยช่วยไทย money:** default (receivable until marked received).
 9. **Cash report:** recommended default (one row per business day: cash in, cash out, balance).
 10. **Screens:** default (owner only for P&L and tax; managers enter expenses).
+
+### P7 tax estimate · open for the owner, 2026-10-20 (asked by Claude, not yet answered)
+1. **Was ภ.ง.ด.94 for 2569 filed?** The half-year window (1 July - 30 September 2026) has ended and the shop had income in every month of Jan-Jun. If it was not filed, a late surcharge (1.5% of the tax per month) and a fine of up to 2,000 baht can apply: ask the Revenue Department (RD Intelligence Center 1161) what to do.
+2. **Food cost: cost per dish or the `ingredients` expense?** The P&L and the tax estimate count both. If you type your ingredient purchases as expenses AND give each dish a cost, the same food is counted twice and the tax looks lower than it should. Pick one way (the estimate flags it when both are present).
+3. **Other allowances for 2569** (insurance, social security, funds, parents, children): enter them in the tax profile (owner, with step-up) or tell us none. Only the personal 60,000 baht is built in.
+4. **The 0.5% threshold.** Resolved as far as the RD pages allow (see D-34): it cannot change your tax while sales are 1,000,000 baht or less. Nothing to answer unless the accountant says otherwise.
