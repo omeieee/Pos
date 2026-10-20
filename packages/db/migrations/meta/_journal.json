@@ -260,6 +260,13 @@
       "when": 1792027202550,
       "tag": "0036_order_claim_without_slip",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1792507893817,
+      "tag": "0037_expense_categories_ledger",
+      "breakpoints": true
     }
   ]
 }

@@ -74,7 +74,7 @@ erDiagram
 ### Money outside orders
 | Table | Key columns |
 |---|---|
-| `expenses` | `id, business_date, category` (`ingredients, packaging, gas, utilities, rent, staff, platform_fees, equipment, other`)`, amount_satang, vendor, note, receipt_image_key, created_by_staff_id` |
+| `expenses` | `id, business_date, category` (a free key checked against the owner's list in `settings.expense_categories`; seeded with `ingredients, packaging, gas, utilities, rent, staff, platform_fees, equipment, other`, D-31)`, amount_satang, vendor, note, receipt_image_key, created_by_staff_id, client_request_id, request_hash, voided_at, voided_by_staff_id, void_reason` |
 | `tax_profiles` | `year, filer_type` (`individual`)`, allowances jsonb` (owner-entered), `method_preference` |
 
 Tax **rules**, meaning brackets, flat-rate %, thresholds and allowance caps, are not a table. They are versioned data files in `packages/finance/rules/th-pit-<year>.ts`, reviewed every year.

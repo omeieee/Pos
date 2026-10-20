@@ -3,7 +3,7 @@
  * them only after it commits, so a subscriber never sees a change that was rolled back.
  * Events carry ids and facts, never secrets.
  */
-import type { OrderChannel, OrderDto, OrderStatus, PaymentDto } from '@sds/shared';
+import type { ExpenseDto, OrderChannel, OrderDto, OrderStatus, PaymentDto } from '@sds/shared';
 
 /** A security-relevant fact the owner should hear about (CLAUDE.md rule 9). Delivery comes in P8 (ntfy). */
 export interface SecurityAlertEvent {
@@ -113,6 +113,18 @@ export interface CustomerUpsertedEvent {
   data: unknown;
 }
 
+/**
+ * An expense row changed (created, edited or voided). Back-office data: there is no device frame
+ * for it yet (`realtime/frames.ts` ignores it), so it feeds in-process subscribers only. `data` is
+ * the staff DTO.
+ */
+export interface ExpenseUpsertedEvent {
+  type: 'expense.upserted';
+  id: string;
+  rev: number;
+  data: ExpenseDto;
+}
+
 export type AppEvent =
   | SecurityAlertEvent
   | SessionEndedEvent
@@ -121,7 +133,8 @@ export type AppEvent =
   | PaymentUpsertedEvent
   | NewOrderAlertEvent
   | SettingsUpdatedEvent
-  | MenuUpsertedEvent;
+  | MenuUpsertedEvent
+  | ExpenseUpsertedEvent;
 
 export type EventHandler = (event: AppEvent) => void | Promise<void>;
 

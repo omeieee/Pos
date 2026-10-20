@@ -1,6 +1,6 @@
 # Phase 7 — Costs, P&L and Tax
 
-**Status:** ⚪ Not started · **Depends on:** P6, Q3, Q12 · **Agents:** payments-finance-engineer, pos-frontend-engineer, qa-security-reviewer
+**Status:** 🟡 In progress (since 2026-10-20) · **Depends on:** P6, Q3, Q12 · **Agents:** payments-finance-engineer, pos-frontend-engineer, qa-security-reviewer
 
 ## Goal
 The owner sees real profit and a trustworthy tax estimate, and can hand clean numbers to the accountant.
@@ -28,7 +28,8 @@ The owner sees real profit and a trustworthy tax estimate, and can hand clean nu
 - [ ] Rules for a new year are added as a data file only, with no code changes
 
 ## As built
-_Fill in with `/checkpoint`._
+Part 1 (2026-10-20): `expenses` ledger (migration 0037, void not delete), `/v1/expenses` and `/v1/expenses/categories`, `/v1/settings/platform-commission` (owner, step-up). See ARCHITECTURE.md.
 
 ## Log
-_Empty._
+- 2026-10-20: kickoff answers recorded; see PROGRESS entry "P7 · Kickoff answers recorded".
+- 2026-10-20: part 1 expense ledger backend; see PROGRESS "P7 · Part 1".

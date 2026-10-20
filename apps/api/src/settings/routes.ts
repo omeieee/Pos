@@ -6,7 +6,7 @@ import { patchGovCopay, patchSetting, RESOURCES, readGovCopay, readSetting } fro
 const meta = (request: FastifyRequest) => ({ ip: request.ip ?? null });
 
 /**
- * Mounted at /v1/settings: shop, opening-hours, numbering, payments, delivery, promptpay, receipt, bank-account, gov-copay.
+ * Mounted at /v1/settings: shop, opening-hours, numbering, payments, delivery, promptpay, receipt, bank-account, platform-commission, gov-copay.
  * Reading needs `settings.view` (cashiers need the PromptPay ID for the QR, and the scheme for
  * the method list). Changing needs `settings.edit` (managers and the owner), except the PromptPay
  * ID (`settings.promptpay`) and the co-pay scheme (`settings.gov_copay`): owner only, with a

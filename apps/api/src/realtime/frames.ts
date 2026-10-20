@@ -153,6 +153,8 @@ export function frameFromEvent(event: AppEvent): FrameFromEvent {
       });
     case 'alert.security':
     case 'session.ended':
+    // No frame type or audience for the expense ledger yet; devices read it over REST.
+    case 'expense.upserted':
       return { kind: 'ignored' };
     default: {
       const unhandled: never = event;

@@ -249,3 +249,15 @@ Written while the owner slept. Per the standing rule, no P7 code is written unti
 8. **ไทยช่วยไทย money.** How long until the government share reaches the bank account, and which account (needed for the receivables and settlement check). Default: shown as "receivable" until you mark it received.
 9. **Cash receipts–payments report.** The accountant's preferred format, and the opening cash balance date. Default: one row per business day (cash in, cash out, balance) from orders and expenses.
 10. **Screens.** Laptop first, iPhone-friendly (as P6). Owner only, or managers too, for P&L and tax? Default: owner only for P&L and tax; managers can enter expenses.
+
+### P7 kickoff answers · owner, 2026-10-20
+1. **Status (Q3):** not VAT-registered. No accountant (sole owner). Tax examples: the Revenue Department's own at rd.go.th.
+2. **Item costs (Q12):** the owner estimates a cost per item in the POS menu. Without a cost: "no cost entered".
+3. **Expense categories:** default list plus owner-added ones (for example lunch boxes, payment-verification fees). So categories are editable data, not a fixed enum.
+4. **Receipt photos:** default (no photo until storage is chosen; same open question as slip storage).
+5. **Income tax:** actual expenses (not the 60% flat rate). No other income. Business income in every month of Jan to Jun 2569. *Not answered:* allowances beyond the 60,000 personal one (default: only that one, editable).
+6. **0.5% method:** no accountant to ask, so the three conflicting thresholds stay unresolved; shown only when it applies. Encode nothing until a threshold is confirmed from an RD source (proposed: re-read the RD page for the current year, mark "confirm").
+7. **Platforms:** sells on Grab and LINE MAN too. Web search 2026-10-20 found **no official current standard GP**: GrabFood headline 9% only for ไทยช่วยไทย พลัส merchants (sign-up by 2026-06-10); LINE MAN 10% for the same scheme (Brand Inside, June 2026) and "no GP increase" (The Standard, Mar 2026); older/third-party figures 20-30%. **Default decision:** commission rate is a per-platform setting the owner enters from the merchant app/contract, with no built-in value; reports show "rate not set" until then. The owner should read the real rate in each merchant app.
+8. **ไทยช่วยไทย money:** default (receivable until marked received).
+9. **Cash report:** recommended default (one row per business day: cash in, cash out, balance).
+10. **Screens:** default (owner only for P&L and tax; managers enter expenses).

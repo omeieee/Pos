@@ -433,3 +433,32 @@ export const govCopayPatchInputSchema = z
   .strictObject({ expectedVersion, code: shortText(60).optional(), ...schemeFields })
   .refine(needsAField, needsAFieldMessage);
 export type GovCopayPatchInput = z.infer<typeof govCopayPatchInputSchema>;
+
+// ---------- Platform commission (Grab, LINE MAN) ----------
+
+/** A rate in basis points (1 bp = 0.01%); `null` = not set. */
+const commissionRateBp = z.number().int().min(0).max(10000).nullable();
+
+/**
+ * What each delivery platform keeps of a sale (owner, 2026-10-20). There is NO built-in value: the
+ * owner reads it from the merchant app or contract, and until it is set a report says "rate not
+ * set". The spelling follows `ORDER_CHANNELS` (`grab`, `lineman`) so a report can join rate to channel.
+ */
+export const platformCommissionSettingsSchema = z.strictObject({
+  grabRateBp: commissionRateBp.default(null),
+  linemanRateBp: commissionRateBp.default(null),
+});
+export type PlatformCommissionSettings = z.infer<typeof platformCommissionSettingsSchema>;
+export const DEFAULT_PLATFORM_COMMISSION: PlatformCommissionSettings = {
+  grabRateBp: null,
+  linemanRateBp: null,
+};
+
+export const platformCommissionPatchInputSchema = z
+  .strictObject({
+    expectedVersion,
+    grabRateBp: commissionRateBp.optional(),
+    linemanRateBp: commissionRateBp.optional(),
+  })
+  .refine(needsAField, needsAFieldMessage);
+export type PlatformCommissionPatchInput = z.infer<typeof platformCommissionPatchInputSchema>;

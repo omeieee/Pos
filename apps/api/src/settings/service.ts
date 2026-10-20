@@ -36,6 +36,7 @@ import {
   DEFAULT_DELIVERY_SETTINGS,
   DEFAULT_LINE_ORDERING,
   DEFAULT_OPENING_HOURS,
+  DEFAULT_PLATFORM_COMMISSION,
   DEFAULT_RECEIPT_SETTINGS,
   DEFAULT_SHOP_SETTINGS,
   type DeliverySettings,
@@ -61,6 +62,8 @@ import {
   type PromptpaySettings,
   paymentsPatchInputSchema,
   paymentsSettingsSchema,
+  platformCommissionPatchInputSchema,
+  platformCommissionSettingsSchema,
   promptpayPatchInputSchema,
   promptpaySettingsSchema,
   type ReceiptSettings,
@@ -103,6 +106,11 @@ interface Resource {
    * realtime feed, and GET answers only a masked view (the full number leaves the server nowhere).
    */
   bankAccount?: true;
+  /**
+   * The Grab and LINE MAN commission rates (2026-10-20): owner only, step-up, audit, alert. Not on
+   * the realtime feed (reports read it from the server).
+   */
+  platformCommission?: true;
   /** The change also answers PUT (a whole-value replacement) besides PATCH. Same handler. */
   put?: true;
 }
@@ -193,6 +201,17 @@ export const RESOURCES: readonly Resource[] = [
     patch: bankAccountPatchInputSchema,
     editPermission: 'settings.bank_account',
     bankAccount: true,
+  },
+  {
+    // What Grab and LINE MAN keep of a sale, entered by the owner from the merchant app. No
+    // built-in value: both are null until set, and reports then say "rate not set".
+    route: 'platform-commission',
+    key: 'platform_commission',
+    schema: platformCommissionSettingsSchema,
+    defaults: DEFAULT_PLATFORM_COMMISSION,
+    patch: platformCommissionPatchInputSchema,
+    editPermission: 'settings.platform_commission',
+    platformCommission: true,
   },
 ];
 
@@ -389,7 +408,9 @@ export async function patchSetting(
           ? 'settings.receipt_change'
           : resource.bankAccount
             ? 'settings.bank_account_change'
-            : 'settings.update',
+            : resource.platformCommission
+              ? 'settings.platform_commission_change'
+              : 'settings.update',
       entity: 'settings',
       entityId: resource.key,
       before: view.before,
@@ -405,16 +426,15 @@ export async function patchSetting(
         }),
       );
     }
-    if (resource.receipt || resource.bankAccount) {
-      // The tax ID, the address and the account number never ride the realtime feed.
-      emit(
-        securityAlert(
-          ctx,
-          resource.bankAccount ? 'settings.bank_account_changed' : 'settings.receipt_changed',
-          'warn',
-          { staffId: actor.staffId, deviceId: actor.deviceId },
-        ),
-      );
+    if (resource.receipt || resource.bankAccount || resource.platformCommission) {
+      // The tax ID, the address and the account number never ride the realtime feed; the
+      // commission rates are not a synced setting either.
+      const kind = resource.bankAccount
+        ? 'settings.bank_account_changed'
+        : resource.platformCommission
+          ? 'settings.platform_commission_changed'
+          : 'settings.receipt_changed';
+      emit(securityAlert(ctx, kind, 'warn', { staffId: actor.staffId, deviceId: actor.deviceId }));
       return toResponse(resource, saved, actor.role);
     }
     emit({

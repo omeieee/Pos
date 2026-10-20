@@ -9,6 +9,7 @@ import type { AuthContext } from './auth/service.ts';
 import { registerCustomerAppRoutes } from './customer-app/routes.ts';
 import { registerCustomerRoutes } from './customers/routes.ts';
 import type { EventBus } from './events.ts';
+import { registerExpenseRoutes } from './expenses/routes.ts';
 import { registerCompletionPush } from './line/completion-push.ts';
 import { notifyOrderChange } from './line/order-change-push.ts';
 import { notifyPaymentRejected } from './line/payment-rejected-push.ts';
@@ -146,6 +147,9 @@ export async function registerV1(app: FastifyInstance, deps: V1Deps): Promise<vo
       );
       await v1.register((scope) => registerMenuRoutes(scope, context.auth, context.guard), {
         prefix: '/menu',
+      });
+      await v1.register((scope) => registerExpenseRoutes(scope, context.auth, context.guard), {
+        prefix: '/expenses',
       });
       await v1.register((scope) => registerReportRoutes(scope, context.auth, context.guard), {
         prefix: '/reports',

@@ -7,6 +7,7 @@ import {
   DEFAULT_BANK_ACCOUNT,
   DEFAULT_DELIVERY_SETTINGS,
   DEFAULT_LINE_ORDERING,
+  DEFAULT_PLATFORM_COMMISSION,
   deliveryPatchInputSchema,
   deliverySettingsSchema,
   govCopayPatchInputSchema,
@@ -20,6 +21,8 @@ import {
   openingHoursSchema,
   openingWindow,
   paymentsSettingsSchema,
+  platformCommissionPatchInputSchema,
+  platformCommissionSettingsSchema,
   promptpayPatchInputSchema,
   serviceOpenAt,
   shopPatchInputSchema,
@@ -449,5 +452,34 @@ describe('shop receiving bank account (fake numbers only)', () => {
         accountNumber: '1234567890',
       }),
     ).not.toHaveProperty('accountNumber');
+  });
+});
+
+describe('platform commission', () => {
+  test('nothing is set by default: no built-in rate', () => {
+    expect(DEFAULT_PLATFORM_COMMISSION).toEqual({ grabRateBp: null, linemanRateBp: null });
+    expect(platformCommissionSettingsSchema.parse({})).toEqual(DEFAULT_PLATFORM_COMMISSION);
+  });
+  test('a rate is whole basis points from 0 to 10000, or null to clear it', () => {
+    for (const grabRateBp of [0, 900, 10000, null]) {
+      expect(
+        platformCommissionPatchInputSchema.safeParse({ expectedVersion: 0, grabRateBp }).success,
+        String(grabRateBp),
+      ).toBe(true);
+    }
+    for (const grabRateBp of [-1, 10001, 9.5, '9%']) {
+      expect(
+        platformCommissionPatchInputSchema.safeParse({ expectedVersion: 0, grabRateBp }).success,
+        String(grabRateBp),
+      ).toBe(false);
+    }
+  });
+  test('a patch changes something and takes no other keys', () => {
+    expect(platformCommissionPatchInputSchema.safeParse({ expectedVersion: 1 }).success).toBe(
+      false,
+    );
+    expect(
+      platformCommissionPatchInputSchema.safeParse({ expectedVersion: 1, phoneRateBp: 5 }).success,
+    ).toBe(false);
   });
 });

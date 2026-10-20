@@ -28,6 +28,8 @@ export const PERMISSIONS = [
   'settings.receipt',
   /** The shop's receiving bank account number, used only to check slip receivers (D-26). */
   'settings.bank_account',
+  /** The per-platform commission rates (Grab, LINE MAN) that reports use. Owner only. */
+  'settings.platform_commission',
   'staff.manage',
   'device.manage',
   'data.export',
@@ -76,6 +78,7 @@ export const STEP_UP_PERMISSIONS: ReadonlySet<Permission> = new Set<Permission>(
   'settings.gov_copay',
   'settings.receipt',
   'settings.bank_account',
+  'settings.platform_commission',
   'payment.void_refund',
   'order.edit_past',
   'staff.manage',

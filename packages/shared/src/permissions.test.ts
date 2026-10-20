@@ -13,6 +13,7 @@ test('only the owner can change the PromptPay ID, the co-pay scheme, staff or de
       'settings.gov_copay',
       'settings.receipt',
       'settings.bank_account',
+      'settings.platform_commission',
       'staff.manage',
       'device.manage',
       'data.export',
@@ -76,6 +77,7 @@ test('sensitive actions need step-up', () => {
       'settings.promptpay',
       'settings.receipt',
       'settings.bank_account',
+      'settings.platform_commission',
       'staff.manage',
     ].sort(),
   );

@@ -1,6 +1,6 @@
 # Progress Log
 
-**Current phase:** P6 — back-office analytics ([checkpoint](checkpoints/PHASE-06-analytics.md)), in progress since 2026-10-17 (owner chose to go on with it while the P4 phone checks and the P5 operations wait). P4 — LINE ordering ([checkpoint](checkpoints/PHASE-04-line-ordering.md)) stays in progress. P3 ([checkpoint](checkpoints/PHASE-03-storefront-pos.md)) was left open for the owner's real-device checks (per the 2026-10-04 header; not re-verified).
+**Current phase:** P7 — costs, P&L, tax ([checkpoint](checkpoints/PHASE-07-costs-pnl-tax.md)), started 2026-10-20. P6 — back-office analytics ([checkpoint](checkpoints/PHASE-06-analytics.md)), in progress since 2026-10-17 (owner chose to go on with it while the P4 phone checks and the P5 operations wait). P4 — LINE ordering ([checkpoint](checkpoints/PHASE-04-line-ordering.md)) stays in progress. P3 ([checkpoint](checkpoints/PHASE-03-storefront-pos.md)) was left open for the owner's real-device checks (per the 2026-10-04 header; not re-verified).
 **Previous:** P2 — Cloud skeleton ✅ 2026-10-01 · P1 — Foundation ✅ 2026-09-29.
 
 > **Read this header and the newest entry only.** Older entries are archived, verbatim, by month:
@@ -17,6 +17,24 @@
 > - **Before any push:** `pnpm lint` (CI gates on Biome, and a lint error skips the deploy), `pnpm build`, tests; `main` auto-deploys, so new env vars go into the VM `.env` first and migrations take the next free number. Check `/healthz` for the new sha after the push.
 > - **Maintenance:** the architecture refactor (code moved, behaviour unchanged) is deployed; see the entry "2026-10-16 · Maintenance · Architecture refactor". Not yet checked on a real iPad/iPhone. The as-built code index `ARCHITECTURE.md` (verified at `7ff9951`) is committed (`070e0b4`) and pushed with the owner's OK; see the newest entry.
 > - **Workflow (owner rule 2026-10-16):** after each completed part, ask the owner "save checkpoint or next step?" and wait for the answer (`CLAUDE.md` workflow, `3d8481c`).
+
+## 2026-10-20 · P7 · Part 1: expense ledger backend
+- **Summary:** built by backend-engineer, tests first. Editable expense categories (settings list, keys can be switched off, never removed), expense create/patch/void/list API, per-platform commission rates (Grab, LINE MAN; unset by default, owner only, step-up, audit).
+- **Changed:** migration 0037 (drops `expenses_category` CHECK; adds idempotency and void columns); `packages/shared` expenses and settings schemas, permission `settings.platform_commission`; `packages/db` `expensesRepo`; `apps/api/src/expenses/*`, `settings/*`; D-31 (Proposed); `docs/03-data-model.md`; `ARCHITECTURE.md`.
+- **Verification (engineer's report, not re-run by me):** biome 0 errors; build 13/13; tests shared 1132, db 315, api 1425 (28 new expense tests).
+- **Decisions:** D-31 Proposed. Owner confirmed 2026-10-20: `expense.edit` (owner, manager) for read and write; void with reason instead of delete; amount greater than 0. Owner's remark on future dates ("customers may book in advance") read as: allow future-dated entries; applied in part 2.
+- **Open issues:** receipt photos (storage undecided); no realtime frame for expenses on devices; cashiers can read commission rates via `settings.view`; `SYNC_EXCLUDED.expenses` comment stale.
+- **Next:** part 2: item costs into gross profit and margin (`@sds/finance`).
+- **Commit:** see git log (committed 2026-10-20, not pushed).
+
+## 2026-10-20 · P7 · Kickoff answers recorded, P6 follow-ups committed
+- **Summary:** the owner answered the P7 kickoff list (`docs/10-open-questions.md`, "P7 kickoff answers"): not VAT-registered, no accountant (use rd.go.th examples), actual-expenses method, no other income, business income every month Jan to Jun 2569, item costs typed by the owner in the POS menu, expense categories editable (owner adds e.g. lunch boxes, payment-verification fees), rates and allowances saved in POS settings, sells on Grab and LINE MAN, other items default.
+- **Changed:** docs only (open-questions answers, this entry, P7 checkpoint status). P6 follow-ups were committed earlier today as `4755310` (not pushed).
+- **Verification:** none for this entry (docs). Web search found no official current standard GP for Grab or LINE MAN (promo 9% / 10% only for ไทยช่วยไทย พลัส), so commission rates are per-platform settings with no built-in value.
+- **Decisions:** none yet. Editable categories mean dropping the `expenses_category` check (needs a decision entry and a forward-only migration).
+- **Open issues:** 0.5% method threshold unconfirmed (60,000 / 120,000 / 1,000,000); allowances beyond 60,000 not given; receipt photo storage undecided.
+- **Next:** P7 part 1: expenses data and API, platform commission setting.
+- **Commit:** uncommitted (docs).
 
 ## 2026-10-17 · P6 · QA follow-ups, hand-check sample, P7 kickoff list (owner asleep)
 - **Summary:** the owner asked for whatever can run on the default settings. P7 (costs, P&L, tax) was NOT started: the project rule says to ask first and Q3 and Q12 are open, so the questions are written down instead (`docs/10-open-questions.md`, "P7 kickoff list"). The P6 follow-ups that need no new information were finished. No commit, push, deploy, money, Oracle or secrets.
