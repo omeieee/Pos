@@ -38,3 +38,4 @@ Part 1 (2026-10-20): `expenses` ledger (migration 0037, void not delete), `/v1/e
 - 2026-10-21: part 5 screens; see PROGRESS "P7 · Part 5".
 - 2026-10-21: QA review and fixes (larger-of rules, owner-only rates); see PROGRESS "P7 · QA review and fixes".
 - 2026-10-21: part 6 receipts-payments report; see PROGRESS "P7 · Part 6".
+- 2026-10-21: part 6 QA fixes, push and deploy; see PROGRESS "P7 · Part 6 QA fixes".

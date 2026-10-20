@@ -39,7 +39,7 @@ export function OpeningCash({
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
 
   const current = setting.data?.value ?? null;
-  const problems = tried ? validateOpeningForm(form) : [];
+  const problems = tried ? validateOpeningForm(form, today) : [];
 
   async function run(call: () => ReturnType<typeof api.settings.cashOpening.save>) {
     setSaving(true);
@@ -61,7 +61,7 @@ export function OpeningCash({
 
   function save() {
     setTried(true);
-    const body = buildOpeningBody(form, setting.data?.version ?? 0);
+    const body = buildOpeningBody(form, setting.data?.version ?? 0, today);
     if (!body || saving) return;
     void run(() => api.settings.cashOpening.save(body));
   }
@@ -112,7 +112,13 @@ export function OpeningCash({
             type="date"
             label={tr('cash.opening.asOf')}
             value={form.asOf}
-            error={problems.includes('asOf') ? tr('cash.opening.invalid') : undefined}
+            error={
+              problems.includes('asOfTooOld')
+                ? tr('cash.opening.tooOld')
+                : problems.includes('asOf')
+                  ? tr('cash.opening.invalid')
+                  : undefined
+            }
             onChange={(asOf) => setForm({ ...form, asOf })}
           />
           <p className="g-t-c fin-note">{tr('tax.allow.stepUp')}</p>

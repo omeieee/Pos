@@ -414,3 +414,78 @@ describe('GET /v1/reports/export/cash.csv', () => {
     expect(JSON.stringify(audit?.after)).not.toContain('1070');
   });
 });
+
+describe('start date limits and set-aside orders in the carry', () => {
+  // The harness clock starts on 2026-10-01 (business date), so 10 years back is 2016-10-01.
+  const cleanUp = () => h.client.query("delete from settings where key = 'cash_opening'");
+  const setOpening = async (asOf: string) =>
+    call('PATCH', OPENING, await steppedOwner(), { expectedVersion: 0, amountSatang: 1000, asOf });
+
+  test('a start date more than 10 years back is refused with 422 CASH_OPENING_TOO_OLD; exactly 10 years is fine', async () => {
+    await cleanUp();
+    for (const asOf of ['0001-01-01', '1999-12-31', '2016-09-30']) {
+      const res = await setOpening(asOf);
+      expect(res.statusCode, asOf).toBe(422);
+      expect(res.json().code, asOf).toBe('CASH_OPENING_TOO_OLD');
+    }
+    expect(
+      (await h.auditRows('cash_opening')).filter(
+        (a) => a.after && JSON.stringify(a.after).includes('0001'),
+      ),
+    ).toEqual([]);
+    const ok = await setOpening('2016-10-01');
+    expect(ok.statusCode).toBe(200);
+    await cleanUp();
+  });
+
+  test('clearing the start amount is still allowed', async () => {
+    await cleanUp();
+    expect((await setOpening('2030-01-01')).statusCode).toBe(200);
+    const cleared = await call('PATCH', OPENING, await steppedOwner(), {
+      expectedVersion: 1,
+      amountSatang: null,
+      asOf: null,
+    });
+    expect(cleared.statusCode).toBe(200);
+    await cleanUp();
+  });
+
+  test('a stored start date that is far too old (saved before the limit) is answered with 422, never a hang', async () => {
+    await cleanUp();
+    await h.client.query(
+      `insert into settings (key, value) values ('cash_opening', '{"amountSatang":1000,"asOf":"0001-01-01"}'::jsonb)`,
+    );
+    const res = await cash(await ownerToken(), '?from=2037-03-01&to=2037-03-07');
+    expect(res.statusCode).toBe(422);
+    expect(res.json().code).toBe('CASH_OPENING_TOO_OLD');
+    await cleanUp();
+  });
+
+  test('an order whose refunds exceed its payment is set aside in the carry window and named, once, with ids from outside the range', async () => {
+    await cleanUp();
+    expect((await setOpening('2036-12-01')).statusCode).toBe(200);
+    // carry window (before the range): one good order and one inconsistent (refund 90.00 on 50.00)
+    await seed('2037-01-10', 'cash', 5000);
+    await seed('2037-01-11', 'cash', 5000, 9000);
+    // inside the range: another inconsistent one
+    await seed('2037-06-02', 'cash', 3000, 7000);
+    await seed('2037-06-02', 'cash', 2000);
+    const outside = (await h.client.query(
+      "select id from orders where business_date = '2037-01-11'",
+    )) as { rows: { id: string }[] };
+    const inside = (await h.client.query(
+      "select o.id from orders o where o.business_date = '2037-06-02' and o.total_satang = 3000",
+    )) as { rows: { id: string }[] };
+    const report = (
+      await cash(await ownerToken(), '?from=2037-06-01&to=2037-06-07')
+    ).json() as CashReport;
+    expect(report.complete).toBe(false);
+    expect(new Set(report.excludedOrderIds).size).toBe(report.excludedOrderIds.length);
+    expect([...report.excludedOrderIds].sort()).toEqual(
+      [outside.rows[0]?.id, inside.rows[0]?.id].sort(),
+    );
+    // the inconsistent orders add nothing to the figures; the good ones do
+    expect(report.totals.receiptsSatang).toBe(2000);
+    await cleanUp();
+  });
+});

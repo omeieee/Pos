@@ -203,6 +203,7 @@ export const enErrors = {
     'This order already has a payment waiting in the system. Check on the order page whether the money was taken twice.',
   'error.reorderMismatch':
     'The list was changed on another device. The latest list is loaded. Try the move again.',
+  'error.cashOpeningTooOld': 'The start date is more than 10 years back. Pick a more recent date.',
   'error.unknownExpenseCategory': 'That category does not exist or is switched off. Pick another.',
   'error.taxRulesNotAvailable': 'There are no tax rules for that year yet. Try another year.',
   'error.photoEmpty': 'The photo came through empty. Choose it again.',

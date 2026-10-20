@@ -14,6 +14,7 @@ import {
   cashReportSchema,
   REPORT_MAX_DAYS,
 } from '@sds/shared';
+import { cashOpeningTooOld } from '../errors.ts';
 import { currentBuyingGoodsKeys } from '../expenses/categories.ts';
 import { currentCashOpening } from '../settings/service.ts';
 import { loadReportOrders } from './service.ts';
@@ -26,6 +27,9 @@ const toExpense = (e: Awaited<ReturnType<typeof expensesRepo.listExpenses>>[numb
   voided: e.voidedAt !== null,
 });
 
+/** At most this many 366-day windows are carried: 10 years back from today plus a range of a year is 12. */
+const MAX_CARRY_WINDOWS = 12;
+
 /** Net (receipts minus payments) from `opening.asOf` to the day before `from`, and any orders set aside. */
 async function broughtForward(
   db: Db,
@@ -34,8 +38,13 @@ async function broughtForward(
   purchaseCategories: readonly string[],
 ): Promise<{ netSatang: number; excludedOrderIds: string[] }> {
   let netSatang = 0;
-  const excludedOrderIds: string[] = [];
+  const excludedOrderIds = new Set<string>();
   const last = addIsoDays(from, -1);
+  // A start date that is absurdly far back must not become thousands of queries (the setting itself
+  // refuses one over 10 years, but a stored older value or a far-future range could still get here).
+  const days =
+    (Date.parse(`${last}T00:00:00Z`) - Date.parse(`${opening.asOf}T00:00:00Z`)) / 86_400_000 + 1;
+  if (Math.ceil(days / REPORT_MAX_DAYS) > MAX_CARRY_WINDOWS) throw cashOpeningTooOld();
   for (let start = opening.asOf; start <= last; ) {
     const end =
       addIsoDays(start, REPORT_MAX_DAYS - 1) < last ? addIsoDays(start, REPORT_MAX_DAYS - 1) : last;
@@ -53,10 +62,10 @@ async function broughtForward(
       purchaseCategories,
     });
     netSatang += window.totals.receiptsMinusPaymentsSatang;
-    excludedOrderIds.push(...excluded);
+    for (const id of excluded) excludedOrderIds.add(id);
     start = addIsoDays(end, 1);
   }
-  return { netSatang, excludedOrderIds };
+  return { netSatang, excludedOrderIds: [...excludedOrderIds] };
 }
 
 export async function cashReport(db: Db, query: CashReportQuery): Promise<CashReport> {
@@ -77,7 +86,7 @@ export async function cashReport(db: Db, query: CashReportQuery): Promise<CashRe
     from: query.from,
     to: query.to,
     orders: usable,
-    excludedOrderIds: [...excludedOrderIds, ...carry.excludedOrderIds],
+    excludedOrderIds: [...new Set([...excludedOrderIds, ...carry.excludedOrderIds])],
     expenses: rows.map(toExpense),
     opening,
     broughtForwardSatang: carry.netSatang,

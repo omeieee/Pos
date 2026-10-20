@@ -32,6 +32,7 @@ import {
   bankAccountSettingsSchema,
   businessDaySettingsSchema,
   type CashOpeningSettings,
+  cashOpeningEarliest,
   cashOpeningPatchInputSchema,
   cashOpeningSettingsSchema,
   DEFAULT_BANK_ACCOUNT,
@@ -86,7 +87,8 @@ import {
   type RequestMeta,
   securityAlert,
 } from '../auth/service.ts';
-import { ApiError, versionConflict } from '../errors.ts';
+import { ApiError, cashOpeningTooOld, versionConflict } from '../errors.ts';
+import { currentBusinessDate } from '../orders/business-day.ts';
 import { withTransaction } from '../tx.ts';
 import { parse } from '../validate.ts';
 
@@ -397,6 +399,17 @@ const maskedBankAccount = (value: BankAccountSettings | null) => ({
 const maskedPromptpay = (value: PromptpaySettings | null) =>
   value ? { idType: value.idType, idMasked: maskPromptpayId(value.idValue) } : null;
 
+/** The start date is refused when it is more than 10 years before today's business date (422). */
+export async function assertCashOpeningNotTooOld(
+  db: Db,
+  now: Date,
+  value: CashOpeningSettings,
+): Promise<void> {
+  if (value.asOf === null) return;
+  const earliest = cashOpeningEarliest(await currentBusinessDate(db, now));
+  if (value.asOf < earliest) throw cashOpeningTooOld();
+}
+
 export async function patchSetting(
   ctx: AuthContext,
   actor: Principal,
@@ -418,6 +431,8 @@ export async function patchSetting(
 
     const current = row ? resource.schema.parse(row.value) : resource.defaults;
     const next = parse(resource.schema, { ...((current as object | null) ?? {}), ...given });
+    if (resource.cashOpening)
+      await assertCashOpeningNotTooOld(tx, ctx.now(), next as CashOpeningSettings);
     if (row && same(current, next)) return toResponse(resource, row, actor.role); // nothing to change
 
     const saved = row

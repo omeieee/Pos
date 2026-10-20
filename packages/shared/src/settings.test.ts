@@ -4,6 +4,8 @@ import {
   bankAccountPatchInputSchema,
   bankAccountSettingsSchema,
   bankAccountViewSchema,
+  CASH_OPENING_MAX_YEARS_BACK,
+  cashOpeningEarliest,
   cashOpeningPatchInputSchema,
   cashOpeningSettingsSchema,
   DEFAULT_BANK_ACCOUNT,
@@ -529,5 +531,13 @@ describe('cash opening (D-35)', () => {
     expect(cashOpeningPatchInputSchema.safeParse({ expectedVersion: 1, note: 'x' }).success).toBe(
       false,
     );
+  });
+  test('the start date may not be more than 10 years before today (the report adds it up window by window)', () => {
+    expect(CASH_OPENING_MAX_YEARS_BACK).toBe(10);
+    expect(cashOpeningEarliest('2026-10-21')).toBe('2016-10-21');
+    // 29 February has no twin ten years back in a non-leap year: the 28th is the limit
+    expect(cashOpeningEarliest('2028-02-29')).toBe('2018-02-28');
+    expect(cashOpeningEarliest('2026-10-21') <= '2016-10-21').toBe(true);
+    expect('2016-10-20' < cashOpeningEarliest('2026-10-21')).toBe(true);
   });
 });

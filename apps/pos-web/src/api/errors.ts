@@ -79,6 +79,7 @@ export const API_ERROR_KEYS = {
   // Expenses and the tax estimate (P7)
   UNKNOWN_EXPENSE_CATEGORY: 'error.unknownExpenseCategory',
   TAX_RULES_NOT_AVAILABLE: 'error.taxRulesNotAvailable',
+  CASH_OPENING_TOO_OLD: 'error.cashOpeningTooOld',
   // Menu photos. The two FST_ codes are Fastify's own answers (body over the cap, other type).
   PHOTO_EMPTY: 'error.photoEmpty',
   PHOTO_TOO_LARGE: 'error.photoTooLarge',

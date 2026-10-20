@@ -233,7 +233,7 @@ describe('cashCsvRows (cash receipts and payments)', () => {
       '50.00',
       '',
     ]);
-    expect(toCsv(rows)).toContain(',-40.00' + String.fromCharCode(13, 10));
+    expect(toCsv(rows)).toContain(`,-40.00${String.fromCharCode(13, 10)}`);
   });
 
   test('no running net is an empty cell, not 0.00', () => {

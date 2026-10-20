@@ -67,7 +67,7 @@ export const thFinance = {
   'exp.cat.buyingGoodsHead': 'นับเป็น “ซื้อสินค้า”',
   'exp.cat.buyingGoodsHint':
     'หมวดที่ติ๊กจะรวมในช่อง “ซื้อสินค้า” ของรายงานรับ-จ่าย หมวดที่ไม่ติ๊กจะอยู่ใน “ค่าใช้จ่ายอื่น ๆ” (เช่น ค่าตรวจสลิปไม่ใช่สินค้า)',
-  'exp.cat.buyingGoodsOf': 'นับ {name} เป็นซื้อสินค้า',
+  'exp.cat.buyingGoodsOf': 'นับเป็น “ซื้อสินค้า”: {name}',
   'exp.cat.addBuyingGoods': 'นับเป็นซื้อสินค้า',
 
   // Profit and loss
@@ -244,6 +244,7 @@ export const thFinance = {
   'cash.opening.save': 'บันทึกยอดตั้งต้น',
   'cash.opening.clear': 'ล้างค่า',
   'cash.opening.invalid': 'ใส่จำนวนเงินตั้งแต่ 0 ขึ้นไป และเลือกวันที่',
+  'cash.opening.tooOld': 'วันที่ตั้งต้นย้อนหลังเกิน 10 ปี เลือกวันที่ใหม่กว่านี้',
   'cash.opening.saved': 'บันทึกยอดตั้งต้นแล้ว',
   'cash.opening.failed': 'บันทึกไม่สำเร็จ ลองใหม่อีกครั้ง',
   'cash.running.start': 'ยอดสุทธิสะสมต้นช่วง',

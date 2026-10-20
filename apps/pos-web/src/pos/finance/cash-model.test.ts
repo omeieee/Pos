@@ -25,6 +25,15 @@ describe('the opening cash form', () => {
     expect(validateOpeningForm({ amount: '5', asOf: '' })).toEqual(['asOf']);
   });
 
+  test('a start date more than 10 years before today is refused, with its own problem', () => {
+    const today = '2026-10-21';
+    expect(validateOpeningForm({ amount: '5', asOf: '2016-10-21' }, today)).toEqual([]);
+    expect(validateOpeningForm({ amount: '5', asOf: '2016-10-20' }, today)).toEqual(['asOfTooOld']);
+    expect(validateOpeningForm({ amount: '5', asOf: '0001-01-01' }, today)).toEqual(['asOfTooOld']);
+    expect(buildOpeningBody({ amount: '5', asOf: '0001-01-01' }, 0, today)).toBeNull();
+    expect(buildOpeningBody({ amount: '5', asOf: '2016-10-21' }, 0, today)).not.toBeNull();
+  });
+
   test('the body is whole satang from the typed baht, with the version the screen saw', () => {
     expect(buildOpeningBody({ amount: '1,250.75', asOf: '2026-09-24' }, 3)).toEqual({
       expectedVersion: 3,

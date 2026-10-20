@@ -77,3 +77,7 @@ export function validationError(error: z.ZodError): ApiError {
     })),
   });
 }
+
+/** The receipts-payments start date is more than 10 years before today (D-35). */
+export const cashOpeningTooOld = () =>
+  new ApiError(422, 'CASH_OPENING_TOO_OLD', 'The start date is too far back');

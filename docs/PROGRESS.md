@@ -18,6 +18,14 @@
 > - **Maintenance:** the architecture refactor (code moved, behaviour unchanged) is deployed; see the entry "2026-10-16 · Maintenance · Architecture refactor". Not yet checked on a real iPad/iPhone. The as-built code index `ARCHITECTURE.md` (verified at `7ff9951`) is committed (`070e0b4`) and pushed with the owner's OK; see the newest entry.
 > - **Workflow (owner rule 2026-10-16):** after each completed part, ask the owner "save checkpoint or next step?" and wait for the answer (`CLAUDE.md` workflow, `3d8481c`).
 
+## 2026-10-21 · P7 · Part 6 QA fixes, push and deploy of P6 follow-ups and P7
+- **Summary:** QA review of part 6 found no wrong-figure bug; fixed the must-fix (start date for the running net limited to 10 years back, `422 CASH_OPENING_TOO_OLD`, carry capped at 12 windows) plus tests for set-aside orders in the carry window, label-in-name on the buying-goods checkbox, a sync-allowlist test, a lint hint. Owner then asked to push and deploy.
+- **Verification (engineer's report plus my own pre-push run, see Commit line):** biome 0 errors; `pnpm build --force` 13/13; finance 223, shared 1166, i18n 26, db 322, api 1472, pos-web 2136. One pos-web test (`OfflineScreens.test.tsx` step-up clear) failed once under load and passed on re-run; not investigated.
+- **Decisions:** none new. Open: audit rows of the start amount keep the amounts (policy question to the owner).
+- **Open issues:** owner hand-check of a sample month (P7 exit criterion); ภ.ง.ด.94 2569 filed?; real iPad/iPhone check of the P6/P7 screens; migrations 0037 and 0038 go live with this push; 0.5% threshold, tax rounding, half-year allowance rule unverified; Slip2Go package; carry-cap message wording.
+- **Next:** check `/healthz` and CI after the push; owner checks on a real device.
+- **Commit:** see git log; push result in the next line of this entry once known.
+
 ## 2026-10-21 · P7 · Part 6: receipts-payments report (รายงานรับ-จ่าย)
 - **Summary:** built by payments-finance-engineer, tests first. Daily table modelled on the RD receipts-payments form (rd.go.th announcement No. 161): receipts by method (all methods, reconciled to the revenue report), payments split into buying goods and other expenses, difference, and a running net from an owner-set start amount and date. Owner answers: no cash drawer (100% bank transfers), so no cash-balance framing; `packaging` and owner-added categories count as buying goods via a per-category `buyingGoods` flag; co-pay receivable dropped from P7 (P&L says "not tracked"); CSV per-day ISO rows accepted.
 - **Changed:** `@sds/finance` `cash.ts`, `csv.ts`; `@sds/shared` cash schemas, `settings.cash_opening`; API `GET /v1/reports/cash`, `GET /v1/reports/export/cash.csv` (step-up, audit), `GET|PATCH /v1/settings/cash-opening` (stored key kept as `cash_opening`); pos-web `#/cash`, category checkbox; i18n; `docs/p7-cash-sample.md` + pinning tests; D-35 Accepted; `ARCHITECTURE.md`.

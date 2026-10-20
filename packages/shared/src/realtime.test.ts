@@ -7,6 +7,7 @@ import {
   realtimeFrameSchema,
   SYNC_DEFAULT_LIMIT,
   SYNC_MAX_LIMIT,
+  SYNCED_SETTING_KEYS,
   settingsUpdatedFrameSchema,
   syncChangeSchema,
   syncQuerySchema,
@@ -327,6 +328,15 @@ describe('server messages and close codes', () => {
       if (['GOING_AWAY', 'MESSAGE_TOO_BIG', 'INTERNAL'].includes(name)) continue;
       expect(code, name).toBeGreaterThanOrEqual(4000);
       expect(code, name).toBeLessThan(5000);
+    }
+  });
+});
+
+describe('SYNCED_SETTING_KEYS', () => {
+  test('never lists the owner-only settings (start amount, commission rates, bank account, receipt)', () => {
+    const keys: readonly string[] = SYNCED_SETTING_KEYS;
+    for (const key of ['cash_opening', 'platform_commission', 'bank_account', 'receipt']) {
+      expect(keys, key).not.toContain(key);
     }
   });
 });

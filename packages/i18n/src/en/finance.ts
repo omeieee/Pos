@@ -70,7 +70,7 @@ export const enFinance = {
   'exp.cat.buyingGoodsHead': 'Counts as “buying goods”',
   'exp.cat.buyingGoodsHint':
     'Ticked categories go in the “buying goods” column of the receipts-payments report; unticked ones go in “other expenses” (for example, a payment-verification fee is not goods)',
-  'exp.cat.buyingGoodsOf': 'Count {name} as buying goods',
+  'exp.cat.buyingGoodsOf': 'Counts as “buying goods”: {name}',
   'exp.cat.addBuyingGoods': 'Counts as buying goods',
 
   // Profit and loss
@@ -251,6 +251,7 @@ export const enFinance = {
   'cash.opening.save': 'Save start amount',
   'cash.opening.clear': 'Clear',
   'cash.opening.invalid': 'Enter an amount of 0 or more and pick a date.',
+  'cash.opening.tooOld': 'The start date is more than 10 years back. Pick a more recent date.',
   'cash.opening.saved': 'Start amount saved.',
   'cash.opening.failed': 'Could not save. Try again.',
   'cash.running.start': 'Running net at the start',

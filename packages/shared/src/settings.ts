@@ -483,6 +483,20 @@ export const cashOpeningSettingsSchema = z
 export type CashOpeningSettings = z.infer<typeof cashOpeningSettingsSchema>;
 export const DEFAULT_CASH_OPENING: CashOpeningSettings = { amountSatang: null, asOf: null };
 
+/** The start date may not be older than this many years before today's business date (the report adds up every day from it). */
+export const CASH_OPENING_MAX_YEARS_BACK = 10;
+
+/**
+ * The earliest start date allowed when today's business date is `today` (`YYYY-MM-DD`): the same
+ * month and day `CASH_OPENING_MAX_YEARS_BACK` years earlier. 29 February falls back to the 28th.
+ * Dates compare as text (four-digit years), so `asOf >= cashOpeningEarliest(today)` is the check.
+ */
+export function cashOpeningEarliest(today: string): string {
+  const year = Number(today.slice(0, 4)) - CASH_OPENING_MAX_YEARS_BACK;
+  const monthDay = today.slice(5) === '02-29' ? '02-28' : today.slice(5);
+  return `${String(year).padStart(4, '0')}-${monthDay}`;
+}
+
 export const cashOpeningPatchInputSchema = z
   .strictObject({
     expectedVersion,
