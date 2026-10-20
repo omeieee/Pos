@@ -104,6 +104,14 @@ export const PNL_INCOMPLETE_REASONS = [
   'commission_rate_not_set',
 ] as const;
 
+/**
+ * Which side of an overlapping pair is deducted when both are above 0 in the period (owner-approved
+ * 2026-10-21): cost of goods vs the `ingredients` expense, commission vs the `platform_fees` expense.
+ * `only_one` also covers "neither": there is no overlap. A tie goes to cost of goods / commission.
+ */
+export const FOOD_COST_BASES = ['cost_of_goods', 'ingredients_expenses', 'only_one'] as const;
+export const PLATFORM_FEES_BASES = ['commission', 'platform_fees_expenses', 'only_one'] as const;
+
 const pnlFiguresShape = {
   revenueSatang: nonNegativeSatangSchema,
   orderCount: z.number().int().min(0),
@@ -115,9 +123,16 @@ const pnlFiguresShape = {
   grossProfitSatang: satangSchema,
   /** Recorded plus estimated platform commission; orders with "rate not set" are not in it. */
   commissionSatang: nonNegativeSatangSchema,
-  /** Unvoided expense rows, every category (platform_fees included, commission not). */
+  /** Unvoided expense rows, every category (platform_fees and ingredients included, commission not). Raw. */
   expensesSatang: nonNegativeSatangSchema,
-  /** Gross profit - commission - expenses, before income tax. Negative for a loss. */
+  /** The smaller of cost of goods and the `ingredients` expense when both are above 0, else 0. Not deducted. */
+  foodCostNotDeductedSatang: nonNegativeSatangSchema,
+  /** The smaller of commission and the `platform_fees` expense when both are above 0, else 0. Not deducted. */
+  platformFeesNotDeductedSatang: nonNegativeSatangSchema,
+  /**
+   * Gross profit - commission - expenses + the two "not deducted" amounts, before income tax.
+   * Negative for a loss.
+   */
   netProfitSatang: satangSchema,
   /** False when anything is missing; the profit is then at most this high, never lower. */
   complete: z.boolean(),
@@ -157,8 +172,12 @@ export const pnlReportSchema = z.object({
     }),
   ),
   voidedExpenseCount: z.number().int().min(0),
-  /** Both a platform commission and a `platform_fees` expense are present: check they are not the same fee. */
-  platformFeesAlsoCommission: z.boolean(),
+  /** Of cost of goods and the `ingredients` expense, the one that is deducted (the other is raw only). */
+  foodCostBasis: z.enum(FOOD_COST_BASES),
+  ingredientsExpensesSatang: nonNegativeSatangSchema,
+  /** Of commission and the `platform_fees` expense, the one that is deducted (the other is raw only). */
+  platformFeesBasis: z.enum(PLATFORM_FEES_BASES),
+  platformFeesExpensesSatang: nonNegativeSatangSchema,
   govCopay: z.object({
     revenueSatang: nonNegativeSatangSchema,
     receivable: z.literal('not_built'),

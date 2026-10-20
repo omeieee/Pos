@@ -184,17 +184,29 @@ describe('warnings', () => {
     expect(screen.getByText(th['pnl.reason.orders_uncosted'])).toBeTruthy();
   });
 
-  test('food cost counted twice and a late filing are banners too, once each', async () => {
+  test('the larger-of-two notes and a late filing are banners too, once each, in one status region', async () => {
     await open({
       tax: async () =>
         ({
           ...sampleTax('half'),
-          foodCostMayBeCountedTwice: true,
-          notes: ['tax.note.pnlIncomplete', 'tax.note.foodCostTwice', 'tax.note.filingLate'],
+          foodCostBasis: 'cost_of_goods',
+          platformFeesBasis: 'commission',
+          notes: [
+            'tax.note.pnlIncomplete',
+            'tax.note.foodCostCostOfGoodsUsed',
+            'tax.note.platformFeesCommissionUsed',
+            'tax.note.filingLate',
+          ],
         }) as TaxReport,
     });
     await loaded();
-    expect(screen.getAllByText(th['tax.note.foodCostTwice']).length).toBe(1);
+    expect(screen.getAllByText(th['tax.note.foodCostCostOfGoodsUsed']).length).toBe(1);
+    expect(screen.getAllByText(th['tax.note.platformFeesCommissionUsed']).length).toBe(1);
+    // grouped in one polite live region, never role=alert
+    expect(screen.queryByRole('alert')).toBeNull();
+    const region = screen.getByRole('status');
+    expect(within(region).getByText(th['tax.note.foodCostCostOfGoodsUsed'])).toBeTruthy();
+    expect(within(region).getByText(th['tax.note.filingLate'])).toBeTruthy();
     expect(screen.getAllByText(th['tax.note.filingLate']).length).toBe(1);
     expect(screen.getByText(th['tax.filing.pastDue'])).toBeTruthy();
   });

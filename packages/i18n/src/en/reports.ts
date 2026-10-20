@@ -66,8 +66,14 @@ export const enReports = {
   'tax.status.proposed': 'Proposed - confirm with the Revenue Department',
   'tax.note.pnlIncomplete':
     'The profit and loss is not complete (an order has no cost, or a commission rate is not set). Expenses may be too low, so the estimated tax may be too high.',
-  'tax.note.foodCostTwice':
-    'Food cost may be counted twice: there is a cost per dish from the menu and an "ingredients" expense. Check the same purchase is not in both.',
+  'tax.note.foodCostCostOfGoodsUsed':
+    'There is both a cost per dish from the menu and an "ingredients" expense. Only the larger is deducted: the menu cost of goods (the ingredients expense is not deducted again). Check it matches your records.',
+  'tax.note.foodCostIngredientsUsed':
+    'There is both a cost per dish from the menu and an "ingredients" expense. Only the larger is deducted: the ingredients expense (the menu cost of goods is not deducted again). Check it matches your records.',
+  'tax.note.platformFeesCommissionUsed':
+    'There is both a platform commission and a "platform fees" expense. Only the larger is deducted: the commission (the platform fees expense is not deducted again).',
+  'tax.note.platformFeesExpensesUsed':
+    'There is both a platform commission and a "platform fees" expense. Only the larger is deducted: the platform fees expense (the commission is not deducted again).',
   'tax.note.costOfGoodsEstimated':
     'Cost of goods comes from the costs the owner estimated in the menu, not from receipts.',
   'tax.note.expensesNeedRecords':

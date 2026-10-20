@@ -37,3 +37,4 @@ Part 1 (2026-10-20): `expenses` ledger (migration 0037, void not delete), `/v1/e
 - 2026-10-20: part 3 P&L backend; see PROGRESS "P7 · Part 3".
 - 2026-10-20: part 4 tax estimator backend; see PROGRESS "P7 · Part 4".
 - 2026-10-21: part 5 screens; see PROGRESS "P7 · Part 5".
+- 2026-10-21: QA review and fixes (larger-of rules, owner-only rates); see PROGRESS "P7 · QA review and fixes".

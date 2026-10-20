@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { catalogs, formatBaht, translator } from '@sds/i18n';
-import { DEFAULT_EXPENSE_CATEGORIES, type PnlReport } from '@sds/shared';
+import { DEFAULT_EXPENSE_CATEGORIES, type PnlReport, satang } from '@sds/shared';
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { ApiClientError } from '../../api/errors.ts';
@@ -33,7 +33,10 @@ const COMPLETE: PnlReport = {
     rateNotSetOrderIds: [],
     ratesNotSet: [],
   },
-  platformFeesAlsoCommission: false,
+  foodCostBasis: 'only_one',
+  foodCostNotDeductedSatang: satang(0),
+  platformFeesBasis: 'only_one',
+  platformFeesNotDeductedSatang: satang(0),
 };
 
 async function open(
@@ -74,7 +77,7 @@ describe('the figures', () => {
   test('asks for the month so far and lays out the server figures, formatted and not recomputed', async () => {
     const env = await open();
     expect(env.api.reports.pnl).toHaveBeenCalledWith({ from: '2030-10-01', to: '2030-10-15' });
-    for (const satang of [79500, 27100, 52400, 4550, 37500, 10350]) {
+    for (const satang of [79500, 27100, 52400, 4550, 37500, 36850]) {
       expect(inLines().getByText(money(satang)), money(satang)).toBeTruthy();
     }
   });
@@ -183,14 +186,43 @@ describe('the incomplete banner', () => {
 });
 
 describe('flags and the rest of the answer', () => {
-  test('both a commission and a platform-fees expense raise the double-count flag', async () => {
+  test('both pairs present: each note names the side that was deducted, in one status region', async () => {
     await open();
-    expect(screen.getByText(th['pnl.feesTwice'])).toBeTruthy();
+    const region = screen.getByRole('status');
+    expect(
+      within(region).getByText(
+        tr('pnl.foodCost.costOfGoodsUsed', { kept: money(27100), left: money(25000) }),
+      ),
+    ).toBeTruthy();
+    expect(
+      within(region).getByText(
+        tr('pnl.fees.commissionUsed', { kept: money(4550), left: money(1500) }),
+      ),
+    ).toBeTruthy();
+    // the "added back" line keeps the lines adding up: 524.00 - 45.50 - 375.00 + 265.00 = 368.50
+    expect(screen.getByText(th['pnl.line.notDeducted'])).toBeTruthy();
   });
 
-  test('no flag, no message', async () => {
+  test('the other sides: ingredients larger, platform fees expense larger', async () => {
+    await open({
+      ...SAMPLE_PNL,
+      foodCostBasis: 'ingredients_expenses',
+      platformFeesBasis: 'platform_fees_expenses',
+    });
+    expect(
+      screen.getByText(
+        tr('pnl.foodCost.ingredientsUsed', { kept: money(25000), left: money(27100) }),
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(tr('pnl.fees.expensesUsed', { kept: money(1500), left: money(4550) })),
+    ).toBeTruthy();
+  });
+
+  test('only one of each pair: no note and no added-back line', async () => {
     await open(COMPLETE);
-    expect(screen.queryByText(th['pnl.feesTwice'])).toBeNull();
+    expect(screen.queryByRole('status')).toBeNull();
+    expect(screen.queryByText(th['pnl.line.notDeducted'])).toBeNull();
   });
 
   test('voided expenses are mentioned as left out', async () => {
@@ -209,7 +241,7 @@ describe('flags and the rest of the answer', () => {
     const table = screen.getByRole('table', { name: th['pnl.months.title'] });
     const rows = within(table).getAllByRole('row');
     expect(rows.length).toBe(3); // header + 2 months
-    expect(within(table).getByText(money(8400))).toBeTruthy();
+    expect(within(table).getByText(money(24900))).toBeTruthy();
     expect(within(table).getByText(th['pnl.months.incomplete'])).toBeTruthy();
     expect(within(table).getByText(th['pnl.months.complete'])).toBeTruthy();
     expect(screen.getByText(th['pnl.months.partial'])).toBeTruthy();

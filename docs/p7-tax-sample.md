@@ -5,7 +5,7 @@ Made-up shop figures, in baht, for tax year 2569 (2026). Work each line out your
 **Status: proposed. Confirm with the Revenue Department (RD).** Rule year: **2569**.
 
 ## The rules being checked (`docs/decisions.md` D-34)
-- **Income** = the P&L revenue of the period (net paid, on the business date). **Actual expenses** = cost of goods + platform commission + the expense ledger (voided rows left out), exactly the lines the P&L takes off. **Flat 60%** = 60% of income (RD table 2, item 9: restaurant, food and drink). Pick one method for the whole income.
+- **Income** = the P&L revenue of the period (net paid, on the business date). **Actual expenses** = cost of goods + platform commission + the expense ledger (voided rows left out), exactly the lines the P&L takes off, including its two "larger of the two" rules (owner-approved 2026-10-21): when both the cost of goods and `ingredients` expenses exist, only the larger is taken off; when both the platform commission and `platform_fees` expenses exist, only the larger is taken off. **Flat 60%** = 60% of income (RD table 2, item 9: restaurant, food and drink). Pick one method for the whole income.
 - **Net income** = income - expenses. Take off the allowances. **If it is 0 or less, there is no tax** (the loss is still shown).
 - **Rates on the rest** (same for the half-year and the annual return): up to 150,000 exempt; 150,001-300,000 5%; 300,001-500,000 10%; 500,001-750,000 15%; 750,001-1,000,000 20%; 1,000,001-2,000,000 25%; 2,000,001-5,000,000 30%; over 5,000,000 35%.
 - **Allowances:** personal 60,000 a year; **30,000 on the half-year return (ภ.ง.ด.94)**.
@@ -57,6 +57,21 @@ Also expected: the shop **must file** (income over 60,000 for Jan-Jun), the wind
 
 **Expected:** with actual expenses the estimate is **6,000** and a 0.5% block is shown, with a note that RD pages disagree on the 60,000 / 120,000 threshold and that the result is the same either way.
 
+## Worksheet C: both overlaps present (half-year, Jan-Jun 2569)
+
+| Line | Baht |
+|---|---:|
+| Revenue (income) | 540,000 |
+| Cost of goods (menu costs) | 150,000 |
+| Platform commission | 18,000 |
+| Expense ledger: ingredients 120,000 + platform_fees 30,000 + rent 60,000 | 210,000 |
+
+- Food cost: cost of goods 150,000 is larger than the ingredients expense 120,000, so the ingredients are **not** taken off (note: cost of goods used).
+- Platform fees: commission 18,000 is smaller than the platform_fees expense 30,000, so the commission is **not** taken off (note: platform_fees expense used).
+- Actual expenses = 150,000 + 18,000 + 210,000 - 120,000 - 18,000 = **240,000** (that is cost of goods 150,000 + platform_fees 30,000 + rent 60,000).
+- Net income 540,000 - 240,000 = **300,000**; less the 30,000 half-year allowance = **270,000** taxable; tax = (270,000 - 150,000) x 5% = **6,000**. The 0.5% of income (2,700) is not over 5,000 and is ignored.
+- The P&L over the same period shows net profit 300,000 before income tax: the tax estimate and the P&L take off exactly the same amount.
+
 ## Revenue Department's own examples (checked by the tests)
 - Rate table 1, tax at the top of each step: 300,000 -> 7,500; 500,000 -> 27,500; 750,000 -> 65,000; 1,000,000 -> 115,000; 2,000,000 -> 365,000; 5,000,000 -> 1,265,000. Source: [RD ภ.ง.ด.94 instruction 2569](https://www.rd.go.th/fileadmin/tax_pdf/pit/2569/Ins94_160669.pdf), page 17.
 - Net income 520,000 -> **30,500** (0 + 7,500 + 20,000 + 3,000). Source: [RD FAQ](https://www.rd.go.th/61549.html).
@@ -64,5 +79,5 @@ Also expected: the shop **must file** (income over 60,000 for Jan-Jun), the wind
 
 ## What you still need to check yourself
 - The allowances beyond your personal one, if you have any (insurance, social security, funds, parents, children). The estimate takes the amounts you type and does not check the caps.
-- That your expense records (receipts) support the actual expenses, and that the same food is not both a dish cost and an "ingredients" expense.
+- That your expense records (receipts) support the actual expenses. If you have both menu costs and "ingredients" expenses (or a commission and "platform_fees" expenses), only the larger of each pair is used; check that is the figure your records support.
 - That the shop's tax-return deadlines are as shown, especially if you filed online.

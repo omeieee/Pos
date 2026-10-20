@@ -98,6 +98,18 @@ describe('payableTax: normal tax against 0.5% of gross (section 48(2))', () => {
     expect(r.payableSatang).toBe(500_001);
   });
 
+  test('boundary: gross exactly 1,000,000 baht (0.5% equals the ceiling) is the normal tax; one satang over is the 0.5% method', () => {
+    const at = payableTax(B(3_000), 100_000_000, thPit2569);
+    expect(at.halfPercent).toBeNull();
+    expect(at.payableSatang).toBe(B(3_000));
+    const under = payableTax(B(3_000), 99_999_999, thPit2569);
+    expect(under.halfPercent).toBeNull();
+    // 100,000,001 satang x 0.5% = 500,000.005 satang -> half up 500,000 (5,000 baht)
+    const over = payableTax(B(3_000), 100_000_001, thPit2569);
+    expect(over.halfPercent).toMatchObject({ status: 'applied', taxSatang: 500_000 });
+    expect(over.payableSatang).toBe(500_000);
+  });
+
   test('a threshold that RD pages disagree on: between the two figures the method is NOT applied, and is named', () => {
     const rules: TaxRules = {
       ...thPit2569,
@@ -133,6 +145,7 @@ const base = (over: Partial<TaxInput> = {}): TaxInput => ({
     commissionSatang: B(50_000),
     ledgerSatang: B(150_000),
     ingredientsLedgerSatang: 0,
+    platformFeesLedgerSatang: 0,
   },
   pnlComplete: true,
   allowanceItems: [],
@@ -246,6 +259,7 @@ describe('estimateTax: loss, the 0.5% rule, a different year', () => {
           commissionSatang: 0,
           ledgerSatang: B(70_000),
           ingredientsLedgerSatang: 0,
+          platformFeesLedgerSatang: 0,
         },
       }),
     );
@@ -268,6 +282,7 @@ describe('estimateTax: loss, the 0.5% rule, a different year', () => {
           commissionSatang: B(100_000),
           ledgerSatang: B(450_000),
           ingredientsLedgerSatang: 0,
+          platformFeesLedgerSatang: 0,
         },
       }),
     );
@@ -305,21 +320,107 @@ describe('estimateTax: loss, the 0.5% rule, a different year', () => {
   });
 });
 
+describe('estimateTax: the 1,000,000 baht edge of the 0.5% method', () => {
+  const at = (gross: number) =>
+    estimateTax(
+      base({
+        grossIncomeSatang: gross,
+        period: 'annual',
+        range: { from: '2026-01-01', to: '2026-12-31' },
+        expenses: {
+          costOfGoodsSatang: 0,
+          commissionSatang: 0,
+          ledgerSatang: 0,
+          ingredientsLedgerSatang: 0,
+          platformFeesLedgerSatang: 0,
+        },
+      }),
+    );
+
+  test('gross exactly 1,000,000 baht: no 0.5% block, no 0.5% note', () => {
+    const e = at(100_000_000);
+    expect(e.halfPercent).toBeNull();
+    expect(e.notes).not.toContain('tax.note.halfPercentThresholdSources');
+    expect(e.taxPayableSatang).toBe(e.methods.actual.payableSatang);
+  });
+
+  test('one satang over: the 0.5% block appears and is applied', () => {
+    const e = at(100_000_001);
+    expect(e.halfPercent).toMatchObject({ status: 'applied' });
+    expect(e.notes).toContain('tax.note.halfPercentThresholdSources');
+  });
+});
+
 describe('estimateTax: notes the owner must see', () => {
   test('incomplete P&L: expenses may be understated, so the tax may be too high', () => {
     expect(estimateTax(base({ pnlComplete: false })).notes).toContain('tax.note.pnlIncomplete');
     expect(estimateTax(base()).notes).not.toContain('tax.note.pnlIncomplete');
   });
 
-  test('food cost counted twice: cost of goods and an ingredients expense are both present', () => {
-    const both = estimateTax(
+  test('food cost, cost of goods larger: only cost of goods is deducted and the note says so', () => {
+    // base: cost of goods 300,000; ingredients expense 100,000 is inside the ledger 150,000 (raw)
+    const e = estimateTax(
+      base({ expenses: { ...base().expenses, ingredientsLedgerSatang: B(100_000) } }),
+    );
+    expect(e.foodCostBasis).toBe('cost_of_goods');
+    expect(e.foodCostNotDeductedSatang).toBe(B(100_000));
+    expect(e.notes).toContain('tax.note.foodCostCostOfGoodsUsed');
+    expect(e.notes).not.toContain('tax.note.foodCostIngredientsUsed');
+    // actual = 300,000 + 50,000 + 150,000 - 100,000
+    expect(e.methods.actual.expenseSatang).toBe(B(400_000));
+  });
+
+  test('food cost, ingredients larger: only the ingredients expense is deducted', () => {
+    const bigger = estimateTax(
       base({
-        expenses: { ...base().expenses, ingredientsLedgerSatang: B(1_000) },
+        expenses: {
+          ...base().expenses,
+          ledgerSatang: B(500_000),
+          ingredientsLedgerSatang: B(400_000),
+        },
       }),
     );
-    expect(both.foodCostMayBeCountedTwice).toBe(true);
-    expect(both.notes).toContain('tax.note.foodCostTwice');
-    expect(estimateTax(base()).foodCostMayBeCountedTwice).toBe(false);
+    expect(bigger.foodCostBasis).toBe('ingredients_expenses');
+    expect(bigger.foodCostNotDeductedSatang).toBe(B(300_000));
+    expect(bigger.notes).toContain('tax.note.foodCostIngredientsUsed');
+    // actual = 300,000 + 50,000 + 500,000 - 300,000
+    expect(bigger.methods.actual.expenseSatang).toBe(B(550_000));
+  });
+
+  test('food cost: only one of the two, no note and nothing left out', () => {
+    const e = estimateTax(base());
+    expect(e.foodCostBasis).toBe('only_one');
+    expect(e.foodCostNotDeductedSatang).toBe(0);
+    expect(e.notes).not.toContain('tax.note.foodCostCostOfGoodsUsed');
+    expect(e.notes).not.toContain('tax.note.foodCostIngredientsUsed');
+    expect(e.methods.actual.expenseSatang).toBe(B(500_000));
+  });
+
+  test('platform fees, commission larger: only the commission is deducted, with a note', () => {
+    const e = estimateTax(
+      base({ expenses: { ...base().expenses, platformFeesLedgerSatang: B(20_000) } }),
+    );
+    expect(e.platformFeesBasis).toBe('commission');
+    expect(e.platformFeesNotDeductedSatang).toBe(B(20_000));
+    expect(e.notes).toContain('tax.note.platformFeesCommissionUsed');
+    expect(e.methods.actual.expenseSatang).toBe(B(480_000));
+  });
+
+  test('platform fees, the expense larger: only the expense is deducted, with a note', () => {
+    const e = estimateTax(
+      base({
+        expenses: {
+          ...base().expenses,
+          ledgerSatang: B(150_000),
+          platformFeesLedgerSatang: B(80_000),
+        },
+      }),
+    );
+    expect(e.platformFeesBasis).toBe('platform_fees_expenses');
+    expect(e.platformFeesNotDeductedSatang).toBe(B(50_000));
+    expect(e.notes).toContain('tax.note.platformFeesExpensesUsed');
+    expect(e.methods.actual.expenseSatang).toBe(B(450_000));
+    expect(estimateTax(base()).platformFeesBasis).toBe('only_one');
   });
 
   test('cost of goods comes from menu cost estimates, not receipts', () => {

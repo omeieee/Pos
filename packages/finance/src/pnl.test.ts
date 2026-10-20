@@ -184,7 +184,7 @@ describe('profitAndLoss', () => {
     expect(p.missing.excludedOrderIds).toEqual(['bad-1']);
   });
 
-  test('platform_fees expenses and commission are separate lines and both are deducted', () => {
+  test('commission larger than the platform_fees expense: only the commission is deducted', () => {
     const grab = order(8000, [line(1, 8000, 2800)], { channel: 'grab', method: 'platform' });
     const p = profitAndLoss(
       input({
@@ -197,22 +197,109 @@ describe('profitAndLoss', () => {
     expect(p.expensesByCategory).toEqual([
       { category: 'platform_fees', totalSatang: 1500, count: 1 },
     ]);
-    expect(p.expensesSatang).toBe(1500); // the commission is not inside this number
-    expect(p.netProfitSatang).toBe(8000 - 2800 - 2000 - 1500);
-    expect(p.platformFeesAlsoCommission).toBe(true);
+    expect(p.expensesSatang).toBe(1500); // raw: the commission is not inside this number
+    expect(p.platformFeesBasis).toBe('commission');
+    expect(p.platformFeesExpensesSatang).toBe(1500);
+    expect(p.platformFeesNotDeductedSatang).toBe(1500);
+    expect(p.netProfitSatang).toBe(8000 - 2800 - 2000);
   });
 
-  test('the overlap flag is off when only one of the two is present', () => {
-    expect(
-      profitAndLoss(input({ expenses: [expense(1500, 'platform_fees')] }))
-        .platformFeesAlsoCommission,
-    ).toBe(false);
+  test('platform_fees expense larger than the commission: only the expense is deducted', () => {
     const rec = order(2000, [line(1, 2000, 400)], {
       channel: 'lineman',
       method: 'platform',
       platformCommissionSatang: 300,
     });
-    expect(profitAndLoss(input({ orders: [rec] })).platformFeesAlsoCommission).toBe(false);
+    const p = profitAndLoss(input({ orders: [rec], expenses: [expense(1500, 'platform_fees')] }));
+    expect(p.platformFeesBasis).toBe('platform_fees_expenses');
+    expect(p.platformFeesNotDeductedSatang).toBe(300);
+    expect(p.commissionSatang).toBe(300); // still shown
+    expect(p.netProfitSatang).toBe(2000 - 400 - 1500);
+  });
+
+  test('only one of commission and the platform_fees expense: nothing is left out', () => {
+    const only = profitAndLoss(input({ expenses: [expense(1500, 'platform_fees')] }));
+    expect(only.platformFeesBasis).toBe('only_one');
+    expect(only.platformFeesNotDeductedSatang).toBe(0);
+    expect(only.netProfitSatang).toBe(-1500);
+    const rec = order(2000, [line(1, 2000, 400)], {
+      channel: 'lineman',
+      method: 'platform',
+      platformCommissionSatang: 300,
+    });
+    const p = profitAndLoss(input({ orders: [rec] }));
+    expect(p.platformFeesBasis).toBe('only_one');
+    expect(p.netProfitSatang).toBe(2000 - 400 - 300);
+  });
+
+  test('food cost: cost of goods larger than the ingredients expense, only cost of goods is deducted', () => {
+    const o = order(10000, [line(1, 10000, 4000)]);
+    const p = profitAndLoss(input({ orders: [o], expenses: [expense(2500, 'ingredients')] }));
+    expect(p.costOfGoodsSatang).toBe(4000);
+    expect(p.ingredientsExpensesSatang).toBe(2500);
+    expect(p.expensesSatang).toBe(2500); // raw
+    expect(p.foodCostBasis).toBe('cost_of_goods');
+    expect(p.foodCostNotDeductedSatang).toBe(2500);
+    expect(p.netProfitSatang).toBe(10000 - 4000);
+  });
+
+  test('food cost: ingredients larger than cost of goods, only ingredients are deducted; other categories stay', () => {
+    const o = order(10000, [line(1, 10000, 4000)]);
+    const p = profitAndLoss(
+      input({
+        orders: [o],
+        expenses: [expense(6000, 'ingredients'), expense(700, 'gas')],
+      }),
+    );
+    expect(p.grossProfitSatang).toBe(6000); // raw: revenue - cost of goods
+    expect(p.foodCostBasis).toBe('ingredients_expenses');
+    expect(p.foodCostNotDeductedSatang).toBe(4000);
+    expect(p.netProfitSatang).toBe(10000 - 6000 - 700);
+  });
+
+  test('food cost: only one present, or a tie, behaves as described', () => {
+    const o = order(10000, [line(1, 10000, 4000)]);
+    expect(profitAndLoss(input({ orders: [o] })).foodCostBasis).toBe('only_one');
+    expect(profitAndLoss(input({ expenses: [expense(500, 'ingredients')] })).foodCostBasis).toBe(
+      'only_one',
+    );
+    const tie = profitAndLoss(input({ orders: [o], expenses: [expense(4000, 'ingredients')] }));
+    expect(tie.foodCostBasis).toBe('cost_of_goods');
+    expect(tie.netProfitSatang).toBe(6000);
+  });
+
+  test('a voided ingredients expense is not an expense, so it does not change the food cost basis', () => {
+    const o = order(10000, [line(1, 10000, 4000)]);
+    const p = profitAndLoss(
+      input({ orders: [o], expenses: [expense(9000, 'ingredients', { voided: true })] }),
+    );
+    expect(p.foodCostBasis).toBe('only_one');
+    expect(p.netProfitSatang).toBe(6000);
+  });
+
+  test('month rows apply the rule to their own rows, so they need not add up to the total', () => {
+    const sep = order(10000, [line(1, 10000, 4000)], { businessDate: '2026-09-30' });
+    const oct = order(10000, [line(1, 10000, 1000)], { businessDate: '2026-10-01' });
+    const p = profitAndLoss(
+      input({
+        from: '2026-09-01',
+        to: '2026-10-31',
+        orders: [sep, oct],
+        expenses: [
+          expense(3000, 'ingredients', { businessDate: '2026-09-30' }),
+          expense(2000, 'ingredients', { businessDate: '2026-10-01' }),
+        ],
+      }),
+    );
+    // whole range: cost of goods 5000 vs ingredients 5000 -> tie -> cost of goods
+    expect(p.foodCostBasis).toBe('cost_of_goods');
+    expect(p.netProfitSatang).toBe(20000 - 5000);
+    // September: 4000 vs 3000 -> cost of goods; October: 1000 vs 2000 -> ingredients
+    const [m9, m10] = p.months;
+    expect(m9?.netProfitSatang).toBe(10000 - 4000);
+    expect(m9?.foodCostNotDeductedSatang).toBe(3000);
+    expect(m10?.netProfitSatang).toBe(10000 - 2000);
+    expect(m10?.foodCostNotDeductedSatang).toBe(1000);
   });
 
   test('gov co-pay: revenue on the sale date at the full amount; the receivable is not built', () => {

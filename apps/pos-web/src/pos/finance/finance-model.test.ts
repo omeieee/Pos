@@ -203,17 +203,23 @@ describe('the tax screen', () => {
   });
 
   test('flags and their notes are one list of warnings, the rest are plain notes', () => {
-    const report = { ...sampleTax('half'), foodCostMayBeCountedTwice: true };
+    const report = {
+      ...sampleTax('half'),
+      foodCostBasis: 'cost_of_goods' as const,
+      platformFeesBasis: 'platform_fees_expenses' as const,
+    };
     report.notes = [
       'tax.note.pnlIncomplete',
-      'tax.note.foodCostTwice',
+      'tax.note.foodCostCostOfGoodsUsed',
+      'tax.note.platformFeesExpensesUsed',
       'tax.note.costOfGoodsEstimated',
       'tax.note.filingLate',
     ];
     const { warnings, notes } = splitNotes(report);
     expect(warnings).toEqual([
       'tax.note.pnlIncomplete',
-      'tax.note.foodCostTwice',
+      'tax.note.foodCostCostOfGoodsUsed',
+      'tax.note.platformFeesExpensesUsed',
       'tax.note.filingLate',
     ]);
     expect(notes).toEqual(['tax.note.costOfGoodsEstimated']);
@@ -222,8 +228,11 @@ describe('the tax screen', () => {
   test('a flag shows its warning even if the note list does not carry it', () => {
     const report = { ...sampleTax('annual'), pnlComplete: true, notes: [] };
     expect(splitNotes(report).warnings).toEqual([]);
-    expect(splitNotes({ ...report, foodCostMayBeCountedTwice: true }).warnings).toEqual([
-      'tax.note.foodCostTwice',
+    expect(splitNotes({ ...report, foodCostBasis: 'ingredients_expenses' }).warnings).toEqual([
+      'tax.note.foodCostIngredientsUsed',
+    ]);
+    expect(splitNotes({ ...report, platformFeesBasis: 'commission' }).warnings).toEqual([
+      'tax.note.platformFeesCommissionUsed',
     ]);
   });
 

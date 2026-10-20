@@ -136,7 +136,7 @@ describe('profit and loss and tax reads', () => {
   test('pnl is a GET with the range and parses with the shared schema', async () => {
     const { api, calls } = clientWith(() => ({ status: 200, json: SAMPLE_PNL }));
     const pnl = await api.reports.pnl(range);
-    expect(pnl.netProfitSatang).toBe(10350);
+    expect(pnl.netProfitSatang).toBe(36850);
     expect(pnl.govCopay.receivable).toBe('not_built');
     expect(calls[0]).toMatchObject({
       method: 'GET',

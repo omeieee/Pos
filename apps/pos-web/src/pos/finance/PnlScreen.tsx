@@ -5,7 +5,7 @@ import { useEntities, useLocale, useNow, useT } from '../../ui/hooks.ts';
 import { Callout } from '../../ui/Notice.tsx';
 import { currentBusinessDay } from '../orders/order-board.ts';
 import { FinancePage, LoadState, RangePicker } from './FinanceParts.tsx';
-import { expenseRows, incompleteDetails } from './pnl-model.ts';
+import { expenseRows, incompleteDetails, overlapNotes } from './pnl-model.ts';
 import { useExpenseCategories, usePnl, useRange } from './use-finance.ts';
 
 /** "ต.ค. 2569" / "Oct 2026" for a `YYYY-MM` month. */
@@ -136,10 +136,14 @@ export function PnlScreen() {
             <span>{tr('pnl.estimateNote')}</span>
           </div>
           {pnl.complete ? null : <IncompleteBanner pnl={pnl} />}
-          {pnl.platformFeesAlsoCommission ? (
-            <Callout tone="warn" role="status">
-              {tr('pnl.feesTwice')}
-            </Callout>
+          {overlapNotes(pnl).length > 0 ? (
+            <div role="status" className="fin-banner">
+              {overlapNotes(pnl).map((note) => (
+                <Callout key={note.key} tone="warn">
+                  {tr(note.key, { kept: money(note.keptSatang), left: money(note.leftSatang) })}
+                </Callout>
+              ))}
+            </div>
           ) : null}
           {pnl.orderCount === 0 ? <p className="g-t-s fin-note">{tr('pnl.empty')}</p> : null}
 
@@ -182,6 +186,14 @@ export function PnlScreen() {
                     amount={money(row.totalSatang)}
                   />
                 ))}
+                {pnl.foodCostNotDeductedSatang + pnl.platformFeesNotDeductedSatang > 0 ? (
+                  <Line
+                    label={tr('pnl.line.notDeducted')}
+                    amount={money(
+                      pnl.foodCostNotDeductedSatang + pnl.platformFeesNotDeductedSatang,
+                    )}
+                  />
+                ) : null}
                 <Line total label={tr('pnl.line.net')} amount={money(pnl.netProfitSatang)}>
                   {pnl.netProfitSatang < 0 ? (
                     <span className="g-badge g-b-bad fin-loss">{tr('pnl.loss')}</span>

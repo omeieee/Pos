@@ -99,8 +99,15 @@ export const enFinance = {
   'pnl.line.expenseRow': '{name} ({count} rows)',
   'pnl.line.net': 'Net profit before income tax',
   'pnl.loss': 'Loss',
-  'pnl.feesTwice':
-    'There is both a commission and an expense in the “platform fees” category. Both are taken off. Check the same fee is not entered twice.',
+  'pnl.line.notDeducted': 'Added back: the smaller of each pair above, not deducted twice',
+  'pnl.foodCost.costOfGoodsUsed':
+    'There is both a menu cost of goods ({kept}) and an “ingredients” expense ({left}). Only the larger is deducted: the menu cost of goods. The ingredients are not deducted again.',
+  'pnl.foodCost.ingredientsUsed':
+    'There is both a menu cost of goods ({left}) and an “ingredients” expense ({kept}). Only the larger is deducted: the ingredients expense. The menu cost of goods is not deducted again.',
+  'pnl.fees.commissionUsed':
+    'There is both a commission ({kept}) and a “platform fees” expense ({left}). Only the larger is deducted: the commission. The platform fees expense is not deducted again.',
+  'pnl.fees.expensesUsed':
+    'There is both a commission ({left}) and a “platform fees” expense ({kept}). Only the larger is deducted: the platform fees expense. The commission is not deducted again.',
   'pnl.voidedExpenses': '{count} voided expenses are not counted',
   'pnl.copay.title': 'Government co-pay',
   'pnl.copay.revenue': 'Included in revenue: {amount} (counted on the sale date)',

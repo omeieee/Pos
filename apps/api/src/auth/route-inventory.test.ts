@@ -98,6 +98,31 @@ describe('the real /v1 routes', () => {
     expect(OPEN).not.toContain('GET /v1/payments/:id/slip');
   });
 
+  test('the commission rates are read with the owner-only finance.pnl permission, not settings.view', async () => {
+    const url = '/v1/settings/platform-commission';
+    const device = await h.newDevice();
+    const owner = await h.newOwner();
+    for (const role of ['manager', 'cashier'] as const) {
+      const staff = await h.newStaff(role, '4821');
+      const token = await h.pinSession(device.token, staff.id, '4821');
+      const res = await h.app.inject({
+        method: 'GET',
+        url,
+        headers: { authorization: `Bearer ${token}` },
+        remoteAddress: h.nextIp(),
+      });
+      expect(res.statusCode, role).toBe(403);
+    }
+    h.clock.advanceSeconds(90);
+    const ok = await h.app.inject({
+      method: 'GET',
+      url,
+      headers: { authorization: `Bearer ${await h.ownerSession(owner)}` },
+      remoteAddress: h.nextIp(),
+    });
+    expect(ok.statusCode).toBe(200);
+  });
+
   test('the customer app routes run the customer guard, which is not the staff guard', () => {
     const key = (r: { method: string; url: string }) =>
       `${r.method === 'HEAD' ? 'GET' : r.method} ${r.url}`;

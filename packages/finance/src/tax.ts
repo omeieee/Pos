@@ -6,12 +6,16 @@
  *
  * How the shop's P&L maps to taxable income (D-34, proposed):
  *   assessable income (เงินได้พึงประเมิน) = P&L revenue (net paid of counted orders, on business date)
- *   actual expenses = cost of goods + platform commission + unvoided expense ledger rows
+ *   actual expenses = cost of goods + platform commission + unvoided expense ledger rows, minus the
+ *                     smaller of each overlapping pair (below), so it equals what the P&L deducts
  *   flat expenses   = revenue x the flat rate (60% for food and drink sales)
  *   net income      = income - expenses; allowances are then deducted; tax is on what is left, never
  *                     below 0 (a loss pays no tax; the negative figure is still shown)
  * Cost of goods comes from the owner's menu cost estimates, not receipts, and may overlap an
- * "ingredients" ledger expense: both are counted (as the P&L does) and the overlap is flagged.
+ * "ingredients" ledger expense; the platform commission may overlap a "platform_fees" ledger expense.
+ * For each pair, when both are above 0 only the LARGER is deducted (owner-approved 2026-10-21,
+ * `overlap.ts`, the same helper the P&L uses), and a note says which one was used. The raw figures
+ * are not changed, so `methods.actual.expenseSatang` = P&L revenue - P&L net profit.
  *
  * Rounding: tax is worked out in satang. The progressive tax is summed over the steps and rounded
  * ONCE, half up, to one satang; the 0.5% tax and the flat expense use the shared `applyBasisPoints`
@@ -23,6 +27,12 @@
  * the 0.5% threshold is recorded in the rules; see `payableTax`.
  */
 import { applyBasisPoints, satang, type TAX_NOTE_KEYS } from '@sds/shared';
+import {
+  type FoodCostBasis,
+  foodCostOverlap,
+  type PlatformFeesBasis,
+  platformFeesOverlap,
+} from './overlap.ts';
 import { isCounted, type ReportOrder } from './revenue.ts';
 import type { RuleSource, TaxRules } from './tax-rules/types.ts';
 
@@ -45,6 +55,8 @@ export interface TaxExpenses {
   ledgerSatang: number;
   /** Of `ledgerSatang`, the "ingredients" category (food cost that may also be in cost of goods). */
   ingredientsLedgerSatang: number;
+  /** Of `ledgerSatang`, the "platform_fees" category (may be the platform commission typed again). */
+  platformFeesLedgerSatang: number;
 }
 
 export interface TaxInput {
@@ -116,7 +128,13 @@ export interface TaxEstimate {
     totalSatang: number;
   };
   pnlComplete: boolean;
-  foodCostMayBeCountedTwice: boolean;
+  /** Which of cost of goods and the ingredients expense is deducted (`only_one` = no overlap). */
+  foodCostBasis: FoodCostBasis;
+  /** The smaller of the two when both are present: raw, but not deducted. */
+  foodCostNotDeductedSatang: number;
+  /** Which of commission and the platform_fees expense is deducted (`only_one` = no overlap). */
+  platformFeesBasis: PlatformFeesBasis;
+  platformFeesNotDeductedSatang: number;
   filing: {
     mustFile: boolean;
     incomeOverSatang: number;
@@ -238,6 +256,7 @@ export function estimateTax(input: TaxInput): TaxEstimate {
   assertSatang(x.commissionSatang, 'commission');
   assertSatang(x.ledgerSatang, 'ledger expenses');
   assertSatang(x.ingredientsLedgerSatang, 'ingredients expenses');
+  assertSatang(x.platformFeesLedgerSatang, 'platform fees expenses');
   for (const item of input.allowanceItems)
     assertSatang(item.annualSatang, `allowance ${item.label}`);
   if (input.incomingTransfers) {
@@ -257,7 +276,14 @@ export function estimateTax(input: TaxInput): TaxEstimate {
   }));
   const allowanceTotal = personal + items.reduce((n, i) => n + i.appliedSatang, 0);
 
-  const actualExpense = x.costOfGoodsSatang + x.commissionSatang + x.ledgerSatang;
+  const food = foodCostOverlap(x.costOfGoodsSatang, x.ingredientsLedgerSatang);
+  const fees = platformFeesOverlap(x.commissionSatang, x.platformFeesLedgerSatang);
+  const actualExpense =
+    x.costOfGoodsSatang +
+    x.commissionSatang +
+    x.ledgerSatang -
+    food.notDeductedSatang -
+    fees.notDeductedSatang;
   const flatExpense = applyBasisPoints(satang(gross), rules.flatExpense.ratePercent * 100);
 
   const method = (
@@ -315,10 +341,12 @@ export function estimateTax(input: TaxInput): TaxEstimate {
     };
   }
 
-  const foodTwice = x.costOfGoodsSatang > 0 && x.ingredientsLedgerSatang > 0;
   const notes: TaxNote[] = [];
   if (!input.pnlComplete) notes.push('tax.note.pnlIncomplete');
-  if (foodTwice) notes.push('tax.note.foodCostTwice');
+  if (food.basis === 'cost_of_goods') notes.push('tax.note.foodCostCostOfGoodsUsed');
+  if (food.basis === 'ingredients_expenses') notes.push('tax.note.foodCostIngredientsUsed');
+  if (fees.basis === 'commission') notes.push('tax.note.platformFeesCommissionUsed');
+  if (fees.basis === 'platform_fees_expenses') notes.push('tax.note.platformFeesExpensesUsed');
   if (x.costOfGoodsSatang > 0) notes.push('tax.note.costOfGoodsEstimated');
   if (chosenMethod === 'actual') notes.push('tax.note.expensesNeedRecords');
   if (items.length > 0) notes.push('tax.note.allowancesUnchecked');
@@ -349,7 +377,10 @@ export function estimateTax(input: TaxInput): TaxEstimate {
     taxPayableSatang: taxPayable,
     allowances: { personalSatang: personal, items, totalSatang: allowanceTotal },
     pnlComplete: input.pnlComplete,
-    foodCostMayBeCountedTwice: foodTwice,
+    foodCostBasis: food.basis,
+    foodCostNotDeductedSatang: food.notDeductedSatang,
+    platformFeesBasis: fees.basis,
+    platformFeesNotDeductedSatang: fees.notDeductedSatang,
     filing: { mustFile, incomeOverSatang: filingOver, window, pastDue },
     watch: {
       vat: {

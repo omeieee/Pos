@@ -321,19 +321,24 @@ export function TaxScreen() {
       {report ? (
         <>
           <DatesLine report={report} />
-          {warnings.map((key) => (
-            <Callout key={key} tone="warn" role="alert">
-              <span>{tr(key)}</span>
-              {key === 'tax.note.pnlIncomplete' && report.incompleteReasons.length > 0 ? (
-                <ul className="fin-bullets" aria-label={tr('tax.reasons.title')}>
-                  {report.incompleteReasons.map((reason) => {
-                    const message = reasonKey(reason);
-                    return message ? <li key={reason}>{tr(message)}</li> : null;
-                  })}
-                </ul>
-              ) : null}
-            </Callout>
-          ))}
+          {/* One grouped live region (status, not alert): the warnings are read out together. */}
+          {warnings.length > 0 ? (
+            <div role="status" className="fin-banner">
+              {warnings.map((key) => (
+                <Callout key={key} tone="warn">
+                  <span>{tr(key)}</span>
+                  {key === 'tax.note.pnlIncomplete' && report.incompleteReasons.length > 0 ? (
+                    <ul className="fin-bullets" aria-label={tr('tax.reasons.title')}>
+                      {report.incompleteReasons.map((reason) => {
+                        const message = reasonKey(reason);
+                        return message ? <li key={reason}>{tr(message)}</li> : null;
+                      })}
+                    </ul>
+                  ) : null}
+                </Callout>
+              ))}
+            </div>
+          ) : null}
           <Estimate report={report} />
           <Compare report={report} />
           {report.halfPercent ? <HalfPercent block={report.halfPercent} /> : null}

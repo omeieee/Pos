@@ -200,14 +200,15 @@ describe('the estimate from real orders and expenses (baht, by hand)', () => {
     const res = await tax(await ownerToken(), '?year=2569&period=half');
     expect(res.statusCode).toBe(200);
     const body = taxReportSchema.parse(res.json()) satisfies TaxReport;
-    // gross 600,000; actual expenses 180,000 + 0 commission + 60,000 = 240,000; net 360,000;
-    // less 30,000 = 330,000; tax 7,500 + 30,000 x 10% = 10,500.
+    // gross 600,000; cost of goods 180,000 is larger than the ingredients expense 10,000, so only
+    // the cost of goods is deducted: 180,000 + 0 commission + 60,000 ledger - 10,000 = 230,000;
+    // net 370,000; less 30,000 = 340,000; tax 7,500 + 40,000 x 10% = 11,500.
     // flat 60% = 360,000 expenses; net 240,000 - 30,000 = 210,000; 60,000 x 5% = 3,000.
     expect(body.income.assessableSatang).toBe(B(600_000));
     expect(body.methods.actual).toMatchObject({
-      expenseSatang: B(240_000),
-      taxableNetSatang: B(330_000),
-      payableSatang: B(10_500),
+      expenseSatang: B(230_000),
+      taxableNetSatang: B(340_000),
+      payableSatang: B(11_500),
     });
     expect(body.methods.flat).toMatchObject({
       expenseSatang: B(360_000),
@@ -218,9 +219,12 @@ describe('the estimate from real orders and expenses (baht, by hand)', () => {
       chosenMethod: 'actual',
       chosenBy: 'default_actual',
       cheaperMethod: 'flat',
-      taxPayableSatang: B(10_500),
+      taxPayableSatang: B(11_500),
       halfPercent: null,
-      foodCostMayBeCountedTwice: true,
+      foodCostBasis: 'cost_of_goods',
+      foodCostNotDeductedSatang: B(10_000),
+      platformFeesBasis: 'only_one',
+      platformFeesNotDeductedSatang: 0,
       pnlComplete: true,
       incompleteReasons: [],
       filing: { mustFile: true, pastDue: true },
@@ -231,7 +235,7 @@ describe('the estimate from real orders and expenses (baht, by hand)', () => {
     });
     expect(body.notes).toEqual(
       expect.arrayContaining([
-        'tax.note.foodCostTwice',
+        'tax.note.foodCostCostOfGoodsUsed',
         'tax.note.costOfGoodsEstimated',
         'tax.note.expensesNeedRecords',
         'tax.note.filingLate',
@@ -241,7 +245,8 @@ describe('the estimate from real orders and expenses (baht, by hand)', () => {
   });
 
   test('annual so far: 700,000 gross, the year is not over', async () => {
-    // actual: 210,000 + 65,000 = 275,000; net 425,000 - 60,000 = 365,000 -> 7,500 + 65,000 x 10% = 14,000.
+    // actual: 210,000 + 65,000 - 10,000 (ingredients, the smaller side) = 265,000; net 435,000 - 60,000
+    // = 375,000 -> 7,500 + 75,000 x 10% = 15,000.
     // flat: 420,000; net 280,000 - 60,000 = 220,000 -> 70,000 x 5% = 3,500.
     const body = taxReportSchema.parse(
       (await tax(await ownerToken(), '?year=2569&period=annual')).json(),
@@ -250,7 +255,7 @@ describe('the estimate from real orders and expenses (baht, by hand)', () => {
       form: 'ภ.ง.ด.90',
       range: { from: '2026-01-01', to: '2026-12-31' },
       coversThrough: '2026-10-01',
-      taxPayableSatang: B(14_000),
+      taxPayableSatang: B(15_000),
     });
     expect(body.methods.flat.payableSatang).toBe(B(3_500));
     expect(body.notes).toEqual(
@@ -357,5 +362,24 @@ describe('the tax profile', () => {
       allowances: { items: [] },
       methodPreference: null,
     });
+  });
+});
+
+describe('the tax estimate and the P&L deduct the same amount (larger of the two pairs)', () => {
+  test('actual expenses = P&L revenue - P&L net profit, with the overlap left out', async () => {
+    const token = await ownerToken();
+    const range = '?from=2026-01-01&to=2026-12-31';
+    const pnl = (await call('GET', `/v1/reports/pnl${range}`, token)).json() as {
+      revenueSatang: number;
+      netProfitSatang: number;
+      foodCostBasis: string;
+      foodCostNotDeductedSatang: number;
+    };
+    const body = taxReportSchema.parse((await tax(token, '?year=2569&period=annual')).json());
+    expect(pnl.foodCostBasis).toBe('cost_of_goods');
+    expect(body.foodCostBasis).toBe(pnl.foodCostBasis);
+    expect(body.foodCostNotDeductedSatang).toBe(pnl.foodCostNotDeductedSatang);
+    expect(body.methods.actual.netBeforeAllowancesSatang).toBe(pnl.netProfitSatang);
+    expect(body.methods.actual.expenseSatang).toBe(pnl.revenueSatang - pnl.netProfitSatang);
   });
 });

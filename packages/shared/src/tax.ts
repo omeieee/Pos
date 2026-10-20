@@ -5,6 +5,7 @@
  * `tax_profiles` table use.
  */
 import { z } from 'zod';
+import { FOOD_COST_BASES, PLATFORM_FEES_BASES } from './reports.ts';
 import { isoDateSchema, nonNegativeSatangSchema, satangSchema } from './schemas.ts';
 
 export const TAX_PERIODS = ['annual', 'half'] as const;
@@ -65,7 +66,10 @@ const windowSchema = z.object({ from: isoDateSchema, to: isoDateSchema });
 
 export const TAX_NOTE_KEYS = [
   'tax.note.pnlIncomplete',
-  'tax.note.foodCostTwice',
+  'tax.note.foodCostCostOfGoodsUsed',
+  'tax.note.foodCostIngredientsUsed',
+  'tax.note.platformFeesCommissionUsed',
+  'tax.note.platformFeesExpensesUsed',
   'tax.note.costOfGoodsEstimated',
   'tax.note.expensesNeedRecords',
   'tax.note.allowancesUnchecked',
@@ -120,7 +124,13 @@ export const taxReportSchema = z.object({
   }),
   pnlComplete: z.boolean(),
   incompleteReasons: z.array(z.string()),
-  foodCostMayBeCountedTwice: z.boolean(),
+  /** Which of cost of goods and the `ingredients` expense is deducted; `only_one` = no overlap. */
+  foodCostBasis: z.enum(FOOD_COST_BASES),
+  /** The smaller of the two when both are present: shown raw, not deducted. */
+  foodCostNotDeductedSatang: nonNegativeSatangSchema,
+  /** Which of the commission and the `platform_fees` expense is deducted; `only_one` = no overlap. */
+  platformFeesBasis: z.enum(PLATFORM_FEES_BASES),
+  platformFeesNotDeductedSatang: nonNegativeSatangSchema,
   filing: z.object({
     mustFile: z.boolean(),
     incomeOverSatang: nonNegativeSatangSchema,

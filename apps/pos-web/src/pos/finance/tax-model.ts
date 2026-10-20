@@ -25,21 +25,36 @@ export const yearChoices = (today: string): number[] => {
 
 const WARNING_KEYS = {
   pnl: 'tax.note.pnlIncomplete',
-  food: 'tax.note.foodCostTwice',
   late: 'tax.note.filingLate',
 } as const satisfies Record<string, MessageKey>;
 
+/** Which note says the larger of an overlapping pair was used (owner-approved 2026-10-21). */
+const FOOD_NOTE_KEYS = {
+  cost_of_goods: 'tax.note.foodCostCostOfGoodsUsed',
+  ingredients_expenses: 'tax.note.foodCostIngredientsUsed',
+} as const satisfies Record<string, MessageKey>;
+const FEES_NOTE_KEYS = {
+  commission: 'tax.note.platformFeesCommissionUsed',
+  platform_fees_expenses: 'tax.note.platformFeesExpensesUsed',
+} as const satisfies Record<string, MessageKey>;
+
 /**
- * The three flags that deserve a banner (profit not complete, food cost possibly counted twice,
- * filing deadline passed) and every other note. The server also lists a flag's note in `notes`;
- * it is taken out there so no text shows twice.
+ * The flags that deserve a banner (profit not complete, a food-cost or platform-fee overlap where
+ * only the larger side was deducted, filing deadline passed) and every other note. The server also
+ * lists a flag's note in `notes`; it is taken out there so no text shows twice.
  */
 export function splitNotes(report: TaxReport): { warnings: MessageKey[]; notes: MessageKey[] } {
   const warnings: MessageKey[] = [];
   if (!report.pnlComplete) warnings.push(WARNING_KEYS.pnl);
-  if (report.foodCostMayBeCountedTwice) warnings.push(WARNING_KEYS.food);
+  if (report.foodCostBasis !== 'only_one') warnings.push(FOOD_NOTE_KEYS[report.foodCostBasis]);
+  if (report.platformFeesBasis !== 'only_one')
+    warnings.push(FEES_NOTE_KEYS[report.platformFeesBasis]);
   if (report.filing.pastDue) warnings.push(WARNING_KEYS.late);
-  const asWarnings = new Set<string>(Object.values(WARNING_KEYS));
+  const asWarnings = new Set<string>([
+    ...Object.values(WARNING_KEYS),
+    ...Object.values(FOOD_NOTE_KEYS),
+    ...Object.values(FEES_NOTE_KEYS),
+  ]);
   return { warnings, notes: report.notes.filter((key) => !asWarnings.has(key)) };
 }
 

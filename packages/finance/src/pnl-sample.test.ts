@@ -7,6 +7,8 @@ import type { OrderChannel, PaymentMethod } from '@sds/shared';
 import { describe, expect, test } from 'vitest';
 import { type PnlExpense, profitAndLoss } from './pnl.ts';
 import type { ReportItem, ReportOrder } from './revenue.ts';
+import { estimateTax } from './tax.ts';
+import { thPit2569 } from './tax-rules/th-pit-2569.ts';
 
 // Menu: T ก๋วยเตี๋ยวต้มยำ 60.00 (cost 22.00), Y เย็นตาโฟ 70.00 (28.00), W น้ำเปล่า 10.00 (4.00),
 // X ชาเย็น 25.00 (cost not entered until 1 Oct, then 9.00).
@@ -165,7 +167,7 @@ const base = { from: '2026-09-24', to: '2026-10-07', orders, excludedOrderIds: [
 const rates = { grabRateBp: 2500, linemanRateBp: 2000 }; // examples only, not real rates
 
 describe('the owner P&L sample (docs/p7-pnl-sample.md)', () => {
-  test('the whole fortnight with both rates set: net 103.50, incomplete only because of order 3', () => {
+  test('the whole fortnight with both rates set: net 368.50, incomplete only because of order 3', () => {
     const p = profitAndLoss({ ...base, rates });
     expect(p).toMatchObject({
       revenueSatang: 79500,
@@ -174,12 +176,19 @@ describe('the owner P&L sample (docs/p7-pnl-sample.md)', () => {
       uncostedRevenueSatang: 6000,
       grossProfitSatang: 52400,
       commissionSatang: 4550, // 3.00 recorded + 20.00 + 22.50 estimated
-      expensesSatang: 37500,
-      netProfitSatang: 10350,
+      expensesSatang: 37500, // raw: 375.00, of which ingredients 250.00 and platform_fees 15.00
+      // 271.00 cost of goods > 250.00 ingredients, 45.50 commission > 15.00 platform_fees: the smaller
+      // of each pair is not deducted. 524.00 - 45.50 - 375.00 + 250.00 + 15.00
+      foodCostBasis: 'cost_of_goods',
+      foodCostNotDeductedSatang: 25000,
+      ingredientsExpensesSatang: 25000,
+      platformFeesBasis: 'commission',
+      platformFeesNotDeductedSatang: 1500,
+      platformFeesExpensesSatang: 1500,
+      netProfitSatang: 36850,
       complete: false,
       incompleteReasons: ['orders_uncosted'],
       voidedExpenseCount: 1,
-      platformFeesAlsoCommission: true,
       govCopay: { revenueSatang: 6000, receivable: 'not_built' },
     });
     expect(p.commission).toMatchObject({ recordedSatang: 300, estimatedSatang: 4250 });
@@ -217,7 +226,10 @@ describe('the owner P&L sample (docs/p7-pnl-sample.md)', () => {
         grossProfitSatang: 35200,
         commissionSatang: 2300,
         expensesSatang: 24500,
-        netProfitSatang: 8400,
+        // 178.00 cost of goods > 150.00 ingredients; 23.00 commission > 15.00 platform_fees
+        foodCostNotDeductedSatang: 15000,
+        platformFeesNotDeductedSatang: 1500,
+        netProfitSatang: 24900,
         complete: false,
       },
       {
@@ -229,20 +241,54 @@ describe('the owner P&L sample (docs/p7-pnl-sample.md)', () => {
         grossProfitSatang: 17200,
         commissionSatang: 2250,
         expensesSatang: 13000,
-        netProfitSatang: 1950,
+        // October alone: 100.00 ingredients > 93.00 cost of goods, so the cost of goods is the one
+        // left out. The two months therefore add to 361.50, not to the 368.50 of the whole range.
+        foodCostNotDeductedSatang: 9300,
+        platformFeesNotDeductedSatang: 0,
+        netProfitSatang: 11250,
         complete: true,
       },
     ]);
   });
 
-  test('with the Grab rate not set, both Grab orders are named and the profit is higher', () => {
+  test('with the Grab rate not set, both Grab orders are named; the 3.00 commission is now the smaller side', () => {
     const p = profitAndLoss({ ...base, rates: { grabRateBp: null, linemanRateBp: 2000 } });
     expect(p.commissionSatang).toBe(300);
-    expect(p.netProfitSatang).toBe(14600);
+    // 3.00 commission < 15.00 platform_fees: the fees expense is deducted instead.
+    // 524.00 - 3.00 - 375.00 + 250.00 (food overlap) + 3.00 = 399.00
+    expect(p.platformFeesBasis).toBe('platform_fees_expenses');
+    expect(p.platformFeesNotDeductedSatang).toBe(300);
+    expect(p.netProfitSatang).toBe(39900);
     expect(p.complete).toBe(false);
     expect(p.incompleteReasons).toEqual(['orders_uncosted', 'commission_rate_not_set']);
     expect(p.missing.rateNotSetOrderIds).toEqual(['o4', 'o10']);
     expect(p.missing.ratesNotSet).toEqual(['grab']);
-    expect(p.months[1]).toMatchObject({ complete: false, netProfitSatang: 4200 });
+    expect(p.months[1]).toMatchObject({ complete: false, netProfitSatang: 13500 });
+  });
+
+  test('the tax estimate fed from this P&L deducts exactly what the P&L deducts (net 368.50)', () => {
+    const p = profitAndLoss({ ...base, rates });
+    const e = estimateTax({
+      rules: thPit2569,
+      period: 'half',
+      range: { from: '2026-01-01', to: '2026-06-30' },
+      asOf: '2026-10-20',
+      grossIncomeSatang: p.revenueSatang,
+      expenses: {
+        costOfGoodsSatang: p.costOfGoodsSatang,
+        commissionSatang: p.commissionSatang,
+        ledgerSatang: p.expensesSatang,
+        ingredientsLedgerSatang: p.ingredientsExpensesSatang,
+        platformFeesLedgerSatang: p.platformFeesExpensesSatang,
+      },
+      pnlComplete: p.complete,
+      allowanceItems: [],
+      methodPreference: null,
+      incomingTransfers: null,
+    });
+    expect(e.methods.actual.netBeforeAllowancesSatang).toBe(p.netProfitSatang);
+    expect(e.methods.actual.expenseSatang).toBe(p.revenueSatang - p.netProfitSatang);
+    expect(e.foodCostBasis).toBe(p.foodCostBasis);
+    expect(e.platformFeesBasis).toBe(p.platformFeesBasis);
   });
 });

@@ -505,15 +505,32 @@ describe('platform commission setting', () => {
     return h.steppedUpOwner(owner);
   }
 
-  test('no built-in rate: every viewer sees both unset at version 0', async () => {
+  test('no built-in rate: the owner sees both unset at version 0', async () => {
     await h.client.query("delete from settings where key = 'platform_commission'");
-    const cashier = await staff('cashier');
-    expect((await call('GET', URL, cashier)).json()).toEqual({
+    h.clock.advanceSeconds(90);
+    const res = await call('GET', URL, await h.ownerSession(owner));
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['cache-control']).toBe('no-store');
+    expect(res.json()).toEqual({
       value: { grabRateBp: null, linemanRateBp: null },
       version: 0,
       rev: 0,
       updatedAt: null,
     });
+  });
+
+  test('the rates are readable by the owner only: manager, cashier and kitchen get 403, no session 401', async () => {
+    for (const role of ['manager', 'cashier', 'kitchen'] as const) {
+      const res = await call('GET', URL, await staff(role));
+      expect(res.statusCode, role).toBe(403);
+      expect(JSON.stringify(res.json()), role).not.toContain('RateBp');
+    }
+    expect((await call('GET', URL, undefined)).statusCode).toBe(401);
+  });
+
+  test('the other settings stay readable by cashiers (the QR needs the PromptPay ID)', async () => {
+    const cashier = await staff('cashier');
+    expect((await call('GET', '/v1/settings/shop', cashier)).statusCode).toBe(200);
   });
 
   test('owner only, and only after a fresh step-up', async () => {

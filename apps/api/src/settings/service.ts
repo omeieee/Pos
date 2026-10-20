@@ -109,9 +109,13 @@ interface Resource {
   bankAccount?: true;
   /**
    * The Grab and LINE MAN commission rates (2026-10-20): owner only, step-up, audit, alert. Not on
-   * the realtime feed (reports read it from the server).
+   * the realtime feed (reports read it from the server). Reading is owner only too (`finance.pnl`,
+   * no step-up; owner-approved 2026-10-21): `settings.view` does not read these rates, and the
+   * response is masked to "not set" for any other role as a second line of defence.
    */
   platformCommission?: true;
+  /** Who may read it. Defaults to `settings.view`. */
+  viewPermission?: Permission;
   /** The change also answers PUT (a whole-value replacement) besides PATCH. Same handler. */
   put?: true;
 }
@@ -213,6 +217,7 @@ export const RESOURCES: readonly Resource[] = [
     patch: platformCommissionPatchInputSchema,
     editPermission: 'settings.platform_commission',
     platformCommission: true,
+    viewPermission: 'finance.pnl',
   },
 ];
 
@@ -239,7 +244,11 @@ function toResponse(
   role: StaffRole,
 ): SettingResponse {
   const shown = (value: unknown) =>
-    resource.bankAccount ? bankAccountView(value as BankAccountSettings, role) : value;
+    resource.bankAccount
+      ? bankAccountView(value as BankAccountSettings, role)
+      : resource.platformCommission && role !== 'owner'
+        ? DEFAULT_PLATFORM_COMMISSION
+        : value;
   if (!row) return { value: shown(resource.defaults), version: 0, rev: 0, updatedAt: null };
   return {
     value: shown(resource.schema.parse(row.value)),

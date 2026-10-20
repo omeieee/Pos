@@ -48,7 +48,6 @@ export async function taxReport(db: Db, query: TaxReportQuery, now: Date): Promi
         methodPreference: row.methodPreference,
       })
     : { allowances: { items: [] }, methodPreference: null };
-  const ingredients = pnl.expensesByCategory.find((c) => c.category === 'ingredients');
 
   const estimate = estimateTax({
     rules,
@@ -60,7 +59,8 @@ export async function taxReport(db: Db, query: TaxReportQuery, now: Date): Promi
       costOfGoodsSatang: pnl.costOfGoodsSatang,
       commissionSatang: pnl.commissionSatang,
       ledgerSatang: pnl.expensesSatang,
-      ingredientsLedgerSatang: ingredients?.totalSatang ?? 0,
+      ingredientsLedgerSatang: pnl.ingredientsExpensesSatang,
+      platformFeesLedgerSatang: pnl.platformFeesExpensesSatang,
     },
     pnlComplete: pnl.complete,
     allowanceItems: profile.allowances.items,

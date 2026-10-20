@@ -227,8 +227,13 @@ describe('the dev mock of profit and loss and tax', () => {
     expect(pnl.complete).toBe(false);
     expect(pnl.expensesSatang).toBe(37500);
     expect(pnl.netProfitSatang).toBe(
-      pnl.grossProfitSatang - pnl.commissionSatang - pnl.expensesSatang,
+      pnl.grossProfitSatang -
+        pnl.commissionSatang -
+        pnl.expensesSatang +
+        pnl.foodCostNotDeductedSatang +
+        pnl.platformFeesNotDeductedSatang,
     );
+    expect(pnl).toMatchObject({ foodCostBasis: 'cost_of_goods', platformFeesBasis: 'commission' });
   });
 
   test('adding and voiding an expense moves the profit; an empty range has no month rows', () => {
@@ -329,6 +334,7 @@ describe('the dev mock of the tax profile and the commission rates', () => {
       value: { grabRateBp: null, linemanRateBp: null },
       version: 0,
     });
+    expect(call(m, 'GET', path, undefined, manager)?.status).toBe(403);
     expect(call(m, 'PATCH', path, { expectedVersion: 0, grabRateBp: 2500 }, manager)?.status).toBe(
       403,
     );

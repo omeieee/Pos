@@ -5,6 +5,7 @@ export * from './customers.ts';
 export * from './heatmap.ts';
 export * from './items.ts';
 export * from './margin.ts';
+export * from './overlap.ts';
 export * from './pnl.ts';
 export * from './revenue.ts';
 export * from './tax.ts';

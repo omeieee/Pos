@@ -10,6 +10,7 @@
  * = gross profit       revenue - cost of goods
  * - platform commission  recorded, else rate × net paid, else named as "rate not set" (no number)
  * - expenses           ledger rows by business date, voided rows left out
+ * + overlap not deducted  the smaller of each "larger of the two" pair (see below)
  * = net profit before income tax
  *
  * Nothing is guessed. An order with an uncosted line adds its revenue but no cost, and an order whose
@@ -21,9 +22,15 @@
  * `margin.grossProfitSatang` is the margin.ts figure: over costed orders only. It differs from the
  * P&L `grossProfitSatang` by exactly `uncostedRevenueSatang`.
  *
- * The `platform_fees` expense category is NOT netted against commission and the commission is not
- * inside `expensesSatang`: both are deducted, side by side. `platformFeesAlsoCommission` is true when
- * both are non-zero so the screen can ask the owner not to have typed the same fee twice.
+ * Two pairs can describe the same money twice (owner-approved 2026-10-21, `overlap.ts`): menu cost of
+ * goods vs the `ingredients` expense, and platform commission vs the `platform_fees` expense. When
+ * both of a pair are above 0 in the period, only the LARGER is deducted. Nothing is removed from the
+ * raw lines: `costOfGoodsSatang`, `commissionSatang` and `expensesSatang` stay as they were, and the
+ * smaller of each pair is `foodCostNotDeductedSatang` / `platformFeesNotDeductedSatang`, added back:
+ *   net = gross - commission - expenses + foodCostNotDeducted + platformFeesNotDeducted
+ * `foodCostBasis` / `platformFeesBasis` say which side was deducted. Month rows apply the rule to
+ * their own rows, so the months need not add up to the total (the larger side can differ by month).
+ * The commission is never inside `expensesSatang`.
  *
  * Gov co-pay is revenue at the full amount on the sale date (it is inside `revenueSatang`). The
  * receivable until the next-day settlement is not tracked anywhere yet: `govCopay.receivable` says so.
@@ -35,6 +42,12 @@ import {
   type RatedPlatform,
 } from './commission.ts';
 import { type PeriodMargin, periodMargin } from './margin.ts';
+import {
+  type FoodCostBasis,
+  foodCostOverlap,
+  type PlatformFeesBasis,
+  platformFeesOverlap,
+} from './overlap.ts';
 import { type ReportOrder, revenueByDay } from './revenue.ts';
 
 export interface PnlExpense {
@@ -71,9 +84,16 @@ export interface PnlFigures {
   grossProfitSatang: number;
   /** Recorded plus estimated; orders with "rate not set" are not in it. */
   commissionSatang: number;
-  /** Unvoided ledger rows, every category (platform_fees included). */
+  /** Unvoided ledger rows, every category (platform_fees and ingredients included). Raw. */
   expensesSatang: number;
-  /** `grossProfitSatang - commissionSatang - expensesSatang`; negative for a loss. */
+  /** The smaller of cost of goods and the `ingredients` expense when both are above 0, else 0. */
+  foodCostNotDeductedSatang: number;
+  /** The smaller of commission and the `platform_fees` expense when both are above 0, else 0. */
+  platformFeesNotDeductedSatang: number;
+  /**
+   * `gross - commission - expenses + foodCostNotDeducted + platformFeesNotDeducted`; negative for a
+   * loss.
+   */
   netProfitSatang: number;
   complete: boolean;
 }
@@ -94,7 +114,12 @@ export interface Pnl extends PnlFigures {
   commission: CommissionSummary;
   expensesByCategory: ExpenseCategoryTotal[];
   voidedExpenseCount: number;
-  platformFeesAlsoCommission: boolean;
+  /** Of cost of goods and the `ingredients` expense, which one is deducted (`only_one` = no overlap). */
+  foodCostBasis: FoodCostBasis;
+  ingredientsExpensesSatang: number;
+  /** Of commission and the `platform_fees` expense, which one is deducted (`only_one` = no overlap). */
+  platformFeesBasis: PlatformFeesBasis;
+  platformFeesExpensesSatang: number;
   govCopay: { revenueSatang: number; receivable: 'not_built' };
   missing: {
     excludedOrderIds: string[];
@@ -109,6 +134,11 @@ export interface Pnl extends PnlFigures {
 }
 
 const PLATFORM_FEES = 'platform_fees';
+const INGREDIENTS = 'ingredients';
+
+function categoryTotal(live: readonly PnlExpense[], category: string): number {
+  return live.filter((e) => e.category === category).reduce((n, e) => n + e.amountSatang, 0);
+}
 
 function liveExpenses(expenses: readonly PnlExpense[]): PnlExpense[] {
   const live: PnlExpense[] = [];
@@ -135,13 +165,25 @@ function figures(
   live: readonly PnlExpense[],
   rates: PlatformRates,
   excludedCount: number,
-): PnlFigures & { margin: PeriodMargin; commission: CommissionSummary; govCopay: number } {
+): PnlFigures & {
+  margin: PeriodMargin;
+  commission: CommissionSummary;
+  govCopay: number;
+  food: ReturnType<typeof foodCostOverlap>;
+  fees: ReturnType<typeof platformFeesOverlap>;
+  ingredients: number;
+  feesExpense: number;
+} {
   const days = revenueByDay(orders);
   const revenue = sum(days.map((d) => d.revenueSatang));
   const margin = periodMargin(orders);
   const commission = platformCommission(orders, rates);
   const expenses = sum(live.map((e) => e.amountSatang));
   const gross = revenue - margin.costSatang;
+  const ingredients = categoryTotal(live, INGREDIENTS);
+  const feesExpense = categoryTotal(live, PLATFORM_FEES);
+  const food = foodCostOverlap(margin.costSatang, ingredients);
+  const fees = platformFeesOverlap(commission.totalSatang, feesExpense);
   return {
     revenueSatang: revenue,
     orderCount: sum(days.map((d) => d.orderCount)),
@@ -150,7 +192,10 @@ function figures(
     grossProfitSatang: gross,
     commissionSatang: commission.totalSatang,
     expensesSatang: expenses,
-    netProfitSatang: gross - commission.totalSatang - expenses,
+    foodCostNotDeductedSatang: food.notDeductedSatang,
+    platformFeesNotDeductedSatang: fees.notDeductedSatang,
+    netProfitSatang:
+      gross - commission.totalSatang - expenses + food.notDeductedSatang + fees.notDeductedSatang,
     complete:
       excludedCount === 0 &&
       margin.uncostedOrderIds.length === 0 &&
@@ -158,6 +203,10 @@ function figures(
     margin,
     commission,
     govCopay: sum(days.map((d) => d.byMethod.gov_copay ?? 0)),
+    food,
+    fees,
+    ingredients,
+    feesExpense,
   };
 }
 
@@ -179,16 +228,12 @@ export function profitAndLoss(input: PnlInput): Pnl {
   const live = liveExpenses(input.expenses);
   const excluded = [...input.excludedOrderIds];
   const all = figures(orders, live, rates, excluded.length);
-  const { margin, commission, govCopay, ...totals } = all;
+  const { margin, commission, govCopay, food, fees, ingredients, feesExpense, ...totals } = all;
 
   const reasons: IncompleteReason[] = [];
   if (excluded.length > 0) reasons.push('orders_excluded');
   if (margin.uncostedOrderIds.length > 0) reasons.push('orders_uncosted');
   if (commission.rateNotSetOrderIds.length > 0) reasons.push('commission_rate_not_set');
-
-  const feesExpense = sum(
-    live.filter((e) => e.category === PLATFORM_FEES).map((e) => e.amountSatang),
-  );
 
   const months: PnlMonth[] = [];
   if (input.from.slice(0, 7) !== input.to.slice(0, 7)) {
@@ -213,6 +258,8 @@ export function profitAndLoss(input: PnlInput): Pnl {
         grossProfitSatang: m.grossProfitSatang,
         commissionSatang: m.commissionSatang,
         expensesSatang: m.expensesSatang,
+        foodCostNotDeductedSatang: m.foodCostNotDeductedSatang,
+        platformFeesNotDeductedSatang: m.platformFeesNotDeductedSatang,
         netProfitSatang: m.netProfitSatang,
         complete: m.complete,
       });
@@ -225,7 +272,10 @@ export function profitAndLoss(input: PnlInput): Pnl {
     commission,
     expensesByCategory: byCategory(live),
     voidedExpenseCount: input.expenses.filter((e) => e.voided).length,
-    platformFeesAlsoCommission: commission.totalSatang > 0 && feesExpense > 0,
+    foodCostBasis: food.basis,
+    ingredientsExpensesSatang: ingredients,
+    platformFeesBasis: fees.basis,
+    platformFeesExpensesSatang: feesExpense,
     govCopay: { revenueSatang: govCopay, receivable: 'not_built' },
     missing: {
       excludedOrderIds: excluded,

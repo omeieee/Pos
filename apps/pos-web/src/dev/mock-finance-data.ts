@@ -72,7 +72,10 @@ export const SAMPLE_PNL: PnlReport = pnlReportSchema.parse({
   grossProfitSatang: 52400,
   commissionSatang: 4550,
   expensesSatang: 37500,
-  netProfitSatang: 10350,
+  // docs/p7-pnl-sample.md: cost of goods 271.00 > ingredients 250.00, commission 45.50 > platform_fees 15.00
+  foodCostNotDeductedSatang: 25000,
+  platformFeesNotDeductedSatang: 1500,
+  netProfitSatang: 36850,
   complete: false,
   incompleteReasons: ['orders_uncosted'],
   missing: {
@@ -100,7 +103,10 @@ export const SAMPLE_PNL: PnlReport = pnlReportSchema.parse({
     { category: 'other', totalSatang: 1000, count: 1 },
   ],
   voidedExpenseCount: 1,
-  platformFeesAlsoCommission: true,
+  foodCostBasis: 'cost_of_goods',
+  ingredientsExpensesSatang: 25000,
+  platformFeesBasis: 'commission',
+  platformFeesExpensesSatang: 1500,
   govCopay: { revenueSatang: 6000, receivable: 'not_built' },
   months: [
     {
@@ -112,7 +118,9 @@ export const SAMPLE_PNL: PnlReport = pnlReportSchema.parse({
       grossProfitSatang: 35200,
       commissionSatang: 2300,
       expensesSatang: 24500,
-      netProfitSatang: 8400,
+      foodCostNotDeductedSatang: 15000,
+      platformFeesNotDeductedSatang: 1500,
+      netProfitSatang: 24900,
       complete: false,
     },
     {
@@ -124,7 +132,9 @@ export const SAMPLE_PNL: PnlReport = pnlReportSchema.parse({
       grossProfitSatang: 17200,
       commissionSatang: 2250,
       expensesSatang: 13000,
-      netProfitSatang: 1950,
+      foodCostNotDeductedSatang: 9300,
+      platformFeesNotDeductedSatang: 0,
+      netProfitSatang: 11250,
       complete: true,
     },
   ],
@@ -195,7 +205,10 @@ export function sampleTax(period: 'annual' | 'half', year = 2569): TaxReport {
     allowances: { personalSatang: personal, items: [], totalSatang: personal },
     pnlComplete: false,
     incompleteReasons: ['orders_uncosted'],
-    foodCostMayBeCountedTwice: false,
+    foodCostBasis: 'only_one',
+    foodCostNotDeductedSatang: 0,
+    platformFeesBasis: 'only_one',
+    platformFeesNotDeductedSatang: 0,
     filing: {
       mustFile: true,
       incomeOverSatang: half ? 6_000_000 : 12_000_000,

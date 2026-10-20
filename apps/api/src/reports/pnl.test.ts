@@ -221,7 +221,10 @@ describe('GET /v1/reports/pnl figures', () => {
       complete: false,
       incompleteReasons: ['orders_uncosted', 'commission_rate_not_set'],
       voidedExpenseCount: 1,
-      platformFeesAlsoCommission: false,
+      foodCostBasis: 'only_one',
+      platformFeesBasis: 'only_one',
+      foodCostNotDeductedSatang: 0,
+      platformFeesNotDeductedSatang: 0,
     });
     expect(body.missing).toEqual({
       excludedOrderIds: [],

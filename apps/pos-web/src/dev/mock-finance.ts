@@ -219,27 +219,56 @@ export function createMockFinance(deps: { now: () => number }) {
       });
     }
     const expensesSatang = sum(found);
+    // Same rule as @sds/finance `overlap.ts` (not imported: this mock only needs the shape). Tie: first side.
+    const inLedger = (key: string) => sum(kept.filter((e) => e.category === key));
+    const ingredients = inLedger('ingredients');
+    const feesExpense = inLedger('platform_fees');
+    const cog = SAMPLE_PNL.costOfGoodsSatang;
+    const commission = SAMPLE_PNL.commissionSatang;
+    const foodBoth = cog > 0 && ingredients > 0;
+    const feesBoth = commission > 0 && feesExpense > 0;
+    const foodLeft = foodBoth ? Math.min(cog, ingredients) : 0;
+    const feesLeft = feesBoth ? Math.min(commission, feesExpense) : 0;
     const months = from.slice(0, 7) === to.slice(0, 7) ? [] : SAMPLE_PNL.months;
     const answer: PnlReport = {
       ...SAMPLE_PNL,
       from,
       to,
       expensesSatang: satang(expensesSatang),
+      foodCostNotDeductedSatang: satang(foodLeft),
+      platformFeesNotDeductedSatang: satang(feesLeft),
       netProfitSatang: satang(
-        SAMPLE_PNL.grossProfitSatang - SAMPLE_PNL.commissionSatang - expensesSatang,
+        SAMPLE_PNL.grossProfitSatang - commission - expensesSatang + foodLeft + feesLeft,
       ),
       expensesByCategory: [...byCategory.entries()]
         .map(([category, v]) => ({ category, totalSatang: satang(v.totalSatang), count: v.count }))
         .sort((a, b) => b.totalSatang - a.totalSatang || a.category.localeCompare(b.category)),
       voidedExpenseCount: found.length - kept.length,
-      platformFeesAlsoCommission:
-        SAMPLE_PNL.commissionSatang > 0 && kept.some((e) => e.category === 'platform_fees'),
+      foodCostBasis: !foodBoth
+        ? 'only_one'
+        : cog >= ingredients
+          ? 'cost_of_goods'
+          : 'ingredients_expenses',
+      ingredientsExpensesSatang: satang(ingredients),
+      platformFeesBasis: !feesBoth
+        ? 'only_one'
+        : commission >= feesExpense
+          ? 'commission'
+          : 'platform_fees_expenses',
+      platformFeesExpensesSatang: satang(feesExpense),
       months: months.map((m) => {
         const monthExpenses = sum(found.filter((e) => e.businessDate.startsWith(m.month)));
         return {
           ...m,
           expensesSatang: satang(monthExpenses),
-          netProfitSatang: satang(m.grossProfitSatang - m.commissionSatang - monthExpenses),
+          // The month rows of the mock keep the sample's own overlap figures (not recomputed).
+          netProfitSatang: satang(
+            m.grossProfitSatang -
+              m.commissionSatang -
+              monthExpenses +
+              m.foodCostNotDeductedSatang +
+              m.platformFeesNotDeductedSatang,
+          ),
         };
       }),
     };
@@ -295,7 +324,8 @@ export function createMockFinance(deps: { now: () => number }) {
       updatedAt: commission.version === 0 ? null : nowIso(),
     });
     if (method === 'GET') {
-      return has(caller, 'settings.view') ? ok(answer()) : error(403, 'FORBIDDEN');
+      // Owner only (D-31 amendment): the rates are not for managers or cashiers.
+      return has(caller, 'finance.pnl') ? ok(answer()) : error(403, 'FORBIDDEN');
     }
     if (!has(caller, 'settings.platform_commission')) return error(403, 'FORBIDDEN');
     if (!caller.stepUpFresh) return error(403, 'STEP_UP_REQUIRED');

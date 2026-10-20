@@ -22,6 +22,7 @@ const halfYear: TaxInput = {
     // rent 60,000 + gas 30,000 + utilities 24,000 + packaging 18,000 + other 12,000
     ledgerSatang: B(144_000),
     ingredientsLedgerSatang: 0,
+    platformFeesLedgerSatang: 0,
   },
   pnlComplete: true,
   allowanceItems: [],
@@ -62,6 +63,44 @@ describe('worksheet A: half-year, Jan-Jun 2569, ภ.ง.ด.94 basis', () => {
   });
 });
 
+describe('worksheet C: both overlaps present, the larger of each pair is deducted', () => {
+  const e = estimateTax({
+    ...halfYear,
+    expenses: {
+      costOfGoodsSatang: B(150_000),
+      commissionSatang: B(18_000),
+      // ingredients 120,000 + platform_fees 30,000 + rent 60,000
+      ledgerSatang: B(210_000),
+      ingredientsLedgerSatang: B(120_000),
+      platformFeesLedgerSatang: B(30_000),
+    },
+  });
+  test('240,000 expenses, 300,000 net, 270,000 taxable, tax 6,000', () => {
+    expect(e.methods.actual).toMatchObject({
+      expenseSatang: B(240_000),
+      netBeforeAllowancesSatang: B(300_000),
+      taxableNetSatang: B(270_000),
+      bracketTaxSatang: B(6_000),
+      payableSatang: B(6_000),
+    });
+    expect(e.halfPercent).toBeNull();
+  });
+  test('says which side was used', () => {
+    expect(e).toMatchObject({
+      foodCostBasis: 'cost_of_goods',
+      foodCostNotDeductedSatang: B(120_000),
+      platformFeesBasis: 'platform_fees_expenses',
+      platformFeesNotDeductedSatang: B(18_000),
+    });
+    expect(e.notes).toEqual(
+      expect.arrayContaining([
+        'tax.note.foodCostCostOfGoodsUsed',
+        'tax.note.platformFeesExpensesUsed',
+      ]),
+    );
+  });
+});
+
 describe('worksheet B: a year with revenue over 1,000,000 (0.5% method)', () => {
   const e = estimateTax({
     ...halfYear,
@@ -74,6 +113,7 @@ describe('worksheet B: a year with revenue over 1,000,000 (0.5% method)', () => 
       commissionSatang: B(100_000),
       ledgerSatang: B(450_000),
       ingredientsLedgerSatang: 0,
+      platformFeesLedgerSatang: 0,
     },
   });
   test('actual: net 50,000 less 60,000 is 0 normal tax, but 0.5% of 1,200,000 is 6,000, paid', () => {
