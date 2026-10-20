@@ -51,6 +51,8 @@ export const thMenuEditor = {
   'menuEditor.field.cost': 'ต้นทุนโดยประมาณ (บาท)',
   'menuEditor.field.costHint':
     'เห็นเฉพาะผู้ที่ดูรายงานได้ ไม่ปรากฏที่หน้าขายหรือครัว ปล่อยว่างตอนแก้ไข = ล้างต้นทุน (0)',
+  'menuEditor.field.costItemHint':
+    'เห็นเฉพาะผู้ที่ดูรายงานได้ ไม่ปรากฏที่หน้าขายหรือครัว ปล่อยว่าง = ยังไม่ใส่ต้นทุน (ไม่นำไปคิดกำไร) ส่วน 0 = ต้นทุนศูนย์จริง ๆ',
   'menuEditor.field.channels': 'ช่องทางที่ขาย',
   'menuEditor.field.channelPrice': 'ราคา {channel} (เว้นว่าง = ราคาปกติ)',
   'menuEditor.field.groups': 'ตัวเลือกเสริมของอาหารนี้',
@@ -86,6 +88,7 @@ export const thMenuEditor = {
   'menuEditor.photo.error.too_big': 'ย่อรูปแล้วก็ยังใหญ่เกินไป ลองรูปอื่น',
   'menuEditor.photo.error.metadata': 'ลบข้อมูลที่ติดมากับรูปไม่สำเร็จ จึงไม่ได้อัปโหลดรูปนี้ ลองรูปอื่น',
   'menuEditor.costLabel': 'ต้นทุน {amount}',
+  'menuEditor.costNone': 'ยังไม่ใส่ต้นทุน',
   'menuEditor.archived': 'เก็บแล้ว',
   'menuEditor.group.range': 'เลือก {min} ถึง {max}',
   'menuEditor.group.required': 'ต้องเลือก',

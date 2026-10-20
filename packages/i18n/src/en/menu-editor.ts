@@ -54,6 +54,8 @@ export const enMenuEditor = {
   'menuEditor.field.cost': 'Estimated cost (baht)',
   'menuEditor.field.costHint':
     'Only people who can see reports see this. It never shows at the till or in the kitchen. Leaving it empty when editing clears the cost (0).',
+  'menuEditor.field.costItemHint':
+    'Only people who can see reports see this. It never shows at the till or in the kitchen. Empty = no cost entered (left out of profit figures); 0 = a real cost of zero.',
   'menuEditor.field.channels': 'Sold on',
   'menuEditor.field.channelPrice': '{channel} price (empty = normal price)',
   'menuEditor.field.groups': 'Option groups for this dish',
@@ -96,6 +98,7 @@ export const enMenuEditor = {
   'menuEditor.photo.error.metadata':
     'The data inside the photo could not be removed, so it was not uploaded. Try another one.',
   'menuEditor.costLabel': 'Cost {amount}',
+  'menuEditor.costNone': 'No cost entered',
   'menuEditor.archived': 'Archived',
   'menuEditor.group.range': 'Pick {min} to {max}',
   'menuEditor.group.required': 'Required',

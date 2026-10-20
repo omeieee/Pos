@@ -101,6 +101,26 @@ export function createMockReports(deps: {
         orderCount: rows.reduce((sum, d) => sum + d.orderCount, 0),
         commissionSatang: satang(0),
       },
+      // the mock shop has no costs and no platform orders
+      margin: {
+        costedOrderCount: 0,
+        costedRevenueSatang: satang(0),
+        costSatang: satang(0),
+        grossProfitSatang: null,
+        marginBp: null,
+        uncostedOrderIds: [],
+        uncostedRevenueSatang: satang(0),
+        uncostedMenuItemIds: [],
+      },
+      commission: {
+        recordedSatang: satang(0),
+        recordedOrderCount: 0,
+        estimatedSatang: satang(0),
+        estimatedOrderCount: 0,
+        totalSatang: satang(0),
+        rateNotSetOrderIds: [],
+        ratesNotSet: [],
+      },
     };
   }
 
@@ -123,9 +143,20 @@ export function createMockReports(deps: {
         revenueSatang: satang(r.revenue),
         unitShareBp: Math.floor((2 * r.qty * 10000 + total) / (2 * total)),
         popular: r.qty * byItem.size * 10 >= total * 7,
+        costedQty: 0,
+        costedRevenueSatang: satang(0),
+        costSatang: null,
+        grossProfitSatang: null,
+        marginBp: null,
       }))
       .sort((a, b) => b.qty - a.qty || b.revenueSatang - a.revenueSatang);
-    return { from, to, excludedOrderIds: [], items: rows };
+    return {
+      from,
+      to,
+      excludedOrderIds: [],
+      items: rows,
+      uncostedMenuItemIds: rows.map((r) => r.menuItemId),
+    };
   }
 
   function heatmap(from: string, to: string): HeatmapReport {

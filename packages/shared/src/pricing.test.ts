@@ -231,6 +231,30 @@ describe('priceOrder: what is saved with each line (03 §1 snapshots)', () => {
     });
   });
 
+  test('an item with no cost entered keeps its line cost null, even with option costs (D-32)', () => {
+    const result = ok(
+      priceOrder(
+        'storefront',
+        [line({ menuItemId: 'noodles', modifierOptionIds: ['wide', 'egg'] })],
+        catalog(noodles({ estCostSatang: null })),
+      ),
+    );
+    expect(result.lines[0]?.unitCostSatang).toBeNull();
+    // the modifier snapshot still carries the option's own cost change
+    expect(result.lines[0]?.modifiers.find((m) => m.optionId === 'egg')?.costDeltaSatang).toBe(300);
+  });
+
+  test('a cost of 0 entered on purpose is a real cost, not "no cost entered"', () => {
+    const result = ok(
+      priceOrder(
+        'storefront',
+        [line({ menuItemId: 'water' })],
+        catalog({ ...water, estCostSatang: s(0) }),
+      ),
+    );
+    expect(result.lines[0]?.unitCostSatang).toBe(0);
+  });
+
   test('a line without a note saves null', () => {
     const result = ok(priceOrder('storefront', [line({ menuItemId: 'water' })], catalog(water)));
     expect(result.lines[0]?.note).toBeNull();

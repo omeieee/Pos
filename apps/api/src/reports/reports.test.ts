@@ -42,13 +42,20 @@ const report = (token: string | undefined, query: string) =>
 
 interface Seed {
   date: string;
-  channel?: 'storefront' | 'line' | 'grab';
+  channel?: 'storefront' | 'line' | 'grab' | 'lineman';
   status?: 'completed' | 'cancelled';
   paymentStatus?: 'paid' | 'unpaid' | 'partially_paid' | 'refunded';
   total: number;
   commission?: number;
   placedAt?: string;
-  lines?: { menuItemId: string; name: string; qty: number; total: number }[];
+  lines?: {
+    menuItemId: string;
+    name: string;
+    qty: number;
+    total: number;
+    /** The cost snapshot per unit; leave out for "no cost entered" (null). */
+    cost?: number;
+  }[];
   pays?: {
     method: 'cash' | 'promptpay' | 'gov_copay' | 'platform';
     status: 'confirmed' | 'voided';
@@ -94,7 +101,7 @@ async function seed(s: Seed) {
         nameThSnapshot: l.name,
         nameEnSnapshot: null,
         unitPriceSatang: Math.round(l.total / l.qty),
-        unitCostSatang: 0,
+        unitCostSatang: l.cost ?? null,
         qty: l.qty,
         modifiers: [],
         note: null,
@@ -234,6 +241,25 @@ describe('GET /v1/reports/revenue', () => {
       excludedOrderIds: [],
       days: [],
       totals: { revenueSatang: 0, orderCount: 0, commissionSatang: 0 },
+      margin: {
+        costedOrderCount: 0,
+        costedRevenueSatang: 0,
+        costSatang: 0,
+        grossProfitSatang: null,
+        marginBp: null,
+        uncostedOrderIds: [],
+        uncostedRevenueSatang: 0,
+        uncostedMenuItemIds: [],
+      },
+      commission: {
+        recordedSatang: 0,
+        recordedOrderCount: 0,
+        estimatedSatang: 0,
+        estimatedOrderCount: 0,
+        totalSatang: 0,
+        rateNotSetOrderIds: [],
+        ratesNotSet: [],
+      },
     });
   });
 });
@@ -249,12 +275,21 @@ async function menuItem(nameTh: string): Promise<string> {
       categoryId: category?.id ?? '',
       nameTh,
       priceSatang: 5000,
-      estCostSatang: 0,
+      estCostSatang: null,
       channels: ['storefront'],
     })
     .returning();
   return item?.id ?? '';
 }
+
+/** The cost fields of an item sold only with "no cost entered". */
+const noCost = {
+  costedQty: 0,
+  costedRevenueSatang: 0,
+  costSatang: null,
+  grossProfitSatang: null,
+  marginBp: null,
+};
 
 const reportGet = (token: string, path: string, query: string) =>
   h.app.inject({
@@ -329,6 +364,7 @@ describe('GET /v1/reports/items and /heatmap', () => {
         revenueSatang: 18000,
         unitShareBp: 7500,
         popular: true,
+        ...noCost,
       },
       {
         menuItemId: tea,
@@ -337,6 +373,7 @@ describe('GET /v1/reports/items and /heatmap', () => {
         revenueSatang: 3000,
         unitShareBp: 2500,
         popular: false,
+        ...noCost,
       },
     ]);
   });
@@ -412,6 +449,116 @@ describe('the overview asks for the same range three times at once', () => {
       expect(spy).toHaveBeenCalledTimes(2);
     } finally {
       spy.mockRestore();
+    }
+  });
+});
+
+describe('cost, gross profit and margin (D-32)', () => {
+  const cash = (amount: number) => [
+    { method: 'cash' as const, status: 'confirmed' as const, amount },
+  ];
+  const noodle = { name: 'ต้มยำ', qty: 1 };
+
+  test('items: margin over the costed units; an item with no cost entered says so with nulls', async () => {
+    const tom = await menuItem('ต้มยำ');
+    const tea = await menuItem('ชาเย็น');
+    await seed({
+      date: '2040-03-02',
+      total: 9000,
+      lines: [
+        { menuItemId: tom, ...noodle, qty: 1, total: 6000, cost: 2200 },
+        { menuItemId: tea, name: 'ชาเย็น', qty: 1, total: 3000 }, // no cost entered
+      ],
+      pays: cash(9000),
+    });
+    const res = await reportGet(await as('manager'), 'items', '?from=2040-03-01&to=2040-03-07');
+    const body = itemsReportSchema.parse(res.json());
+    const byId = Object.fromEntries(body.items.map((i) => [i.menuItemId, i]));
+    expect(byId[tom]).toMatchObject({
+      qty: 1,
+      costedQty: 1,
+      costedRevenueSatang: 6000,
+      costSatang: 2200,
+      grossProfitSatang: 3800,
+      marginBp: 6333,
+    });
+    expect(byId[tea]).toMatchObject({ qty: 1, ...noCost });
+    expect(body.uncostedMenuItemIds).toEqual([tea]);
+  });
+
+  test('revenue: the margin block covers only fully costed orders and names the rest', async () => {
+    const tom = await menuItem('ต้มยำ');
+    const tea = await menuItem('ชาเย็น');
+    await seed({
+      date: '2041-03-02',
+      total: 10000,
+      lines: [{ menuItemId: tom, ...noodle, total: 10000, cost: 4000 }],
+      pays: [{ method: 'cash', status: 'confirmed', amount: 10000, refund: 2500 }],
+    });
+    await seed({
+      date: '2041-03-02',
+      total: 3000,
+      lines: [{ menuItemId: tea, name: 'ชาเย็น', qty: 1, total: 3000 }],
+      pays: cash(3000),
+    });
+    const res = await report(await as('manager'), '?from=2041-03-01&to=2041-03-07');
+    const body = revenueReportSchema.parse(res.json());
+    expect(body.totals.revenueSatang).toBe(7500 + 3000);
+    expect(body.margin).toMatchObject({
+      costedOrderCount: 1,
+      costedRevenueSatang: 7500, // net of the 25.00 handed back
+      costSatang: 4000,
+      grossProfitSatang: 3500,
+      marginBp: 4667,
+      uncostedRevenueSatang: 3000,
+      uncostedMenuItemIds: [tea],
+    });
+    expect(body.margin.uncostedOrderIds).toHaveLength(1);
+  });
+
+  test('commission: the recorded figure wins, the settings rate estimates, no rate = named', async () => {
+    const platformOrder = (date: string, channel: 'grab' | 'lineman', commission?: number) =>
+      seed({
+        date,
+        channel,
+        total: 8000,
+        ...(commission === undefined ? {} : { commission }),
+        pays: [{ method: 'platform', status: 'confirmed', amount: 8000 }],
+      });
+    await platformOrder('2042-03-02', 'grab'); // estimated from the rate
+    await platformOrder('2042-03-02', 'lineman', 300); // recorded wins over any rate
+    await platformOrder('2042-03-02', 'lineman'); // no LINE MAN rate: named, no number
+    const q = '?from=2042-03-01&to=2042-03-07';
+    const token = await as('manager');
+
+    // nothing saved in settings: no built-in rate, so both unrecorded orders are named
+    const none = revenueReportSchema.parse((await report(token, q)).json());
+    expect(none.commission).toMatchObject({
+      recordedSatang: 300,
+      estimatedSatang: 0,
+      totalSatang: 300,
+      ratesNotSet: ['grab', 'lineman'],
+    });
+    expect(none.commission.rateNotSetOrderIds).toHaveLength(2);
+
+    await h.client.query(
+      "insert into settings (key, value) values ('platform_commission', $1::jsonb)",
+      [JSON.stringify({ grabRateBp: 2500, linemanRateBp: null })],
+    );
+    try {
+      const set = revenueReportSchema.parse((await report(token, q)).json());
+      expect(set.commission).toMatchObject({
+        recordedSatang: 300,
+        estimatedSatang: 2000, // 25% of 80.00
+        totalSatang: 2300,
+        estimatedOrderCount: 1,
+        ratesNotSet: ['lineman'],
+      });
+      expect(set.commission.rateNotSetOrderIds).toHaveLength(1);
+      // the per-day figure keeps meaning "recorded on the orders"
+      expect(set.totals.commissionSatang).toBe(300);
+    } finally {
+      await h.client.query("delete from settings where key = 'platform_commission'");
     }
   });
 });

@@ -6,6 +6,7 @@ import {
   createItemInputSchema,
   createOptionInputSchema,
   itemDtoSchema,
+  menuCostsResponseSchema,
   menuPhotoPath,
   patchItemInputSchema,
   photoQuerySchema,
@@ -27,7 +28,7 @@ describe('createItemInputSchema', () => {
     const parsed = createItemInputSchema.parse(item);
     expect(parsed).toMatchObject({
       priceSatang: 5000,
-      estCostSatang: 0,
+      estCostSatang: null, // no cost entered (D-32), not a cost of 0
       isAvailable: true,
       sort: 0,
     });
@@ -82,6 +83,29 @@ describe('createItemInputSchema', () => {
       createItemInputSchema.safeParse({ ...item, modifierGroupIds: [uuid(2), uuid(2)] }).success,
     ).toBe(false);
     expect(createItemInputSchema.safeParse({ ...item, rev: 5 }).success).toBe(false);
+  });
+});
+
+describe('item cost: null means "no cost entered" (D-32)', () => {
+  test('a create may state a cost of 0 on purpose, or null, but never a negative cost', () => {
+    expect(createItemInputSchema.parse({ ...item, estCostSatang: 0 }).estCostSatang).toBe(0);
+    expect(createItemInputSchema.parse({ ...item, estCostSatang: null }).estCostSatang).toBeNull();
+    expect(createItemInputSchema.safeParse({ ...item, estCostSatang: -1 }).success).toBe(false);
+  });
+
+  test('a patch can clear a cost with null, and null alone counts as a field', () => {
+    expect(patchItemInputSchema.parse({ expectedVersion: 1, estCostSatang: null })).toMatchObject({
+      estCostSatang: null,
+    });
+  });
+
+  test('the costs answer carries null for an item with no cost', () => {
+    const id = uuid(9);
+    const parsed = menuCostsResponseSchema.parse({
+      items: [{ id, estCostSatang: null }],
+      options: [],
+    });
+    expect(parsed.items[0]?.estCostSatang).toBeNull();
   });
 });
 

@@ -43,11 +43,33 @@ describe('reports reads', () => {
             excludedOrderIds: [],
             days: [day],
             totals: { revenueSatang: 20050, orderCount: 2, commissionSatang: 0 },
+            margin: {
+              costedOrderCount: 1,
+              costedRevenueSatang: 8000,
+              costSatang: 3000,
+              grossProfitSatang: 5000,
+              marginBp: 6250,
+              uncostedOrderIds: [],
+              uncostedRevenueSatang: 12050,
+              uncostedMenuItemIds: [],
+            },
+            commission: {
+              recordedSatang: 0,
+              recordedOrderCount: 0,
+              estimatedSatang: 0,
+              estimatedOrderCount: 0,
+              totalSatang: 0,
+              rateNotSetOrderIds: [],
+              ratesNotSet: [],
+            },
           },
         };
       }
       if (call.url.includes('/items'))
-        return { status: 200, json: { ...range, excludedOrderIds: [], items: [] } };
+        return {
+          status: 200,
+          json: { ...range, excludedOrderIds: [], items: [], uncostedMenuItemIds: [] },
+        };
       if (call.url.includes('/heatmap'))
         return { status: 200, json: { ...range, excludedOrderIds: [], cells: [] } };
       return {
@@ -55,7 +77,9 @@ describe('reports reads', () => {
         json: { summary: { new: 0, regular: 0, lapsed: 0 }, customers: [] },
       };
     });
-    expect((await api.reports.revenue(range)).totals.revenueSatang).toBe(20050);
+    const revenue = await api.reports.revenue(range);
+    expect(revenue.totals.revenueSatang).toBe(20050);
+    expect(revenue.margin.marginBp).toBe(6250);
     expect((await api.reports.items(range)).items).toEqual([]);
     expect((await api.reports.heatmap(range)).cells).toEqual([]);
     expect((await api.reports.customers()).summary.regular).toBe(0);

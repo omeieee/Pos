@@ -92,6 +92,19 @@ describe('the lists', () => {
     expect(screen.queryByText(/ต้นทุน/)).toBeNull();
   });
 
+  test('an item with no cost entered says so instead of showing a cost of 0', async () => {
+    await open({
+      menuApi: {
+        costs: async () => ({
+          items: [{ id: MENU.tomYum, estCostSatang: null }],
+          options: [],
+        }),
+      },
+    });
+    expect(await screen.findByText(tr('menuEditor.costNone'))).toBeTruthy();
+    expect(screen.queryByText(tr('menuEditor.costLabel', { amount: '฿0' }))).toBeNull();
+  });
+
   test('says so when the costs could not be read for a reason other than 403, and retries', async () => {
     let fail = true;
     const env = await open({

@@ -8,11 +8,13 @@ const item = (
   name: string,
   qty: number,
   lineTotalSatang: number,
+  unitCostSatang: number | null = null,
 ): ReportItem => ({
   menuItemId,
   name,
   qty,
   lineTotalSatang,
+  unitCostSatang,
 });
 
 const order = (items: ReportItem[], over: Partial<ReportOrder> = {}): ReportOrder => ({

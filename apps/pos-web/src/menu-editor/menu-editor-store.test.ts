@@ -144,6 +144,45 @@ describe('creating', () => {
     expect(env.store.getState().costs?.items[created.id]).toBe(1200);
   });
 
+  test('an item created without a cost is remembered as "no cost entered" (null), not 0', async () => {
+    const created = itemDto(uuid(712), 1000, { nameTh: 'ชา', categoryId: MENU.catDrink });
+    const env = createEditorEnv({
+      costs: true,
+      menu: {
+        listCategories: async () => ({ categories: [] }),
+        listItems: async () => ({ items: [] }),
+        listGroups: async () => ({ groups: [] }),
+        costs: async () => ({ items: [], options: [] }),
+        createItem: async (_input, options) => ({
+          row: created,
+          replay: false,
+          clientRequestId: options?.clientRequestId ?? '',
+        }),
+      },
+    });
+    await env.store.load();
+    await env.store.createItem({ ...NEW_ITEM });
+    expect(env.store.getState().costs?.items[created.id]).toBeNull();
+  });
+
+  test('a cost cleared with null is remembered as null, and the costs read keeps null', async () => {
+    const env = createEditorEnv({
+      costs: true,
+      seed: false,
+      menu: {
+        listCategories: async () => ({ categories: [] }),
+        listItems: async () => ({ items: [] }),
+        listGroups: async () => ({ groups: [] }),
+        costs: async () => ({
+          items: [{ id: MENU.tomYum, estCostSatang: null }],
+          options: [],
+        }),
+      },
+    });
+    await env.store.load();
+    expect(env.store.getState().costs?.items[MENU.tomYum]).toBeNull();
+  });
+
   test('every create carries a request id, and a retry of the same content reuses it', async () => {
     const created = itemDto(uuid(711), 1001);
     let attempt = 0;

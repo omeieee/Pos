@@ -216,8 +216,45 @@ describe('reports repo: listReportOrders', () => {
         name: 'ก๋วยเตี๋ยวต้มยำ',
         qty: 2,
         lineTotalSatang: 10000,
+        unitCostSatang: 2000,
       },
     ]);
     expect(kept?.id).toBeDefined();
+  });
+
+  test('carries the cost snapshot, and null for a line sold with no cost entered (D-32)', async () => {
+    const day = '2031-07-08';
+    const [category] = await db.insert(menuCategories).values({ nameTh: 'หมวด' }).returning();
+    const [menuItem] = await db
+      .insert(menuItems)
+      .values({
+        categoryId: category?.id ?? '',
+        nameTh: 'ชาเย็น',
+        priceSatang: 2500,
+        estCostSatang: null,
+        channels: ['storefront'],
+      })
+      .returning();
+    expect(menuItem?.estCostSatang).toBeNull();
+    const { order } = await seedOrder({
+      businessDate: day,
+      totalSatang: 5000,
+      pays: [{ method: 'cash', status: 'confirmed', amount: 5000 }],
+    });
+    await ordersRepo.insertOrderItems(db, order.id, [
+      {
+        menuItemId: menuItem?.id ?? '',
+        nameThSnapshot: 'ชาเย็น',
+        nameEnSnapshot: null,
+        unitPriceSatang: 2500,
+        unitCostSatang: null,
+        qty: 2,
+        modifiers: [],
+        note: null,
+        lineTotalSatang: 5000,
+      },
+    ]);
+    const [row] = await reportsRepo.listReportOrders(db, day, day);
+    expect(row?.items[0]?.unitCostSatang).toBeNull();
   });
 });

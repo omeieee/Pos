@@ -150,6 +150,11 @@ describe('itemsCsvRows', () => {
     revenueSatang: 18000,
     unitShareBp: 7500,
     popular: true,
+    costedQty: 0,
+    costedRevenueSatang: 0,
+    costSatang: null,
+    grossProfitSatang: null,
+    marginBp: null,
     ...over,
   });
 

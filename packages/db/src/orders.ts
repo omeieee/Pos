@@ -94,7 +94,8 @@ export interface NewOrderItem {
   nameThSnapshot: string;
   nameEnSnapshot: string | null;
   unitPriceSatang: number;
-  unitCostSatang: number;
+  /** Null = no cost was entered for the item when it was sold (D-32). */
+  unitCostSatang: number | null;
   qty: number;
   modifiers: PricedModifier[];
   note: string | null;
@@ -365,7 +366,7 @@ export async function loadCatalog(
       nameTh: item.nameTh,
       nameEn: item.nameEn,
       priceSatang: satang(item.priceSatang),
-      estCostSatang: satang(item.estCostSatang),
+      estCostSatang: item.estCostSatang === null ? null : satang(item.estCostSatang),
       isAvailable: item.isAvailable,
       archived: item.archivedAt !== null,
       categoryActive,

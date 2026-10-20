@@ -38,7 +38,7 @@ function call(
 const uid = () => crypto.randomUUID().slice(0, 8);
 
 interface Costs {
-  items: { id: string; estCostSatang: number }[];
+  items: { id: string; estCostSatang: number | null }[];
   options: { id: string; costDeltaSatang: number }[];
 }
 
@@ -99,6 +99,40 @@ describe('GET /v1/menu/costs', () => {
     const body = (await call('GET', '/v1/menu/costs', token)).json() as Costs;
     expect(body.items.find((i) => i.id === item.id)?.estCostSatang).toBe(1500);
     expect(body.options.find((o) => o.id === option?.id)?.costDeltaSatang).toBe(90);
+  });
+
+  test('no cost entered is null, a cost of 0 is 0, and a PATCH of null clears a cost (D-32)', async () => {
+    const token = await as('manager');
+    const cat = (
+      await call('POST', '/v1/menu/categories', token, { nameTh: `c ${uid()}` })
+    ).json() as CategoryDto;
+    const make = async (extra: Record<string, unknown>) =>
+      (
+        await call('POST', '/v1/menu/items', token, {
+          categoryId: cat.id,
+          nameTh: `i ${uid()}`,
+          priceSatang: 5000,
+          channels: ['storefront'],
+          ...extra,
+        })
+      ).json() as ItemDto;
+    const none = await make({});
+    const zero = await make({ estCostSatang: 0 });
+    const clearing = await make({ estCostSatang: 1500 });
+    const read = async () => (await call('GET', '/v1/menu/costs', token)).json() as Costs;
+    const costOf = (body: Costs, id: string) => body.items.find((i) => i.id === id)?.estCostSatang;
+    let body = await read();
+    expect(costOf(body, none.id)).toBeNull();
+    expect(costOf(body, zero.id)).toBe(0);
+    expect(costOf(body, clearing.id)).toBe(1500);
+
+    const patched = await call('PATCH', `/v1/menu/items/${clearing.id}`, token, {
+      expectedVersion: clearing.version,
+      estCostSatang: null,
+    });
+    expect(patched.statusCode).toBe(200);
+    body = await read();
+    expect(costOf(body, clearing.id)).toBeNull();
   });
 
   test('cashier, kitchen and an unsigned caller are refused', async () => {

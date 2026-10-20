@@ -43,6 +43,22 @@ export function applyBasisPoints(amount: Satang, basisPoints: number): Satang {
   return satang(Math.floor((scaled + 5000) / 10000));
 }
 
+/**
+ * profit / revenue in basis points (10000 = 100%), as a whole number. Rounds half away from zero, so
+ * a loss of 1/3 reads -3333 and a profit of 1/3 reads 3333 (the sign never changes the size). Returns
+ * `null` when revenue is 0: there is no margin to state. Profit may be negative; revenue may not.
+ * The only rounding rule for margins, like `applyBasisPoints` for rates.
+ */
+export function marginBasisPoints(profit: Satang, revenue: Satang): number | null {
+  assertNonNegative(revenue, 'revenue');
+  if (revenue === 0) return null;
+  const scaled = Math.abs(profit) * 10000;
+  if (!Number.isSafeInteger(scaled))
+    throw new RangeError('profit is too large to express as a margin');
+  const rounded = Math.floor((2 * scaled + revenue) / (2 * revenue));
+  return profit < 0 ? -rounded : rounded;
+}
+
 export interface PricedLine {
   unitPrice: Satang;
   qty: number;

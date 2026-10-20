@@ -7,6 +7,8 @@ import {
   favouriteItems,
   heatmap,
   itemSales,
+  periodMargin,
+  platformCommission,
   revenueByDay,
   segmentOf,
   segmentSummary,
@@ -23,6 +25,7 @@ import {
   type Satang,
   satang,
 } from '@sds/shared';
+import { currentPlatformCommission } from '../settings/service.ts';
 
 /** The finance package works in plain integers; the wire type is branded satang. */
 function brand<K extends string>(amounts: Partial<Record<K, number>>): Partial<Record<K, Satang>> {
@@ -59,6 +62,8 @@ export function loadReportOrders(db: Db, query: RevenueReportQuery) {
 export async function revenueReport(db: Db, query: RevenueReportQuery): Promise<RevenueReport> {
   const { usable, excludedOrderIds } = await loadReportOrders(db, query);
   const days = revenueByDay(usable);
+  const margin = periodMargin(usable);
+  const commissionSummary = platformCommission(usable, await currentPlatformCommission(db));
   let revenue = 0;
   let orderCount = 0;
   let commission = 0;
@@ -84,16 +89,38 @@ export async function revenueReport(db: Db, query: RevenueReportQuery): Promise<
       orderCount,
       commissionSatang: satang(commission),
     },
+    margin: {
+      ...margin,
+      costedRevenueSatang: satang(margin.costedRevenueSatang),
+      costSatang: satang(margin.costSatang),
+      grossProfitSatang:
+        margin.grossProfitSatang === null ? null : satang(margin.grossProfitSatang),
+      uncostedRevenueSatang: satang(margin.uncostedRevenueSatang),
+    },
+    commission: {
+      ...commissionSummary,
+      recordedSatang: satang(commissionSummary.recordedSatang),
+      estimatedSatang: satang(commissionSummary.estimatedSatang),
+      totalSatang: satang(commissionSummary.totalSatang),
+    },
   };
 }
 
 export async function itemsReport(db: Db, query: RevenueReportQuery): Promise<ItemsReport> {
   const { usable, excludedOrderIds } = await loadReportOrders(db, query);
+  const items = itemSales(usable);
   return {
     from: query.from,
     to: query.to,
     excludedOrderIds,
-    items: itemSales(usable).map((i) => ({ ...i, revenueSatang: satang(i.revenueSatang) })),
+    items: items.map((i) => ({
+      ...i,
+      revenueSatang: satang(i.revenueSatang),
+      costedRevenueSatang: satang(i.costedRevenueSatang),
+      costSatang: i.costSatang === null ? null : satang(i.costSatang),
+      grossProfitSatang: i.grossProfitSatang === null ? null : satang(i.grossProfitSatang),
+    })),
+    uncostedMenuItemIds: items.filter((i) => i.costedQty < i.qty).map((i) => i.menuItemId),
   };
 }
 

@@ -41,7 +41,8 @@ export interface CatalogItem {
   nameTh: string;
   nameEn: string | null;
   priceSatang: Satang;
-  estCostSatang: Satang;
+  /** Null = the owner has not entered a cost (D-32); 0 is a real cost of nothing. */
+  estCostSatang: Satang | null;
   isAvailable: boolean;
   archived: boolean;
   /** False when the item's category is deactivated: the item leaves the menu with it. */
@@ -75,8 +76,8 @@ export interface PricedOrderLine {
   nameEn: string | null;
   /** Base price on this channel, before modifiers. */
   unitPriceSatang: Satang;
-  /** Estimated cost per unit including modifier costs. */
-  unitCostSatang: Satang;
+  /** Estimated cost per unit including modifier costs; null when the item's cost was not entered. */
+  unitCostSatang: Satang | null;
   qty: number;
   modifiers: PricedModifier[];
   note: string | null;
@@ -202,9 +203,10 @@ export function priceOrder(
       nameTh: item.nameTh,
       nameEn: item.nameEn,
       unitPriceSatang: unitPrice,
-      unitCostSatang: satang(
-        item.estCostSatang + sumSatang(modifiers.map((m) => m.costDeltaSatang)),
-      ),
+      unitCostSatang:
+        item.estCostSatang === null
+          ? null
+          : satang(item.estCostSatang + sumSatang(modifiers.map((m) => m.costDeltaSatang))),
       qty: input.qty,
       modifiers,
       note: input.note ?? null,

@@ -37,7 +37,7 @@ const clientRequestId = z.uuid().optional();
  * kitchen sockets.
  */
 export const menuCostsResponseSchema = z.object({
-  items: z.array(z.object({ id: z.uuid(), estCostSatang: nonNegativeSatangSchema })),
+  items: z.array(z.object({ id: z.uuid(), estCostSatang: nonNegativeSatangSchema.nullable() })),
   options: z.array(z.object({ id: z.uuid(), costDeltaSatang: satangSchema })),
 });
 export type MenuCostsResponse = z.infer<typeof menuCostsResponseSchema>;
@@ -237,8 +237,8 @@ const itemFields = {
   descriptionTh: z.string().trim().max(500).nullable(),
   descriptionEn: z.string().trim().max(500).nullable(),
   priceSatang: nonNegativeSatangSchema,
-  /** Estimated cost of one unit. Write-only. */
-  estCostSatang: nonNegativeSatangSchema,
+  /** Estimated cost of one unit. Write-only. Null = no cost entered (D-32); 0 is a real cost. */
+  estCostSatang: nonNegativeSatangSchema.nullable(),
   imageUrl: imageUrl.nullable(),
   channels: channelsSchema,
   /** Replaces all channel price overrides when given. */
@@ -256,7 +256,7 @@ export const createItemInputSchema = z.strictObject({
   descriptionTh: itemFields.descriptionTh.optional(),
   descriptionEn: itemFields.descriptionEn.optional(),
   priceSatang: itemFields.priceSatang,
-  estCostSatang: itemFields.estCostSatang.default(ZERO),
+  estCostSatang: itemFields.estCostSatang.default(null),
   imageUrl: itemFields.imageUrl.optional(),
   channels: itemFields.channels,
   channelPrices: itemFields.channelPrices.optional(),

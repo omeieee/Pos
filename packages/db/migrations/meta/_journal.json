@@ -267,6 +267,13 @@
       "when": 1792507893817,
       "tag": "0037_expense_categories_ledger",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1792509004789,
+      "tag": "0038_item_cost_not_entered",
+      "breakpoints": true
     }
   ]
 }

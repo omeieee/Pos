@@ -207,7 +207,8 @@ export interface ItemPatch {
   descriptionTh?: string | null;
   descriptionEn?: string | null;
   priceSatang?: ReturnType<typeof satang>;
-  estCostSatang?: ReturnType<typeof satang>;
+  /** `null` clears the cost to "no cost entered" (D-32); 0 is a real cost. */
+  estCostSatang?: ReturnType<typeof satang> | null;
   channels?: MenuChannel[];
   channelPrices?: Partial<Record<MenuChannel, ReturnType<typeof satang>>>;
   modifierGroupIds?: string[];
@@ -243,9 +244,9 @@ export function buildItemPatch(
   if (price !== item.priceSatang) set('priceSatang', satang(price));
 
   if (options.withCost) {
-    // A blank box clears a cost that was known (0); with no known cost it is "not touched".
-    const cost = form.cost.trim() !== '' ? satangOf(form.cost) : originalCost === null ? null : 0;
-    if (cost !== null && cost !== originalCost) set('estCostSatang', satang(cost));
+    // A blank box means "no cost entered" (null); a typed 0 is a real cost of nothing (D-32).
+    const cost = form.cost.trim() !== '' ? satangOf(form.cost) : null;
+    if (cost !== originalCost) set('estCostSatang', cost === null ? null : satang(cost));
   }
 
   const channels = inChannelOrder(form.channels);

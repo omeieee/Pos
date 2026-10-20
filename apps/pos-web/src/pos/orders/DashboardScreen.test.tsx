@@ -48,12 +48,34 @@ const totals = (revenue: number, orders: number) => ({
   commissionSatang: satang(0),
 });
 
+const NO_MARGIN = {
+  costedOrderCount: 0,
+  costedRevenueSatang: satang(0),
+  costSatang: satang(0),
+  grossProfitSatang: null,
+  marginBp: null,
+  uncostedOrderIds: [],
+  uncostedRevenueSatang: satang(0),
+  uncostedMenuItemIds: [],
+};
+const NO_COMMISSION = {
+  recordedSatang: satang(0),
+  recordedOrderCount: 0,
+  estimatedSatang: satang(0),
+  estimatedOrderCount: 0,
+  totalSatang: satang(0),
+  rateNotSetOrderIds: [],
+  ratesNotSet: [],
+};
+
 const TODAY: RevenueReport = {
   from: '2030-10-15',
   to: '2030-10-15',
   excludedOrderIds: [],
   days: [day('2030-10-15')],
   totals: totals(486000, 38),
+  margin: NO_MARGIN,
+  commission: NO_COMMISSION,
 };
 const YESTERDAY: RevenueReport = {
   from: '2030-10-14',
@@ -61,6 +83,8 @@ const YESTERDAY: RevenueReport = {
   excludedOrderIds: [],
   days: [day('2030-10-14', { revenueSatang: satang(466000), orderCount: 35 })],
   totals: totals(466000, 35),
+  margin: NO_MARGIN,
+  commission: NO_COMMISSION,
 };
 
 const item = (name: string, qty: number) => ({
@@ -70,11 +94,17 @@ const item = (name: string, qty: number) => ({
   revenueSatang: satang(qty * 6000),
   unitShareBp: 0,
   popular: false,
+  costedQty: 0,
+  costedRevenueSatang: satang(0),
+  costSatang: null,
+  grossProfitSatang: null,
+  marginBp: null,
 });
 const ITEMS: ItemsReport = {
   from: '2030-10-15',
   to: '2030-10-15',
   excludedOrderIds: [],
+  uncostedMenuItemIds: [],
   items: [
     item('ชาเย็น', 17),
     item('ก๋วยเตี๋ยวต้มยำ', 14),

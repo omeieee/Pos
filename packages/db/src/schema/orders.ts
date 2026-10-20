@@ -143,7 +143,8 @@ export const orderItems = pgTable(
     nameThSnapshot: text('name_th_snapshot').notNull(),
     nameEnSnapshot: text('name_en_snapshot'),
     unitPriceSatang: money('unit_price_satang').notNull(),
-    unitCostSatang: money('unit_cost_satang').notNull().default(0),
+    /** Cost snapshot per unit, modifiers included. Null = no cost was entered when it was sold (D-32). */
+    unitCostSatang: money('unit_cost_satang'),
     qty: integer('qty').notNull(),
     /** [{ groupId, optionId, name, priceDeltaSatang, costDeltaSatang }] snapshot. */
     modifiers: jsonb('modifiers').notNull().default([]),

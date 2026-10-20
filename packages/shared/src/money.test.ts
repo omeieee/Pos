@@ -4,6 +4,7 @@ import {
   bahtToSatang,
   cashChange,
   lineTotal,
+  marginBasisPoints,
   orderTotals,
   satang,
   sumSatang,
@@ -129,4 +130,47 @@ test('sumSatang', () => {
   expect(sumSatang([])).toBe(0);
   expect(sumSatang([satang(1), satang(2), satang(3)])).toBe(6);
   expect(() => sumSatang([satang(Number.MAX_SAFE_INTEGER), satang(1)])).toThrow(RangeError);
+});
+
+describe('marginBasisPoints (profit / revenue, half away from zero)', () => {
+  test.each([
+    [60, 100, 6000], // 60%
+    [1, 3, 3333], // 33.333...% -> 3333
+    [2, 3, 6667], // 66.666...% -> 6667
+    [1, 8, 1250], // exact
+    [1, 16000, 1], // 0.00625 bp... 1/16000 = 0.625 bp -> 1
+    [1, 40000, 0], // 0.25 bp -> 0
+    [0, 5000, 0],
+    [-1, 3, -3333], // a loss rounds the same way, away from zero at the half
+    [-2, 3, -6667],
+    [-1, 20000, -1], // -0.5 bp -> -1 (away from zero)
+    [6, 100, 600],
+    [150, 100, 15000], // above 100% is only arithmetic (a negative cost); the maths does not cap it
+  ])('%i / %i = %i bp', (profit, revenue, expected) => {
+    expect(marginBasisPoints(satang(profit), satang(revenue))).toBe(expected);
+  });
+  test('is null when there is no revenue to divide by', () => {
+    expect(marginBasisPoints(satang(0), satang(0))).toBeNull();
+    expect(marginBasisPoints(satang(100), satang(0))).toBeNull();
+  });
+  test('rejects negative revenue', () => {
+    expect(() => marginBasisPoints(satang(1), satang(-1))).toThrow(RangeError);
+  });
+  test('negating the profit negates the margin (symmetry), over many seeded values', () => {
+    let seed = 12345;
+    const next = () => {
+      seed = (seed * 1103515245 + 12345) % 2147483648;
+      return seed;
+    };
+    for (let i = 0; i < 2000; i++) {
+      const revenue = (next() % 5_000_000) + 1;
+      const profit = (next() % 10_000_000) - 5_000_000;
+      const up = marginBasisPoints(satang(profit), satang(revenue));
+      const down = marginBasisPoints(satang(-profit), satang(revenue));
+      expect(up).not.toBeNull();
+      expect(down).toBe(-(up as number) + 0);
+      // within half a basis point of the exact ratio
+      expect(Math.abs((up as number) - (profit * 10000) / revenue)).toBeLessThanOrEqual(0.5);
+    }
+  });
 });

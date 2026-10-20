@@ -158,6 +158,11 @@ describe('topItems and bottomItems', () => {
     revenueSatang: satang(qty * 100),
     unitShareBp: 0,
     popular: false,
+    costedQty: 0,
+    costedRevenueSatang: satang(0),
+    costSatang: null,
+    grossProfitSatang: null,
+    marginBp: null,
   });
   const list = ['a', 'b', 'c', 'd', 'e', 'f', 'g'].map((n, i) => item(n, 10 - i));
 

@@ -74,7 +74,7 @@ const PHOTO_CODES = {
 
 export function createMockMenuAdmin(deps: MockMenuAdminDeps) {
   /** Estimated costs by id. A dish costs about 40% of its price until someone says otherwise. */
-  const itemCosts = new Map<string, number>();
+  const itemCosts = new Map<string, number | null>();
   const optionCosts = new Map<string, number>();
   /** `kind:clientRequestId` -> what it made, for the idempotent creates. */
   const made = new Map<string, { hash: string; row: unknown }>();
@@ -220,7 +220,9 @@ export function createMockMenuAdmin(deps: MockMenuAdminDeps) {
           body: {
             items: [...state.items.values()].map((i) => ({
               id: i.id,
-              estCostSatang: itemCosts.get(i.id) ?? Math.round(i.priceSatang * 0.4),
+              estCostSatang: itemCosts.has(i.id)
+                ? (itemCosts.get(i.id) ?? null)
+                : Math.round(i.priceSatang * 0.4),
             })),
             options: [...state.options.values()].map((o) => ({
               id: o.id,

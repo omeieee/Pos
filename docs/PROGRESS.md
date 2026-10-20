@@ -18,6 +18,15 @@
 > - **Maintenance:** the architecture refactor (code moved, behaviour unchanged) is deployed; see the entry "2026-10-16 · Maintenance · Architecture refactor". Not yet checked on a real iPad/iPhone. The as-built code index `ARCHITECTURE.md` (verified at `7ff9951`) is committed (`070e0b4`) and pushed with the owner's OK; see the newest entry.
 > - **Workflow (owner rule 2026-10-16):** after each completed part, ask the owner "save checkpoint or next step?" and wait for the answer (`CLAUDE.md` workflow, `3d8481c`).
 
+## 2026-10-20 · P7 · Part 2: item costs, gross profit, margin, commission estimate
+- **Summary:** built by payments-finance-engineer, tests first. `NULL` item cost = "no cost entered" (migration 0038 also turns stored zeros into NULL); reports read the cost snapshot on `order_items`; per-item and per-period cost, gross profit, margin (whole costed orders only, others listed); platform commission = recorded amount, else net paid x per-platform rate from settings, else "rate not set". Future-dated expenses now allowed.
+- **Changed:** migration 0038; `@sds/shared` (`marginBasisPoints`, `priceOrder`); `@sds/finance` (`items.ts`, new `margin.ts`, `commission.ts`); reports API and schemas; menu editor cost hints; `docs/p7-margin-sample.md` + pinning test; D-32 (Proposed); D-31 text.
+- **Verification (engineer's report, not re-run by me):** biome 0 errors; build 13/13; tests shared 1152, db 320, finance 90, api 1430, pos-web 1964, others unchanged. Backfill run on PGlite only, not real Postgres.
+- **Decisions:** D-32 Proposed. Owner chose the recommended defaults 2026-10-20: old zero costs read as "no cost entered"; past orders never re-costed; margin over fully costed orders only; recorded commission beats the rate.
+- **Open issues:** no screen shows margin or commission; CSV unchanged; nothing writes `platform_commission_satang`; real Grab and LINE MAN rates not entered; recipe costing not built.
+- **Next:** part 3: P&L.
+- **Commit:** see git log (committed 2026-10-20, not pushed).
+
 ## 2026-10-20 · P7 · Part 1: expense ledger backend
 - **Summary:** built by backend-engineer, tests first. Editable expense categories (settings list, keys can be switched off, never removed), expense create/patch/void/list API, per-platform commission rates (Grab, LINE MAN; unset by default, owner only, step-up, audit).
 - **Changed:** migration 0037 (drops `expenses_category` CHECK; adds idempotency and void columns); `packages/shared` expenses and settings schemas, permission `settings.platform_commission`; `packages/db` `expensesRepo`; `apps/api/src/expenses/*`, `settings/*`; D-31 (Proposed); `docs/03-data-model.md`; `ARCHITECTURE.md`.

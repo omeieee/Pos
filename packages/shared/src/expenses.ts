@@ -119,7 +119,7 @@ const amount = satangSchema.refine((v) => v > 0, 'must be more than zero');
 const clientRequestId = z.uuid().optional();
 
 export const createExpenseInputSchema = z.strictObject({
-  /** Omitted = today's business day. A date after today's business day is refused by the API. */
+  /** Omitted = today's business day. Any date is allowed, later ones too (advance bookings, D-31). */
   businessDate: isoDateSchema.optional(),
   category: expenseCategoryKeySchema,
   amountSatang: amount,

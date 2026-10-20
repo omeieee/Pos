@@ -219,17 +219,29 @@ describe('buildItemPatch: only what changed', () => {
     expect(buildItemPatch(item, null, { ...blind, cost: '20' }, { withCost: false })).toBeNull();
   });
 
-  test('a blank cost clears a known cost (sends 0); it sends nothing when there was no cost or a role cannot see costs', () => {
+  test('a blank cost clears a known cost to "no cost entered" (sends null, not 0); a typed 0 is a real cost', () => {
     expect(buildItemPatch(item, cost, { ...same(), cost: '' }, opts)).toEqual({
+      expectedVersion: 4,
+      estCostSatang: null,
+    });
+    expect(buildItemPatch(item, cost, { ...same(), cost: '0' }, opts)).toEqual({
       expectedVersion: 4,
       estCostSatang: 0,
     });
-    // Already 0: blank changes nothing.
+    // Already no cost: blank changes nothing. A real 0 is not the same as no cost.
+    const none = itemFormFrom(item, CATEGORY, null);
+    expect(buildItemPatch(item, null, { ...none, cost: '' }, opts)).toBeNull();
+    expect(buildItemPatch(item, null, { ...none, cost: '0' }, opts)).toEqual({
+      expectedVersion: 4,
+      estCostSatang: 0,
+    });
     const zero = itemFormFrom(item, CATEGORY, satang(0));
-    expect(buildItemPatch(item, satang(0), { ...zero, cost: '' }, opts)).toBeNull();
-    // The cost was never read (null): blank is "not touched", never a silent overwrite.
-    const unknown = itemFormFrom(item, CATEGORY, null);
-    expect(buildItemPatch(item, null, { ...unknown, cost: '' }, opts)).toBeNull();
+    expect(zero.cost).toBe('0');
+    expect(buildItemPatch(item, satang(0), { ...zero, cost: '' }, opts)).toEqual({
+      expectedVersion: 4,
+      estCostSatang: null,
+    });
+    // A role that cannot see costs never sends one.
     expect(buildItemPatch(item, cost, { ...same(), cost: '' }, { withCost: false })).toBeNull();
   });
 

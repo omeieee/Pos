@@ -140,7 +140,7 @@ export function ItemDialog({
             label={tr('menuEditor.field.cost')}
             value={form.cost}
             inputMode="decimal"
-            hint={tr('menuEditor.field.costHint')}
+            hint={tr('menuEditor.field.costItemHint')}
             error={fieldError('cost', 'menuEditor.error.cost')}
             onChange={(cost) => setForm({ ...form, cost })}
           />

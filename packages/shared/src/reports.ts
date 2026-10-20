@@ -4,7 +4,7 @@
  */
 import { z } from 'zod';
 import { ORDER_CHANNELS, PAYMENT_METHODS } from './enums.ts';
-import { isoDateSchema, nonNegativeSatangSchema } from './schemas.ts';
+import { isoDateSchema, nonNegativeSatangSchema, satangSchema } from './schemas.ts';
 
 /** Longest range one report call may cover: a leap year. */
 export const REPORT_MAX_DAYS = 366;
@@ -42,6 +42,44 @@ export const dayRevenueSchema = z.object({
 });
 export type DayRevenueDto = z.infer<typeof dayRevenueSchema>;
 
+/**
+ * Gross profit over the orders whose every line has a cost (D-32). Revenue here is net paid; cost
+ * is the snapshot saved on each line. Orders with an uncosted line are left out of the margin and
+ * named, never guessed. Gross profit is before platform commission and expenses; it is negative
+ * for a loss, and `null` (with `marginBp`) when no order is costed or there is no revenue.
+ */
+export const periodMarginSchema = z.object({
+  costedOrderCount: z.number().int().min(0),
+  costedRevenueSatang: nonNegativeSatangSchema,
+  costSatang: nonNegativeSatangSchema,
+  grossProfitSatang: satangSchema.nullable(),
+  /** Basis points (10000 = 100%), half away from zero. */
+  marginBp: z.number().int().nullable(),
+  uncostedOrderIds: z.array(z.string()),
+  uncostedRevenueSatang: nonNegativeSatangSchema,
+  uncostedMenuItemIds: z.array(z.string()),
+});
+export type PeriodMarginDto = z.infer<typeof periodMarginSchema>;
+
+/** The delivery platforms whose commission rate is a setting. */
+export const RATED_PLATFORMS = ['grab', 'lineman'] as const;
+
+/**
+ * Platform commission, an expense shown beside revenue (D-31, D-32). A figure recorded on the order
+ * wins; otherwise Grab and LINE MAN orders are estimated from the rate in settings (no built-in
+ * rate). An order with neither is named in `rateNotSetOrderIds` and is not in `totalSatang`.
+ */
+export const commissionSummarySchema = z.object({
+  recordedSatang: nonNegativeSatangSchema,
+  recordedOrderCount: z.number().int().min(0),
+  estimatedSatang: nonNegativeSatangSchema,
+  estimatedOrderCount: z.number().int().min(0),
+  totalSatang: nonNegativeSatangSchema,
+  rateNotSetOrderIds: z.array(z.string()),
+  ratesNotSet: z.array(z.enum(RATED_PLATFORMS)),
+});
+export type CommissionSummaryDto = z.infer<typeof commissionSummarySchema>;
+
 /** Only business dates with at least one counted order appear, oldest first. */
 export const revenueReportSchema = z.object({
   from: isoDateSchema,
@@ -51,8 +89,11 @@ export const revenueReportSchema = z.object({
   totals: z.object({
     revenueSatang: nonNegativeSatangSchema,
     orderCount: z.number().int().min(0),
+    /** Commission recorded on the orders only; the estimate is in `commission`. */
     commissionSatang: nonNegativeSatangSchema,
   }),
+  margin: periodMarginSchema,
+  commission: commissionSummarySchema,
 });
 export type RevenueReport = z.infer<typeof revenueReportSchema>;
 
@@ -63,6 +104,14 @@ export const itemSalesSchema = z.object({
   revenueSatang: nonNegativeSatangSchema,
   unitShareBp: z.number().int().min(0).max(10000),
   popular: z.boolean(),
+  /** Units with a cost snapshot; the rest of `qty` had "no cost entered" and is out of the margin. */
+  costedQty: z.number().int().min(0),
+  costedRevenueSatang: nonNegativeSatangSchema,
+  /** Null = no cost entered on any unit sold. */
+  costSatang: nonNegativeSatangSchema.nullable(),
+  grossProfitSatang: satangSchema.nullable(),
+  /** Gross profit / costed revenue, basis points; null when it cannot be stated. */
+  marginBp: z.number().int().nullable(),
 });
 export type ItemSalesDto = z.infer<typeof itemSalesSchema>;
 
@@ -72,6 +121,8 @@ export const itemsReportSchema = z.object({
   to: isoDateSchema,
   excludedOrderIds: excludedOrderIdsSchema,
   items: z.array(itemSalesSchema),
+  /** Items sold at least once with no cost entered (their `qty - costedQty` units are out of the margin). */
+  uncostedMenuItemIds: z.array(z.string()),
 });
 export type ItemsReport = z.infer<typeof itemsReportSchema>;
 

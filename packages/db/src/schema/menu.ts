@@ -55,7 +55,8 @@ export const menuItems = pgTable(
     descriptionTh: text('description_th'),
     descriptionEn: text('description_en'),
     priceSatang: money('price_satang').notNull(),
-    estCostSatang: money('est_cost_satang').notNull().default(0),
+    /** Null = the owner has not entered a cost (D-32); 0 is a real cost of nothing. */
+    estCostSatang: money('est_cost_satang'),
     imageKey: text('image_key'),
     /**
      * The version of this item's photo (D-21), or null when it has none. It travels in the feed so

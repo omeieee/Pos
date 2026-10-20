@@ -43,9 +43,11 @@ function ItemRow({
           </span>
           {cost === undefined ? null : (
             <span>
-              {tr('menuEditor.costLabel', {
-                amount: formatBaht(cost, locale, { decimals: 'auto' }),
-              })}
+              {cost === null
+                ? tr('menuEditor.costNone')
+                : tr('menuEditor.costLabel', {
+                    amount: formatBaht(cost, locale, { decimals: 'auto' }),
+                  })}
             </span>
           )}
           <span>{tr('menuEditor.channels.on', { channels })}</span>

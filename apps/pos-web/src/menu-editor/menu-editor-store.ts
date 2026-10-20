@@ -37,7 +37,8 @@ import type { GroupPatch, ItemPatch, OptionPatch } from './model.ts';
 import { type PhotoEngine, PhotoError, type PhotoFailure, preparePhoto } from './photo-plan.ts';
 
 export interface Costs {
-  items: Readonly<Record<string, number>>;
+  /** Null = the item has no cost entered (D-32); 0 is a real cost. */
+  items: Readonly<Record<string, number | null>>;
   options: Readonly<Record<string, number>>;
 }
 
@@ -307,7 +308,11 @@ export function createMenuEditorStore(deps: MenuEditorDeps): MenuEditorStore {
     return outcome;
   }
 
-  const rememberCost = (kind: 'items' | 'options', id: string, value: number | undefined) => {
+  const rememberCost = (
+    kind: 'items' | 'options',
+    id: string,
+    value: number | null | undefined,
+  ) => {
     const costs = store.getState().costs;
     if (!costs || value === undefined) return;
     store.setState({ costs: { ...costs, [kind]: { ...costs[kind], [id]: value } } });
@@ -371,7 +376,7 @@ export function createMenuEditorStore(deps: MenuEditorDeps): MenuEditorStore {
         (id) => deps.api.menu.createItem(input, { clientRequestId: id }),
         (item) => {
           putItem(item);
-          rememberCost('items', item.id, input.estCostSatang ?? 0);
+          rememberCost('items', item.id, input.estCostSatang ?? null);
         },
       ),
     patchItem: (id, patch) =>

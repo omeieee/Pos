@@ -177,7 +177,8 @@ export interface NewItem {
   descriptionTh: string | null;
   descriptionEn: string | null;
   priceSatang: number;
-  estCostSatang: number;
+  /** Null = no cost entered (D-32). */
+  estCostSatang: number | null;
   /** The photo URL (stored in the image_key column until photos have their own store). */
   imageKey: string | null;
   channels: string[];

@@ -59,6 +59,7 @@ import {
   openingHoursSchema,
   type PaymentsSettings,
   type Permission,
+  type PlatformCommissionSettings,
   type PromptpaySettings,
   paymentsPatchInputSchema,
   paymentsSettingsSchema,
@@ -260,6 +261,15 @@ export async function readSetting(
 export async function currentPromptpayId(db: Db): Promise<PromptpaySettings | null> {
   const row = await getSettingRow(db, 'promptpay');
   return row ? promptpaySettingsSchema.parse(row.value) : null;
+}
+
+/**
+ * The per-platform commission rates for the reports (D-31, D-32), read from settings every time.
+ * Never saved = both `null` ("rate not set"): there is no built-in rate.
+ */
+export async function currentPlatformCommission(db: Db): Promise<PlatformCommissionSettings> {
+  const row = await getSettingRow(db, 'platform_commission');
+  return row ? platformCommissionSettingsSchema.parse(row.value) : DEFAULT_PLATFORM_COMMISSION;
 }
 
 /**

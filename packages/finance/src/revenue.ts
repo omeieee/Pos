@@ -36,6 +36,11 @@ export interface ReportItem {
   name: string;
   qty: number;
   lineTotalSatang: number;
+  /**
+   * The cost snapshot of one unit (modifier costs included) saved on the order line when it was
+   * sold, or null when no cost had been entered then (D-32). 0 is a real cost, never "unknown".
+   */
+  unitCostSatang: number | null;
 }
 
 export interface ReportOrder {

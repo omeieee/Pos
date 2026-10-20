@@ -148,7 +148,7 @@ stateDiagram-v2
 - A void or refund counts against **the original order's business date**, even when it is done after midnight (owner, 2026-10-02).
 - Gov co-pay money counts as revenue on the sale date and as a receivable until it is settled the next day.
 - Platform orders count the platform price as revenue and the commission as an expense.
-- Cost of goods = Σ(`unit_cost_satang × qty`) from item snapshots, until P7 adds recipes.
+- Cost of goods = Σ(`unit_cost_satang × qty`) from item snapshots, until P7 adds recipes. `est_cost_satang` and `unit_cost_satang` are nullable: `NULL` = no cost entered, `0` = a real zero cost. Margins cover only costed lines/orders and name the rest (D-32).
 
 ## 7. Retention (defaults, all configurable; confirm legal periods in [06-legal-compliance.md](06-legal-compliance.md))
 | Data | Keep |

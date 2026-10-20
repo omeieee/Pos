@@ -26,7 +26,14 @@ export interface ReportOrderRow {
   payments: { id: string; method: PaymentMethod; status: PaymentStatus; amountSatang: number }[];
   refunds: { paymentId: string; amountSatang: number }[];
   /** Lines still on the order (removed ones are left out). */
-  items: { menuItemId: string; name: string; qty: number; lineTotalSatang: number }[];
+  items: {
+    menuItemId: string;
+    name: string;
+    qty: number;
+    lineTotalSatang: number;
+    /** The cost snapshot per unit; null = no cost was entered when it was sold (D-32). */
+    unitCostSatang: number | null;
+  }[];
 }
 
 /** Paid, not-cancelled orders with `business_date` from `from` to `to` (inclusive, `YYYY-MM-DD`). */
@@ -83,6 +90,7 @@ export async function listReportOrders(
       name: orderItems.nameThSnapshot,
       qty: orderItems.qty,
       lineTotalSatang: orderItems.lineTotalSatang,
+      unitCostSatang: orderItems.unitCostSatang,
     })
     .from(orderItems)
     .innerJoin(orders, eq(orders.id, orderItems.orderId))

@@ -107,15 +107,15 @@ describe('create', () => {
     expect(events[0]).toMatchObject({ type: 'expense.upserted', id: dto.id, rev: dto.rev });
   });
 
-  test('a past date is kept; a date after today is refused', async () => {
+  test('a past date is kept, and so is a date after today (customers may book in advance)', async () => {
     const past = await create({ ...gas, businessDate: '2026-09-28' });
     expect(past.dto.businessDate).toBe('2026-09-28');
     const future = await call('POST', '/v1/expenses', manager, {
       ...gas,
       businessDate: '2026-10-02',
     });
-    expect(future.statusCode).toBe(422);
-    expect(future.json()).toMatchObject({ code: 'EXPENSE_DATE_IN_FUTURE' });
+    expect(future.statusCode).toBe(201);
+    expect(future.json()).toMatchObject({ businessDate: '2026-10-02' });
   });
 
   test('the date follows the business-day cutoff, not the calendar', async () => {
@@ -128,8 +128,10 @@ describe('create', () => {
     try {
       const { dto } = await create();
       expect(dto.businessDate).toBe('2026-09-30');
+      // the calendar day is now after the business day, and that is allowed too
       const today = await call('POST', '/v1/expenses', manager, { ...gas, businessDate: TODAY });
-      expect(today.json()).toMatchObject({ code: 'EXPENSE_DATE_IN_FUTURE' });
+      expect(today.statusCode).toBe(201);
+      expect(today.json()).toMatchObject({ businessDate: TODAY });
     } finally {
       await h.client.query("delete from settings where key = 'business_day'");
     }
@@ -248,7 +250,7 @@ describe('patch', () => {
     expect(expenseEvents().length).toBe(events);
   });
 
-  test('a new category or date is checked; an unknown id is 404; a body without fields is 400', async () => {
+  test('a new category is checked, a later date is allowed; an unknown id is 404; a body without fields is 400', async () => {
     const { dto } = await create();
     const unknown = await call('PATCH', `/v1/expenses/${dto.id}`, manager, {
       expectedVersion: 1,
@@ -259,7 +261,8 @@ describe('patch', () => {
       expectedVersion: 1,
       businessDate: '2026-12-01',
     });
-    expect(future.json()).toMatchObject({ code: 'EXPENSE_DATE_IN_FUTURE' });
+    expect(future.statusCode).toBe(200);
+    expect(future.json()).toMatchObject({ businessDate: '2026-12-01', version: 2 });
     expect(
       (
         await call('PATCH', `/v1/expenses/${crypto.randomUUID()}`, manager, {

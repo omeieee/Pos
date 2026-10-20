@@ -3,7 +3,7 @@
  * commit. Rows are never deleted: a mistake is voided. Amounts are positive integer satang from
  * the client; the only total is the server's sum in the list.
  */
-import { type Db, expensesRepo, insertAudit } from '@sds/db';
+import { expensesRepo, insertAudit } from '@sds/db';
 import {
   type CreateExpenseInput,
   type ExpenseDto,
@@ -14,7 +14,7 @@ import {
   type VoidExpenseInput,
 } from '@sds/shared';
 import type { AuthContext, Principal, RequestMeta } from '../auth/service.ts';
-import { ApiError, conflict, notFound, versionConflict } from '../errors.ts';
+import { conflict, notFound, versionConflict } from '../errors.ts';
 import { currentBusinessDate } from '../orders/business-day.ts';
 import { type Emit, withTransaction } from '../tx.ts';
 import { assertCategoryActive } from './categories.ts';
@@ -37,13 +37,7 @@ const actorOf = (actor: Principal, meta: RequestMeta) => ({
 const publish = (emit: Emit, row: expensesRepo.ExpenseRow) =>
   emit({ type: 'expense.upserted', id: row.id, rev: row.rev, data: toExpenseDto(row) });
 
-const dateInFuture = () =>
-  new ApiError(422, 'EXPENSE_DATE_IN_FUTURE', 'An expense cannot be dated after today');
 const voided = () => conflict('EXPENSE_VOIDED', 'This expense was voided and cannot be changed');
-
-async function assertNotAfterToday(ctx: AuthContext, db: Db, date: string): Promise<void> {
-  if (date > (await currentBusinessDate(db, ctx.now()))) throw dateInFuture();
-}
 
 // ---------- Create ----------
 
@@ -87,9 +81,8 @@ function insertOnce(
 ): Promise<ExpenseDto> {
   return withTransaction(ctx, async (tx, emit) => {
     await assertCategoryActive(tx, input.category);
-    const today = await currentBusinessDate(tx, ctx.now());
-    const businessDate = input.businessDate ?? today;
-    if (businessDate > today) throw dateInFuture();
+    // Any date is allowed, later ones too: customers may book in advance, so a cost can be known early.
+    const businessDate = input.businessDate ?? (await currentBusinessDate(tx, ctx.now()));
     const row = await expensesRepo.insertExpense(tx, {
       businessDate,
       category: input.category,
@@ -143,7 +136,6 @@ export async function patchExpense(
     if (Object.keys(patch).length === 0) return toExpenseDto(row);
 
     if (patch.category !== undefined) await assertCategoryActive(tx, patch.category);
-    if (patch.businessDate !== undefined) await assertNotAfterToday(ctx, tx, patch.businessDate);
 
     const updated = await expensesRepo.updateExpenseIfVersion(tx, id, row.version, patch);
     if (!updated) throw versionConflict(row.version);

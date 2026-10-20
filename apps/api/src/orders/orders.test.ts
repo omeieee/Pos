@@ -215,6 +215,24 @@ describe('POST /v1/orders', () => {
     expect(JSON.stringify(saved?.modifiers)).toContain('"costDeltaSatang":300');
   });
 
+  test('an item with no cost entered saves a null cost snapshot, not 0 (D-32)', async () => {
+    newDay();
+    await row('update menu_items set est_cost_satang = null where id = $1', [menu.water]);
+    try {
+      const res = await post(
+        await sign('cashier'),
+        orderBody({ items: [{ menuItemId: menu.water, qty: 2, modifierOptionIds: [] }] }),
+      );
+      expect(res.statusCode).toBe(201);
+      const saved = await row('select unit_cost_satang from order_items where order_id = $1', [
+        res.json().id,
+      ]);
+      expect(saved?.unit_cost_satang).toBeNull();
+    } finally {
+      await row('update menu_items set est_cost_satang = 400 where id = $1', [menu.water]);
+    }
+  });
+
   test('ignores any price, total or discount the client sends', async () => {
     newDay();
     const body = orderBody({
