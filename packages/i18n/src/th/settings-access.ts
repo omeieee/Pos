@@ -17,7 +17,7 @@ export const thSettingsAccess = {
   'settings.devices.kind.ipad': 'iPad',
   'settings.devices.kind.iphone': 'iPhone',
   'settings.devices.kind.laptop': 'คอมพิวเตอร์',
-  'settings.devices.kind.print_agent': 'เครื่องพิมพ์ (Mini PC)',
+  'settings.devices.kind.print_agent': 'เครื่องพิมพ์ใบออเดอร์',
   'settings.devices.kind.display': 'จอแสดงผล',
   'settings.devices.lastSeen': 'ใช้ล่าสุด {time}',
   'settings.devices.neverSeen': 'ยังไม่เคยใช้',

@@ -1,5 +1,5 @@
 import { type Locale, type MessageKey, type MessageParams, translator } from '@sds/i18n';
-import type { StaffRole } from '@sds/shared';
+import type { Permission, StaffRole } from '@sds/shared';
 import {
   createContext,
   useContext,
@@ -46,6 +46,16 @@ export function useStaffRole(): StaffRole | undefined {
     store ? store.subscribe : noSubscription,
     () => store?.getState().session?.staff.role,
     () => undefined,
+  );
+}
+
+/** Does the signed-in person hold this permission? False when nobody is signed in or no auth store is provided. */
+export function useHasPermission(permission: Permission): boolean {
+  const store = useContext(AuthContext);
+  return useSyncExternalStore(
+    store ? store.subscribe : noSubscription,
+    () => store?.getState().session?.permissions.includes(permission) ?? false,
+    () => false,
   );
 }
 

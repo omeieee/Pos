@@ -5,6 +5,7 @@
 import {
   DEFAULT_DELIVERY_SETTINGS,
   DEFAULT_OPENING_HOURS,
+  DEFAULT_PRINTING,
   DEFAULT_RECEIPT_SETTINGS,
   DEFAULT_SHOP_SETTINGS,
 } from '@sds/shared';
@@ -34,6 +35,7 @@ const DEFAULT_READS = {
   numbering: { cutoffMinutes: 240, timeZone: 'Asia/Bangkok' },
   payments: { cash: true, promptpay: true, platform: true, other: false },
   deliveryList: DEFAULT_DELIVERY_SETTINGS,
+  printing: DEFAULT_PRINTING,
   receipt: DEFAULT_RECEIPT_SETTINGS,
   bankAccount: { bankCode: null, accountMasked: null, configured: false },
   promptpayMasked: { idType: 'phone', idMasked: '******1234' },

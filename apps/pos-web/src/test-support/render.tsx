@@ -30,6 +30,7 @@ import { PROMPTPAY_CACHE_KEY, type SavedPromptpay } from '../pos/outbox/offline-
 import { createOutboxStore } from '../pos/outbox/outbox-store.ts';
 import { createPaymentStore } from '../pos/payments/payment-store.ts';
 import { createPromptpayCache } from '../pos/payments/promptpay-cache.ts';
+import { createPrintStore } from '../pos/print/print-store.ts';
 import type { ConnectionState } from '../realtime/connection.ts';
 import { createEntityStore } from '../realtime/entity-store.ts';
 import type { Services } from '../services.ts';
@@ -116,6 +117,7 @@ export function createFakeApi(
     devices?: Partial<ApiClient['devices']>;
     reports?: Partial<ApiClient['reports']>;
     expenses?: Partial<ApiClient['expenses']>;
+    print?: Partial<ApiClient['print']>;
   } = {},
 ) {
   const orders = {
@@ -263,7 +265,14 @@ export function createFakeApi(
       ),
     },
   };
-  return { orders, payments, auth, recipients, settings, devices, reports, expenses };
+  // The reprint and the recent jobs (P8): the list is empty unless a test gave it an answer.
+  const print = {
+    jobs: vi.fn<ApiClient['print']['jobs']>(overrides.print?.jobs ?? (async () => ({ jobs: [] }))),
+    reprint: vi.fn<ApiClient['print']['reprint']>(
+      overrides.print?.reprint ?? unexpected('print.reprint'),
+    ),
+  };
+  return { orders, payments, auth, recipients, settings, devices, reports, expenses, print };
 }
 
 export function createTestServices(
@@ -300,6 +309,8 @@ export function createTestServices(
     reports?: Partial<ApiClient['reports']>;
     /** What the expense ledger's calls answer (every other call fails the test). */
     expenses?: Partial<ApiClient['expenses']>;
+    /** What the reprint and the recent print jobs answer (jobs: an empty list by default). */
+    print?: Partial<ApiClient['print']>;
     /** What the tax profile read and save answer (every other call fails the test). */
     taxProfile?: Partial<ApiClient['settings']['taxProfile']>;
     /** What the cash screen's opening-cash read and save answer (every other call fails the test). */
@@ -329,6 +340,7 @@ export function createTestServices(
     ...(options.devices ? { devices: options.devices } : {}),
     ...(options.reports ? { reports: options.reports } : {}),
     ...(options.expenses ? { expenses: options.expenses } : {}),
+    ...(options.print ? { print: options.print } : {}),
     ...(options.taxProfile || options.cashOpening
       ? {
           settings: {
@@ -409,6 +421,7 @@ export function createTestServices(
     },
   });
   const orderMoves = createOrderMovesStore({ api, entities });
+  const print = createPrintStore({ api, lifecycle: life.lifecycle });
   const menuApi = createFakeMenuApi(options.menuApi);
   const menuEditor = createMenuEditorStore({
     api: { menu: menuApi as unknown as ApiClient['menu'] },
@@ -463,6 +476,7 @@ export function createTestServices(
     recipients,
     payments,
     orderMoves,
+    print,
     menuEditor,
     settingsEditor,
     adminEditor,
@@ -489,6 +503,7 @@ export function createTestServices(
     recipients,
     payments,
     orderMoves,
+    print,
     menuEditor,
     menuApi,
     settingsEditor,

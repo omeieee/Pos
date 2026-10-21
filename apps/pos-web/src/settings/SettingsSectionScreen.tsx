@@ -11,6 +11,7 @@ import { HoursForm } from './HoursForm.tsx';
 import { LineOrderingForm } from './LineOrderingForm.tsx';
 import { NumberingForm } from './NumberingForm.tsx';
 import { PaymentsForm } from './PaymentsForm.tsx';
+import { PrintingForm } from './PrintingForm.tsx';
 import { PromptpayForm } from './PromptpayForm.tsx';
 import { ReceiptForm } from './ReceiptForm.tsx';
 import { SettingSection } from './SettingSection.tsx';
@@ -67,6 +68,12 @@ function SectionBody({ def, editable }: { def: SectionDef; editable: boolean }) 
       return (
         <SettingSection name="lineOrdering" editable={editable}>
           {(p) => <LineOrderingForm {...p} />}
+        </SettingSection>
+      );
+    case 'printing':
+      return (
+        <SettingSection name="printing" editable={editable}>
+          {(p) => <PrintingForm {...p} />}
         </SettingSection>
       );
     case 'promptpay':

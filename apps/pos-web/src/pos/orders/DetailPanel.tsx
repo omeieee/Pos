@@ -11,6 +11,7 @@ import { deliveryLabel } from '../cart/delivery-model.ts';
 import { MemberLine } from '../cart/MemberLine.tsx';
 import { localName } from '../cart/names.ts';
 import { OrderCorrectionActions } from '../correction/OrderCorrection.tsx';
+import { ReprintButton } from '../print/ReprintButton.tsx';
 import { elapsedText } from './elapsed-text.ts';
 import { isWaiting, nextStep, StateBadge } from './list-parts.tsx';
 import { elapsedMinutes } from './order-board.ts';
@@ -136,6 +137,7 @@ export function DetailPanel({ order, now }: { order: OrderDto; now: number }) {
         </button>
       ) : null}
       <OrderCorrectionActions order={order} />
+      <ReprintButton orderId={order.id} />
       <div className="g-t-c" style={s('display:flex;gap:6px;align-items:flex-start')}>
         <Gi n="lock" style={s('width:14px;height:14px;margin-top:3px')} />
         {tr('orders.auditNote')}

@@ -19,7 +19,7 @@ export const enSettingsAccess = {
   'settings.devices.kind.ipad': 'iPad',
   'settings.devices.kind.iphone': 'iPhone',
   'settings.devices.kind.laptop': 'Computer',
-  'settings.devices.kind.print_agent': 'Printer (Mini PC)',
+  'settings.devices.kind.print_agent': 'Print notebook',
   'settings.devices.kind.display': 'Display',
   'settings.devices.lastSeen': 'Last used {time}',
   'settings.devices.neverSeen': 'Never used',

@@ -38,6 +38,7 @@ import { createMockFinance } from './mock-finance.ts';
 import { createMockMenuAdmin, type RawBody } from './mock-menu-admin.ts';
 import { createAttribution, originalStaffGate, originalStaffKnown } from './mock-original-staff.ts';
 import { createMockPayments, type MockCaller } from './mock-payments.ts';
+import { createMockPrint } from './mock-print.ts';
 import { createMockReports } from './mock-reports.ts';
 import { createMockSettings } from './mock-settings.ts';
 
@@ -310,6 +311,14 @@ export function createMockShop(options: MockShopOptions = {}) {
     now,
     nextRev: () => ++rev,
     publish: (frame) => publish(frame as SyncChange),
+  });
+
+  // The reprint and the recent print jobs (see mock-print.ts); the switch is the Printing setting.
+  const printing = createMockPrint({
+    now,
+    orders,
+    newUuid,
+    printingEnabled: () => (settings.savedValue('printing') as { enabled: boolean }).enabled,
   });
 
   // The menu editor's routes (see mock-menu-admin.ts): they change the rows in `latest`.
@@ -730,6 +739,8 @@ export function createMockShop(options: MockShopOptions = {}) {
     if (money) return money;
     const settled = settings.handle(method, path, body, caller);
     if (settled) return settled;
+    const printed = printing.handle(method, path, body, caller);
+    if (printed) return printed;
     if (method === 'POST' && path === '/v1/orders') return createOrder(body, caller);
     if (method === 'GET' && path === '/v1/orders/summary') return summarizeMonth(query);
     const reported = reports.handle(method, path, query, caller);

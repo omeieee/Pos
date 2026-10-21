@@ -19,6 +19,8 @@ import {
   paymentsSettingsSchema,
   platformCommissionPatchInputSchema,
   platformCommissionSettingsSchema,
+  printingPatchInputSchema,
+  printingSettingsSchema,
   promptpayPatchInputSchema,
   promptpaySettingsSchema,
   putTaxProfileInputSchema,
@@ -116,6 +118,8 @@ export function makeSettings({ get, patch, put }: Transport) {
       lineOrderingSchema,
       lineOrderingPatchInputSchema,
     ),
+    /** Whether orders are sent to the print notebook (manager and owner; no step-up). */
+    printing: settingsResource('printing', printingSettingsSchema, printingPatchInputSchema),
     promptpayMasked,
     /** What Grab and LINE MAN keep, in basis points (null: not set). Owner only, with a step-up. */
     platformCommission: settingsResource(

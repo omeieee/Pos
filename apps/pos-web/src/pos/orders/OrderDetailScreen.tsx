@@ -21,6 +21,7 @@ import { OrderCorrectionActions } from '../correction/OrderCorrection.tsx';
 import { LocalOrderScreen } from '../outbox/LocalOrderScreen.tsx';
 import { PaymentPanel } from '../payments/PaymentPanel.tsx';
 import { PageNote, PayPage } from '../payments/PayParts.tsx';
+import { ReprintButton } from '../print/ReprintButton.tsx';
 import { OrderMoves } from './OrderMoves.tsx';
 import { OrderSummary, type SummaryLine } from './OrderSummary.tsx';
 import { NoSlipFlag, OrderStatusBadge, PaymentStatusBadge } from './StatusBadge.tsx';
@@ -149,6 +150,7 @@ export function OrderDetailScreen({ id }: { id: string }) {
     <>
       {role ? <OrderMoves order={order} role={role} /> : null}
       <OrderCorrectionActions order={order} />
+      <ReprintButton orderId={order.id} />
       <a className="g-btn" href="#/new">
         <Gi n="plus" />
         {tr('order.detail.takeAnother')}

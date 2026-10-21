@@ -52,6 +52,8 @@ export const API_ERROR_KEYS = {
   QR_LINK_INVALID: 'error.qrLinkInvalid',
   QR_LINK_EXPIRED: 'error.qrLinkExpired',
   ORDER_HAS_PAYMENT: 'error.orderHasPayment',
+  // Kitchen printing (P8)
+  PRINTING_OFF: 'error.printingOff',
   // The owner's correction and void of a past order
   PAYMENT_ACTION_REQUIRED: 'error.paymentActionRequired',
   NOTHING_TO_CHANGE: 'error.nothingToChange',

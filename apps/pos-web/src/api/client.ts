@@ -22,6 +22,7 @@ import { makeExpenses } from './resources/expenses.ts';
 import { makeMenu } from './resources/menu.ts';
 import { makeOrders } from './resources/orders.ts';
 import { makePayments } from './resources/payments.ts';
+import { makePrint } from './resources/print.ts';
 import { makeRecipients } from './resources/recipients.ts';
 import { makeReports } from './resources/reports.ts';
 import { makeSettings } from './resources/settings.ts';
@@ -48,6 +49,7 @@ export function createApiClient(options: ApiClientOptions) {
     menu: makeMenu(transport),
     sync: makeSync(transport),
     payments: makePayments(transport),
+    print: makePrint(transport),
     recipients: makeRecipients(transport),
     reports: makeReports(transport),
     expenses: makeExpenses(transport),

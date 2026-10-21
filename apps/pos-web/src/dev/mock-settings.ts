@@ -16,6 +16,7 @@ import {
   DEFAULT_DELIVERY_SETTINGS,
   DEFAULT_LINE_ORDERING,
   DEFAULT_OPENING_HOURS,
+  DEFAULT_PRINTING,
   DEFAULT_SHOP_SETTINGS,
   deliveryPatchInputSchema,
   deliverySettingsSchema,
@@ -24,6 +25,8 @@ import {
   numberingPatchInputSchema,
   openingHoursPatchInputSchema,
   openingHoursSchema,
+  printingPatchInputSchema,
+  printingSettingsSchema,
   type RealtimeFrame,
   ROLE_PERMISSIONS,
   SHOP_TIME_ZONE,
@@ -77,6 +80,13 @@ const RESOURCES: readonly Resource[] = [
     schema: lineOrderingSchema,
     patch: lineOrderingPatchInputSchema,
     defaults: DEFAULT_LINE_ORDERING,
+  },
+  {
+    route: 'printing',
+    key: 'printing',
+    schema: printingSettingsSchema,
+    patch: printingPatchInputSchema,
+    defaults: DEFAULT_PRINTING,
   },
   {
     route: 'numbering',
@@ -176,5 +186,9 @@ export function createMockSettings(deps: Deps) {
     return null;
   }
 
-  return { handle };
+  /** The saved value of a setting (its default until someone saves it). */
+  const savedValue = (key: string): unknown =>
+    saved.get(key)?.value ?? RESOURCES.find((r) => r.key === key)?.defaults;
+
+  return { handle, savedValue };
 }

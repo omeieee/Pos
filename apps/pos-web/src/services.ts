@@ -36,6 +36,7 @@ import { createOrderMovesStore, type OrderMovesStore } from './pos/orders/order-
 import { createOutboxStore, type OutboxStore } from './pos/outbox/outbox-store.ts';
 import { createPaymentStore, type PaymentStore } from './pos/payments/payment-store.ts';
 import { createPromptpayCache, type PromptpayCache } from './pos/payments/promptpay-cache.ts';
+import { createPrintStore, type PrintStore } from './pos/print/print-store.ts';
 import { bindRealtime } from './realtime/bind.ts';
 import { type Connection, createConnection } from './realtime/connection.ts';
 import { createEntityStore, type EntityStore } from './realtime/entity-store.ts';
@@ -83,6 +84,8 @@ export interface Services {
   adminEditor: AdminStore;
   /** The status moves of an order (order page and kitchen view): guarded, reconciled, epoch-safe. */
   orderMoves: OrderMovesStore;
+  /** Reprint of an order and the recent print jobs (P8): online only, one reprint per order at a time. */
+  print: PrintStore;
   /** The chime for a new order and its remembered on/off choice (a platform seam). */
   sound: SoundPlayer;
   /** Keeps the screen awake while a display needs it (a platform seam). */
@@ -195,6 +198,7 @@ export function createServices(
   const recipients = createRecipientStore({ api, entities });
   const payments = createPaymentStore({ api, entities, activity, auth });
   const orderMoves = createOrderMovesStore({ api, entities });
+  const print = createPrintStore({ api, lifecycle });
   const menuEditor = createMenuEditorStore({
     api,
     entities,
@@ -238,6 +242,7 @@ export function createServices(
     recipients,
     payments,
     orderMoves,
+    print,
     menuEditor,
     settingsEditor,
     adminEditor,
@@ -259,6 +264,7 @@ export function createServices(
           recipients.reset();
           payments.reset();
           orderMoves.reset();
+          print.reset();
           menuEditor.reset();
           settingsEditor.reset();
           adminEditor.reset();

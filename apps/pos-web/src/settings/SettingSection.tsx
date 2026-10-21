@@ -13,6 +13,8 @@ const FEED_KEY: Record<ResourceName, string> = {
   payments: 'payment_methods',
   delivery: 'delivery',
   lineOrdering: 'line_ordering',
+  // Not on the realtime feed: nothing to compare.
+  printing: 'printing',
   promptpay: 'promptpay',
   // Never on the realtime feed (the server keeps the tax ID off it): nothing to compare.
   receipt: 'receipt',

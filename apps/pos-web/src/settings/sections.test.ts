@@ -29,6 +29,7 @@ describe('who sees which card', () => {
       payments: true,
       delivery: true,
       'line-ordering': true,
+      printing: true,
       promptpay: false,
       receipt: false,
       'gov-copay': false,
@@ -41,6 +42,13 @@ describe('who sees which card', () => {
     expect(entries.map((e) => e.section.id)).not.toContain('staff');
     expect(entries.length).toBe(9);
     expect(entries.some((e) => e.canEdit)).toBe(false);
+  });
+
+  test('the printing section is for the manager and the owner, not the cashier', () => {
+    expect(idsFor('manager')).toContain('printing');
+    expect(idsFor('owner')).toContain('printing');
+    expect(idsFor('cashier')).not.toContain('printing');
+    expect(sectionById('printing')).toMatchObject({ view: 'settings.edit', edit: 'settings.edit' });
   });
 
   test('the kitchen sees nothing', () => {

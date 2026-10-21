@@ -30,6 +30,8 @@ import type {
   PaymentsSettings,
   PlatformCommissionPatchInput,
   PlatformCommissionSettings,
+  PrintingPatchInput,
+  PrintingSettings,
   PromptpayMasked,
   PromptpayPatchInput,
   ReceiptPatchInput,
@@ -51,6 +53,8 @@ export interface SettingsResources {
   payments: { value: PaymentsSettings; input: PaymentsPatchInput };
   delivery: { value: DeliverySettings; input: DeliveryPatchInput };
   lineOrdering: { value: LineOrdering; input: LineOrderingPatchInput };
+  /** Whether orders are sent to the print notebook. Manager and owner, no step-up. */
+  printing: { value: PrintingSettings; input: PrintingPatchInput };
   /** Masked, always: the ID in clear never reaches the store (the client reduces it). */
   promptpay: { value: PromptpayMasked | null; input: PromptpayPatchInput };
   /** The tax ID and address on receipts. Owner only, step-up first. */
@@ -130,6 +134,7 @@ const initial = (): SettingsState => ({
     payments: emptySlot(),
     delivery: emptySlot(),
     lineOrdering: emptySlot(),
+    printing: emptySlot(),
     promptpay: emptySlot(),
     receipt: emptySlot(),
     bankAccount: emptySlot(),
@@ -174,6 +179,7 @@ export function createSettingsStore(deps: SettingsDeps): SettingsStore {
     payments: resource(s.payments),
     delivery: resource(s.deliveryList),
     lineOrdering: resource(s.lineOrdering),
+    printing: resource(s.printing),
     // Owner only, and the step-up comes first.
     promptpay: resource(s.promptpayMasked, true),
     receipt: resource(s.receipt, true),
