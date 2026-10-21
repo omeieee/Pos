@@ -1,9 +1,11 @@
+import type { OrderStatus } from '@sds/shared';
 import { useEffect } from 'react';
 import { errorText } from '../../api/errors.ts';
 import { Gi } from '../../design/icons.tsx';
 import { s } from '../../design/style.ts';
 import { useHasPermission, useServices, useStoreState, useT } from '../../ui/hooks.ts';
 import { Callout } from '../../ui/Notice.tsx';
+import { canReprint } from './print-model.ts';
 
 /**
  * "Reprint order": asks the server to queue the kitchen ticket again (cashier, manager, owner; the
@@ -12,14 +14,14 @@ import { Callout } from '../../ui/Notice.tsx';
  * because the device is offline. One tap sends one request; a second tap while it is on its way
  * does nothing (the button is disabled and the store refuses it too).
  */
-export function ReprintButton({ orderId }: { orderId: string }) {
+export function ReprintButton({ orderId, status }: { orderId: string; status: OrderStatus }) {
   const { print } = useServices();
   const flow = useStoreState(print);
   const tr = useT();
   const allowed = useHasPermission('order.create');
   // The outcome of an earlier visit to this order is not news any more.
   useEffect(() => print.dismiss(orderId), [print, orderId]);
-  if (!allowed) return null;
+  if (!allowed || !canReprint(status)) return null;
 
   const pending = flow.pending.includes(orderId);
   const result = flow.results[orderId];

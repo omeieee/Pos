@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { translator } from '@sds/i18n';
-import type { PrintJobDto, StaffRole } from '@sds/shared';
+import type { OrderStatus, PrintJobDto, StaffRole } from '@sds/shared';
 import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, test } from 'vitest';
 import { ApiClientError } from '../../api/errors.ts';
@@ -25,14 +25,19 @@ const job = (seq: number): PrintJobDto => ({
   printedAt: null,
 });
 
-async function open(role: StaffRole, reprint: (...a: never[]) => unknown, offline = false) {
+async function open(
+  role: StaffRole,
+  reprint: (...a: never[]) => unknown,
+  offline = false,
+  status: OrderStatus = 'ready',
+) {
   const { auth } = await createTestAuth(role);
   const env = createTestServices({
     auth,
     print: { reprint: reprint as never },
     ...(offline ? { offline: true } : {}),
   });
-  renderScreen(<ReprintButton orderId={ORDER} />, env.services);
+  renderScreen(<ReprintButton orderId={ORDER} status={status} />, env.services);
   return env;
 }
 const button = () => screen.queryByRole('button', { name: tr('print.reprint.button') });
@@ -41,6 +46,11 @@ describe('who sees it', () => {
   test.each(['cashier', 'manager', 'owner'] as const)('%s has the button', async (role) => {
     await open(role, async () => ({ job: job(1), replay: false }));
     expect(button()).not.toBeNull();
+  });
+
+  test('a cancelled order has none', async () => {
+    await open('cashier', async () => ({ job: job(1), replay: false }), false, 'cancelled');
+    expect(button()).toBeNull();
   });
 
   test('the kitchen has none', async () => {

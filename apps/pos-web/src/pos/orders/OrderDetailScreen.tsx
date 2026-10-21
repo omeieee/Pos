@@ -150,7 +150,7 @@ export function OrderDetailScreen({ id }: { id: string }) {
     <>
       {role ? <OrderMoves order={order} role={role} /> : null}
       <OrderCorrectionActions order={order} />
-      <ReprintButton orderId={order.id} />
+      <ReprintButton orderId={order.id} status={order.status} />
       <a className="g-btn" href="#/new">
         <Gi n="plus" />
         {tr('order.detail.takeAnother')}

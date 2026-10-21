@@ -137,7 +137,7 @@ export function DetailPanel({ order, now }: { order: OrderDto; now: number }) {
         </button>
       ) : null}
       <OrderCorrectionActions order={order} />
-      <ReprintButton orderId={order.id} />
+      <ReprintButton orderId={order.id} status={order.status} />
       <div className="g-t-c" style={s('display:flex;gap:6px;align-items:flex-start')}>
         <Gi n="lock" style={s('width:14px;height:14px;margin-top:3px')} />
         {tr('orders.auditNote')}
