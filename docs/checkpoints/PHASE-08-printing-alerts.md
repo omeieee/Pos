@@ -7,7 +7,7 @@ Every order, whatever its source (LINE, storefront, Grab, LINE MAN), prints in t
 
 ## Scope
 - **In:**
-  - phone alerts: self-hosted ntfy as first planned, now **Web Push proposed** (D-37, to approve); thumbnail, priority and click-through;
+  - phone alerts: **Web Push built** instead of self-hosted ntfy (D-37, owner to confirm); no thumbnail; click-through to the order;
   - `apps/print-agent` on a Windows 11 notebook, polling the API (D-37, replaces the Mini PC and WSS);
   - `packages/escpos` raster rendering of Thai tickets;
   - `print_jobs` queue with retries and reprint;
@@ -19,13 +19,15 @@ Every order, whatever its source (LINE, storefront, Grab, LINE MAN), prints in t
 - [ ] Orders from all four sources print within 3 s with correct Thai text, source badge and order number
 - [ ] Printer off or out of paper → job retries and staff are alerted; a reprint gives exactly one copy
 - [ ] Notebook restart or power loss → agent recovers with no duplicate prints (code and tests done; not tried on Windows)
-- [ ] ntfy alert with thumbnail and alarm priority arrives on the kitchen phone(s), with no customer personal data in it
+- [ ] Phone alert arrives on the kitchen phone(s) with no customer personal data in it (Web Push replaces ntfy; code and tests done, not tried on a real phone, VAPID keys not set)
 
 ## As built
 Slices 1-3 built 2026-10-22, **uncommitted, not deployed, no real printer yet** (rows in `ARCHITECTURE.md`):
 - **Queue (slice 1):** `print_jobs` (migration 0040); `GET|PATCH /v1/settings/printing` (`settings.view` / `settings.edit`, default off); `POST /v1/print/claim`, `POST /v1/print/jobs/:id/ack` (guard: non-revoked `print_agent` device token), `GET /v1/print/jobs`, `POST /v1/orders/:id/reprint` (`order.create`); event `order.sent_to_kitchen` (on entering `preparing`); schemas and ticket builder in `packages/shared/src/print.ts`.
 - **Drawing and agent (slice 2):** `packages/escpos` (fontkit + bundled Sarabun, own scanline filler, `renderTicket`); `apps/print-agent` (claim, render, TCP 9100, ack; printed-ids file; `--test-print`; README for Windows).
+- **Phone alerts (slice 4):** `push_subscriptions` (migration 0041); `GET /v1/push/config`, `GET|PUT|DELETE /v1/push/subscription`; `apps/api/src/push/` sends on `alert.new_order`; VAPID env `VAPID_PUBLIC_KEY/PRIVATE_KEY/SUBJECT`; pos-web `#/alerts` screen, `platform/push.ts`, `public/push-sw.js`.
 - **Screens (slice 3):** Settings "Printing" section (switch plus recent jobs), Reprint button on order screens, `print_agent` device label.
 
 ## Log
+- 2026-10-22: phone alerts (Web Push) built: see "2026-10-22 · P8 · Phone alerts with Web Push".
 - 2026-10-22: P8 slices 1-3 built, uncommitted: see the PROGRESS entry "2026-10-22 · P8 · Print queue, ticket drawing, print agent, Printing screens".
