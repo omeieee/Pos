@@ -86,7 +86,7 @@ Tax **rules**, meaning brackets, flat-rate %, thresholds and allowance caps, are
 | `line_events` | `webhook_event_id (unique), type, user_id, payload jsonb, received_at, processed_at, error`. Kept 30 days |
 | `line_message_log` | `id, customer_id, kind` (`reply, push`)`, template, order_id?, counted boolean, sent_at`, used by the quota tracker |
 | `audit_log` | `id, at, actor_type` (`staff, customer, system`)`, actor_id, device_id, action, entity, entity_id, before jsonb, after jsonb, ip` |
-| `print_jobs` (P8) | `id, order_id, kind` (`kitchen, receipt`)`, status` (`queued, sent, failed`)`, attempts, last_error, requested_by, created_at, sent_at` |
+| `print_jobs` (P8, built, migration 0040, D-37) | `id, order_id, kind` (`kitchen, reprint`)`, seq` (0 = kitchen, 1.. = reprints)`, status` (`pending, claimed, printed, failed`)`, attempts, claimed_by_device_id, lease_until, last_error` (code only)`, client_request_id, created_at, printed_at`; unique `(order_id, kind, seq)` |
 
 ### Main indexes
 `orders(business_date)`, `orders(status) where status in ('new','preparing','ready')`, `orders(customer_id)`, `order_items(order_id)`, `payments(order_id)`, `payments(status) where status in ('pending','claimed')`, `customers(line_user_id)`, and `(rev)` on every synced table.

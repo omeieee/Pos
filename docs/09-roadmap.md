@@ -24,7 +24,7 @@ flowchart LR
 | **P5 Pilot & go-live** | Run the real shop on it | Real-device UAT (iPad, iPhone, LINE on iOS and Android); SOPs and training; security/PDPA review; 1–2 weeks of soft launch; go-live checklist | M |
 | **P6 Analytics** | Understand the business | Day/month/year dashboards with comparisons; top items; menu-engineering matrix; heatmap; customer segments; exports | M |
 | **P7 Costs, P&L & tax** | Know the profit and tax | Item costs; expense ledger; platform fees; P&L; tax estimator (flat vs actual, 0.5% method); ภ.ง.ด.94; VAT and e-Payment watches; cash receipts–payments report; tested against the accountant's figures | M |
-| **P8 Printing & alerts** | Kitchen tickets and phone alarms | Self-hosted ntfy (thumbnail, priority); print agent on the Mini PC; XP-80T raster Thai tickets; retries; reprint | M |
+| **P8 Printing & alerts** | Kitchen tickets and phone alarms | Self-hosted ntfy (thumbnail, priority); print agent on a Windows notebook (D-37); XP-80T raster Thai tickets; retries; reprint | M |
 | **P9 Future** | Grow when needed | Chosen from the backlog in the P9 checkpoint | — |
 | **P10 Native apps** | Installable apps from the same code: desktop (Windows/macOS/Linux) first, then iPad/iPhone | Desktop app installs, updates itself and prints directly; iOS app on TestFlight with push alarm and LAN printing; the same E2E suite passes in every shell | M–L |
 

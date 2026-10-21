@@ -148,7 +148,7 @@ Sources: [PRD merchant registration](https://www.prd.go.th/th/content/category/d
   - iOS only allows audio after the first tap, so the POS unlocks sound at login.
   - The counter iPad should use the Screen Wake Lock and have Auto-Lock set to Never.
 - ✅ **LINE Notify ended on 31 Mar 2025** ([announcement](https://notify-bot.line.me/closing-announce)). Don't follow old tutorials that use it.
-- **P8, ntfy:** self-host ntfy in the Compose stack, with access tokens and private topics (e.g. `kitchen`, `owner`).
+- **P8, ntfy (planned before D-37; Web Push is now proposed instead):** self-host ntfy in the Compose stack, with access tokens and private topics (e.g. `kitchen`, `owner`).
   - The API posts: title "ออเดอร์ใหม่ #L-012 (LINE)", the items, priority 5, tags, `Attach` (a thumbnail URL), and `Click` (a link to the order in the POS).
   - For instant iOS delivery through a self-hosted server, set `upstream-base-url: https://ntfy.sh`.
   - ✅ The public ntfy.sh free tier allows about 250 messages a day and 2 MB attachments. Fine for testing; self-hosting has no such limits ([config docs](https://docs.ntfy.sh/config/), [limits issue](https://github.com/binwiederhier/ntfy/issues/1167)).
@@ -157,11 +157,10 @@ Sources: [PRD merchant registration](https://www.prd.go.th/th/content/category/d
 
 ## 6. Kitchen printer — Xprinter XP-80T (P8)
 - 80 mm thermal printer, USB and LAN, ESC/POS. Give it a **fixed IP** with a DHCP reservation on the AIS router.
-- `apps/print-agent` on the Mini PC:
-  - keeps an outbound WSS connection to the API, so no ports are opened at the shop;
-  - receives print jobs;
-  - renders the ticket as a **raster image**, about 576 dots wide (⚠️ confirm the printable width for this model), using a Thai font;
-  - sends it with `GS v 0` / `GS ( L`, then a cut command, over TCP 9100.
+- `apps/print-agent` on the print notebook (Windows 11, D-37; replaces the Mini PC plan):
+  - polls the API over HTTPS (`POST /v1/print/claim`), so no ports are opened at the shop and nothing is forwarded on the router;
+  - renders the ticket as a **raster image**, 576 dots wide by default (⚠️ confirm the printable width for this model on the device), with the bundled Sarabun font;
+  - sends it with `GS v 0`, then a cut command, over TCP 9100, then acks the job (`printed` or `failed` with a code).
 
   Text-mode code pages often garble Thai vowels and tone marks, which is why the ticket is an image. ✅ This is a common issue in ESC/POS libraries ([escpos-php #51](https://github.com/mike42/escpos-php/issues/51)).
 - **Ticket content:**
@@ -169,12 +168,12 @@ Sources: [PRD merchant registration](https://www.prd.go.th/th/content/category/d
   - a source badge: หน้าร้าน / LINE / Grab / LINE MAN, and dine-in / pickup / room;
   - the time;
   - items with modifiers and notes;
-  - the payment status (PAID / UNPAID).
+  - the delivery or hand-over note and a name or room label (never a phone number). A PAID / UNPAID line is **not built** (the ticket schema has no payment field).
 - **Reliability:**
   - `print_jobs` has a status and retries, and jobs are idempotent per order and kind;
   - the POS has a Reprint button;
-  - the agent runs as a service that restarts on failure;
-  - the Mini PC's BIOS is set to power on after a power cut, and a small UPS is recommended.
+  - the agent runs as a Windows startup task or service and keeps printed job ids, so a lost ack never prints a ticket twice;
+  - printing has an on/off setting; a UPS is optional (jobs wait on the server during a power cut).
 
 ## Slip2Go slip verification (D-27, 2026-10-12)
 - **What:** a paid Thai service that checks a transfer slip against the bank's records. Our API sends the slip's QR text (or the picture when no QR can be read) with three conditions: receiver (PromptPay ID or bank account from settings), this payment's amount, and date after the order was created.

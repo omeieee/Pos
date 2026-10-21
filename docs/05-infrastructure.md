@@ -177,7 +177,7 @@ Status as of 2026-09-29 (VM state verified by the P2 sessions; ✅ = done, the u
 | Oracle VM, Cloudflare, Supabase (Path B), GitHub, Sentry, monitoring | ฿0 on free tiers |
 | Domain | ≈ US$10 a year ⚠️ |
 | LINE OA | ฿0 up to 300 counted messages a month. Basic is ฿1,280 a month if needed |
-| Later (P8) | Mini PC + XP-80T + small UPS: one-off hardware |
+| Later (P8) | XP-80T (plus an existing Windows notebook as the print host; UPS optional): one-off hardware |
 | Later (P10, optional) | iPad/iPhone and Mac apps: Apple Developer Program **US$99 a year**, plus access to a Mac for builds. Windows and Linux apps: ฿0 |
 
 ## 12. Native app distribution and build machines (P10)
