@@ -32,6 +32,7 @@ import {
   type SecurityAlertEvent,
 } from '../events.ts';
 import type { LineRuntime } from '../line/runtime.ts';
+import type { PushRuntime } from '../push/notifier.ts';
 import type { RealtimeOptions } from '../realtime/routes.ts';
 import { createMemorySlipStore, type SlipStore } from '../slips/store.ts';
 import { registerV1 } from '../v1.ts';
@@ -143,6 +144,8 @@ export async function createHarness(
     slips?: SlipStore;
     /** `null` leaves receipt storage unset, as on a server without R2. */
     receipts?: SlipStore | null;
+    /** Web Push phone alerts; omitted leaves them unconfigured (503). */
+    push?: PushRuntime;
   } = {},
 ): Promise<Harness> {
   const { db, client } = await createPgliteDb();
@@ -205,6 +208,7 @@ export async function createHarness(
     ...(options.line ? { line: options.line } : {}),
     ...(options.slips ? { slips: options.slips } : {}),
     ...(options.receipts === null ? {} : { receipts: options.receipts ?? createMemorySlipStore() }),
+    ...(options.push ? { push: options.push } : {}),
   });
 
   // One probe route per permission, behind the real guard, to test the RBAC matrix.

@@ -33,6 +33,12 @@ const CREDENTIAL_KEYS = [
   // The R2 credentials (D-36).
   'secretaccesskey',
   'accesskeyid',
+  // Web Push (D-37): our VAPID private key, and a browser's subscription (endpoint and keys let
+  // anyone push to that browser).
+  'privatekey',
+  'endpoint',
+  'p256dh',
+  'keys',
   // The customer app: a LIFF token sent to sign in, the session token we hand back, and the
   // LINE user id they stand for.
   'idtoken',
@@ -54,6 +60,10 @@ const CREDENTIAL_FIELDS = [
   'secretKey',
   'secretAccessKey',
   'accessKeyId',
+  'privateKey',
+  'endpoint',
+  'p256dh',
+  'keys',
   'idToken',
   'accessToken',
   'token',

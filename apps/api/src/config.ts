@@ -1,4 +1,8 @@
 import { z } from 'zod';
+import { vapidPublicKeyOf } from './push/webpush.ts';
+
+/** `mailto:` or `https:` contact for the push services (RFC 8292 `sub`). */
+export const VAPID_SUBJECT_PATTERN = /^(mailto:[^\s@]+@[^\s@]+|https:\/\/[^\s/]+\S*)$/;
 
 const emptyToUndefined = (v: unknown) => (v === '' ? undefined : v);
 
@@ -145,6 +149,34 @@ const envSchema = z
       emptyToUndefined,
       z.coerce.number().int().min(1).max(100_000_000).default(100_000),
     ),
+    /**
+     * Web Push phone alerts (D-37). All three or none. The public key is the browser's
+     * `applicationServerKey` (base64url, 65 bytes); the private key signs our requests (base64url,
+     * 32 bytes) and is a secret: never log it. Make a pair with `pnpm --filter @sds/api push:keys`.
+     */
+    VAPID_PUBLIC_KEY: z.preprocess(
+      emptyToUndefined,
+      z
+        .string()
+        .regex(/^B[A-Za-z0-9_-]{86}$/, { error: 'must be a base64url VAPID public key' })
+        .optional(),
+    ),
+    VAPID_PRIVATE_KEY: z.preprocess(
+      emptyToUndefined,
+      z
+        .string()
+        .regex(/^[A-Za-z0-9_-]{43}$/, { error: 'must be a base64url VAPID private key' })
+        .optional(),
+    ),
+    VAPID_SUBJECT: z.preprocess(
+      emptyToUndefined,
+      z
+        .string()
+        .regex(VAPID_SUBJECT_PATTERN, {
+          error: 'must be a mailto: address or an https: URL',
+        })
+        .optional(),
+    ),
     GIT_SHA: z.preprocess(emptyToUndefined, z.string().default('dev')),
   })
   .refine(
@@ -159,6 +191,21 @@ const envSchema = z
       path: ['R2_BUCKET'],
       error: 'R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY and R2_BUCKET go together',
     },
+  )
+  .refine(
+    (e) =>
+      [e.VAPID_PUBLIC_KEY, e.VAPID_PRIVATE_KEY, e.VAPID_SUBJECT].every((v) => v === undefined) ||
+      [e.VAPID_PUBLIC_KEY, e.VAPID_PRIVATE_KEY, e.VAPID_SUBJECT].every((v) => v !== undefined),
+    {
+      path: ['VAPID_SUBJECT'],
+      error: 'VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY and VAPID_SUBJECT go together',
+    },
+  )
+  .refine(
+    (e) =>
+      e.VAPID_PRIVATE_KEY === undefined ||
+      vapidPublicKeyOf(e.VAPID_PRIVATE_KEY) === e.VAPID_PUBLIC_KEY,
+    { path: ['VAPID_PUBLIC_KEY'], error: 'VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY do not match' },
   )
   .refine((e) => e.SLIP_VERIFIER !== 'slip2go' || e.SLIP2GO_SECRET_KEY !== undefined, {
     path: ['SLIP2GO_SECRET_KEY'],
@@ -197,6 +244,8 @@ export type Config = {
   slipDir: string;
   /** Slips and receipts on Cloudflare R2 (D-36); null keeps them on disk. `secretAccessKey` is a secret. */
   r2: { accountId: string; accessKeyId: string; secretAccessKey: string; bucket: string } | null;
+  /** Web Push phone alerts (D-37); null when off. `privateKey` is a secret: never log it. */
+  vapid: { publicKey: string; privateKey: string; subject: string } | null;
   /** The automatic slip reading (D-26); null when it is off. */
   slipOcr: { lang: string; timeoutMs: number } | null;
   /** The slip's small QR is read as well (D-26); only when the slip reading is on. */
@@ -246,6 +295,16 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
             accessKeyId: e.R2_ACCESS_KEY_ID,
             secretAccessKey: e.R2_SECRET_ACCESS_KEY,
             bucket: e.R2_BUCKET,
+          }
+        : null,
+    vapid:
+      e.VAPID_PUBLIC_KEY !== undefined &&
+      e.VAPID_PRIVATE_KEY !== undefined &&
+      e.VAPID_SUBJECT !== undefined
+        ? {
+            publicKey: e.VAPID_PUBLIC_KEY,
+            privateKey: e.VAPID_PRIVATE_KEY,
+            subject: e.VAPID_SUBJECT,
           }
         : null,
     slipOcr:

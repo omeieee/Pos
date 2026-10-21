@@ -288,6 +288,13 @@
       "when": 1792607602386,
       "tag": "0040_print_jobs",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1792612164561,
+      "tag": "0041_push_subscriptions",
+      "breakpoints": true
     }
   ]
 }

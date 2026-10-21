@@ -118,6 +118,7 @@ await registerV1(app, {
   line,
   slips,
   ...(receipts ? { receipts } : {}),
+  ...(config.vapid ? { push: { vapid: config.vapid } } : {}),
 });
 
 // 0.0.0.0 so Caddy can reach the container over the Docker network.

@@ -26,6 +26,8 @@ import { registerOrderRoutes } from './orders/routes.ts';
 import { registerPaymentRoutes } from './payments/routes.ts';
 import { registerKitchenQueue } from './print/kitchen-queue.ts';
 import { registerPrintRoutes } from './print/routes.ts';
+import { type PushRuntime, registerPushNotifier } from './push/notifier.ts';
+import { registerPushRoutes } from './push/routes.ts';
 import { type RealtimeOptions, registerRealtimeRoutes, setupRealtime } from './realtime/routes.ts';
 import { registerReportRoutes } from './reports/routes.ts';
 import { registerSettingsRoutes } from './settings/routes.ts';
@@ -47,6 +49,8 @@ export interface V1Deps {
   slips?: SlipStore;
   /** Where expense receipt photos live (D-36), a store of their own. Omitted: in memory, for tests. */
   receipts?: SlipStore;
+  /** Web Push phone alerts (D-37). Omitted: the push routes answer 503 and nothing is sent. */
+  push?: PushRuntime;
 }
 
 /**
@@ -105,7 +109,7 @@ export interface ModuleContext {
 
 /** What `registerV1` hands back: a way to wait for the background work an event started. */
 export interface V1Handle {
-  /** Resolves when the kitchen print queue has finished every enqueue it started (tests). */
+  /** Resolves when the kitchen print queue and the phone alerts have finished what events started (tests). */
   idle(): Promise<void>;
 }
 
@@ -127,6 +131,16 @@ export async function registerV1(app: FastifyInstance, deps: V1Deps): Promise<V1
   registerCompletionPush({ db: deps.db, runtime: lineRuntime, events: deps.events, now: auth.now });
   // One kitchen print job per order that reaches `preparing`, while the owner's switch is on.
   const kitchenQueue = registerKitchenQueue({ db: deps.db, events: deps.events, now: auth.now });
+  // One phone alert per new order, to every subscribed device that is not revoked (D-37).
+  const pushNotifier = deps.push
+    ? registerPushNotifier({
+        db: deps.db,
+        events: deps.events,
+        now: auth.now,
+        log: app.log,
+        runtime: deps.push,
+      })
+    : null;
   // The WebSocket plugin lives on the root instance, ahead of the /v1 scope that declares /v1/ws.
   const realtime = await setupRealtime(app, auth, deps.realtime);
 
@@ -203,6 +217,11 @@ export async function registerV1(app: FastifyInstance, deps: V1Deps): Promise<V1
       await v1.register((scope) =>
         registerPrintRoutes(scope, context.auth, context.guard, createPrintAgentGuard(auth)),
       );
+      // Phone alerts: /v1/push/config and /v1/push/subscription (any signed-in staff on a device).
+      await v1.register(
+        (scope) => registerPushRoutes(scope, context.auth, context.guard, deps.push ?? null),
+        { prefix: '/push' },
+      );
       // Device and staff management: /v1/devices and /v1/staff (no prefix of its own).
       await v1.register((scope) => registerAdminRoutes(scope, context.auth, context.guard));
       // Catch-up sync and the WebSocket: /v1/sync and /v1/ws (no prefix of its own).
@@ -212,5 +231,5 @@ export async function registerV1(app: FastifyInstance, deps: V1Deps): Promise<V1
     },
     { prefix: '/v1' },
   );
-  return { idle: () => kitchenQueue.idle() };
+  return { idle: () => Promise.all([kitchenQueue.idle(), pushNotifier?.idle()]).then(() => {}) };
 }

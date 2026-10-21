@@ -12,6 +12,7 @@
     "owner:reset": "node build.ts && node dist/owner-reset.js",
     "owner:unlock": "node build.ts && node dist/owner-unlock.js",
     "richmenu:upload": "node build.ts && node dist/richmenu-upload.js",
+    "push:keys": "node build.ts && node dist/push-keys.js",
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run"
   },

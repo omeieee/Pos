@@ -127,6 +127,20 @@ describe('the real /v1 routes', () => {
     expect(ok.statusCode).toBe(200);
   });
 
+  test('the phone-alert routes are all staff routes behind the guard (none open, none signed-URL)', () => {
+    const push = h.routes.filter((r) => r.url.startsWith('/v1/push'));
+    const key = (r: { method: string; url: string }) => `${r.method} ${r.url}`;
+    expect([...new Set(push.map(key))].sort()).toEqual([
+      'DELETE /v1/push/subscription',
+      'GET /v1/push/config',
+      'GET /v1/push/subscription',
+      'HEAD /v1/push/config',
+      'HEAD /v1/push/subscription',
+      'PUT /v1/push/subscription',
+    ]);
+    for (const r of push) expect(r.guarded, key(r)).toBe(true);
+  });
+
   test('the customer app routes run the customer guard, which is not the staff guard', () => {
     const key = (r: { method: string; url: string }) =>
       `${r.method === 'HEAD' ? 'GET' : r.method} ${r.url}`;

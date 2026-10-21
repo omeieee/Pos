@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { ConfigError, loadConfig } from './config.ts';
+import { generateVapidKeys } from './push/webpush.ts';
 
 const SECRET_URL = 'postgresql://postgres.ref:s3cret-pass@pooler.example.com:5432/postgres';
 // Test-only key: 32 bytes of 9s, not a secret.
@@ -26,6 +27,7 @@ describe('loadConfig', () => {
       privacy: { controller: 'omeie', contactEmail: 'omeza25482548@gmail.com' },
       slipDir: '/data/slips',
       r2: null,
+      vapid: null,
       slipOcr: null,
       slipQr: true,
       slipVerifier: null,
@@ -121,6 +123,71 @@ describe('loadConfig', () => {
       expect.unreachable();
     } catch (error) {
       expect(String(error)).not.toContain('SECRET-VALUE-NOT-REAL');
+    }
+  });
+
+  test('Web Push (VAPID) is off by default, all three variables or none, and the pair must match (D-37)', () => {
+    const keys = generateVapidKeys();
+    const other = generateVapidKeys();
+    const vapid = {
+      VAPID_PUBLIC_KEY: keys.publicKey,
+      VAPID_PRIVATE_KEY: keys.privateKey,
+      VAPID_SUBJECT: 'mailto:owner@example.com',
+    };
+    expect(loadConfig(base).vapid).toBeNull();
+    expect(loadConfig({ ...base, ...vapid }).vapid).toEqual({
+      publicKey: keys.publicKey,
+      privateKey: keys.privateKey,
+      subject: 'mailto:owner@example.com',
+    });
+    expect(
+      loadConfig({ ...base, ...vapid, VAPID_SUBJECT: 'https://shop.example.com' }).vapid,
+    ).toMatchObject({
+      subject: 'https://shop.example.com',
+    });
+    // Empty counts as unset.
+    expect(
+      loadConfig({ ...base, VAPID_PUBLIC_KEY: '', VAPID_PRIVATE_KEY: '', VAPID_SUBJECT: '' }).vapid,
+    ).toBeNull();
+    // All three or none.
+    for (const missing of Object.keys(vapid)) {
+      expect(() => loadConfig({ ...base, ...vapid, [missing]: '' }), missing).toThrow(
+        /go together/,
+      );
+    }
+    // The subject is a contact: mailto: or https: only.
+    for (const subject of [
+      'owner@example.com',
+      'http://shop.example.com',
+      'mailto:',
+      'tel:0812345678',
+    ]) {
+      expect(() => loadConfig({ ...base, ...vapid, VAPID_SUBJECT: subject }), subject).toThrow(
+        ConfigError,
+      );
+    }
+    // Key formats and a public key that is not the private key's.
+    expect(() => loadConfig({ ...base, ...vapid, VAPID_PUBLIC_KEY: 'short' })).toThrow(ConfigError);
+    expect(() => loadConfig({ ...base, ...vapid, VAPID_PRIVATE_KEY: 'short' })).toThrow(
+      ConfigError,
+    );
+    expect(() => loadConfig({ ...base, ...vapid, VAPID_PUBLIC_KEY: other.publicKey })).toThrow(
+      /do not match/,
+    );
+    // No message holds a key.
+    for (const env of [
+      { ...vapid, VAPID_PUBLIC_KEY: other.publicKey },
+      { ...vapid, VAPID_PRIVATE_KEY: `${keys.privateKey.slice(0, 40)}***` },
+      { ...vapid, VAPID_SUBJECT: 'nope' },
+    ]) {
+      try {
+        loadConfig({ ...base, ...env });
+        expect.unreachable();
+      } catch (error) {
+        expect(String(error)).not.toContain(keys.privateKey);
+        expect(String(error)).not.toContain(keys.privateKey.slice(0, 40));
+        expect(String(error)).not.toContain(other.publicKey);
+      }
     }
   });
 

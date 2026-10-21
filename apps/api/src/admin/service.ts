@@ -3,7 +3,7 @@
  * staff, rename or deactivate them, set a PIN. Owner only with step-up (the route guard checks);
  * every change is audited and alerted. A hash, token or PIN never leaves the database layer.
  */
-import { authRepo, findAuditByRequestId, insertAudit, peopleRepo } from '@sds/db';
+import { authRepo, findAuditByRequestId, insertAudit, peopleRepo, pushRepo } from '@sds/db';
 import {
   type ChangeRoleInput,
   type CreateStaffInput,
@@ -84,6 +84,8 @@ export async function revokeDevice(
     const now = ctx.now();
     const revoked = await peopleRepo.revokeDevice(tx, id, now);
     await peopleRepo.revokeSessionsForDevice(tx, id, now);
+    // A revoked device gets no more phone alerts, and its subscription is credentials-like.
+    await pushRepo.deleteForDevice(tx, id);
     await insertAudit(tx, {
       ...audited(actor, meta),
       action: 'device.revoke',

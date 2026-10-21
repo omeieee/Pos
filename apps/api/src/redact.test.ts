@@ -281,7 +281,15 @@ describe('log redaction of credentials', () => {
       lineUserId: 'Utest-line-user-secret',
       secretAccessKey: 'r2-secret-access-key-value',
       accessKeyId: 'r2-access-key-id-value',
+      privateKey: 'vapid-private-key-value',
+      endpoint: 'https://fcm.googleapis.com/fcm/send/subscription-secret',
+      p256dh: 'subscriber-public-key-value',
+      keys: { p256dh: 'subscriber-p256dh-value', auth: 'subscriber-auth-secret-value' },
     };
+    // Read before logging: redaction may blank the shared nested object while it writes the line.
+    const values = Object.values(secrets).flatMap((v) =>
+      typeof v === 'string' ? [v] : Object.values(v),
+    );
     app.log.info({ body: secrets }, 'top');
     app.log.info({ req: { headers: secrets } }, 'request');
     app.log.info({ res: { body: { nested: secrets } } }, 'nested');
@@ -289,7 +297,7 @@ describe('log redaction of credentials', () => {
     await app.close();
 
     const out = lines.join('');
-    for (const value of Object.values(secrets)) expect(out).not.toContain(value);
+    for (const value of values) expect(out).not.toContain(value);
     expect(out).toContain('[redacted]');
     expect(LOG_REDACT_PATHS.length).toBeGreaterThan(0);
   });

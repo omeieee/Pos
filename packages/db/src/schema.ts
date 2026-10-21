@@ -30,6 +30,7 @@ export {
   staffInvites,
 } from './schema/people.ts';
 export { printJobs } from './schema/printing.ts';
+export { pushSubscriptions } from './schema/push.ts';
 export {
   auditLog,
   lineButtonReplies,

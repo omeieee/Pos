@@ -12,6 +12,7 @@ export * as ordersRepo from './orders.ts';
 export * as paymentsRepo from './payments.ts';
 export * as peopleRepo from './people.ts';
 export * as printRepo from './print.ts';
+export * as pushRepo from './push.ts';
 export * as reportsRepo from './reports.ts';
 export * as retentionRepo from './retention.ts';
 export * as schema from './schema.ts';
