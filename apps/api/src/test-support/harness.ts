@@ -33,7 +33,7 @@ import {
 } from '../events.ts';
 import type { LineRuntime } from '../line/runtime.ts';
 import type { RealtimeOptions } from '../realtime/routes.ts';
-import type { SlipStore } from '../slips/store.ts';
+import { createMemorySlipStore, type SlipStore } from '../slips/store.ts';
 import { registerV1 } from '../v1.ts';
 
 // Test-only key, not a secret.
@@ -133,6 +133,8 @@ export async function createHarness(
     realtime?: RealtimeOptions;
     line?: LineRuntime;
     slips?: SlipStore;
+    /** `null` leaves receipt storage unset, as on a server without R2. */
+    receipts?: SlipStore | null;
   } = {},
 ): Promise<Harness> {
   const { db, client } = await createPgliteDb();
@@ -193,6 +195,7 @@ export async function createHarness(
     ...(options.realtime ? { realtime: options.realtime } : {}),
     ...(options.line ? { line: options.line } : {}),
     ...(options.slips ? { slips: options.slips } : {}),
+    ...(options.receipts === null ? {} : { receipts: options.receipts ?? createMemorySlipStore() }),
   });
 
   // One probe route per permission, behind the real guard, to test the RBAC matrix.

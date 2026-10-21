@@ -16,6 +16,7 @@ import {
   expenseFormFrom,
   validateExpenseForm,
 } from './expense-model.ts';
+import { type PickedReceipt, ReceiptField } from './ReceiptParts.tsx';
 
 /** Runs one save for a dialog: keeps the failure inside the dialog and ignores a second tap meanwhile. */
 function useSave(onConflict: () => void) {
@@ -46,9 +47,14 @@ function useSave(onConflict: () => void) {
  * screen: a retry after a lost answer sends the same key (the server returns the row it already
  * made), and a changed amount or date is a different request with a new key. A correction sends
  * only what changed, with the version the row had when the screen read it.
+ *
+ * A receipt picture is chosen in the form and uploaded after the row is saved: the row is created
+ * (or corrected) first, then the picture is attached with the version that answer carried. If the
+ * picture then fails the row is already saved, so the dialog becomes the edit dialog of that row
+ * (a retry attaches only, never creates again) and closing it still reads the list again.
  */
 export function ExpenseDialog({
-  expense,
+  expense: opened,
   categories,
   today,
   onClose,
@@ -66,9 +72,13 @@ export function ExpenseDialog({
   const tr = useT();
   const locale = useLocale();
   const { api } = useServices();
+  // The row as the server last answered; every receipt step and save carries its version on.
+  const [expense, setExpense] = useState(opened);
   const [form, setForm] = useState(() =>
-    expense ? expenseFormFrom(expense) : emptyExpenseForm(today, categories),
+    opened ? expenseFormFrom(opened) : emptyExpenseForm(today, categories),
   );
+  const [picked, setPicked] = useState<PickedReceipt | null>(null);
+  const changed = useRef(false);
   const [tried, setTried] = useState(false);
   const attempt = useRef<{ signature: string; id: string } | null>(null);
   const { saving, error, setError, run } = useSave(onConflict);
@@ -79,24 +89,52 @@ export function ExpenseDialog({
     problems.includes(field) ? tr(`exp.error.${field}`) : undefined;
   const options = categoryOptions(categories, expense?.category);
 
+  function saved(row: ExpenseDto) {
+    changed.current = true;
+    setExpense(row);
+  }
+  /** Closing after a save or a photo change that went through still reads the list again. */
+  const close = () => (changed.current ? onDone() : onClose());
+  const pickFile = (file: File | null) =>
+    setPicked(file ? { file, requestId: newClientRequestId() } : null);
+
   async function submit() {
     setTried(true);
     if (validateExpenseForm(form).length > 0) return;
     await run(async () => {
-      if (expense) {
-        const patch = buildExpensePatch(expense, form);
-        if (!patch) {
+      let row = expense;
+      if (row) {
+        const patch = buildExpensePatch(row, form);
+        if (!patch && !picked) {
           setError(tr('exp.noChange'));
           return false;
         }
-        await api.expenses.patch(expense.id, patch);
+        if (patch) {
+          row = await api.expenses.patch(row.id, patch);
+          saved(row);
+        }
       } else {
         const body = buildExpenseCreate(form);
         const signature = JSON.stringify(body);
         if (attempt.current?.signature !== signature) {
           attempt.current = { signature, id: newClientRequestId() };
         }
-        await api.expenses.create(body, { clientRequestId: attempt.current.id });
+        row = (await api.expenses.create(body, { clientRequestId: attempt.current.id })).row;
+        saved(row);
+      }
+      if (picked && row) {
+        try {
+          const done = await api.expenses.receipt.attach(row.id, picked.file, {
+            expectedVersion: row.version,
+            requestId: picked.requestId,
+          });
+          saved(done.row);
+          setPicked(null);
+        } catch (caught) {
+          setError(tr('exp.receipt.attachFailed', { reason: errorText(tr, caught) }));
+          if (caught instanceof ApiClientError && caught.code === 'VERSION_CONFLICT') onConflict();
+          return false;
+        }
       }
       onDone();
       return true;
@@ -104,20 +142,24 @@ export function ExpenseDialog({
   }
 
   return (
-    <PortalModal labelledBy="exp-title" onClose={onClose}>
+    <PortalModal labelledBy="exp-title" onClose={close}>
       <DialogLayout
         titleId="exp-title"
         title={expense ? tr('exp.dialog.editTitle') : tr('exp.dialog.addTitle')}
-        onClose={onClose}
+        onClose={close}
         onSubmit={() => void submit()}
         error={error}
         actions={
           <>
-            <button type="button" className="g-btn g-btn-lg" onClick={onClose}>
+            <button type="button" className="g-btn g-btn-lg" onClick={close}>
               {tr('common.cancel')}
             </button>
             <button type="submit" className="g-btn g-btn-p g-btn-lg" disabled={saving}>
-              {saving ? tr('exp.saving') : tr('common.save')}
+              {saving
+                ? picked
+                  ? tr('exp.receipt.uploading')
+                  : tr('exp.saving')
+                : tr('common.save')}
             </button>
           </>
         }
@@ -162,6 +204,14 @@ export function ExpenseDialog({
           value={form.note}
           error={fieldError('note')}
           onChange={(note) => setForm({ ...form, note })}
+        />
+        <ReceiptField
+          expense={expense}
+          picked={picked}
+          busy={saving}
+          onPick={pickFile}
+          onRemoved={saved}
+          onConflict={onConflict}
         />
       </DialogLayout>
     </PortalModal>

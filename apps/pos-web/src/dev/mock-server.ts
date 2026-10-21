@@ -27,6 +27,7 @@ import {
   staffStepUpInputSchema,
 } from '@sds/shared';
 import { createMockAdmin, type MockDevice, type MockPerson } from './mock-admin.ts';
+import { isMockBinary } from './mock-finance.ts';
 import type { RawBody } from './mock-menu-admin.ts';
 import { createMockShop } from './mock-shop.ts';
 
@@ -185,10 +186,15 @@ export function createMockServer(options: MockServerOptions = {}) {
   const shop = createMockShop({ now });
 
   const reply = (status: number, body?: unknown): Response =>
-    new Response(status === 204 || body === undefined ? null : JSON.stringify(body), {
-      status,
-      headers: { 'content-type': 'application/json' },
-    });
+    isMockBinary(body)
+      ? new Response(new Uint8Array(body.bytes), {
+          status,
+          headers: { 'content-type': body.contentType },
+        })
+      : new Response(status === 204 || body === undefined ? null : JSON.stringify(body), {
+          status,
+          headers: { 'content-type': 'application/json' },
+        });
   const fail = (status: number, code: string, details: Record<string, unknown> = {}) =>
     reply(status, { code, message: 'mock server error', details });
 
@@ -412,6 +418,7 @@ export function createMockServer(options: MockServerOptions = {}) {
         staffKnown: (id) => people.some((p) => p.id === id),
       },
       raw,
+      headers.get('idempotency-key') ?? undefined,
     );
     if (answer) return reply(answer.status, answer.body);
 
@@ -466,6 +473,8 @@ export function createMockServer(options: MockServerOptions = {}) {
     seedDemoOrders: shop.seedDemoOrders,
     /** Dev and tests: the network goes away or comes back (requests fail like a lost connection). */
     setOffline: shop.setOffline,
+    /** Dev and tests: receipt photo storage is not set up (receipt calls answer 503) or is back. */
+    setReceiptStorage: shop.setReceiptStorage,
     /** Dev: change prices or sell a dish out on the server only, as if done while a counter was offline. */
     bumpPrices: shop.bumpPrices,
     soldOut: shop.soldOut,

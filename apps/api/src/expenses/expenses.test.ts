@@ -89,7 +89,7 @@ describe('create', () => {
       amountSatang: 25000,
       vendor: 'ร้านแก๊ส',
       note: 'ถังใหญ่',
-      receiptImageKey: null,
+      hasReceipt: false,
       voided: false,
       voidedAt: null,
       voidReason: null,

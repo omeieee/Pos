@@ -279,6 +279,8 @@ describe('log redaction of credentials', () => {
       accessToken: 'liff-access-token-secret',
       token: 'sds_cst.customer-session-secret',
       lineUserId: 'Utest-line-user-secret',
+      secretAccessKey: 'r2-secret-access-key-value',
+      accessKeyId: 'r2-access-key-id-value',
     };
     app.log.info({ body: secrets }, 'top');
     app.log.info({ req: { headers: secrets } }, 'request');

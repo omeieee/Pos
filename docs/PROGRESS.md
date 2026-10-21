@@ -18,6 +18,24 @@
 > - **Maintenance:** the architecture refactor (code moved, behaviour unchanged) is deployed; see the entry "2026-10-16 · Maintenance · Architecture refactor". Not yet checked on a real iPad/iPhone. The as-built code index `ARCHITECTURE.md` (verified at `7ff9951`) is committed (`070e0b4`) and pushed with the owner's OK; see the newest entry.
 > - **Workflow (owner rule 2026-10-16):** after each completed part, ask the owner "save checkpoint or next step?" and wait for the answer (`CLAUDE.md` workflow, `3d8481c`).
 
+## 2026-10-21 · P7 · R2 storage for slips and receipt photos, receipt screen
+- **Summary:** D-36 (Proposed): slips and expense receipt photos can live on Cloudflare R2 (free quota only). Backend by backend-engineer, screen by pos-frontend-engineer. Owner choices: receipts kept 5 years, JPEG about 1280px, existing slips move to R2, staff see slips only. Without R2, receipt routes answer 503 `RECEIPT_STORAGE_UNAVAILABLE` (owner decision 2), slips stay on the VM disk, nothing else changes. Pushed so the owner can test on the live server.
+- **Changed:** `apps/api` (`slips/r2-store.ts`, `sigv4.ts`, `copy-to-r2.ts`, `expenses/receipt*.ts`, `jobs/storage-usage.ts`, `cli/slips-to-r2.ts`, config, redact, server); migration 0039 (expand only); `apps/pos-web` receipt UI and mock; i18n; compose `R2_*` pass-through; `ARCHITECTURE.md`.
+- **Verification (my run):** `npx biome check apps packages infra` 0 errors; `pnpm build` 13/13; `pnpm test` api 83 files 1519 tests passed. Agents report pos-web 2171, i18n 26, db 322, shared 1166, new E2E on ipad/iphone Chromium and WebKit, ipad Firefox. Not run: real R2, real VM, real iPad/iPhone, resize speed on the 1 GB VM.
+- **Decisions:** D-36 Proposed (becomes Accepted when R2 is live). Slips are not resized (OCR and QR read them back).
+- **Open issues:** R2 bucket, bucket-scoped token, four `R2_*` values in `/opt/sds/.env` and a Cloudflare billing notification (owner); copy script run order (copy, switch env, copy again); 5-year receipt deletion not built; WebP refused; add-expense dialog can open before categories load (old).
+- **Next:** owner tests the receipt screen on a device (expect the Thai 503 message until R2 is set); then R2 setup.
+- **Commit:** see git log (pushed 2026-10-21).
+
+## 2026-10-21 · P7 · Owner answers: photo storage and Slip2Go
+- **Summary:** owner chose Cloudflare R2 free tier for slip and receipt photos (not built; any Cloudflare change needs the owner's OK) and will buy a Slip2Go package, keeping `SLIP_AUTOCONFIRM` on. Package name and price still to be told. Live checked: `/healthz` shows `9aaf0b6`, `/readyz` 200.
+- **Changed:** `docs/10-open-questions.md` (new "Answers 2026-10-21" section).
+- **Verification:** `curl` on `/healthz` and `/readyz` only; no tests run.
+- **Decisions:** none new.
+- **Open issues:** owner real-device check of P6/P7 screens (`#/expenses`, `#/pnl`, `#/tax`, `#/cash`, commission settings); P7 sample-month P&L agreement; Slip2Go package name; R2 bucket and keys not created.
+- **Next:** owner checks the screens on iPad/iPhone and reports; then R2 photo storage (needs OK).
+- **Commit:** uncommitted.
+
 ## 2026-10-21 · P7 · Part 6 QA fixes, push and deploy of P6 follow-ups and P7
 - **Summary:** QA review of part 6 found no wrong-figure bug; fixed the must-fix (start date for the running net limited to 10 years back, `422 CASH_OPENING_TOO_OLD`, carry capped at 12 windows) plus tests for set-aside orders in the carry window, label-in-name on the buying-goods checkbox, a sync-allowlist test, a lint hint. Owner then asked to push and deploy.
 - **Verification (engineer's report plus my own pre-push run, see Commit line):** biome 0 errors; `pnpm build --force` 13/13; finance 223, shared 1166, i18n 26, db 322, api 1472, pos-web 2136. One pos-web test (`OfflineScreens.test.tsx` step-up clear) failed once under load and passed on re-run; not investigated.

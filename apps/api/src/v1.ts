@@ -38,6 +38,8 @@ export interface V1Deps {
   line?: LineRuntime;
   /** Where slip images live (D-24). Omitted: in memory, which only tests want. */
   slips?: SlipStore;
+  /** Where expense receipt photos live (D-36), a store of their own. Omitted: in memory, for tests. */
+  receipts?: SlipStore;
 }
 
 /**
@@ -107,6 +109,7 @@ export async function registerV1(app: FastifyInstance, deps: V1Deps): Promise<vo
   const lineRuntime =
     deps.line ?? createLineRuntime({ channelSecret: undefined, channelAccessToken: undefined });
   const slips = deps.slips ?? createMemorySlipStore();
+  const receipts = deps.receipts ?? null;
   // One push per LINE order when staff complete it, through the quota-aware sender.
   registerCompletionPush({ db: deps.db, runtime: lineRuntime, events: deps.events, now: auth.now });
   // The WebSocket plugin lives on the root instance, ahead of the /v1 scope that declares /v1/ws.
@@ -148,9 +151,12 @@ export async function registerV1(app: FastifyInstance, deps: V1Deps): Promise<vo
       await v1.register((scope) => registerMenuRoutes(scope, context.auth, context.guard), {
         prefix: '/menu',
       });
-      await v1.register((scope) => registerExpenseRoutes(scope, context.auth, context.guard), {
-        prefix: '/expenses',
-      });
+      await v1.register(
+        (scope) => registerExpenseRoutes(scope, context.auth, context.guard, receipts),
+        {
+          prefix: '/expenses',
+        },
+      );
       await v1.register((scope) => registerReportRoutes(scope, context.auth, context.guard), {
         prefix: '/reports',
       });

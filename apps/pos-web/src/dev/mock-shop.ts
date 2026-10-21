@@ -714,6 +714,7 @@ export function createMockShop(options: MockShopOptions = {}) {
     body: unknown,
     caller: MockCaller = { role: 'owner', stepUpFresh: true },
     raw?: RawBody,
+    requestId?: string,
   ): MockAnswer | null {
     if (method === 'GET' && path === '/v1/menu') return publicMenu();
     const edited = menuAdmin.handle(method, path, query, body, caller.role, raw);
@@ -722,7 +723,10 @@ export function createMockShop(options: MockShopOptions = {}) {
     if (paid) return paid;
     if (method === 'GET' && path === '/v1/sync') return sync(query);
     if (method === 'GET' && path === '/v1/recipients') return listRecipients(query);
-    const money = finance.handle(method, path, query, body, caller);
+    const money = finance.handle(method, path, query, body, caller, {
+      ...(raw ? { raw } : {}),
+      ...(requestId ? { requestId } : {}),
+    });
     if (money) return money;
     const settled = settings.handle(method, path, body, caller);
     if (settled) return settled;
@@ -797,6 +801,8 @@ export function createMockShop(options: MockShopOptions = {}) {
     seedDemoOrders: reports.seedDemoOrders,
     setOffline,
     isOffline: () => offline,
+    /** Dev: receipt photo storage is not set up (receipt calls answer 503) or is back. */
+    setReceiptStorage: finance.setReceiptStorage,
     /** Dev and tests: who made each order and cash payment, and who it was named for. */
     attributions: attribution.list,
     /** Dev: the last menu photo the app uploaded (what a server would have stored). */

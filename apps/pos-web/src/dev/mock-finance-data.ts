@@ -35,7 +35,7 @@ export const SAMPLE_EXPENSES: readonly ExpenseDto[] = expenseDtoSchema.array().p
       amountSatang: amountSatang as number,
       vendor: vendor as string | null,
       note: note as string | null,
-      receiptImageKey: null,
+      hasReceipt: false,
       createdByStaffId: null,
       voided,
       voidedAt: voided ? '2026-09-29T09:00:00.000Z' : null,

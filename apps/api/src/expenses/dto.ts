@@ -9,7 +9,7 @@ export function toExpenseDto(row: expensesRepo.ExpenseRow): ExpenseDto {
     amountSatang: satang(row.amountSatang),
     vendor: row.vendor,
     note: row.note,
-    receiptImageKey: row.receiptImageKey,
+    hasReceipt: row.receiptImageKey !== null,
     createdByStaffId: row.createdByStaffId,
     voided: row.voidedAt !== null,
     voidedAt: row.voidedAt ? row.voidedAt.toISOString() : null,

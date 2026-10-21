@@ -578,9 +578,15 @@ describe('slip images', () => {
     );
   });
 
-  test('findReferencedSlipKeys returns only the keys some payment holds', async () => {
+  test('findReferencedSlipKeys returns only the keys a payment or an expense receipt holds', async () => {
     await payment({ status: 'claimed', updatedDaysAgo: 1, key: KEY(8) });
-    expect(await retention.findReferencedSlipKeys(db, [KEY(8), KEY(9)])).toEqual(new Set([KEY(8)]));
+    await q(
+      "insert into expenses (business_date, category, amount_satang, receipt_image_key) values ('2026-10-01', 'gas', 100, $1)",
+      [KEY(10)],
+    );
+    expect(await retention.findReferencedSlipKeys(db, [KEY(8), KEY(9), KEY(10)])).toEqual(
+      new Set([KEY(8), KEY(10)]),
+    );
     expect(await retention.findReferencedSlipKeys(db, [])).toEqual(new Set());
   });
 

@@ -210,4 +210,14 @@ export const enErrors = {
   'error.photoTooLarge': 'The photo is too large. Choose another one.',
   'error.photoNotImage': 'That file is not a usable image (JPEG, PNG or WebP).',
   'error.photoTooManyPixels': 'The photo is bigger than the system accepts. Choose another one.',
+  'error.expenseVoided': 'This expense was voided, so it and its receipt photo cannot be changed.',
+  'error.expenseReceiptType':
+    'Only JPEG or PNG pictures are accepted (not WebP or other files). Choose another picture or take a new one.',
+  'error.expenseReceiptTooLarge':
+    'The picture is too large (10 MB at most). Take it again or choose another.',
+  'error.expenseReceiptUnreadable':
+    'That picture could not be opened. Take it again or choose another.',
+  'error.expenseReceiptNone': 'This expense has no receipt photo.',
+  'error.expenseReceiptStorage':
+    'Receipt photo storage is not set up yet, so a photo cannot be attached or shown right now. The rest of the expense works as usual. Try again later.',
 } as const satisfies Record<keyof typeof thErrors, string>;

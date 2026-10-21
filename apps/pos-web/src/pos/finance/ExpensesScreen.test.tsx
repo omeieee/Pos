@@ -455,3 +455,321 @@ describe('the categories', () => {
     ).toBeTruthy();
   });
 });
+describe('receipt photos', () => {
+  const WITH = { ...FIRST, hasReceipt: true, version: 3 };
+  const WITH_LIST: ExpenseList = {
+    expenses: SAMPLE_EXPENSES.map((e) =>
+      e.id === FIRST.id ? WITH : e.id === VOIDED.id ? { ...e, hasReceipt: true } : e,
+    ),
+    totalSatang: satang(37500),
+  };
+  const png = (name = 'bill.png', type = 'image/png') =>
+    new File([new Uint8Array([1, 2, 3])], name, { type });
+  const created: string[] = [];
+  const revoked: string[] = [];
+  const madeRow = (version = 1) => ({
+    row: {
+      ...FIRST,
+      id: 'new',
+      version,
+      amountSatang: satang(2000),
+      businessDate: '2030-10-15',
+      vendor: null,
+      note: null,
+    },
+    replay: false,
+    clientRequestId: 'x',
+  });
+  const attached = { row: { ...WITH, id: 'new' }, replay: false, requestId: 'k' };
+  const sampleBlob = () => new Blob([new Uint8Array([1])], { type: 'image/png' });
+
+  beforeEach(() => {
+    created.length = 0;
+    revoked.length = 0;
+    Object.assign(URL, {
+      createObjectURL: vi.fn(() => {
+        const url = `blob:test-${created.length}`;
+        created.push(url);
+        return url;
+      }),
+      revokeObjectURL: vi.fn((url: string) => revoked.push(url)),
+    });
+  });
+
+  /** All three receipt calls answered; a test replaces the one it cares about. */
+  function receipt(given: Record<string, unknown> = {}) {
+    return {
+      attach: vi.fn(async () => ({ row: WITH, replay: false, requestId: 'k' })),
+      read: vi.fn(async () => sampleBlob()),
+      remove: vi.fn(async () => ({ ...WITH, hasReceipt: false, version: 4 })),
+      ...given,
+    } as unknown as NonNullable<Parameters<typeof open>[0]>['receipt'] & {
+      attach: ReturnType<typeof vi.fn>;
+      read: ReturnType<typeof vi.fn>;
+      remove: ReturnType<typeof vi.fn>;
+    };
+  }
+
+  const rowView = () =>
+    screen.getByRole('button', {
+      name: tr('exp.receipt.rowView', { category: 'วัตถุดิบ', amount: money(15000) }),
+    });
+  const editRow = () =>
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: tr('exp.rowEdit', { category: 'วัตถุดิบ', amount: money(15000) }),
+      }),
+    );
+  const fileInput = (dialog: HTMLElement) =>
+    dialog.querySelector('input[type="file"]') as HTMLInputElement;
+  const pick = (dialog: HTMLElement, file: File) =>
+    fireEvent.change(fileInput(dialog), { target: { files: [file] } });
+  const save = (dialog: HTMLElement) =>
+    fireEvent.click(within(dialog).getByRole('button', { name: th['common.save'] }));
+  const openAdd = (amount = '20') => {
+    fireEvent.click(screen.getByRole('button', { name: th['exp.add'] }));
+    const dialog = screen.getByRole('dialog');
+    fireEvent.change(within(dialog).getByLabelText(th['exp.field.amount']), {
+      target: { value: amount },
+    });
+    return dialog;
+  };
+
+  test('a row with a photo has a view button with a name; one without has none', async () => {
+    await open({ list: async () => WITH_LIST, receipt: receipt() });
+    expect(rowView()).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: /ดูรูปใบเสร็จ/ })).toHaveLength(2);
+  });
+
+  test('a row without a photo shows no view button', async () => {
+    await open({ receipt: receipt() });
+    expect(screen.queryByRole('button', { name: /ดูรูปใบเสร็จ/ })).toBeNull();
+  });
+
+  test('viewing fetches the picture, shows it, and revokes the address when closed', async () => {
+    const api = receipt();
+    await open({ list: async () => WITH_LIST, receipt: api });
+    fireEvent.click(rowView());
+    const dialog = screen.getByRole('dialog');
+    const img = (await within(dialog).findByAltText(th['exp.receipt.alt'])) as HTMLImageElement;
+    expect(img.getAttribute('src')).toBe('blob:test-0');
+    expect(api.read).toHaveBeenCalledWith(WITH.id);
+    fireEvent.click(within(dialog).getByRole('button', { name: th['exp.receipt.close'] }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(revoked).toEqual(['blob:test-0']);
+  });
+
+  test('a voided expense keeps its photo viewable and offers nothing else', async () => {
+    await open({ list: async () => WITH_LIST, receipt: receipt() });
+    const voided = screen
+      .getAllByRole('listitem')
+      .find((li) => within(li).queryByText(money(99900)) !== null) as HTMLElement;
+    expect(within(voided).getAllByRole('button')).toHaveLength(1);
+    expect(within(voided).getByRole('button', { name: /ดูรูปใบเสร็จ/ })).toBeTruthy();
+  });
+
+  test('photo storage not set up is told calmly, with no code, and can be retried', async () => {
+    const read = vi
+      .fn()
+      .mockRejectedValueOnce(new ApiClientError('RECEIPT_STORAGE_UNAVAILABLE', { status: 503 }))
+      .mockResolvedValue(sampleBlob());
+    await open({ list: async () => WITH_LIST, receipt: receipt({ read }) });
+    fireEvent.click(rowView());
+    const dialog = screen.getByRole('dialog');
+    expect(await within(dialog).findByText(th['error.expenseReceiptStorage'])).toBeTruthy();
+    expect(dialog.textContent).not.toContain('RECEIPT_STORAGE_UNAVAILABLE');
+    fireEvent.click(within(dialog).getByRole('button', { name: th['common.retry'] }));
+    expect(await within(dialog).findByAltText(th['exp.receipt.alt'])).toBeTruthy();
+  });
+
+  test('the file picker takes JPEG and PNG only', async () => {
+    await open({ receipt: receipt() });
+    fireEvent.click(screen.getByRole('button', { name: th['exp.add'] }));
+    expect(fileInput(screen.getByRole('dialog')).getAttribute('accept')).toBe(
+      'image/jpeg,image/png',
+    );
+  });
+
+  test('a new expense is created first and the photo attached with the version it got', async () => {
+    const api = receipt();
+    const create = vi.fn(async () => madeRow());
+    await open({ create, receipt: api });
+    const dialog = openAdd();
+    const file = png();
+    pick(dialog, file);
+    expect(within(dialog).getByText(tr('exp.receipt.picked', { name: 'bill.png' }))).toBeTruthy();
+    save(dialog);
+    await waitFor(() => expect(api.attach).toHaveBeenCalledTimes(1));
+    expect(create.mock.invocationCallOrder[0]).toBeLessThan(
+      api.attach.mock.invocationCallOrder[0] as number,
+    );
+    expect(api.attach).toHaveBeenCalledWith('new', file, {
+      expectedVersion: 1,
+      requestId: expect.stringMatching(/^[0-9a-f-]{36}$/),
+    });
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+
+  test('if the photo fails after the expense was made, the dialog says so, stays, and a retry does not create again', async () => {
+    const attach = vi
+      .fn()
+      .mockRejectedValueOnce(new ApiClientError('RECEIPT_STORAGE_UNAVAILABLE', { status: 503 }))
+      .mockResolvedValue(attached);
+    const create = vi.fn(async () => madeRow());
+    const env = await open({ create, receipt: receipt({ attach }) });
+    const before = env.api.expenses.list.mock.calls.length;
+    const dialog = openAdd();
+    pick(dialog, png());
+    save(dialog);
+    const message = tr('exp.receipt.attachFailed', { reason: th['error.expenseReceiptStorage'] });
+    expect(await within(dialog).findByText(message)).toBeTruthy();
+    expect(within(dialog).getByText(th['exp.dialog.editTitle'])).toBeTruthy();
+    await waitFor(() =>
+      expect(
+        (within(dialog).getByRole('button', { name: th['common.save'] }) as HTMLButtonElement)
+          .disabled,
+      ).toBe(false),
+    );
+    save(dialog);
+    await waitFor(() => expect(attach).toHaveBeenCalledTimes(2));
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(attach.mock.calls[1]?.[2].requestId).toBe(attach.mock.calls[0]?.[2].requestId);
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(env.api.expenses.list.mock.calls.length).toBeGreaterThan(before);
+  });
+
+  test('closing after the expense was made but the photo failed still reads the list again', async () => {
+    const attach = vi.fn().mockRejectedValue(new ApiClientError('NETWORK'));
+    const env = await open({ create: vi.fn(async () => madeRow()), receipt: receipt({ attach }) });
+    const before = env.api.expenses.list.mock.calls.length;
+    const dialog = openAdd();
+    pick(dialog, png());
+    save(dialog);
+    await within(dialog).findByText(
+      tr('exp.receipt.attachFailed', { reason: th['error.network'] }),
+    );
+    fireEvent.click(within(dialog).getByRole('button', { name: th['common.cancel'] }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(env.api.expenses.list.mock.calls.length).toBeGreaterThan(before);
+  });
+
+  test('a photo-only change on an existing expense attaches without a patch, with its version', async () => {
+    const patch = vi.fn(async () => FIRST);
+    const api = receipt();
+    await open({ patch, receipt: api });
+    editRow();
+    const dialog = screen.getByRole('dialog');
+    const file = png('r.png');
+    pick(dialog, file);
+    save(dialog);
+    await waitFor(() => expect(api.attach).toHaveBeenCalledTimes(1));
+    expect(patch).not.toHaveBeenCalled();
+    expect(api.attach).toHaveBeenCalledWith(
+      FIRST.id,
+      file,
+      expect.objectContaining({ expectedVersion: 1 }),
+    );
+  });
+
+  test('a field change and a photo: patch first, then attach with the version the patch returned', async () => {
+    const patch = vi.fn(async () => ({ ...FIRST, amountSatang: satang(16050), version: 2 }));
+    const api = receipt();
+    await open({ patch, receipt: api });
+    editRow();
+    const dialog = screen.getByRole('dialog');
+    fireEvent.change(within(dialog).getByLabelText(th['exp.field.amount']), {
+      target: { value: '160.5' },
+    });
+    pick(dialog, png());
+    save(dialog);
+    await waitFor(() => expect(api.attach).toHaveBeenCalledTimes(1));
+    expect(patch).toHaveBeenCalledWith(FIRST.id, { expectedVersion: 1, amountSatang: 16050 });
+    expect(api.attach).toHaveBeenCalledWith(
+      FIRST.id,
+      expect.anything(),
+      expect.objectContaining({ expectedVersion: 2 }),
+    );
+  });
+
+  test('an expense with a photo shows it in the dialog and offers to replace or remove it', async () => {
+    await open({ list: async () => WITH_LIST, receipt: receipt() });
+    editRow();
+    const dialog = screen.getByRole('dialog');
+    expect(await within(dialog).findByAltText(th['exp.receipt.alt'])).toBeTruthy();
+    expect(within(dialog).getByText(th['exp.receipt.has'])).toBeTruthy();
+    expect(within(dialog).getByText(th['exp.receipt.replace'])).toBeTruthy();
+    expect(within(dialog).getByRole('button', { name: th['exp.receipt.remove'] })).toBeTruthy();
+  });
+
+  test('a WebP or oversized file is told at once and nothing is attached', async () => {
+    const api = receipt();
+    await open({ receipt: api });
+    fireEvent.click(screen.getByRole('button', { name: th['exp.add'] }));
+    const dialog = screen.getByRole('dialog');
+    pick(dialog, png('x.webp', 'image/webp'));
+    expect(await within(dialog).findByText(th['error.expenseReceiptType'])).toBeTruthy();
+    expect(within(dialog).queryByText(/จะแนบรูป/)).toBeNull();
+    const big = png('big.png');
+    Object.defineProperty(big, 'size', { value: 10 * 1024 * 1024 + 1 });
+    pick(dialog, big);
+    expect(await within(dialog).findByText(th['error.expenseReceiptTooLarge'])).toBeTruthy();
+    expect(api.attach).not.toHaveBeenCalled();
+  });
+
+  test('a server 415 is told in words too', async () => {
+    const attach = vi
+      .fn()
+      .mockRejectedValue(new ApiClientError('RECEIPT_TYPE_UNSUPPORTED', { status: 415 }));
+    await open({ receipt: receipt({ attach }) });
+    editRow();
+    const dialog = screen.getByRole('dialog');
+    pick(dialog, png());
+    save(dialog);
+    expect(
+      await within(dialog).findByText(
+        tr('exp.receipt.attachFailed', { reason: th['error.expenseReceiptType'] }),
+      ),
+    ).toBeTruthy();
+  });
+
+  test('removing asks first, and nothing is sent unless it is confirmed', async () => {
+    const api = receipt();
+    await open({ list: async () => WITH_LIST, receipt: api });
+    editRow();
+    const dialog = screen.getByRole('dialog');
+    fireEvent.click(within(dialog).getByRole('button', { name: th['exp.receipt.remove'] }));
+    expect(within(dialog).getByText(th['exp.receipt.removeAsk'])).toBeTruthy();
+    expect(api.remove).not.toHaveBeenCalled();
+    fireEvent.click(within(dialog).getByRole('button', { name: th['exp.receipt.removeKeep'] }));
+    expect(within(dialog).queryByText(th['exp.receipt.removeAsk'])).toBeNull();
+    expect(api.remove).not.toHaveBeenCalled();
+  });
+
+  test('a confirmed removal sends the version, shows no photo, and the list is read again on close', async () => {
+    const api = receipt();
+    const env = await open({ list: async () => WITH_LIST, receipt: api });
+    const before = env.api.expenses.list.mock.calls.length;
+    editRow();
+    const dialog = screen.getByRole('dialog');
+    fireEvent.click(within(dialog).getByRole('button', { name: th['exp.receipt.remove'] }));
+    fireEvent.click(within(dialog).getByRole('button', { name: th['exp.receipt.removeConfirm'] }));
+    await waitFor(() => expect(api.remove).toHaveBeenCalledWith(WITH.id, 3));
+    expect(await within(dialog).findByText(th['exp.receipt.none'])).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole('button', { name: th['common.cancel'] }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(env.api.expenses.list.mock.calls.length).toBeGreaterThan(before);
+  });
+
+  test('a removal that fails keeps the photo and tells why', async () => {
+    const remove = vi
+      .fn()
+      .mockRejectedValue(new ApiClientError('VERSION_CONFLICT', { status: 409 }));
+    await open({ list: async () => WITH_LIST, receipt: receipt({ remove }) });
+    editRow();
+    const dialog = screen.getByRole('dialog');
+    fireEvent.click(within(dialog).getByRole('button', { name: th['exp.receipt.remove'] }));
+    fireEvent.click(within(dialog).getByRole('button', { name: th['exp.receipt.removeConfirm'] }));
+    expect(await within(dialog).findByText(th['error.versionConflict'])).toBeTruthy();
+    expect(within(dialog).getByText(th['exp.receipt.has'])).toBeTruthy();
+  });
+});

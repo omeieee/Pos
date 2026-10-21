@@ -1,5 +1,6 @@
 import { type LineJobDeps, retryLineEvents } from '../line/retry.ts';
 import { activeSlipChecker } from '../slips/checker.ts';
+import type { SlipStore } from '../slips/store.ts';
 import {
   anonymizeOrders,
   expireEmptyLineCustomers,
@@ -12,9 +13,13 @@ import {
   sweepOrphanSlips,
 } from './retention.ts';
 import { checkSlip2goAccount } from './slip2go.ts';
+import { checkStorageUsage } from './storage-usage.ts';
 
 /** What every job gets. Jobs are plain functions of this, so tests call them directly. */
-export type JobDeps = LineJobDeps;
+export type JobDeps = LineJobDeps & {
+  /** Where expense receipt photos live (D-36). No job deletes from it; the usage check only measures it. */
+  receipts?: SlipStore;
+};
 
 export interface JobDefinition {
   name: string;
@@ -57,4 +62,6 @@ export const JOBS: readonly JobDefinition[] = [
   { name: 'retention-slips', cron: '5 4 * * *', run: purgeSlips },
   // Slip files no payment points to (after the purge above), older than a day.
   { name: 'retention-slip-orphans', cron: '15 4 * * *', run: sweepOrphanSlips },
+  // How much the slip and receipt stores hold against the free R2 quota (D-36); warns the owner at 70%.
+  { name: 'storage-usage-check', cron: '30 4 * * *', run: checkStorageUsage },
 ];

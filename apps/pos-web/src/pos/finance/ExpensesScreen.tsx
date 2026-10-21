@@ -8,12 +8,14 @@ import { CategoriesPanel } from './CategoriesPanel.tsx';
 import { ExpenseDialog, VoidExpenseDialog } from './ExpenseDialogs.tsx';
 import { categoryName } from './expense-model.ts';
 import { FinancePage, LoadState, RangePicker, useDayText } from './FinanceParts.tsx';
+import { ReceiptViewerDialog } from './ReceiptParts.tsx';
 import { useExpenseCategories, useExpenses, useRange } from './use-finance.ts';
 
 type Dialog =
   | { kind: 'add' }
   | { kind: 'edit'; expense: ExpenseDto }
-  | { kind: 'void'; expense: ExpenseDto };
+  | { kind: 'void'; expense: ExpenseDto }
+  | { kind: 'receipt'; expense: ExpenseDto };
 
 /**
  * The expense ledger (`#/expenses`, owner and manager). Rows of the chosen period with the total
@@ -96,6 +98,16 @@ export function ExpensesScreen() {
                       </span>
                       <span className="fin-item__amount">{amount}</span>
                     </div>
+                    {e.hasReceipt ? (
+                      <button
+                        type="button"
+                        className="g-btn g-btn-icon fin-item__receipt"
+                        aria-label={tr('exp.receipt.rowView', { category, amount })}
+                        onClick={() => setDialog({ kind: 'receipt', expense: e })}
+                      >
+                        <Gi n="receipt" size="sm" />
+                      </button>
+                    ) : null}
                     {e.voided ? (
                       <div className="fin-item__voided">
                         <span className="g-badge g-b-mute">{tr('exp.voided')}</span>
@@ -144,6 +156,9 @@ export function ExpensesScreen() {
           onDone={done}
           onConflict={expenses.reload}
         />
+      ) : null}
+      {dialog?.kind === 'receipt' ? (
+        <ReceiptViewerDialog expense={dialog.expense} onClose={() => setDialog(null)} />
       ) : null}
       {dialog?.kind === 'void' ? (
         <VoidExpenseDialog

@@ -57,6 +57,23 @@ interface Answer {
   status: number;
   body: unknown;
 }
+
+/** A picture answer: `mock-server.ts` sends it as the bytes, not as JSON. */
+export interface MockBinary {
+  mockBinary: true;
+  bytes: Uint8Array;
+  contentType: string;
+}
+export const isMockBinary = (value: unknown): value is MockBinary =>
+  typeof value === 'object' && value !== null && 'mockBinary' in value;
+
+/** What a route that takes a file needs besides the JSON body (the bytes and the Idempotency-Key). */
+export interface FinanceRequestExtras {
+  raw?: { bytes: Uint8Array; contentType: string };
+  requestId?: string;
+}
+
+const MAX_RECEIPT_BYTES = 10 * 1024 * 1024;
 /** The slice of the mock caller this file needs. */
 interface Caller {
   role: StaffRole;
@@ -82,6 +99,10 @@ export function createMockFinance(deps: { now: () => number }) {
     list: [...DEFAULT_EXPENSE_CATEGORIES.categories],
     version: 0,
   };
+  // Receipt photos (D-36): the bytes as uploaded, by expense id (the real server shrinks them).
+  const receipts = new Map<string, { bytes: Uint8Array; contentType: string }>();
+  const receiptKeys = new Map<string, { id: string; hash: string }>();
+  let receiptStorage = true;
   const profiles = new Map<number, TaxProfileResponse>();
   let commission = { value: DEFAULT_PLATFORM_COMMISSION, version: 0, rev: 0 };
   let opening = { value: DEFAULT_CASH_OPENING, version: 0, rev: 0 };
@@ -134,7 +155,7 @@ export function createMockFinance(deps: { now: () => number }) {
       amountSatang: input.data.amountSatang,
       vendor: input.data.vendor ?? null,
       note: input.data.note ?? null,
-      receiptImageKey: null,
+      hasReceipt: false,
       createdByStaffId: null,
       voided: false,
       voidedAt: null,
@@ -196,6 +217,62 @@ export function createMockFinance(deps: { now: () => number }) {
       version: row.version + 1,
       rev,
     };
+    rows.set(id, next);
+    return ok(next);
+  }
+
+  const storageDown = () => error(503, 'RECEIPT_STORAGE_UNAVAILABLE');
+  const hashOf = (file: { bytes: Uint8Array; contentType: string }) =>
+    `${file.contentType}:${file.bytes.length}:${file.bytes.reduce((n, b) => (n * 31 + b) % 1_000_003, 7)}`;
+  const versionOf = (query: URLSearchParams): number | null => {
+    const n = Number(query.get('expectedVersion'));
+    return Number.isInteger(n) && n >= 1 ? n : null;
+  };
+
+  function attachReceipt(id: string, query: URLSearchParams, extras: FinanceRequestExtras): Answer {
+    if (!receiptStorage) return storageDown();
+    const version = versionOf(query);
+    if (version === null || !extras.requestId) return error(400, 'VALIDATION_ERROR');
+    const file = extras.raw;
+    if (!file || file.bytes.length === 0) return error(422, 'RECEIPT_UNREADABLE');
+    const seen = receiptKeys.get(extras.requestId);
+    if (seen) {
+      return seen.id === id && seen.hash === hashOf(file)
+        ? ok(rows.get(id), 200)
+        : error(409, 'IDEMPOTENCY_KEY_REUSED');
+    }
+    if (file.contentType !== 'image/jpeg' && file.contentType !== 'image/png') {
+      return error(415, 'RECEIPT_TYPE_UNSUPPORTED');
+    }
+    if (file.bytes.length > MAX_RECEIPT_BYTES) return error(413, 'RECEIPT_TOO_LARGE');
+    const row = target(id, version);
+    if (isAnswer(row)) return row;
+    rev += 1;
+    const next: ExpenseDto = { ...row, hasReceipt: true, version: row.version + 1, rev };
+    rows.set(id, next);
+    receipts.set(id, { bytes: file.bytes, contentType: file.contentType });
+    receiptKeys.set(extras.requestId, { id, hash: hashOf(file) });
+    return ok(next, 201);
+  }
+
+  function readReceipt(id: string): Answer {
+    if (!receiptStorage) return storageDown();
+    const file = receipts.get(id);
+    if (!rows.has(id) || !file) return error(404, 'RECEIPT_NOT_FOUND');
+    const binary: MockBinary = { mockBinary: true, ...file };
+    return ok(binary);
+  }
+
+  function removeReceipt(id: string, query: URLSearchParams): Answer {
+    if (!receiptStorage) return storageDown();
+    const version = versionOf(query);
+    if (version === null) return error(400, 'VALIDATION_ERROR');
+    const row = target(id, version);
+    if (isAnswer(row)) return row;
+    if (!receipts.has(id)) return error(404, 'RECEIPT_NOT_FOUND');
+    receipts.delete(id);
+    rev += 1;
+    const next: ExpenseDto = { ...row, hasReceipt: false, version: row.version + 1, rev };
     rows.set(id, next);
     return ok(next);
   }
@@ -528,6 +605,7 @@ export function createMockFinance(deps: { now: () => number }) {
     query: URLSearchParams,
     body: unknown,
     caller: Caller,
+    extras: FinanceRequestExtras = {},
   ): Answer | null {
     if (path === '/v1/settings/tax-profile' && (method === 'GET' || method === 'PUT')) {
       return taxProfile(method, query, body, caller);
@@ -558,12 +636,25 @@ export function createMockFinance(deps: { now: () => number }) {
       if (method === 'PUT') return putCategories(body);
       return null;
     }
-    const one = /^\/v1\/expenses\/([^/]+)(\/void)?$/.exec(path);
+    const one = /^\/v1\/expenses\/([^/]+)(\/void|\/receipt)?$/.exec(path);
     if (!one) return null;
-    if (method === 'PATCH' && !one[2]) return patch(one[1] ?? '', body);
-    if (method === 'POST' && one[2]) return voidRow(one[1] ?? '', body);
+    const id = one[1] ?? '';
+    if (one[2] === '/receipt') {
+      if (method === 'POST') return attachReceipt(id, query, extras);
+      if (method === 'GET') return readReceipt(id);
+      if (method === 'DELETE') return removeReceipt(id, query);
+      return null;
+    }
+    if (method === 'PATCH' && !one[2]) return patch(id, body);
+    if (method === 'POST' && one[2]) return voidRow(id, body);
     return null;
   }
 
-  return { handle };
+  return {
+    handle,
+    /** Dev and tests: photo storage is not set up (every receipt call answers 503) or is back. */
+    setReceiptStorage(available: boolean) {
+      receiptStorage = available;
+    },
+  };
 }

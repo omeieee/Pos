@@ -174,4 +174,11 @@ export const thErrors = {
   'error.photoTooLarge': 'รูปใหญ่เกินไป ลองเลือกรูปอื่น',
   'error.photoNotImage': 'ไฟล์นี้ไม่ใช่รูปภาพที่ใช้ได้ (JPEG, PNG หรือ WebP)',
   'error.photoTooManyPixels': 'รูปมีขนาดเกินที่ระบบรับได้ ลองเลือกรูปอื่น',
+  'error.expenseVoided': 'รายการนี้ถูกยกเลิกแล้ว จึงแก้ไขหรือเปลี่ยนรูปใบเสร็จไม่ได้',
+  'error.expenseReceiptType': 'รับเฉพาะรูป JPEG หรือ PNG (ไม่รับ WebP หรือไฟล์ชนิดอื่น) เลือกรูปอื่น หรือถ่ายรูปใหม่',
+  'error.expenseReceiptTooLarge': 'รูปใหญ่เกินไป (ไม่เกิน 10 MB) ลองถ่ายใหม่หรือเลือกรูปอื่น',
+  'error.expenseReceiptUnreadable': 'เปิดรูปนี้ไม่ได้ ลองถ่ายใหม่หรือเลือกรูปอื่น',
+  'error.expenseReceiptNone': 'รายการนี้ไม่มีรูปใบเสร็จ',
+  'error.expenseReceiptStorage':
+    'ยังไม่ได้ตั้งค่าที่เก็บรูปใบเสร็จ จึงแนบหรือดูรูปตอนนี้ไม่ได้ ส่วนที่เหลือของรายการใช้งานได้ตามปกติ ลองใหม่ภายหลัง',
 } as const;

@@ -220,6 +220,55 @@
   color: var(--sds-color-text-muted);
 }
 
+/* The receipt-photo button of a row: an icon, 48 wide like every icon button. */
+.fin-item__receipt {
+  flex: none;
+}
+
+/* ---------- Receipt photo (viewer and the form field) ---------- */
+.fin-receipt {
+  display: flex;
+  justify-content: center;
+  min-width: 0;
+}
+.fin-receipt__img {
+  display: block;
+  max-width: 100%;
+  max-height: min(65vh, 560px);
+  object-fit: contain;
+  border-radius: var(--sds-radius-md);
+  background: var(--sds-color-surface);
+}
+.fin-receipt-field .fin-receipt__img {
+  max-height: 240px;
+}
+.fin-receipt__state {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.fin-receipt-field__row,
+.fin-receipt-field__ask {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+.fin-receipt-field__ask {
+  flex-direction: column;
+}
+.fin-receipt-field__picked {
+  overflow-wrap: anywhere;
+}
+/* The real input is visually hidden: its label is the button, so show the focus ring on it. */
+.fin-pick:focus-visible + label {
+  outline: 3px solid var(--sds-color-focus);
+  outline-offset: 2px;
+}
+
 /* ---------- Categories ---------- */
 .fin-cats {
   list-style: none;

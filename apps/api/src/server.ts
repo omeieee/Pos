@@ -13,6 +13,7 @@ import { sentryOptions } from './redact.ts';
 import { createSlipChecker, installSlipChecker } from './slips/checker.ts';
 import { createTesseractOcr } from './slips/ocr.ts';
 import { createWorkerQrReader } from './slips/qr.ts';
+import { createR2SlipStore, R2_RECEIPT_PREFIX, R2_SLIP_PREFIX } from './slips/r2-store.ts';
 import { createSlip2goVerifier, installSlipVerifier } from './slips/slip2go.ts';
 import { createFsSlipStore } from './slips/store.ts';
 import { registerV1 } from './v1.ts';
@@ -74,7 +75,16 @@ events.subscribe((event) => {
 });
 if (reportAlert) forwardAlerts(events, reportAlert);
 const line = createLineRuntime(config.line, { privacy: config.privacy });
-const slips = createFsSlipStore(config.slipDir);
+// Slips (90 days) and expense receipt photos (5 years) are two stores that never share a listing
+// (D-36): on R2 two prefixes of one bucket, without R2 two folders on the slips volume. The orphan
+// sweep and the retention job only ever see `slips`.
+const slips = config.r2
+  ? createR2SlipStore({ ...config.r2, prefix: R2_SLIP_PREFIX })
+  : createFsSlipStore(config.slipDir);
+// Receipt photos are 5-year records: without R2 they are refused (503) rather than kept on the slips volume, which has no off-site copy.
+const receipts = config.r2
+  ? createR2SlipStore({ ...config.r2, prefix: R2_RECEIPT_PREFIX })
+  : undefined;
 // The automatic reading of slips, one picture at a time: the amount with Tesseract on this machine
 // (D-26) and/or the bank check by Slip2Go (D-27). The checker starts when either is on.
 const verifier = config.slipVerifier
@@ -101,7 +111,14 @@ if (config.slipOcr || verifier) {
     }),
   );
 }
-await registerV1(app, { db, authSecretKey: config.authSecretKey, events, line, slips });
+await registerV1(app, {
+  db,
+  authSecretKey: config.authSecretKey,
+  events,
+  line,
+  slips,
+  ...(receipts ? { receipts } : {}),
+});
 
 // 0.0.0.0 so Caddy can reach the container over the Docker network.
 await app.listen({ host: '0.0.0.0', port: config.port });
@@ -113,7 +130,7 @@ const jobs = superviseJobs({
   start: () =>
     startJobs({
       databaseUrl: config.databaseUrl,
-      deps: { db, events, now: () => new Date(), line, slips },
+      deps: { db, events, now: () => new Date(), line, slips, ...(receipts ? { receipts } : {}) },
       log: app.log,
     }),
   onFailure: (failure) => {

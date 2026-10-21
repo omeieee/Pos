@@ -30,6 +30,9 @@ const CREDENTIAL_KEYS = [
   'idvalue',
   // The Slip2Go secret key (D-27).
   'secretkey',
+  // The R2 credentials (D-36).
+  'secretaccesskey',
+  'accesskeyid',
   // The customer app: a LIFF token sent to sign in, the session token we hand back, and the
   // LINE user id they stand for.
   'idtoken',
@@ -49,6 +52,8 @@ const CREDENTIAL_FIELDS = [
   'cookie',
   'idValue',
   'secretKey',
+  'secretAccessKey',
+  'accessKeyId',
   'idToken',
   'accessToken',
   'token',

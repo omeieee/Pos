@@ -78,6 +78,26 @@ const envSchema = z
     /** Where transfer slip images are kept (D-24): a directory on a volume, never in the image. */
     SLIP_DIR: z.preprocess(emptyToUndefined, z.string().min(1).default('/data/slips')),
     /**
+     * Slip images and expense receipt photos on Cloudflare R2 (D-36). All four or none: with none,
+     * the files stay on disk (SLIP_DIR). The secret is a credential: never log it.
+     */
+    R2_ACCOUNT_ID: z.preprocess(
+      emptyToUndefined,
+      z
+        .string()
+        .regex(/^[0-9a-f]{32}$/)
+        .optional(),
+    ),
+    R2_ACCESS_KEY_ID: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
+    R2_SECRET_ACCESS_KEY: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
+    R2_BUCKET: z.preprocess(
+      emptyToUndefined,
+      z
+        .string()
+        .regex(/^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/)
+        .optional(),
+    ),
+    /**
      * Reads the amount on a slip with Tesseract on this machine (D-26), as a hint for staff only.
      * Default: on in production (the image has it), off elsewhere. `off` leaves slips unread.
      */
@@ -127,6 +147,19 @@ const envSchema = z
     ),
     GIT_SHA: z.preprocess(emptyToUndefined, z.string().default('dev')),
   })
+  .refine(
+    (e) =>
+      [e.R2_ACCOUNT_ID, e.R2_ACCESS_KEY_ID, e.R2_SECRET_ACCESS_KEY, e.R2_BUCKET].every(
+        (v) => v === undefined,
+      ) ||
+      [e.R2_ACCOUNT_ID, e.R2_ACCESS_KEY_ID, e.R2_SECRET_ACCESS_KEY, e.R2_BUCKET].every(
+        (v) => v !== undefined,
+      ),
+    {
+      path: ['R2_BUCKET'],
+      error: 'R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY and R2_BUCKET go together',
+    },
+  )
   .refine((e) => e.SLIP_VERIFIER !== 'slip2go' || e.SLIP2GO_SECRET_KEY !== undefined, {
     path: ['SLIP2GO_SECRET_KEY'],
     error: 'is required when SLIP_VERIFIER=slip2go',
@@ -160,8 +193,10 @@ export type Config = {
   };
   /** Named in the privacy notice the LINE bot sends. */
   privacy: { controller: string; contactEmail: string };
-  /** Directory of the slip image files. */
+  /** Directory of the slip image files (and, without R2, of the receipt photos in its `receipts` folder). */
   slipDir: string;
+  /** Slips and receipts on Cloudflare R2 (D-36); null keeps them on disk. `secretAccessKey` is a secret. */
+  r2: { accountId: string; accessKeyId: string; secretAccessKey: string; bucket: string } | null;
   /** The automatic slip reading (D-26); null when it is off. */
   slipOcr: { lang: string; timeoutMs: number } | null;
   /** The slip's small QR is read as well (D-26); only when the slip reading is on. */
@@ -201,6 +236,18 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     },
     privacy: { controller: e.PRIVACY_CONTROLLER_NAME, contactEmail: e.PRIVACY_CONTACT_EMAIL },
     slipDir: e.SLIP_DIR,
+    r2:
+      e.R2_ACCOUNT_ID !== undefined &&
+      e.R2_ACCESS_KEY_ID !== undefined &&
+      e.R2_SECRET_ACCESS_KEY !== undefined &&
+      e.R2_BUCKET !== undefined
+        ? {
+            accountId: e.R2_ACCOUNT_ID,
+            accessKeyId: e.R2_ACCESS_KEY_ID,
+            secretAccessKey: e.R2_SECRET_ACCESS_KEY,
+            bucket: e.R2_BUCKET,
+          }
+        : null,
     slipOcr:
       (e.SLIP_OCR ?? (e.NODE_ENV === 'production' ? 'tesseract' : 'off')) === 'tesseract'
         ? { lang: e.SLIP_OCR_LANG, timeoutMs: e.SLIP_OCR_TIMEOUT_MS }

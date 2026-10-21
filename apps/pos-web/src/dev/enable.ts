@@ -60,6 +60,9 @@ export async function devBackend(): Promise<
         // Two weeks of paid orders for the overview (the report API reads the mock's orders).
         demoOrders: () => server.seedDemoOrders(),
         setOffline,
+        // Expense receipt photos: __sdsMock.setReceiptStorage(false) makes every photo call answer 503,
+        // as the live server does until the owner sets up the photo store.
+        setReceiptStorage: server.setReceiptStorage,
         bumpPrices: server.bumpPrices,
         soldOut: server.soldOut,
         // The owner changes the PromptPay ID on the server: __sdsMock.setPromptpayId('0899990000').

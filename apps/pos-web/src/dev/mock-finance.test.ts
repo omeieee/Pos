@@ -12,7 +12,7 @@ import {
   taxReportSchema,
 } from '@sds/shared';
 import { describe, expect, test } from 'vitest';
-import { createMockFinance } from './mock-finance.ts';
+import { createMockFinance, isMockBinary } from './mock-finance.ts';
 
 const NOW = Date.parse('2026-10-20T05:00:00Z');
 interface Caller {
@@ -216,6 +216,141 @@ describe('the dev mock of the expense API', () => {
     expect(call(m, 'POST', '/v1/expenses', { category: 'gas', amountSatang: 100 })?.status).toBe(
       422,
     );
+  });
+});
+
+describe('the dev mock of expense receipt photos', () => {
+  const PNG = {
+    bytes: new Uint8Array([0x89, 0x50, 0x4e, 0x47, 9, 8, 7]),
+    contentType: 'image/png',
+  };
+  const OTHER = {
+    bytes: new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 1, 1]),
+    contentType: 'image/png',
+  };
+  const KEY = '0192f3a0-0000-7000-8000-00000000f001';
+  const withVersion = (version: number) => q({ expectedVersion: String(version) });
+  const attach = (
+    m: Mock,
+    id: string,
+    version: number,
+    file = PNG,
+    requestId: string | null = KEY,
+    caller: Caller = manager,
+  ) =>
+    m.handle('POST', `/v1/expenses/${id}/receipt`, withVersion(version), undefined, caller, {
+      raw: file,
+      ...(requestId ? { requestId } : {}),
+    });
+  const fresh = (m: Mock) =>
+    expenseDtoSchema.parse(
+      call(m, 'POST', '/v1/expenses', { category: 'gas', amountSatang: 8000 })?.body,
+    );
+
+  test('an attach bumps the version, sets hasReceipt, and the picture can be read back', () => {
+    const m = mock();
+    const row = fresh(m);
+    expect(row.hasReceipt).toBe(false);
+    const answer = attach(m, row.id, row.version);
+    expect(answer?.status).toBe(201);
+    const next = expenseDtoSchema.parse(answer?.body);
+    expect(next).toMatchObject({ hasReceipt: true, version: row.version + 1 });
+    expect(next.rev).toBeGreaterThan(row.rev);
+    const read = call(m, 'GET', `/v1/expenses/${row.id}/receipt`, undefined, manager);
+    expect(read?.status).toBe(200);
+    expect(isMockBinary(read?.body)).toBe(true);
+    expect(isMockBinary(read?.body) && Array.from(read.body.bytes)).toEqual(Array.from(PNG.bytes));
+  });
+
+  test('the same key with the same picture replays with 200; the same key with another is 409', () => {
+    const m = mock();
+    const row = fresh(m);
+    attach(m, row.id, row.version);
+    const replay = attach(m, row.id, row.version);
+    expect(replay?.status).toBe(200);
+    expect(expenseDtoSchema.parse(replay?.body).version).toBe(row.version + 1);
+    expect(attach(m, row.id, row.version + 1, OTHER)?.status).toBe(409);
+  });
+
+  test('a stale version is 409 with the current one; WebP is 415; empty is 422; a missing key is 400', () => {
+    const m = mock();
+    const row = fresh(m);
+    expect(attach(m, row.id, 99, PNG, '0192f3a0-0000-7000-8000-00000000f002')).toMatchObject({
+      status: 409,
+      body: { code: 'VERSION_CONFLICT', details: { currentVersion: row.version } },
+    });
+    expect(attach(m, row.id, row.version, { ...PNG, contentType: 'image/webp' })).toMatchObject({
+      status: 415,
+      body: { code: 'RECEIPT_TYPE_UNSUPPORTED' },
+    });
+    expect(
+      attach(m, row.id, row.version, { bytes: new Uint8Array(), contentType: 'image/png' })?.status,
+    ).toBe(422);
+    expect(attach(m, row.id, row.version, PNG, null)?.status).toBe(400);
+    expect(attach(m, '0192f3a0-0000-7000-8000-00000000ffff', 1)?.status).toBe(404);
+  });
+
+  test('remove needs the version, keeps the expense, and a second remove is 404', () => {
+    const m = mock();
+    const row = fresh(m);
+    const withPhoto = expenseDtoSchema.parse(attach(m, row.id, row.version)?.body);
+    const path = `/v1/expenses/${row.id}/receipt`;
+    expect(m.handle('DELETE', path, withVersion(1), undefined, manager)?.status).toBe(409);
+    const gone = m.handle('DELETE', path, withVersion(withPhoto.version), undefined, manager);
+    expect(gone?.status).toBe(200);
+    expect(expenseDtoSchema.parse(gone?.body)).toMatchObject({
+      hasReceipt: false,
+      version: withPhoto.version + 1,
+    });
+    expect(call(m, 'GET', path, undefined, manager)?.status).toBe(404);
+    expect(
+      m.handle('DELETE', path, withVersion(withPhoto.version + 1), undefined, manager)?.status,
+    ).toBe(404);
+  });
+
+  test('a voided expense keeps its photo for viewing but refuses changes', () => {
+    const m = mock();
+    const row = fresh(m);
+    const withPhoto = expenseDtoSchema.parse(attach(m, row.id, row.version)?.body);
+    const voided = expenseDtoSchema.parse(
+      call(m, 'POST', `/v1/expenses/${row.id}/void`, {
+        expectedVersion: withPhoto.version,
+        reason: 'ผิด',
+      })?.body,
+    );
+    expect(call(m, 'GET', `/v1/expenses/${row.id}/receipt`, undefined, manager)?.status).toBe(200);
+    expect(
+      attach(m, row.id, voided.version, OTHER, '0192f3a0-0000-7000-8000-00000000f003'),
+    ).toMatchObject({ status: 409, body: { code: 'EXPENSE_VOIDED' } });
+  });
+
+  test('with photo storage off every receipt call is 503 and the rest of the expense works', () => {
+    const m = mock();
+    const row = fresh(m);
+    m.setReceiptStorage(false);
+    const path = `/v1/expenses/${row.id}/receipt`;
+    for (const answer of [
+      attach(m, row.id, row.version),
+      call(m, 'GET', path, undefined, manager),
+      m.handle('DELETE', path, withVersion(row.version), undefined, manager),
+    ]) {
+      expect(answer).toMatchObject({ status: 503, body: { code: 'RECEIPT_STORAGE_UNAVAILABLE' } });
+    }
+    expect(
+      call(m, 'PATCH', `/v1/expenses/${row.id}`, {
+        expectedVersion: row.version,
+        amountSatang: 9000,
+      })?.status,
+    ).toBe(200);
+    m.setReceiptStorage(true);
+    expect(attach(m, row.id, row.version + 1)?.status).toBe(201);
+  });
+
+  test('cashiers are refused', () => {
+    const m = mock();
+    const row = fresh(m);
+    expect(attach(m, row.id, row.version, PNG, KEY, cashier)?.status).toBe(403);
+    expect(call(m, 'GET', `/v1/expenses/${row.id}/receipt`, undefined, cashier)?.status).toBe(403);
   });
 });
 

@@ -25,6 +25,7 @@ describe('loadConfig', () => {
       },
       privacy: { controller: 'omeie', contactEmail: 'omeza25482548@gmail.com' },
       slipDir: '/data/slips',
+      r2: null,
       slipOcr: null,
       slipQr: true,
       slipVerifier: null,
@@ -91,6 +92,35 @@ describe('loadConfig', () => {
       expect.unreachable();
     } catch (error) {
       expect(String(error)).not.toContain('SECRET-KEY-VALUE');
+    }
+  });
+
+  test('R2 storage is off by default, all four variables or none (D-36)', () => {
+    const r2 = {
+      R2_ACCOUNT_ID: 'a'.repeat(32),
+      R2_ACCESS_KEY_ID: 'id-not-real',
+      R2_SECRET_ACCESS_KEY: 'SECRET-VALUE-NOT-REAL',
+      R2_BUCKET: 'sds-files',
+    };
+    expect(loadConfig(base).r2).toBeNull();
+    expect(loadConfig({ ...base, ...r2 }).r2).toEqual({
+      accountId: 'a'.repeat(32),
+      accessKeyId: 'id-not-real',
+      secretAccessKey: 'SECRET-VALUE-NOT-REAL',
+      bucket: 'sds-files',
+    });
+    expect(loadConfig({ ...base, R2_ACCOUNT_ID: '', R2_BUCKET: '' }).r2).toBeNull();
+    expect(() => loadConfig({ ...base, ...r2, R2_BUCKET: '' })).toThrow(/go together/);
+    expect(() => loadConfig({ ...base, R2_BUCKET: 'sds-files' })).toThrow(/go together/);
+    // The account id becomes part of a host name: only 32 hex characters.
+    expect(() => loadConfig({ ...base, ...r2, R2_ACCOUNT_ID: 'evil.example/x' })).toThrow(
+      ConfigError,
+    );
+    try {
+      loadConfig({ ...base, ...r2, R2_BUCKET: 'Bad Bucket' });
+      expect.unreachable();
+    } catch (error) {
+      expect(String(error)).not.toContain('SECRET-VALUE-NOT-REAL');
     }
   });
 

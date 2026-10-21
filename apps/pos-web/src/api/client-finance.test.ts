@@ -134,6 +134,99 @@ describe('expenses', () => {
   });
 });
 
+describe('expense receipt photos', () => {
+  const ID = ROW?.id ?? '';
+  const KEY = '0192f3a0-0000-7000-8000-00000000beef';
+  const photo = new Blob([new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3])], {
+    type: 'image/jpeg',
+  });
+
+  test('attaching sends the bytes as they are, the version in the query and one Idempotency-Key', async () => {
+    const { api, calls } = clientWith(() => ({ status: 201, json: { ...ROW, hasReceipt: true } }));
+    const done = await api.expenses.receipt.attach(ID, photo, {
+      expectedVersion: 3,
+      requestId: KEY,
+    });
+    expect(done.row.hasReceipt).toBe(true);
+    expect(done.replay).toBe(false);
+    expect(calls[0]).toMatchObject({
+      method: 'POST',
+      url: `${BASE}/v1/expenses/${ID}/receipt?expectedVersion=3`,
+    });
+    expect(calls[0]?.headers['idempotency-key']).toBe(KEY);
+    expect(calls[0]?.headers['content-type']).toBe('image/jpeg');
+    expect(Array.from(calls[0]?.bytes ?? [])).toEqual([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]);
+    expect(calls[0]?.headers.authorization).toBe(`Bearer ${FAKE_SESSION_TOKEN}`);
+  });
+
+  test('a 200 answer is a replay, and a call with no id makes one', async () => {
+    const { api, calls } = clientWith(() => ({ status: 200, json: { ...ROW, hasReceipt: true } }));
+    const done = await api.expenses.receipt.attach(ID, photo, { expectedVersion: 1 });
+    expect(done.replay).toBe(true);
+    expect(done.requestId).toMatch(/^[0-9a-f-]{36}$/);
+    expect(calls[0]?.headers['idempotency-key']).toBe(done.requestId);
+  });
+
+  test('a bad id, version or empty file never reaches the network', async () => {
+    const { api, calls } = clientWith(() => ({ status: 201, json: ROW }));
+    await expect(
+      api.expenses.receipt.attach('not-an-id', photo, { expectedVersion: 1 }),
+    ).rejects.toMatchObject({ code: 'REQUEST_INVALID' });
+    await expect(
+      api.expenses.receipt.attach(ID, photo, { expectedVersion: 0 }),
+    ).rejects.toMatchObject({ code: 'REQUEST_INVALID' });
+    await expect(
+      api.expenses.receipt.attach(ID, new Blob([], { type: 'image/png' }), { expectedVersion: 1 }),
+    ).rejects.toMatchObject({ code: 'REQUEST_INVALID' });
+    expect(calls).toEqual([]);
+  });
+
+  test('reading is a GET with the session header and hands back the picture as a Blob', async () => {
+    const net = mockFetch(() => ({ status: 200, text: 'PNGBYTES' }));
+    const api = createApiClient({
+      baseUrl: BASE,
+      fetch: net.fetch,
+      getSessionToken: () => FAKE_SESSION_TOKEN,
+      getDeviceToken: () => FAKE_DEVICE_TOKEN,
+    });
+    const blob = await api.expenses.receipt.read(ID);
+    expect(await blob.text()).toBe('PNGBYTES');
+    expect(net.calls[0]).toMatchObject({ method: 'GET', url: `${BASE}/v1/expenses/${ID}/receipt` });
+    expect(net.calls[0]?.headers.authorization).toBe(`Bearer ${FAKE_SESSION_TOKEN}`);
+  });
+
+  test('a refused read carries its code and no body text', async () => {
+    const { api } = clientWith(() => apiError(503, 'RECEIPT_STORAGE_UNAVAILABLE'));
+    await expect(api.expenses.receipt.read(ID)).rejects.toMatchObject({
+      code: 'RECEIPT_STORAGE_UNAVAILABLE',
+      status: 503,
+    });
+  });
+
+  test('removing is a DELETE with the version and answers with the expense', async () => {
+    const { api, calls } = clientWith(() => ({ status: 200, json: ROW }));
+    const row = await api.expenses.receipt.remove(ID, 4);
+    expect(row.id).toBe(ID);
+    expect(calls[0]).toMatchObject({
+      method: 'DELETE',
+      url: `${BASE}/v1/expenses/${ID}/receipt?expectedVersion=4`,
+    });
+  });
+
+  test('refusals carry their code', async () => {
+    for (const [status, code] of [
+      [415, 'RECEIPT_TYPE_UNSUPPORTED'],
+      [409, 'EXPENSE_VOIDED'],
+      [503, 'RECEIPT_STORAGE_UNAVAILABLE'],
+    ] as const) {
+      const { api } = clientWith(() => apiError(status, code));
+      await expect(
+        api.expenses.receipt.attach(ID, photo, { expectedVersion: 1 }),
+      ).rejects.toMatchObject({ code });
+    }
+  });
+});
+
 describe('profit and loss and tax reads', () => {
   test('pnl is a GET with the range and parses with the shared schema', async () => {
     const { api, calls } = clientWith(() => ({ status: 200, json: SAMPLE_PNL }));

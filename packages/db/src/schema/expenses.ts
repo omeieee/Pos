@@ -28,6 +28,12 @@ export const expenses = pgTable(
     vendor: text('vendor'),
     note: text('note'),
     receiptImageKey: text('receipt_image_key'),
+    /**
+     * Idempotency of the receipt upload (migration 0039): the Idempotency-Key and the SHA-256 of the
+     * picture received with it. A repeat with both equal changes nothing. Both null without a receipt.
+     */
+    receiptRequestId: uuid('receipt_request_id'),
+    receiptRequestHash: text('receipt_request_hash'),
     createdByStaffId: uuid('created_by_staff_id').references(() => staff.id),
     /**
      * Idempotency of the create route (migration 0037): a client request id and the fingerprint of

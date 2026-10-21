@@ -5,7 +5,8 @@
  * "lunch boxes" or "payment-verification fees" without a release. A key can be switched off but
  * never removed, so an old expense always has a category to point at.
  *
- * Pure: no I/O. `receiptImageKey` stays null until the owner decides where photos are stored.
+ * Pure: no I/O. The receipt photo (D-36) is never named in the DTO: `hasReceipt` says there is one, and
+ * the picture comes from `GET /v1/expenses/:id/receipt`.
  */
 import { z } from 'zod';
 import { EXPENSE_CATEGORIES } from './enums.ts';
@@ -124,7 +125,7 @@ export const expenseDtoSchema = z.object({
   amountSatang: nonNegativeSatangSchema,
   vendor: z.string().nullable(),
   note: z.string().nullable(),
-  receiptImageKey: z.string().nullable(),
+  hasReceipt: z.boolean(),
   createdByStaffId: z.uuid().nullable(),
   voided: z.boolean(),
   voidedAt: z.iso.datetime().nullable(),

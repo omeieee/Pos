@@ -243,6 +243,17 @@ export function createFakeApi(
     void: vi.fn<ApiClient['expenses']['void']>(
       overrides.expenses?.void ?? unexpected('expenses.void'),
     ),
+    receipt: {
+      attach: vi.fn<ApiClient['expenses']['receipt']['attach']>(
+        overrides.expenses?.receipt?.attach ?? unexpected('expenses.receipt.attach'),
+      ),
+      read: vi.fn<ApiClient['expenses']['receipt']['read']>(
+        overrides.expenses?.receipt?.read ?? unexpected('expenses.receipt.read'),
+      ),
+      remove: vi.fn<ApiClient['expenses']['receipt']['remove']>(
+        overrides.expenses?.receipt?.remove ?? unexpected('expenses.receipt.remove'),
+      ),
+    },
     categories: {
       read: vi.fn<ApiClient['expenses']['categories']['read']>(
         overrides.expenses?.categories?.read ?? unexpected('expenses.categories.read'),

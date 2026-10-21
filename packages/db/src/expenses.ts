@@ -27,6 +27,9 @@ export type ExpensePatch = Partial<
     | 'voidedAt'
     | 'voidedByStaffId'
     | 'voidReason'
+    | 'receiptImageKey'
+    | 'receiptRequestId'
+    | 'receiptRequestHash'
   >
 >;
 
@@ -60,6 +63,11 @@ export async function insertExpense(db: Db, input: NewExpense): Promise<ExpenseR
     .onConflictDoNothing({ target: expenses.clientRequestId })
     .returning();
   if (!row) throw new DuplicateExpenseRequest();
+  return row;
+}
+
+export async function findExpenseById(db: Db, id: string): Promise<ExpenseRow | undefined> {
+  const [row] = await db.select().from(expenses).where(eq(expenses.id, id)).limit(1);
   return row;
 }
 

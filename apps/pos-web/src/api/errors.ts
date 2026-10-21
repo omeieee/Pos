@@ -80,6 +80,13 @@ export const API_ERROR_KEYS = {
   UNKNOWN_EXPENSE_CATEGORY: 'error.unknownExpenseCategory',
   TAX_RULES_NOT_AVAILABLE: 'error.taxRulesNotAvailable',
   CASH_OPENING_TOO_OLD: 'error.cashOpeningTooOld',
+  EXPENSE_VOIDED: 'error.expenseVoided',
+  // Expense receipt photos (D-36)
+  RECEIPT_TYPE_UNSUPPORTED: 'error.expenseReceiptType',
+  RECEIPT_TOO_LARGE: 'error.expenseReceiptTooLarge',
+  RECEIPT_UNREADABLE: 'error.expenseReceiptUnreadable',
+  RECEIPT_NOT_FOUND: 'error.expenseReceiptNone',
+  RECEIPT_STORAGE_UNAVAILABLE: 'error.expenseReceiptStorage',
   // Menu photos. The two FST_ codes are Fastify's own answers (body over the cap, other type).
   PHOTO_EMPTY: 'error.photoEmpty',
   PHOTO_TOO_LARGE: 'error.photoTooLarge',

@@ -31,6 +31,7 @@ import { anonymizeCustomer } from './customers.ts';
 import { lockOrders, refreshClaimWithoutSlip } from './payments.ts';
 import {
   customers,
+  expenses,
   lineButtonReplies,
   lineEvents,
   orders,
@@ -367,14 +368,21 @@ export async function findDueSlips(
   return rows.flatMap((r) => (r.key === null ? [] : [{ id: r.id, key: r.key }]));
 }
 
-/** Which of these slip keys some payment still points to (the orphan sweep deletes the others). */
+/**
+ * Which of these keys something still points to: a payment's slip or an expense's receipt photo
+ * (the orphan sweep deletes the others). A receipt is never swept, even if a store were shared.
+ */
 export async function findReferencedSlipKeys(db: Db, keys: string[]): Promise<Set<string>> {
   if (keys.length === 0) return new Set();
-  const rows = await db
+  const slips = await db
     .select({ key: payments.slipImageKey })
     .from(payments)
     .where(inArray(payments.slipImageKey, keys));
-  return new Set(rows.flatMap((r) => (r.key === null ? [] : [r.key])));
+  const receipts = await db
+    .select({ key: expenses.receiptImageKey })
+    .from(expenses)
+    .where(inArray(expenses.receiptImageKey, keys));
+  return new Set([...slips, ...receipts].flatMap((r) => (r.key === null ? [] : [r.key])));
 }
 
 /**
