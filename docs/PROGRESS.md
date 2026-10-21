@@ -18,6 +18,15 @@
 > - **Maintenance:** the architecture refactor (code moved, behaviour unchanged) is deployed; see the entry "2026-10-16 · Maintenance · Architecture refactor". Not yet checked on a real iPad/iPhone. The as-built code index `ARCHITECTURE.md` (verified at `7ff9951`) is committed (`070e0b4`) and pushed with the owner's OK; see the newest entry.
 > - **Workflow (owner rule 2026-10-16):** after each completed part, ask the owner "save checkpoint or next step?" and wait for the answer (`CLAUDE.md` workflow, `3d8481c`).
 
+## 2026-10-21 · P7 · R2 live: bucket, receipts tested, slips copied
+- **Summary:** R2 enabled (free plan, card 7787 on file, $0 due), bucket `sds-files` (Standard, private, Asia Pacific), bucket-scoped Object Read & Write token created by the owner, four `R2_*` values in `/opt/sds/.env`. First receipt upload failed with 503 because the container (started 14:58) predated the `.env` edit (15:13); `./dc up -d --no-deps api` fixed it. Receipt upload then worked (POST 201, GET 200, `receipts/` folder in the bucket). Existing slips copied: 31 found, 31 copied, 0 mismatched, 0 failed; a second run shows 31 already there. Cloudflare budget alert lowered from $10 to $0.01 (email to the owner).
+- **Changed:** Cloudflare account (R2, bucket, token, budget alert); VM `.env` and API container; no repo code. D-36 Accepted.
+- **Verification:** log lines for the two requests; dashboard shows `receipts/`; copy script reports above (dry run, `--apply`, dry run again). Not checked: viewing an old slip in the app, slips uploaded after the switch, the lifecycle rule, view/replace/remove of a receipt on a device.
+- **Decisions:** D-36 Accepted.
+- **Open issues:** the old slip files stay on the VM disk until the owner removes them (they outlive 90 days); no R2 lifecycle rule yet; 5-year receipt deletion not built; Cloudflare's own Class A/B counts only in the dashboard; token Secret was typed by the owner, never read by Claude.
+- **Next:** owner checks an old slip and a new slip in the app; decide when to delete the disk copies; Slip2Go package.
+- **Commit:** docs uncommitted.
+
 ## 2026-10-21 · P7 · R2 storage for slips and receipt photos, receipt screen
 - **Summary:** D-36 (Proposed): slips and expense receipt photos can live on Cloudflare R2 (free quota only). Backend by backend-engineer, screen by pos-frontend-engineer. Owner choices: receipts kept 5 years, JPEG about 1280px, existing slips move to R2, staff see slips only. Without R2, receipt routes answer 503 `RECEIPT_STORAGE_UNAVAILABLE` (owner decision 2), slips stay on the VM disk, nothing else changes. Pushed so the owner can test on the live server.
 - **Changed:** `apps/api` (`slips/r2-store.ts`, `sigv4.ts`, `copy-to-r2.ts`, `expenses/receipt*.ts`, `jobs/storage-usage.ts`, `cli/slips-to-r2.ts`, config, redact, server); migration 0039 (expand only); `apps/pos-web` receipt UI and mock; i18n; compose `R2_*` pass-through; `ARCHITECTURE.md`.

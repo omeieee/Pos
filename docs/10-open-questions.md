@@ -269,7 +269,8 @@ Written while the owner slept. Per the standing rule, no P7 code is written unti
 4. **The 0.5% threshold.** Resolved as far as the RD pages allow (see D-34): it cannot change your tax while sales are 1,000,000 baht or less. Nothing to answer unless the accountant says otherwise.
 
 ## Answers 2026-10-21 · owner
-- **Slip and receipt photo storage:** Cloudflare R2 free tier. Not built yet; creating the bucket and keys needs the owner's OK before any Cloudflare change.
+- **Slip and receipt photo storage:** Cloudflare R2 free tier. Built and live 2026-10-21.
 - **Slip2Go after the trial (ended 2026-10-19):** the owner will buy a package and keeps `SLIP_AUTOCONFIRM` on. Package name and price still to be told in chat (money decision, owner only).
 - **Cloudflare card and zero-fee rule (owner, 2026-10-21):** a card is now on the Cloudflare account. Standing rule: no service fees, stay inside the free quota, ask before any Cloudflare change. R2 has no hard cap, so the safeguard is design (Standard class only, resized images, lifecycle delete, usage check) plus a Cloudflare billing notification set by the owner. Scope: slips and expense receipt photos both on R2; proposed as D-36, superseding D-24.
 - **R2 build answers (owner, 2026-10-21):** receipt photos kept 5 years (slips stay 90 days); images resized to JPEG, longest side about 1280px, about 200 KB, EXIF stripped; existing slips on the VM disk move to R2; owner and manager view slips and receipts, staff view slips only. The owner also gave blanket permission to proceed while away. Still needs the owner: Cloudflare R2 bucket and API token (no tool access to Cloudflare from here), and a billing notification.
+- **R2 live (2026-10-21):** bucket `sds-files` created, token and `.env` set by the owner, receipts and slip copy verified (see PROGRESS). Budget alert is $0.01.

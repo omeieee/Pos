@@ -43,7 +43,7 @@ This is the **single source of truth for technology and design choices**. Other 
 | D-33 | P7 profit and loss: one revenue base, `complete` flag, larger of cost of goods vs `ingredients` and of commission vs `platform_fees`, owner-only `finance.pnl` | **Accepted** with the larger-of amendments (owner 2026-10-21) | 2026-10-21 |
 | D-34 | P7 income tax estimate: how the P&L maps to taxable income, rules as yearly data, the 0.5% threshold, half-year allowances, owner-only `finance.pnl` | **Accepted** with the larger-of amendments (owner 2026-10-21) | 2026-10-21 |
 | D-35 | P7 receipts and payments report (รายงานรับ-จ่าย): columns after the Revenue Department form, receipts = all methods tied to revenue, buying goods by a per-category flag, a running net from an owner-set start amount (no cash drawer), owner-only | **Accepted** (proposed by Claude 2026-10-21; accepted with the owner's amendments the same day) | 2026-10-21 |
-| D-36 | Slip images and expense receipt photos move to Cloudflare R2 (Standard class, free quota only), superseding D-24 for storage; zero-fee rule for Cloudflare | **Proposed** (owner chose R2 2026-10-21; details open) | 2026-10-21 |
+| D-36 | Slip images and expense receipt photos move to Cloudflare R2 (Standard class, free quota only), superseding D-24 for storage; zero-fee rule for Cloudflare | **Accepted** (owner chose R2; live and tested 2026-10-21) | 2026-10-21 |
 
 ---
 
