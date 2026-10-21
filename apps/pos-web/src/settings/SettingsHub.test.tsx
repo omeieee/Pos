@@ -44,6 +44,8 @@ describe('the hub', () => {
       '#/pnl',
       '#/cash',
       '#/tax',
+      // Phone alerts (P8): a page for every role, with the notification rows.
+      '#/alerts',
       '#/settings/devices',
       '#/settings/staff',
     ]);
@@ -66,6 +68,7 @@ describe('the hub', () => {
       '#/settings/receipt',
       '#/settings/gov-copay',
       '#/expenses',
+      '#/alerts',
     ]);
     const card = screen.getByText(th['settings.promptpay.title']).closest('a') as HTMLElement;
     expect(within(card).getByText(th['settings.hub.readOnly'])).toBeTruthy();

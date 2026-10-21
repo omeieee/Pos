@@ -10,8 +10,6 @@ export const thSettings = {
   'settings.group.notify': 'การแจ้งเตือน',
   'settings.group.people': 'อุปกรณ์และพนักงาน',
   'settings.notify.sound': 'เสียงออเดอร์ใหม่',
-  'settings.notify.mobile': 'แจ้งเตือนบนมือถือ',
-  'settings.notify.mobileDesc': 'ส่งถึงเจ้าของร้านเมื่อมีออเดอร์ค้างนาน',
   'settings.hub.readOnly': 'ดูได้อย่างเดียว',
   'settings.hub.needsConfirm': 'ต้องยืนยันตัวตนก่อนเปิด',
   'settings.back': 'กลับไปหน้าตั้งค่า',

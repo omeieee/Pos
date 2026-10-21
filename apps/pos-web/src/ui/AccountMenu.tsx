@@ -1,4 +1,5 @@
 import { type ReactNode, useEffect, useId, useRef, useState } from 'react';
+import { ALERTS_PATH } from '../app/routes.ts';
 import { Gi } from '../design/icons.tsx';
 import { s } from '../design/style.ts';
 import { SignOutGuard } from '../pos/outbox/SignOutGuard.tsx';
@@ -101,6 +102,10 @@ export function AccountMenu({
             <div className="g-t-c">{tr('shell.device', { name: state.device.name })}</div>
           ) : null}
           <hr className="g-hair" />
+          <a className="g-btn g-btn-block" href={`#${ALERTS_PATH}`} onClick={() => setOpen(false)}>
+            <Gi n="bell" size="sm" />
+            {tr('push.title')}
+          </a>
           <button
             type="button"
             className="g-btn g-btn-block"

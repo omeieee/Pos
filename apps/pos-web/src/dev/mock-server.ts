@@ -29,6 +29,7 @@ import {
 import { createMockAdmin, type MockDevice, type MockPerson } from './mock-admin.ts';
 import { isMockBinary } from './mock-finance.ts';
 import type { RawBody } from './mock-menu-admin.ts';
+import { createMockPush } from './mock-push.ts';
 import { createMockShop } from './mock-shop.ts';
 
 type Role = 'owner' | 'manager' | 'cashier' | 'kitchen';
@@ -90,6 +91,8 @@ export interface MockServerOptions {
   delayMs?: number;
   /** Start with one open invite, `/invite#mock-invite-demo` (dev server only). */
   demoInvite?: boolean;
+  /** The phone-alert keys are set up on the server (default true). */
+  pushConfigured?: boolean;
   /** Answer before the routes do; return a Response to inject a fault. */
   intercept?: (call: { method: string; path: string; body: unknown }) => Response | undefined;
 }
@@ -182,6 +185,10 @@ export function createMockServer(options: MockServerOptions = {}) {
       });
     }
   }
+  // Phone alerts: the server's key and each device's subscription (see mock-push.ts).
+  const push = createMockPush(
+    options.pushConfigured === undefined ? {} : { configured: options.pushConfigured },
+  );
   // The menu, orders, sync and the socket: see mock-shop.ts.
   const shop = createMockShop({ now });
 
@@ -392,6 +399,9 @@ export function createMockServer(options: MockServerOptions = {}) {
     }
 
     noteDevice(deviceHeader);
+    const alerted = push.handle(method, path, body, deviceOf(deviceHeader)?.id ?? null);
+    if (alerted) return reply(alerted.status, alerted.body);
+
     const managed = admin.handle(method, path, body, {
       role: session.staff.role,
       stepUpFresh: (stepUps.get(session.token) ?? 0) > now(),
@@ -475,6 +485,10 @@ export function createMockServer(options: MockServerOptions = {}) {
     setOffline: shop.setOffline,
     /** Dev and tests: receipt photo storage is not set up (receipt calls answer 503) or is back. */
     setReceiptStorage: shop.setReceiptStorage,
+    /** Dev and tests: the server has (or has not) got its phone-alert keys (alert calls answer 503 until it has). */
+    setPushConfigured: push.setConfigured,
+    /** Dev and tests: does the server hold a phone-alert subscription for this device id? */
+    pushSubscribed: push.isSubscribed,
     /** Dev: change prices or sell a dish out on the server only, as if done while a counter was offline. */
     bumpPrices: shop.bumpPrices,
     soldOut: shop.soldOut,

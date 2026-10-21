@@ -9,6 +9,7 @@ import { enOrders } from './en/orders.ts';
 import { enPayment } from './en/payment.ts';
 import { enPos } from './en/pos.ts';
 import { enPrint } from './en/print.ts';
+import { enPush } from './en/push.ts';
 import { enReports } from './en/reports.ts';
 import { enSettings } from './en/settings.ts';
 import { enSettingsAccess } from './en/settings-access.ts';
@@ -34,4 +35,5 @@ export const en = {
   ...enReports,
   ...enFinance,
   ...enPrint,
+  ...enPush,
 } as const satisfies Record<MessageKey, string>;

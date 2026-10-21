@@ -11,3 +11,6 @@
 # The service worker file must always be revalidated, or a new version is found late.
 /sw.js
   Cache-Control: no-cache
+# The alert handlers the worker imports: revalidated too, or a fix reaches phones late.
+/push-sw.js
+  Cache-Control: no-cache

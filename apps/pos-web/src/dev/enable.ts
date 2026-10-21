@@ -1,5 +1,18 @@
 import { findMetadata } from '../menu-editor/photo-plan.ts';
+import type { PushPlatform } from '../platform/push.ts';
 import type { SocketFactory } from '../platform/socket.ts';
+import type { FakePushOptions } from './fake-push.ts';
+
+const PUSH_KEY = 'sds-mock-push';
+
+/** What a test or the dev console set up before the page loaded (kept for the tab, dev only). */
+const readPush = (): FakePushOptions & { configured?: boolean } => {
+  try {
+    return JSON.parse(sessionStorage.getItem(PUSH_KEY) ?? '{}');
+  } catch {
+    return {};
+  }
+};
 
 const OFFLINE_KEY = 'sds-mock-offline';
 
@@ -37,11 +50,20 @@ const writeOffline = (on: boolean): void => {
  * PIN session is accepted again after the reload.
  */
 export async function devBackend(): Promise<
-  { fetch: typeof fetch; createSocket: SocketFactory } | undefined
+  { fetch: typeof fetch; createSocket: SocketFactory; push: PushPlatform } | undefined
 > {
   if (import.meta.env.DEV && import.meta.env.VITE_MOCK_API === '1') {
     const { createMockServer } = await import('./mock-server.ts');
-    const server = createMockServer({ delayMs: 150, demoInvite: true });
+    const pushSetup = readPush();
+    const server = createMockServer({
+      delayMs: 150,
+      demoInvite: true,
+      ...(pushSetup.configured === undefined ? {} : { pushConfigured: pushSetup.configured }),
+    });
+    // A fake browser push: nothing is ever delivered. Set it up for the next load with
+    // sessionStorage['sds-mock-push'] = '{"availability":"needs-install","permission":"denied","configured":false}'.
+    const { createFakePush } = await import('./fake-push.ts');
+    const fakePush = createFakePush(pushSetup);
     const setOffline = (on: boolean) => {
       server.setOffline(on);
       writeOffline(on);
@@ -63,6 +85,13 @@ export async function devBackend(): Promise<
         // Expense receipt photos: __sdsMock.setReceiptStorage(false) makes every photo call answer 503,
         // as the live server does until the owner sets up the photo store.
         setReceiptStorage: server.setReceiptStorage,
+        // Phone alerts: the server has (not) got its keys, and what this fake browser is like.
+        setPushConfigured: server.setPushConfigured,
+        push: {
+          set: fakePush.set,
+          calls: () => [...fakePush.calls],
+          held: () => fakePush.held(),
+        },
         bumpPrices: server.bumpPrices,
         soldOut: server.soldOut,
         // The owner changes the PromptPay ID on the server: __sdsMock.setPromptpayId('0899990000').
@@ -88,7 +117,7 @@ export async function devBackend(): Promise<
     const startOffline = readOffline();
     addOfflineButton(setOffline, startOffline);
     if (startOffline) setOffline(true);
-    return { fetch: server.fetch, createSocket: server.createSocket };
+    return { fetch: server.fetch, createSocket: server.createSocket, push: fakePush.platform };
   }
   return undefined;
 }

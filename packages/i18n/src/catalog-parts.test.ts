@@ -10,6 +10,7 @@ import { enOrders } from './en/orders.ts';
 import { enPayment } from './en/payment.ts';
 import { enPos } from './en/pos.ts';
 import { enPrint } from './en/print.ts';
+import { enPush } from './en/push.ts';
 import { enReports } from './en/reports.ts';
 import { enSettings } from './en/settings.ts';
 import { enSettingsAccess } from './en/settings-access.ts';
@@ -27,6 +28,7 @@ import { thOrders } from './th/orders.ts';
 import { thPayment } from './th/payment.ts';
 import { thPos } from './th/pos.ts';
 import { thPrint } from './th/print.ts';
+import { thPush } from './th/push.ts';
 import { thReports } from './th/reports.ts';
 import { thSettings } from './th/settings.ts';
 import { thSettingsAccess } from './th/settings-access.ts';
@@ -52,6 +54,7 @@ const thParts: Record<string, Record<string, string>> = {
   payment: thPayment,
   pos: thPos,
   print: thPrint,
+  push: thPush,
   reports: thReports,
   settings: thSettings,
   'settings-access': thSettingsAccess,
@@ -70,6 +73,7 @@ const enParts: Record<string, Record<string, string>> = {
   payment: enPayment,
   pos: enPos,
   print: enPrint,
+  push: enPush,
   reports: enReports,
   settings: enSettings,
   'settings-access': enSettingsAccess,

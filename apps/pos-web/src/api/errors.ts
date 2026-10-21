@@ -54,6 +54,9 @@ export const API_ERROR_KEYS = {
   ORDER_HAS_PAYMENT: 'error.orderHasPayment',
   // Kitchen printing (P8)
   PRINTING_OFF: 'error.printingOff',
+  // Phone alerts (P8)
+  PUSH_NOT_CONFIGURED: 'error.pushNotConfigured',
+  DEVICE_REQUIRED: 'error.deviceRequired',
   // The owner's correction and void of a past order
   PAYMENT_ACTION_REQUIRED: 'error.paymentActionRequired',
   NOTHING_TO_CHANGE: 'error.nothingToChange',

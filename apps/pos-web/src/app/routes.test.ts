@@ -115,6 +115,15 @@ describe('resolving the address', () => {
     expect(resolveRoute('#/nope', kitchen)?.path).toBe('/kitchen');
   });
 
+  test('phone alerts is a page for every role, even the kitchen that has no Settings, and is no navigation entry', () => {
+    expect(ROUTES.some((r) => r.path === '/alerts')).toBe(false);
+    expect(resolveRoute('#/alerts', kitchen)).toMatchObject({ page: 'alerts', path: '/alerts' });
+    expect(resolveRoute('#/alerts', kitchen)?.route.id).toBe('orders');
+    expect(resolveRoute('#/alerts', cashier)).toMatchObject({ page: 'alerts', path: '/alerts' });
+    expect(resolveRoute('#/alerts', cashier)?.route.id).toBe('settings');
+    expect(resolveRoute('#/alerts', [])).toBeNull();
+  });
+
   test('nothing allowed means nothing to show', () => {
     expect(resolveRoute('#/orders', [])).toBeNull();
   });

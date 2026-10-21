@@ -53,7 +53,14 @@ export type RouteId =
   | 'cash';
 
 /** Everything the address bar can show; `order` is a page inside `orders`, `settingsSection` one inside `settings`. */
-export type PageId = RouteId | 'order' | 'settingsSection';
+export type PageId = RouteId | 'order' | 'settingsSection' | 'alerts';
+
+/**
+ * Phone alerts of this device (P8): a page for every signed-in role, not a navigation entry. The
+ * kitchen role has no Settings, so it cannot live under it; it is reached from the account menu and
+ * from the Settings hub.
+ */
+export const ALERTS_PATH = '/alerts';
 
 export interface RouteDef {
   id: RouteId;
@@ -190,6 +197,12 @@ export function resolveRoute(hash: string, allowed: readonly RouteDef[]): Resolv
   const path = pathFromHash(hash);
   const own = allowed.find((r) => r.path === path);
   if (own) return { page: own.id, route: own, params: {}, path: own.path };
+  if (path === ALERTS_PATH) {
+    // Highlights Settings for those who have it, otherwise the queue every role can open.
+    const parent =
+      allowed.find((r) => r.id === 'settings') ?? allowed.find((r) => r.id === 'orders');
+    if (parent) return { page: 'alerts', route: parent, params: {}, path };
+  }
   for (const candidate of PARAM_ROUTES) {
     const params = matchPath(candidate.pattern, path);
     const parent = allowed.find((r) => r.id === candidate.parent);

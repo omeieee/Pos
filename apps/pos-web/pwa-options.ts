@@ -26,6 +26,9 @@ export const pwaOptions: Partial<VitePWAOptions> = {
     clientsClaim: true,
     skipWaiting: false,
     runtimeCaching: [],
+    // Phone alerts: the push and notificationclick handlers (public/push-sw.js) run inside the
+    // generated worker. A same-origin file, so the CSP (`worker-src 'self'`) allows it.
+    importScripts: ['push-sw.js'],
   },
   devOptions: { enabled: false },
 };

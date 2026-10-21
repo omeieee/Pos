@@ -21,6 +21,7 @@ import { type FileOutput, webFileOutput } from './platform/fileOutput.ts';
 import { type Lifecycle, webLifecycle } from './platform/lifecycle.ts';
 import { type LocalStore, openLocalStore } from './platform/localStore.ts';
 import { createWebPhotoEngine } from './platform/photo.ts';
+import { createWebPush, type PushPlatform } from './platform/push.ts';
 import { webServiceWorker } from './platform/serviceWorker.ts';
 import { createWebSocket, type SocketFactory, socketUrl } from './platform/socket.ts';
 import { createSound, type SoundPlayer } from './platform/sound.ts';
@@ -41,6 +42,7 @@ import { bindRealtime } from './realtime/bind.ts';
 import { type Connection, createConnection } from './realtime/connection.ts';
 import { createEntityStore, type EntityStore } from './realtime/entity-store.ts';
 import { type AdminStore, createAdminStore } from './settings/admin-store.ts';
+import { createPushAlertsStore, type PushAlertsStore } from './settings/push-alerts-store.ts';
 import { createSettingsStore, type SettingsStore } from './settings/settings-store.ts';
 
 export interface Services {
@@ -86,6 +88,8 @@ export interface Services {
   orderMoves: OrderMovesStore;
   /** Reprint of an order and the recent print jobs (P8): online only, one reprint per order at a time. */
   print: PrintStore;
+  /** Phone alerts of this device (P8): the on/off switch against the server and the browser's push (a platform seam). */
+  pushAlerts: PushAlertsStore;
   /** The chime for a new order and its remembered on/off choice (a platform seam). */
   sound: SoundPlayer;
   /** Keeps the screen awake while a display needs it (a platform seam). */
@@ -125,6 +129,8 @@ export function createServices(
     /** Tests give the sound, the wake lock and the local store their own doubles. */
     sound?: SoundPlayer;
     wakeLock?: ScreenWakeLock;
+    /** Web Push of this browser; tests and the dev mock give a fake. */
+    push?: PushPlatform;
     clipboard?: TextClipboard;
     files?: FileOutput;
     localStore?: () => Promise<LocalStore>;
@@ -199,6 +205,7 @@ export function createServices(
   const payments = createPaymentStore({ api, entities, activity, auth });
   const orderMoves = createOrderMovesStore({ api, entities });
   const print = createPrintStore({ api, lifecycle });
+  const pushAlerts = createPushAlertsStore({ api, push: options.push ?? createWebPush() });
   const menuEditor = createMenuEditorStore({
     api,
     entities,
@@ -243,6 +250,7 @@ export function createServices(
     payments,
     orderMoves,
     print,
+    pushAlerts,
     menuEditor,
     settingsEditor,
     adminEditor,
@@ -265,6 +273,7 @@ export function createServices(
           payments.reset();
           orderMoves.reset();
           print.reset();
+          pushAlerts.reset();
           menuEditor.reset();
           settingsEditor.reset();
           adminEditor.reset();

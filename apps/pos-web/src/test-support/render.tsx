@@ -15,6 +15,8 @@ import { vi } from 'vitest';
 import type { ApiClient, createApiClient } from '../api/client.ts';
 import { ApiClientError } from '../api/errors.ts';
 import { type AuthStore, createAuthStore } from '../auth/auth-store.ts';
+import { createFakePush, type FakePushOptions } from '../dev/fake-push.ts';
+import { MOCK_VAPID_PUBLIC_KEY } from '../dev/mock-push.ts';
 import { createActivity } from '../lib/activity.ts';
 import { createStore } from '../lib/store.ts';
 import { createMenuEditorStore } from '../menu-editor/menu-editor-store.ts';
@@ -35,6 +37,7 @@ import type { ConnectionState } from '../realtime/connection.ts';
 import { createEntityStore } from '../realtime/entity-store.ts';
 import type { Services } from '../services.ts';
 import { createAdminStore } from '../settings/admin-store.ts';
+import { createPushAlertsStore } from '../settings/push-alerts-store.ts';
 import { createSettingsStore } from '../settings/settings-store.ts';
 import { AuthContext, LocaleContext, ServicesContext } from '../ui/hooks.ts';
 import { StepUpDialog } from '../ui/StepUpDialog.tsx';
@@ -49,6 +52,9 @@ import {
   createFakeSettingsApi,
   type SettingsOverrides,
 } from './settings-env.ts';
+
+/** The server's VAPID public key in tests: the right shape, not a real key. */
+export const FAKE_VAPID_KEY = MOCK_VAPID_PUBLIC_KEY;
 
 /** The PIN the fake step-up accepts. */
 export const STEP_UP_PIN = '4321';
@@ -118,6 +124,7 @@ export function createFakeApi(
     reports?: Partial<ApiClient['reports']>;
     expenses?: Partial<ApiClient['expenses']>;
     print?: Partial<ApiClient['print']>;
+    push?: Partial<ApiClient['push']>;
   } = {},
 ) {
   const orders = {
@@ -272,7 +279,22 @@ export function createFakeApi(
       overrides.print?.reprint ?? unexpected('print.reprint'),
     ),
   };
-  return { orders, payments, auth, recipients, settings, devices, reports, expenses, print };
+  // Phone alerts (P8): the server is set up and holds no subscription unless a test says otherwise.
+  const push = {
+    config: vi.fn<ApiClient['push']['config']>(
+      overrides.push?.config ?? (async () => ({ enabled: true, publicKey: FAKE_VAPID_KEY })),
+    ),
+    subscribed: vi.fn<ApiClient['push']['subscribed']>(
+      overrides.push?.subscribed ?? (async () => ({ subscribed: false })),
+    ),
+    subscribe: vi.fn<ApiClient['push']['subscribe']>(
+      overrides.push?.subscribe ?? (async () => ({ subscribed: true })),
+    ),
+    unsubscribe: vi.fn<ApiClient['push']['unsubscribe']>(
+      overrides.push?.unsubscribe ?? (async () => ({ subscribed: false })),
+    ),
+  };
+  return { orders, payments, auth, recipients, settings, devices, reports, expenses, print, push };
 }
 
 export function createTestServices(
@@ -311,6 +333,10 @@ export function createTestServices(
     expenses?: Partial<ApiClient['expenses']>;
     /** What the reprint and the recent print jobs answer (jobs: an empty list by default). */
     print?: Partial<ApiClient['print']>;
+    /** What the phone-alert calls answer (default: set up, nothing subscribed, saves and removals succeed). */
+    push?: Partial<ApiClient['push']>;
+    /** The browser's push as a fake (default: supported, permission not asked yet). */
+    pushBrowser?: FakePushOptions;
     /** What the tax profile read and save answer (every other call fails the test). */
     taxProfile?: Partial<ApiClient['settings']['taxProfile']>;
     /** What the cash screen's opening-cash read and save answer (every other call fails the test). */
@@ -341,6 +367,7 @@ export function createTestServices(
     ...(options.reports ? { reports: options.reports } : {}),
     ...(options.expenses ? { expenses: options.expenses } : {}),
     ...(options.print ? { print: options.print } : {}),
+    ...(options.push ? { push: options.push } : {}),
     ...(options.taxProfile || options.cashOpening
       ? {
           settings: {
@@ -422,6 +449,8 @@ export function createTestServices(
   });
   const orderMoves = createOrderMovesStore({ api, entities });
   const print = createPrintStore({ api, lifecycle: life.lifecycle });
+  const pushBrowser = createFakePush(options.pushBrowser);
+  const pushAlerts = createPushAlertsStore({ api, push: pushBrowser.platform });
   const menuApi = createFakeMenuApi(options.menuApi);
   const menuEditor = createMenuEditorStore({
     api: { menu: menuApi as unknown as ApiClient['menu'] },
@@ -477,6 +506,7 @@ export function createTestServices(
     payments,
     orderMoves,
     print,
+    pushAlerts,
     menuEditor,
     settingsEditor,
     adminEditor,
@@ -504,6 +534,8 @@ export function createTestServices(
     payments,
     orderMoves,
     print,
+    pushAlerts,
+    pushBrowser,
     menuEditor,
     menuApi,
     settingsEditor,

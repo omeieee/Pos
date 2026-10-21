@@ -34,6 +34,9 @@ const TaxScreen = lazy(async () => ({
   default: (await import('../pos/finance/TaxScreen.tsx')).TaxScreen,
 }));
 
+const PhoneAlertsScreen = lazy(async () => ({
+  default: (await import('../settings/PhoneAlertsScreen.tsx')).PhoneAlertsScreen,
+}));
 const SettingsHub = lazy(async () => ({
   default: (await import('../settings/SettingsHub.tsx')).SettingsHub,
 }));
@@ -460,6 +463,18 @@ function PageSwitch({
           }
         >
           <MenuEditorScreen />
+        </Suspense>
+      );
+    case 'alerts':
+      return (
+        <Suspense
+          fallback={
+            <p className="muted" role="status">
+              {tr('common.loading')}
+            </p>
+          }
+        >
+          <PhoneAlertsScreen />
         </Suspense>
       );
     case 'settings':

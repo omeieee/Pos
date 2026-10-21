@@ -10,6 +10,7 @@ import { createInviteStore } from './invite/invite-store.ts';
 import { isInvitePath, takeInviteToken } from './platform/appLocation.ts';
 import { webClipboard } from './platform/clipboard.ts';
 import { apiBaseUrl } from './platform/config.ts';
+import { listenForOpenRequests } from './platform/push.ts';
 import { supportsServiceWorker } from './platform/serviceWorker.ts';
 import { createServices } from './services.ts';
 import './styles.css';
@@ -56,7 +57,10 @@ if (onInvitePage) {
   const services = createServices(backend ?? {});
   services.bindRealtime();
   void services.auth.boot();
-  if (supportsServiceWorker()) services.updates.start();
+  if (supportsServiceWorker()) {
+    services.updates.start();
+    listenForOpenRequests();
+  }
 
   createRoot(root).render(
     <StrictMode>

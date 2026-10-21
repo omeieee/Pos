@@ -12,8 +12,6 @@ export const enSettings = {
   'settings.group.notify': 'Notifications',
   'settings.group.people': 'Devices and staff',
   'settings.notify.sound': 'New order sound',
-  'settings.notify.mobile': 'Mobile notifications',
-  'settings.notify.mobileDesc': 'Sent to the owner when an order waits too long',
   'settings.hub.readOnly': 'View only',
   'settings.hub.needsConfirm': 'Asks you to confirm first',
   'settings.back': 'Back to Settings',

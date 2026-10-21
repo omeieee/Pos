@@ -41,6 +41,15 @@ describe('service worker rules (app shell only)', () => {
     expect(headers).toContain("worker-src 'self'");
   });
 
+  test('phone alerts: the push handlers are imported into the generated worker, as a file that exists and is revalidated', () => {
+    expect(workbox.importScripts).toEqual(['push-sw.js']);
+    expect(readFileSync(new URL('../../public/push-sw.js', import.meta.url), 'utf8')).toContain(
+      "addEventListener('push'",
+    );
+    const headers = readFileSync(new URL('../../public/_headers', import.meta.url), 'utf8');
+    expect(headers).toMatch(/\/push-sw\.js\s+Cache-Control: no-cache/);
+  });
+
   test('the worker file is always revalidated, so a new version is found', () => {
     const headers = readFileSync(new URL('../../public/_headers', import.meta.url), 'utf8');
     expect(headers).toMatch(/\/sw\.js\s+Cache-Control: no-cache/);

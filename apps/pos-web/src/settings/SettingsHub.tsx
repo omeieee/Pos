@@ -78,14 +78,6 @@ const DESIGN_ONLY = [
     color: '#d63a2e',
     on: true,
   },
-  {
-    id: 'mobile',
-    titleKey: 'settings.notify.mobile',
-    descKey: 'settings.notify.mobileDesc',
-    icon: 'phone',
-    color: '#7a5af5',
-    on: false,
-  },
 ] as const satisfies readonly {
   id: string;
   titleKey: MessageKey;
@@ -148,11 +140,13 @@ export function SettingsHub() {
   const notify = DESIGN_ONLY.filter((row) =>
     matches(tr(row.titleKey), row.descKey ? tr(row.descKey) : null),
   );
+  // Phone alerts (P8) is a real page for every signed-in role, not a section: it sits with the sound row.
+  const alerts = matches(tr('push.title'), tr('push.hubDesc'));
   const blocks = [
     ...groups
       .filter((group) => group.id !== 'people' && group.rows.length > 0)
       .map((group) => ({ kind: 'sections' as const, ...group })),
-    ...(notify.length > 0
+    ...(notify.length > 0 || alerts
       ? [
           {
             kind: 'design' as const,
@@ -306,6 +300,20 @@ export function SettingsHub() {
                     />
                   </div>
                 ))}
+            {block.kind === 'design' && alerts ? (
+              <a className="g-row" href="#/alerts">
+                <div className="g-ico" style={s('background:#7a5af5')}>
+                  <Gi n="phone" size="sm" />
+                </div>
+                <div style={s('flex-grow:1;min-width:0')}>
+                  <div className="g-t-3" style={s('font-weight:500')}>
+                    {tr('push.title')}
+                  </div>
+                  <div className="g-t-c gset-oneline">{tr('push.hubDesc')}</div>
+                </div>
+                <Gi n="chevronRight" className="gset-chev" />
+              </a>
+            ) : null}
           </div>
         </div>
       ))}
