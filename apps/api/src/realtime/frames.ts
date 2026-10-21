@@ -155,6 +155,8 @@ export function frameFromEvent(event: AppEvent): FrameFromEvent {
     case 'session.ended':
     // No frame type or audience for the expense ledger yet; devices read it over REST.
     case 'expense.upserted':
+    // The kitchen print queue's trigger: ids only, no device ever sees it.
+    case 'order.sent_to_kitchen':
       return { kind: 'ignored' };
     default: {
       const unhandled: never = event;

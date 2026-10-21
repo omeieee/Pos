@@ -42,6 +42,7 @@ import {
   DEFAULT_LINE_ORDERING,
   DEFAULT_OPENING_HOURS,
   DEFAULT_PLATFORM_COMMISSION,
+  DEFAULT_PRINTING,
   DEFAULT_RECEIPT_SETTINGS,
   DEFAULT_SHOP_SETTINGS,
   type DeliverySettings,
@@ -70,6 +71,8 @@ import {
   paymentsSettingsSchema,
   platformCommissionPatchInputSchema,
   platformCommissionSettingsSchema,
+  printingPatchInputSchema,
+  printingSettingsSchema,
   promptpayPatchInputSchema,
   promptpaySettingsSchema,
   type ReceiptSettings,
@@ -166,6 +169,16 @@ export const RESOURCES: readonly Resource[] = [
     schema: businessDaySettingsSchema,
     defaults: businessDayDefaults,
     patch: numberingPatchInputSchema,
+    editPermission: 'settings.edit',
+  },
+  {
+    // Whether new orders are sent to the print host (owner, 2026-10-22). Not a money setting:
+    // settings.edit, no step-up, an audit row. Not on the realtime feed.
+    route: 'printing',
+    key: 'printing',
+    schema: printingSettingsSchema,
+    defaults: DEFAULT_PRINTING,
+    patch: printingPatchInputSchema,
     editPermission: 'settings.edit',
   },
   {
@@ -365,6 +378,12 @@ export async function lineOrderingNow(db: Db, instant: Date) {
   const row = await getSettingRow(db, 'line_ordering');
   const { mode } = row ? lineOrderingSchema.parse(row.value) : DEFAULT_LINE_ORDERING;
   return lineOrderingOpenAt(mode, await currentOpeningHours(db), instant);
+}
+
+/** Whether new orders create a kitchen print job: the saved switch, or off when never saved. */
+export async function currentPrintingEnabled(db: Db): Promise<boolean> {
+  const row = await getSettingRow(db, 'printing');
+  return (row ? printingSettingsSchema.parse(row.value) : DEFAULT_PRINTING).enabled;
 }
 
 /** The payment methods the shop takes now: the saved switches, or the defaults when never saved. */

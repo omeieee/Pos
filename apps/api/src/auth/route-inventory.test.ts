@@ -48,7 +48,11 @@ describe('the real /v1 routes', () => {
     // Fastify adds a HEAD route next to every GET; it counts as the GET.
     const key = (r: { method: string; url: string }) =>
       `${r.method === 'HEAD' ? 'GET' : r.method} ${r.url}`;
-    const open = [...new Set(v1.filter((r) => !r.guarded && !r.customerGuarded).map(key))];
+    const open = [
+      ...new Set(
+        v1.filter((r) => !r.guarded && !r.customerGuarded && !r.printAgentGuarded).map(key),
+      ),
+    ];
     expect(open.sort()).toEqual([...OPEN, ...SIGNED, ...WS, ...MEDIA, ...LINE_WEBHOOK].sort());
     // ...and the list itself is exactly the sign-in routes and the public menu, so it cannot grow unnoticed.
     expect(OPEN.sort()).toEqual([
@@ -145,6 +149,17 @@ describe('the real /v1 routes', () => {
     expect(h.routes.filter((r) => r.customerGuarded && r.guarded)).toEqual([]);
   });
 
+  test('the print program routes run the print-agent guard, which is neither the staff nor the customer guard', () => {
+    const key = (r: { method: string; url: string }) =>
+      `${r.method === 'HEAD' ? 'GET' : r.method} ${r.url}`;
+    const agent = [...new Set(h.routes.filter((r) => r.printAgentGuarded).map(key))].sort();
+    expect(agent).toEqual(['POST /v1/print/claim', 'POST /v1/print/jobs/:id/ack']);
+    // One credential kind per route.
+    expect(h.routes.filter((r) => r.printAgentGuarded && (r.guarded || r.customerGuarded))).toEqual(
+      [],
+    );
+  });
+
   test('the inventory includes the routes we know about', () => {
     const all = new Set(h.routes.map((r) => `${r.method} ${r.url}`));
     for (const route of [
@@ -181,6 +196,10 @@ describe('the real /v1 routes', () => {
       'PATCH /v1/orders/:id',
       'POST /v1/orders/:id/transition',
       'POST /v1/orders/:id/cancel',
+      'POST /v1/orders/:id/reprint',
+      'GET /v1/print/jobs',
+      'GET /v1/settings/printing',
+      'PATCH /v1/settings/printing',
       'POST /v1/orders/:id/payments',
       'GET /v1/orders/:id/payments',
       'POST /v1/payments/:id/claim',

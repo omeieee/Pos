@@ -11,6 +11,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { forbidden, stepUpRequired, unauthenticated } from '../errors.ts';
 import {
   type AuthContext,
+  authenticateDevice,
   authenticateSession,
   hasFreshStepUp,
   type Principal,
@@ -20,7 +21,15 @@ declare module 'fastify' {
   interface FastifyRequest {
     /** Set by the guard on every authenticated route. */
     auth: Principal | null;
+    /** Set by the print-agent guard on the print program's routes. */
+    printAgent: PrintAgent | null;
   }
+}
+
+/** The registered `print_agent` device behind a request to the print routes. */
+export interface PrintAgent {
+  deviceId: string;
+  name: string;
 }
 
 export type Guard = (request: FastifyRequest) => Promise<void>;
@@ -150,6 +159,29 @@ export function hasCustomerGuard(route: RouteHooks): boolean {
 }
 
 /**
+ * Marks the guard of the print program's routes (`/v1/print/...`). The program on the print host is
+ * not a person: it holds only a registered device's token (kind `print_agent`), no staff session
+ * and no permission. `guard()` (staff) never accepts it and this guard never accepts a staff
+ * session. It runs in `onRequest` like the others.
+ */
+const PRINT_AGENT_GUARDED = Symbol.for('sds.print-agent-guarded');
+
+export function markPrintAgentGuard(fn: Guard): Guard {
+  return Object.assign(fn, { [PRINT_AGENT_GUARDED]: true });
+}
+
+/** True when the route runs the print-agent guard in its own `onRequest` hooks. */
+export function hasPrintAgentGuard(route: RouteHooks): boolean {
+  return [route.onRequest]
+    .flat(2)
+    .some(
+      (hook) =>
+        typeof hook === 'function' &&
+        (hook as unknown as Record<symbol, unknown>)[PRINT_AGENT_GUARDED] === true,
+    );
+}
+
+/**
  * Marks the handler of a WebSocket route that authenticates its sockets itself: a browser
  * WebSocket cannot send an Authorization header, so the socket proves who it is with its first
  * message. The marked handler is what enforces that (`realtime/hub.ts`).
@@ -192,7 +224,7 @@ export function enforceGuardedRoutes(
 ): void {
   scope.addHook('onRoute', (route) => {
     if (!route.url.startsWith('/v1')) return;
-    if (isGuarded(route) || hasCustomerGuard(route)) return;
+    if (isGuarded(route) || hasCustomerGuard(route) || hasPrintAgentGuard(route)) return;
     for (const method of [route.method].flat()) {
       const key = `${method === 'HEAD' ? 'GET' : method} ${route.url}`;
       if (open.has(key)) continue;
@@ -254,6 +286,25 @@ export function createGuard(ctx: AuthContext): GuardFactory {
       }
     });
   };
+}
+
+/**
+ * The print program's guard: the `x-device-token` of a registered, not revoked device whose kind is
+ * `print_agent`. Any other kind of device is refused (403), so an iPad's token cannot claim jobs.
+ */
+export function createPrintAgentGuard(ctx: AuthContext): Guard {
+  return markPrintAgentGuard(async (request) => {
+    const header = request.headers['x-device-token'];
+    const device = await authenticateDevice(ctx, typeof header === 'string' ? header : undefined);
+    if (device.kind !== 'print_agent') throw forbidden();
+    request.printAgent = { deviceId: device.id, name: device.name };
+  });
+}
+
+/** The print agent the guard set. A route without the guard has none, which is a bug: fail closed. */
+export function printAgentOf(request: FastifyRequest): PrintAgent {
+  if (!request.printAgent) throw unauthenticated();
+  return request.printAgent;
 }
 
 /** The principal the guard set. A route without a guard has none, which is a bug: fail closed. */

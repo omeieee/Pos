@@ -29,6 +29,7 @@ export {
   staff,
   staffInvites,
 } from './schema/people.ts';
+export { printJobs } from './schema/printing.ts';
 export {
   auditLog,
   lineButtonReplies,

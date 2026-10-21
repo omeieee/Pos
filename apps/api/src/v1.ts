@@ -2,7 +2,12 @@ import type { Db } from '@sds/db';
 import type { FastifyInstance } from 'fastify';
 import { registerAdminRoutes } from './admin/routes.ts';
 import { deriveAuthKeys } from './auth/crypto.ts';
-import { createGuard, enforceGuardedRoutes, type GuardFactory } from './auth/guards.ts';
+import {
+  createGuard,
+  createPrintAgentGuard,
+  enforceGuardedRoutes,
+  type GuardFactory,
+} from './auth/guards.ts';
 import { type AuthPolicy, DEFAULT_AUTH_POLICY } from './auth/policy.ts';
 import { registerAuthRoutes } from './auth/routes.ts';
 import type { AuthContext } from './auth/service.ts';
@@ -19,6 +24,8 @@ import { registerMenuRoutes } from './menu/routes.ts';
 import { registerRecipientRoutes } from './orders/recipients.ts';
 import { registerOrderRoutes } from './orders/routes.ts';
 import { registerPaymentRoutes } from './payments/routes.ts';
+import { registerKitchenQueue } from './print/kitchen-queue.ts';
+import { registerPrintRoutes } from './print/routes.ts';
 import { type RealtimeOptions, registerRealtimeRoutes, setupRealtime } from './realtime/routes.ts';
 import { registerReportRoutes } from './reports/routes.ts';
 import { registerSettingsRoutes } from './settings/routes.ts';
@@ -96,8 +103,14 @@ export interface ModuleContext {
   guard: GuardFactory;
 }
 
+/** What `registerV1` hands back: a way to wait for the background work an event started. */
+export interface V1Handle {
+  /** Resolves when the kitchen print queue has finished every enqueue it started (tests). */
+  idle(): Promise<void>;
+}
+
 /** Mounts the REST API under /v1. Call it once, after `buildApp`. */
-export async function registerV1(app: FastifyInstance, deps: V1Deps): Promise<void> {
+export async function registerV1(app: FastifyInstance, deps: V1Deps): Promise<V1Handle> {
   const auth: AuthContext = {
     db: deps.db,
     keys: deriveAuthKeys(deps.authSecretKey),
@@ -112,6 +125,8 @@ export async function registerV1(app: FastifyInstance, deps: V1Deps): Promise<vo
   const receipts = deps.receipts ?? null;
   // One push per LINE order when staff complete it, through the quota-aware sender.
   registerCompletionPush({ db: deps.db, runtime: lineRuntime, events: deps.events, now: auth.now });
+  // One kitchen print job per order that reaches `preparing`, while the owner's switch is on.
+  const kitchenQueue = registerKitchenQueue({ db: deps.db, events: deps.events, now: auth.now });
   // The WebSocket plugin lives on the root instance, ahead of the /v1 scope that declares /v1/ws.
   const realtime = await setupRealtime(app, auth, deps.realtime);
 
@@ -126,6 +141,7 @@ export async function registerV1(app: FastifyInstance, deps: V1Deps): Promise<vo
         LINE_SIGNATURE_ROUTES,
       );
       v1.decorateRequest('auth', null);
+      v1.decorateRequest('printAgent', null);
       await v1.register((scope) => registerAuthRoutes(scope, context.auth, context.guard), {
         prefix: '/auth',
       });
@@ -183,6 +199,10 @@ export async function registerV1(app: FastifyInstance, deps: V1Deps): Promise<vo
           ),
         ),
       );
+      // The kitchen print queue: /v1/print/... for the print program, /v1/orders/:id/reprint for staff.
+      await v1.register((scope) =>
+        registerPrintRoutes(scope, context.auth, context.guard, createPrintAgentGuard(auth)),
+      );
       // Device and staff management: /v1/devices and /v1/staff (no prefix of its own).
       await v1.register((scope) => registerAdminRoutes(scope, context.auth, context.guard));
       // Catch-up sync and the WebSocket: /v1/sync and /v1/ws (no prefix of its own).
@@ -192,4 +212,5 @@ export async function registerV1(app: FastifyInstance, deps: V1Deps): Promise<vo
     },
     { prefix: '/v1' },
   );
+  return { idle: () => kitchenQueue.idle() };
 }

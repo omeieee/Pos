@@ -259,6 +259,7 @@ export async function createOrder(
         status,
         createdOnDeviceId: actor?.deviceId ?? null,
       });
+      if (status === 'preparing') emit({ type: 'order.sent_to_kitchen', orderId: row.id });
       return dto;
     });
     return { order, replay: false };
@@ -410,6 +411,7 @@ export async function transitionOrder(
     if (!updated) throw versionConflict(row.version); // cannot happen under the row lock
     const dto = await withItems(tx, updated);
     emitUpserted(emit, updated, dto);
+    if (input.to === 'preparing') emit({ type: 'order.sent_to_kitchen', orderId: updated.id });
     return dto;
   });
 }

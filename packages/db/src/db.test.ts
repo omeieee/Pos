@@ -85,6 +85,7 @@ describe('migrations on an empty Postgres', () => {
         'owner_credentials',
         'payment_refunds',
         'payments',
+        'print_jobs',
         'sessions',
         'settings',
         'slip_verify_daily',

@@ -21,7 +21,7 @@ import {
   newRecoveryCodes,
   newToken,
 } from '../auth/crypto.ts';
-import { createGuard, hasCustomerGuard, isGuarded } from '../auth/guards.ts';
+import { createGuard, hasCustomerGuard, hasPrintAgentGuard, isGuarded } from '../auth/guards.ts';
 import { type AuthPolicy, DEFAULT_AUTH_POLICY } from '../auth/policy.ts';
 import type { AuthContext } from '../auth/service.ts';
 import { generateTotpSecret, hotp, timeStep } from '../auth/totp.ts';
@@ -99,7 +99,15 @@ export interface Harness {
   /** For tests that subscribe their own handler. */
   bus: EventBus;
   /** Every route the app registered, and whether it runs the guard. */
-  routes: { method: string; url: string; guarded: boolean; customerGuarded: boolean }[];
+  routes: {
+    method: string;
+    url: string;
+    guarded: boolean;
+    customerGuarded: boolean;
+    printAgentGuarded: boolean;
+  }[];
+  /** Waits for the background work events started (the kitchen print queue). */
+  settle(): Promise<void>;
   /** Menu rows for order tests (built by hand: seed() holds the test PromptPay ID). */
   newMenu(): Promise<Menu>;
   /** Everything the logger wrote, as one string. */
@@ -168,6 +176,7 @@ export async function createHarness(
         url: route.url,
         guarded: isGuarded(route),
         customerGuarded: hasCustomerGuard(route),
+        printAgentGuarded: hasPrintAgentGuard(route),
       });
     }
   });
@@ -186,7 +195,7 @@ export async function createHarness(
     inviteGlobalRatePerMinute: 100_000,
     ...options.policy,
   };
-  await registerV1(app, {
+  const v1 = await registerV1(app, {
     db,
     authSecretKey: TEST_MASTER_KEY,
     events: bus,
@@ -407,6 +416,7 @@ export async function createHarness(
     events,
     alerts,
     routes,
+    settle: () => v1.idle(),
     bus,
     newMenu,
     logs: () => lines.join(''),

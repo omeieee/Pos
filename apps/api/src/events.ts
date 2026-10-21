@@ -125,8 +125,19 @@ export interface ExpenseUpsertedEvent {
   data: ExpenseDto;
 }
 
+/**
+ * An order has just reached `preparing`: created there (a counter or phone order) or accepted by
+ * staff (a LINE or platform order). The kitchen print queue listens for it, once per order: the
+ * state machine never enters `preparing` twice. Ids only; no device frame for it.
+ */
+export interface OrderSentToKitchenEvent {
+  type: 'order.sent_to_kitchen';
+  orderId: string;
+}
+
 export type AppEvent =
   | SecurityAlertEvent
+  | OrderSentToKitchenEvent
   | SessionEndedEvent
   | CustomerUpsertedEvent
   | OrderUpsertedEvent

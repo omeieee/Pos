@@ -21,6 +21,7 @@ export * from './payment-machine.ts';
 export * from './payments.ts';
 export * from './permissions.ts';
 export * from './pricing.ts';
+export * from './print.ts';
 export * from './realtime.ts';
 export * from './receipt.ts';
 export * from './reports.ts';
