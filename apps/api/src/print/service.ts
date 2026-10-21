@@ -99,6 +99,9 @@ export async function claimPrintJob(
     for (const job of await printRepo.failExhausted(tx, { now, maxAttempts: PRINT_MAX_ATTEMPTS })) {
       await alertFailed(ctx, tx, emit, job, job.claimedByDeviceId);
     }
+    // A kitchen ticket for an order cancelled while it waited is never handed out, and it is
+    // not a failure staff need to hear about.
+    await printRepo.skipCancelledOrders(tx, now);
     const job = await printRepo.claimNext(tx, {
       deviceId,
       leaseToken: crypto.randomUUID(),

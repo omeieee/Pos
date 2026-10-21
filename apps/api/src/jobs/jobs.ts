@@ -1,6 +1,7 @@
 import { type LineJobDeps, retryLineEvents } from '../line/retry.ts';
 import { activeSlipChecker } from '../slips/checker.ts';
 import type { SlipStore } from '../slips/store.ts';
+import { checkPrintAgentSilent } from './print-agent-silent.ts';
 import {
   anonymizeOrders,
   expireEmptyLineCustomers,
@@ -46,6 +47,9 @@ export const JOBS: readonly JobDefinition[] = [
   // The Slip2Go account (D-27): slips left and package end, 08:00 Bangkok. Not charged; a no-op when
   // the bank check is off.
   { name: 'slip2go-account-check', cron: '0 8 * * *', run: checkSlip2goAccount },
+  // Printing is on and a kitchen ticket has waited 3 minutes with no print program claiming it: one
+  // warn alert, repeated only after 30 minutes or after the queue was clear (D-37). No-op when off.
+  { name: 'print-agent-silent-check', cron: '*/2 * * * *', run: checkPrintAgentSilent },
   // Retention (owner decisions 2026-10-03), nightly, staggered. Each is idempotent and bounded.
   { name: 'retention-line-events', cron: '30 3 * * *', run: purgeLineEvents },
   { name: 'retention-orders', cron: '40 3 * * *', run: anonymizeOrders },

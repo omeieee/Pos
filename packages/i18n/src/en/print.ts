@@ -34,6 +34,7 @@ export const enPrint = {
   'settings.printing.jobs.error.TIMEOUT': 'The printer took too long',
   'settings.printing.jobs.error.RENDER_FAILED': 'The ticket could not be drawn',
   'settings.printing.jobs.error.LEASE_EXPIRED': 'The print notebook stopped answering',
+  'settings.printing.jobs.error.ORDER_CANCELLED': 'Skipped: the order was cancelled',
   'settings.printing.jobs.error.OTHER': 'Another reason',
   'print.reprint.button': 'Reprint order',
   'print.reprint.sending': 'Sending to print…',

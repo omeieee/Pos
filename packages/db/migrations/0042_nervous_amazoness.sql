@@ -1,0 +1,2 @@
+ALTER TABLE "print_jobs" DROP CONSTRAINT "print_jobs_last_error";--> statement-breakpoint
+ALTER TABLE "print_jobs" ADD CONSTRAINT "print_jobs_last_error" CHECK (last_error is null or last_error in ('PRINTER_OFFLINE', 'OUT_OF_PAPER', 'COVER_OPEN', 'TIMEOUT', 'RENDER_FAILED', 'LEASE_EXPIRED', 'ORDER_CANCELLED', 'OTHER'));

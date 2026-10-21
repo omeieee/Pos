@@ -19,7 +19,9 @@ export type PrintJobStatus = (typeof PRINT_JOB_STATUSES)[number];
 
 /**
  * Why a print failed, as a code and never free text (printer messages can carry addresses). The
- * print program picks one; the server sets `LEASE_EXPIRED` when a job keeps timing out.
+ * print program picks one; the server sets `LEASE_EXPIRED` when a job keeps timing out and
+ * `ORDER_CANCELLED` when it skips a waiting kitchen ticket of an order cancelled in the meantime
+ * (a program cannot send that one).
  */
 export const PRINT_ERROR_CODES = [
   'PRINTER_OFFLINE',
@@ -28,9 +30,12 @@ export const PRINT_ERROR_CODES = [
   'TIMEOUT',
   'RENDER_FAILED',
   'LEASE_EXPIRED',
+  'ORDER_CANCELLED',
   'OTHER',
 ] as const;
 export type PrintErrorCode = (typeof PRINT_ERROR_CODES)[number];
+/** The codes a print program may report in an ack (the server alone sets `ORDER_CANCELLED`). */
+export type PrintAckErrorCode = Exclude<PrintErrorCode, 'ORDER_CANCELLED'>;
 
 /** How long a claimed job is held for the print program before another claim may take it. */
 export const PRINT_LEASE_SECONDS = 30;
@@ -183,7 +188,7 @@ export const printAckInputSchema = z.discriminatedUnion('result', [
   z.strictObject({
     leaseToken: z.uuid(),
     result: z.literal('failed'),
-    errorCode: z.enum(PRINT_ERROR_CODES),
+    errorCode: z.enum(PRINT_ERROR_CODES).exclude(['ORDER_CANCELLED']),
   }),
 ]);
 export type PrintAckInput = z.infer<typeof printAckInputSchema>;

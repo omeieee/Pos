@@ -4,7 +4,7 @@
  * tests and the API use the same clock.
  */
 import type { PrintErrorCode, PrintJobKind } from '@sds/shared';
-import { and, desc, eq, lt, lte, max, ne, or, sql } from 'drizzle-orm';
+import { and, count, desc, eq, inArray, lt, lte, max, ne, or, sql } from 'drizzle-orm';
 import type { Db } from './client.ts';
 import { orders, printJobs } from './schema.ts';
 
@@ -104,6 +104,59 @@ export async function failExhausted(
       ),
     )
     .returning();
+}
+
+/**
+ * Finishes, without printing, the kitchen jobs that wait (or whose lease ran out) for an order
+ * that was cancelled since. Marked failed with `ORDER_CANCELLED`; the caller raises no alert for
+ * these. A reprint is a staff request for paper and is left alone. Returns how many were skipped.
+ */
+export async function skipCancelledOrders(db: Db, now: Date): Promise<number> {
+  const rows = await db
+    .update(printJobs)
+    .set({
+      status: 'failed',
+      lastError: 'ORDER_CANCELLED',
+      leaseUntil: null,
+      leaseToken: null,
+      updatedAt: now,
+    })
+    .where(
+      and(
+        eq(printJobs.kind, 'kitchen'),
+        or(
+          eq(printJobs.status, 'pending'),
+          and(eq(printJobs.status, 'claimed'), lt(printJobs.leaseUntil, now)),
+        ),
+        inArray(
+          printJobs.orderId,
+          db.select({ id: orders.id }).from(orders).where(eq(orders.status, 'cancelled')),
+        ),
+      ),
+    )
+    .returning({ id: printJobs.id });
+  return rows.length;
+}
+
+/**
+ * Jobs no print program has ever claimed (`attempts` 0) that have waited since before `olderThan`,
+ * not counting a kitchen job of a cancelled order (it will be skipped). A job that was claimed and
+ * is waiting for its back-off is not silence: the program is there.
+ */
+export async function countUnclaimedSince(db: Db, olderThan: Date): Promise<number> {
+  const [row] = await db
+    .select({ n: count() })
+    .from(printJobs)
+    .innerJoin(orders, eq(orders.id, printJobs.orderId))
+    .where(
+      and(
+        eq(printJobs.status, 'pending'),
+        eq(printJobs.attempts, 0),
+        lt(printJobs.createdAt, olderThan),
+        sql`not (${printJobs.kind} = 'kitchen' and ${orders.status} = 'cancelled')`,
+      ),
+    );
+  return row?.n ?? 0;
 }
 
 /**

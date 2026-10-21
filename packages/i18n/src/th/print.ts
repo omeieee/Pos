@@ -29,6 +29,7 @@ export const thPrint = {
   'settings.printing.jobs.error.TIMEOUT': 'เครื่องพิมพ์ใช้เวลานานเกินไป',
   'settings.printing.jobs.error.RENDER_FAILED': 'สร้างใบออเดอร์ไม่สำเร็จ',
   'settings.printing.jobs.error.LEASE_EXPIRED': 'โน้ตบุ๊กเครื่องพิมพ์ไม่ตอบกลับ',
+  'settings.printing.jobs.error.ORDER_CANCELLED': 'ข้ามแล้ว: ออเดอร์ถูกยกเลิก',
   'settings.printing.jobs.error.OTHER': 'เหตุผลอื่น',
   'print.reprint.button': 'พิมพ์ใบออเดอร์ซ้ำ',
   'print.reprint.sending': 'กำลังส่งไปพิมพ์…',

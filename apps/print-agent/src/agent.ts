@@ -9,7 +9,7 @@
  *   ack is sent before the loop exits.
  */
 import { renderTicket } from '@sds/escpos';
-import type { ClaimedPrintJob, KitchenTicket, PrintErrorCode } from '@sds/shared';
+import type { ClaimedPrintJob, KitchenTicket, PrintAckErrorCode } from '@sds/shared';
 import { ApiCallError, type PrintApi } from './api.ts';
 import type { AgentConfig } from './config.ts';
 import type { Logger } from './log.ts';
@@ -77,7 +77,7 @@ export function createAgent(deps: AgentDeps) {
     }
   }
 
-  async function ackFailed(job: ClaimedPrintJob, errorCode: PrintErrorCode): Promise<void> {
+  async function ackFailed(job: ClaimedPrintJob, errorCode: PrintAckErrorCode): Promise<void> {
     try {
       await api.ack(job.id, { leaseToken: job.leaseToken, result: 'failed', errorCode });
     } catch (error) {
@@ -115,7 +115,7 @@ export function createAgent(deps: AgentDeps) {
     try {
       await send(bytes, config.printer);
     } catch (error) {
-      const code: PrintErrorCode = error instanceof PrinterError ? error.code : 'OTHER';
+      const code: PrintAckErrorCode = error instanceof PrinterError ? error.code : 'OTHER';
       log('warn', 'job.print_failed', { jobId: job.id, errorCode: code });
       await ackFailed(job, code);
       return 'failed';

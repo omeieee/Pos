@@ -12,11 +12,11 @@ import {
   isPaperEndStatus,
   statusQuery,
 } from '@sds/escpos';
-import type { PrintErrorCode } from '@sds/shared';
+import type { PrintAckErrorCode } from '@sds/shared';
 
 export class PrinterError extends Error {
-  readonly code: PrintErrorCode;
-  constructor(code: PrintErrorCode) {
+  readonly code: PrintAckErrorCode;
+  constructor(code: PrintAckErrorCode) {
     super(`Printer error: ${code}`);
     this.name = 'PrinterError';
     this.code = code;
@@ -42,7 +42,7 @@ const OFFLINE_ERRORS = new Set([
   'EPIPE',
 ]);
 
-const socketErrorCode = (error: NodeJS.ErrnoException): PrintErrorCode => {
+const socketErrorCode = (error: NodeJS.ErrnoException): PrintAckErrorCode => {
   if (error.code && OFFLINE_ERRORS.has(error.code)) return 'PRINTER_OFFLINE';
   if (error.code === 'ETIMEDOUT') return 'TIMEOUT';
   return 'OTHER';
@@ -53,7 +53,7 @@ const CLOSE_GRACE_MS = 1_500;
 const STATUS_WAIT_MS = 800;
 
 /** Asks the three status questions; null means all clear or no (usable) answer. */
-function readProblem(socket: Socket): Promise<PrintErrorCode | null> {
+function readProblem(socket: Socket): Promise<PrintAckErrorCode | null> {
   return new Promise((resolve) => {
     const replies: number[] = [];
     const done = () => {

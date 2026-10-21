@@ -459,6 +459,71 @@ describe('claim, lease and ack', () => {
 
 // ---------- privacy ----------
 
+describe('an order cancelled while its ticket waits', () => {
+  const cancelOrder = (id: string) =>
+    h.app.inject({
+      method: 'POST',
+      url: `/v1/orders/${id}/cancel`,
+      headers: bearer(staff.manager),
+      payload: { reason: 'customer changed mind' },
+    });
+
+  test('its waiting kitchen ticket is skipped, never served, and raises no failed-print alert', async () => {
+    await setPrinting(true);
+    const order = await place();
+    expect((await cancelOrder(order.id)).statusCode).toBe(200);
+    await h.settle();
+    const alertsBefore = h.alerts.filter((a) => a.kind === 'print.job_failed').length;
+    expect((await claim()).json()).toEqual({ job: null });
+    expect(await jobsOf(order.id)).toMatchObject([
+      { status: 'failed', last_error: 'ORDER_CANCELLED', attempts: 0 },
+    ]);
+    expect(h.alerts.filter((a) => a.kind === 'print.job_failed')).toHaveLength(alertsBefore);
+  });
+
+  test('a cancelled order does not block the next order in the queue', async () => {
+    await setPrinting(true);
+    const dead = await place();
+    const live = await place();
+    await cancelOrder(dead.id);
+    await h.settle();
+    expect((await claimed()).ticket.orderNo).toBe(live.orderNo);
+  });
+
+  test('a ticket already being printed is left alone', async () => {
+    await setPrinting(true);
+    const order = await place();
+    const job = await claimed();
+    await cancelOrder(order.id);
+    await h.settle();
+    expect((await claim()).json()).toEqual({ job: null });
+    expect((await ack(job.id, { leaseToken: job.leaseToken, result: 'printed' })).statusCode).toBe(
+      200,
+    );
+  });
+
+  test('an explicit reprint of a cancelled order still prints (existing behaviour)', async () => {
+    await setPrinting(true);
+    const order = await place();
+    await cancelOrder(order.id);
+    await h.settle();
+    expect((await reprint(order.id, staff.cashier)).statusCode).toBe(201);
+    expect((await claimed()).kind).toBe('reprint');
+  });
+
+  test('the print program cannot report ORDER_CANCELLED itself', async () => {
+    await setPrinting(true);
+    await place();
+    const job = await claimed();
+    const res = await ack(job.id, {
+      leaseToken: job.leaseToken,
+      result: 'failed',
+      errorCode: 'ORDER_CANCELLED',
+    });
+    expect(res.statusCode).toBe(400);
+  });
+});
+
 describe('the ticket', () => {
   test('never holds a phone number, a customer id or money, even when the notes do', async () => {
     await setPrinting(true);
