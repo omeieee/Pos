@@ -18,6 +18,15 @@
 > - **Maintenance:** the architecture refactor (code moved, behaviour unchanged) is deployed; see the entry "2026-10-16 · Maintenance · Architecture refactor". Not yet checked on a real iPad/iPhone. The as-built code index `ARCHITECTURE.md` (verified at `7ff9951`) is committed (`070e0b4`) and pushed with the owner's OK; see the newest entry.
 > - **Workflow (owner rule 2026-10-16):** after each completed part, ask the owner "save checkpoint or next step?" and wait for the answer (`CLAUDE.md` workflow, `3d8481c`).
 
+## 2026-10-22 · P8 · Print follow-ups: cancelled tickets, silent-notebook alert, Reprint hidden when cancelled
+- **Summary:** two D-37 known gaps closed and one owner-recommended UI rule applied (auto next step). Cancelled-order tickets are skipped at claim (`ORDER_CANCELLED`, no failure alert); a `print-agent-silent-check` job warns once when printing is on and a job waits over 3 minutes; Reprint is hidden on cancelled orders.
+- **Changed:** migration 0042 (widens the `last_error` CHECK); shared `print.ts`; db `print.ts`; `apps/api/src/print/service.ts`, `jobs/print-agent-silent.ts`, `jobs/jobs.ts`; print-agent types; pos-web `pos/print/print-model.ts`, `ReprintButton`; i18n; ARCHITECTURE rows; D-37 text.
+- **Verification:** agents report api 1618, db 340, shared 1206, i18n 26, print-agent 35, pos-web 2294 passed and print e2e 4/4 (ipad and iphone Chromium). Run by me: `npx biome check apps packages infra` 0 errors (1074 files); `pnpm build` 16/16 (cached). Not run: deploy, real devices.
+- **Decisions:** none new (D-37 gaps struck).
+- **Open issues:** reprint of a cancelled order is still allowed server-side; the silent alert dedupe is in memory (one repeat after an API restart); VAPID keys, push, `print_agent` device and the real printer still pending.
+- **Next:** owner OK to push (migrations 0040-0042), then keys and device steps.
+- **Commit:** committed locally, not pushed.
+
 ## 2026-10-22 · P8 · Phone alerts with Web Push
 - **Summary:** four P8 commits made (`378a5a7`, `45fb19b`, `09eab7b`, `68c5ee7`, not pushed). Phone alerts built as Web Push instead of ntfy (D-37), on the owner's "proceed as recommended": server (backend) and client (pos-web). Alert on arrival, no alert to the creating device, order number and source only. Own push crypto on `node:crypto`.
 - **Changed:** migration 0041 (`push_subscriptions`); `apps/api/src/push/`, `cli/push-keys.ts`, config (`VAPID_*`), compose pass-through; shared `push.ts`; db `push.ts`; pos-web `platform/push.ts`, `public/push-sw.js`, `#/alerts` screen and store, hub row, account menu; i18n; `ARCHITECTURE.md`; D-37 text.
