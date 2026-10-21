@@ -41,3 +41,4 @@ Part 1 (2026-10-20): `expenses` ledger (migration 0037, void not delete), `/v1/e
 - 2026-10-21: part 6 QA fixes, push and deploy; see PROGRESS "P7 · Part 6 QA fixes".
 - 2026-10-21: owner answers (R2 photo storage, Slip2Go package); see PROGRESS "P7 · Owner answers".
 - 2026-10-21: R2 storage and receipt photo screen (D-36); see PROGRESS "P7 · R2 storage".
+- 2026-10-21: R2 live, receipts and slips verified; see PROGRESS "P7 · R2 live" and "P7 · R2 slip check".

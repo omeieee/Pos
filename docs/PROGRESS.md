@@ -18,6 +18,15 @@
 > - **Maintenance:** the architecture refactor (code moved, behaviour unchanged) is deployed; see the entry "2026-10-16 · Maintenance · Architecture refactor". Not yet checked on a real iPad/iPhone. The as-built code index `ARCHITECTURE.md` (verified at `7ff9951`) is committed (`070e0b4`) and pushed with the owner's OK; see the newest entry.
 > - **Workflow (owner rule 2026-10-16):** after each completed part, ask the owner "save checkpoint or next step?" and wait for the answer (`CLAUDE.md` workflow, `3d8481c`).
 
+## 2026-10-21 · P7 · R2 slip check on the owner's device
+- **Summary:** owner opened one new and one old slip in the app. API logs show two `GET /v1/payments/<id>/slip` answered 200 (589 ms and 230 ms), 0 warnings or errors in 15 minutes. The API's only slip store is R2, so the old slip came from the copy; the 31-slip copy works end to end. The first of the two views was not logged until the app was reopened (the app reuses images it already holds).
+- **Changed:** nothing in code or on the VM.
+- **Verification:** read-only `./dc logs` over `ssh deploy@sds-pos`; request paths printed with ids masked.
+- **Decisions:** none.
+- **Open issues:** original slip files still on the VM disk (no longer read, kept past 90 days, hold bank details): owner to say when to delete; no R2 lifecycle rule on `slips/` yet; 5-year receipt deletion not built; Slip2Go package name and price; view, replace and remove of a receipt on a device not yet confirmed; P7 sample-month P&L agreement.
+- **Next:** owner picks: disk copy deletion after a few normal days, lifecycle rule, receipt deletion job, Slip2Go package, or the P7 sample month.
+- **Commit:** uncommitted (the previous docs commit `d35dc0b` is not pushed either).
+
 ## 2026-10-21 · P7 · R2 live: bucket, receipts tested, slips copied
 - **Summary:** R2 enabled (free plan, card 7787 on file, $0 due), bucket `sds-files` (Standard, private, Asia Pacific), bucket-scoped Object Read & Write token created by the owner, four `R2_*` values in `/opt/sds/.env`. First receipt upload failed with 503 because the container (started 14:58) predated the `.env` edit (15:13); `./dc up -d --no-deps api` fixed it. Receipt upload then worked (POST 201, GET 200, `receipts/` folder in the bucket). Existing slips copied: 31 found, 31 copied, 0 mismatched, 0 failed; a second run shows 31 already there. Cloudflare budget alert lowered from $10 to $0.01 (email to the owner).
 - **Changed:** Cloudflare account (R2, bucket, token, budget alert); VM `.env` and API container; no repo code. D-36 Accepted.
