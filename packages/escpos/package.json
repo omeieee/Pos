@@ -1,0 +1,26 @@
+{
+  "name": "@sds/escpos",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "fonts:embed": "node scripts/embed-fonts.ts",
+    "preview": "node scripts/preview.ts"
+  },
+  "dependencies": {
+    "@sds/i18n": "workspace:*",
+    "@sds/shared": "workspace:*",
+    "fontkit": "2.0.4"
+  },
+  "devDependencies": {
+    "@sds/config": "workspace:*",
+    "@types/fontkit": "^2.0.8",
+    "@types/pngjs": "^6.0.5",
+    "pngjs": "5.0.0"
+  }
+}

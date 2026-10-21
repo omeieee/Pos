@@ -1,0 +1,22 @@
+{
+  "name": "@sds/print-agent",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "node build.ts",
+    "start": "node --env-file-if-exists=.env dist/agent.mjs",
+    "test-print": "node --env-file-if-exists=.env dist/agent.mjs --test-print",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@sds/escpos": "workspace:*",
+    "@sds/shared": "workspace:*",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@sds/config": "workspace:*",
+    "esbuild": "^0.28.2"
+  }
+}

@@ -19,3 +19,7 @@ playwright-report/
 
 # Local-only generated pages (e.g. PromptPay scan test)
 *.local.html
+
+# Print agent runtime state (apps/print-agent)
+printed-jobs.json
+printed-jobs.json.tmp
