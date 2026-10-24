@@ -11,7 +11,13 @@ import { type SlipVerifyVerdict, slipCycleAvailable, slipResendRechecks } from '
  * final "not found" or "unchecked" at least a minute after the last call (`slipResendRechecks`).
  */
 export const slipPatch = (
-  slip: { key: string; hash: string; ocr?: boolean; verify?: boolean },
+  slip: {
+    key: string;
+    hash: string;
+    ocr?: boolean;
+    verify?: boolean;
+    autoConfirmBlocked?: boolean;
+  },
   current: paymentsRepo.PaymentRow,
   now: Date,
 ): paymentsRepo.PaymentPatch => {
@@ -24,6 +30,8 @@ export const slipPatch = (
     slipImageHash: slip.hash,
     slipRefHash: null,
     slipRecipientCheck: null,
+    // D-40: per picture. A slip the server could not match to one order is staff's to confirm.
+    slipAutoconfirmBlocked: Boolean(slip.autoConfirmBlocked),
     ...(current.slipImageHash === slip.hash &&
     current.slipVerify !== null &&
     // A final "not found" or "unchecked" and a last call a minute ago: sending the picture again is

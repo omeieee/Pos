@@ -15,6 +15,8 @@ import {
 } from '../auth/service.ts';
 import { claimPayment } from '../customer-app/service.ts';
 import { ApiError, conflict, notFound, versionConflict } from '../errors.ts';
+import type { AppEvent } from '../events.ts';
+import { emitSlipReview, slipNeedsReview } from '../payments/alerts.ts';
 import { toPaymentDto } from '../payments/dto.ts';
 import { listOrderPayments } from '../payments/service.ts';
 import { type CoreContext, withTransaction } from '../tx.ts';
@@ -41,6 +43,7 @@ export async function attachSlip(
   orderId: string,
   bytes: Buffer,
   meta: RequestMeta,
+  options: { autoConfirmBlocked?: boolean } = {},
 ): Promise<MyOrder> {
   checkSlipBytes(bytes);
   // Somebody else's order is a plain 404, and nothing is written for it.
@@ -59,6 +62,8 @@ export async function attachSlip(
       onReplaced: (oldKey) => replaced.add(oldKey),
       ocr: checker?.wants.ocr ?? false,
       verify: checker?.wants.verify ?? false,
+      // D-40: the server never confirms this claim by itself; the checker still runs as a hint.
+      ...(options.autoConfirmBlocked ? { autoConfirmBlocked: true } : {}),
     });
   } catch (error) {
     await slips.delete(key).catch(() => undefined);
@@ -66,6 +71,15 @@ export async function attachSlip(
   }
   for (const oldKey of replaced) await removeFile(slips, oldKey);
   if (checker && order.payment) checker.enqueue(order.payment.id);
+  // No reading is running on this picture (no checker, or its checks are used up): it is staff's
+  // to review right now. A running reading announces it when it ends (`slips/checker.ts`).
+  if (order.payment) {
+    const paid = await paymentsRepo.findPaymentById(ctx.db, order.payment.id);
+    if (paid && slipNeedsReview(paid)) {
+      const emit = (event: AppEvent) => ctx.events.publish(event);
+      emitSlipReview(emit, { id: order.id, orderNo: order.orderNo }, paid);
+    }
+  }
   return order;
 }
 

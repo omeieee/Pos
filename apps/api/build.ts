@@ -1,5 +1,5 @@
 /**
- * Bundles the API into dist/ (server.js, migrate.js, owner-create.js, owner-reset.js, owner-unlock.js, slips-to-r2.js, push-keys.js) with every dependency inlined, so the
+ * Bundles the API into dist/ (server.js, migrate.js, owner-create.js, owner-reset.js, owner-unlock.js, slips-to-r2.js, push-keys.js, telegram-test.js) with every dependency inlined, so the
  * runtime image needs only dist/. Workspace packages are TypeScript source; esbuild compiles them.
  *   node build.ts          one-off build
  *   node build.ts --watch  rebuild on change and restart the server (reads apps/api/.env if present)
@@ -24,6 +24,7 @@ const options: BuildOptions = {
     'richmenu-upload': 'src/cli/richmenu-upload.ts',
     'slips-to-r2': 'src/cli/slips-to-r2.ts',
     'push-keys': 'src/cli/push-keys.ts',
+    'telegram-test': 'src/cli/telegram-test.ts',
     // The slip QR reader runs in a worker thread, which loads its own file (slips/qr.ts).
     'slip-qr-worker': 'src/slips/qr-worker.ts',
   },

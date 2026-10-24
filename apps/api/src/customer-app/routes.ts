@@ -1,26 +1,35 @@
 import {
+  appOrderCancelInputSchema,
+  appOrderEditInputSchema,
   appOrderInputSchema,
+  appOrderMergeInputSchema,
   customerSessionRequestSchema,
   memberInputSchema,
   orderIdParamSchema,
   selectPaymentInputSchema,
 } from '@sds/shared';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
+import { z } from 'zod';
 import type { AuthContext } from '../auth/service.ts';
 import { ApiError } from '../errors.ts';
 import { type LiffIdentity, LiffUnavailableError } from '../line/liff-verify.ts';
 import type { LineRuntime } from '../line/runtime.ts';
+import { attachAppSlip } from '../slips/app-slip.ts';
 import { MAX_SLIP_BYTES, SLIP_CONTENT_TYPES } from '../slips/image.ts';
-import { attachSlip, readOwnSlip } from '../slips/service.ts';
+import { readOwnSlip } from '../slips/service.ts';
 import type { SlipStore } from '../slips/store.ts';
 import { parse } from '../validate.ts';
 import {
   acknowledgePrivacy,
+  cancelMyOrder,
   checkoutInfo,
   claimPayment,
+  editMyOrder,
   getMember,
   getMyOrder,
   listMyOrders,
+  listOpenOrders,
+  mergeMyOrders,
   myQr,
   openSession,
   placeOrder,
@@ -29,8 +38,26 @@ import {
 } from './service.ts';
 import { createCustomerGuard, customerOf } from './session.ts';
 
+/** `?combine=1` / `?review=1` on a slip upload (D-40). */
+const queryFlag = z
+  .enum(['1', 'true'])
+  .optional()
+  .transform((value) => value !== undefined);
+const slipModeSchema = z.object({ combine: queryFlag, review: queryFlag });
 const meta = (request: FastifyRequest) => ({ ip: request.ip ?? null });
 const orderIdOf = (request: FastifyRequest) => parse(orderIdParamSchema, request.params).id;
+/** Edit, cancel and merge carry no request id in the body, so the header is the key and is required. */
+const keyOf = (request: FastifyRequest): string => {
+  const parsed = z.uuid().safeParse(request.headers['idempotency-key']);
+  if (!parsed.success) {
+    throw new ApiError(
+      400,
+      'IDEMPOTENCY_KEY_REQUIRED',
+      'Send an Idempotency-Key header (a UUID) with this request',
+    );
+  }
+  return parsed.data;
+};
 
 /**
  * Mounted at /v1/app: the customer app (`apps/liff-web`) and nothing else.
@@ -156,6 +183,9 @@ export async function registerCustomerAppRoutes(
 
   app.get('/orders', reads, async (request) => listMyOrders(ctx, customerOf(request)));
 
+  // The unpaid orders the customer can still change: for the checkout warning and a merge.
+  app.get('/orders/open', reads, async (request) => listOpenOrders(ctx, customerOf(request)));
+
   app.get('/orders/:id', reads, async (request) =>
     getMyOrder(ctx, customerOf(request), orderIdOf(request)),
   );
@@ -166,6 +196,39 @@ export async function registerCustomerAppRoutes(
       customerOf(request).customerId,
       orderIdOf(request),
       parse(selectPaymentInputSchema, request.body),
+      meta(request),
+    ),
+  );
+
+  app.put('/orders/:id/items', writes, async (request) =>
+    editMyOrder(
+      ctx,
+      customerOf(request).customerId,
+      orderIdOf(request),
+      parse(appOrderEditInputSchema, request.body),
+      keyOf(request),
+      meta(request),
+    ),
+  );
+
+  app.post('/orders/:id/cancel', writes, async (request) =>
+    cancelMyOrder(
+      ctx,
+      customerOf(request).customerId,
+      orderIdOf(request),
+      parse(appOrderCancelInputSchema, request.body),
+      keyOf(request),
+      meta(request),
+    ),
+  );
+
+  app.post('/orders/:id/merge', writes, async (request) =>
+    mergeMyOrders(
+      ctx,
+      customerOf(request).customerId,
+      orderIdOf(request),
+      parse(appOrderMergeInputSchema, request.body),
+      keyOf(request),
       meta(request),
     ),
   );
@@ -199,13 +262,18 @@ export async function registerCustomerAppRoutes(
         if (!Buffer.isBuffer(request.body)) {
           throw new ApiError(415, 'SLIP_TYPE_UNSUPPORTED', 'Send a JPEG, PNG or WebP picture');
         }
-        return attachSlip(
+        const mode = parse(slipModeSchema, request.query);
+        if (mode.combine && mode.review) {
+          throw new ApiError(400, 'VALIDATION_ERROR', 'Choose combine or review, not both');
+        }
+        return attachAppSlip(
           ctx,
           slips,
           customerOf(request).customerId,
           orderIdOf(request),
           request.body,
           meta(request),
+          mode,
         );
       },
     );

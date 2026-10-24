@@ -177,6 +177,36 @@ const envSchema = z
         })
         .optional(),
     ),
+    /**
+     * Telegram payment alerts to the staff group (D-42). All three or none. The bot token is a
+     * secret: never log it. `PUBLIC_API_BASE_URL` (https) makes menu photo paths absolute so
+     * Telegram can fetch them.
+     */
+    TELEGRAM_BOT_TOKEN: z.preprocess(
+      emptyToUndefined,
+      z
+        .string()
+        .regex(/^\d{5,}:[A-Za-z0-9_-]{20,}$/, { error: 'must look like <digits>:<token>' })
+        .optional(),
+    ),
+    TELEGRAM_CHAT_ID: z.preprocess(
+      emptyToUndefined,
+      z
+        .string()
+        .regex(/^(-?\d{5,20}|@[A-Za-z][A-Za-z0-9_]{4,})$/, {
+          error: 'must be a chat id such as -1001234567890',
+        })
+        .optional(),
+    ),
+    PUBLIC_API_BASE_URL: z.preprocess(
+      emptyToUndefined,
+      z
+        .string()
+        .regex(/^https:\/\/[^\s/?#]+(\/[^\s?#]*)?$/, {
+          error: 'must be an https URL without a query, such as https://api.example.com',
+        })
+        .optional(),
+    ),
     GIT_SHA: z.preprocess(emptyToUndefined, z.string().default('dev')),
   })
   .refine(
@@ -199,6 +229,19 @@ const envSchema = z
     {
       path: ['VAPID_SUBJECT'],
       error: 'VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY and VAPID_SUBJECT go together',
+    },
+  )
+  .refine(
+    (e) =>
+      [e.TELEGRAM_BOT_TOKEN, e.TELEGRAM_CHAT_ID, e.PUBLIC_API_BASE_URL].every(
+        (v) => v === undefined,
+      ) ||
+      [e.TELEGRAM_BOT_TOKEN, e.TELEGRAM_CHAT_ID, e.PUBLIC_API_BASE_URL].every(
+        (v) => v !== undefined,
+      ),
+    {
+      path: ['PUBLIC_API_BASE_URL'],
+      error: 'TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID and PUBLIC_API_BASE_URL go together',
     },
   )
   .refine(
@@ -246,6 +289,8 @@ export type Config = {
   r2: { accountId: string; accessKeyId: string; secretAccessKey: string; bucket: string } | null;
   /** Web Push phone alerts (D-37); null when off. `privateKey` is a secret: never log it. */
   vapid: { publicKey: string; privateKey: string; subject: string } | null;
+  /** Telegram payment alerts (D-42); null when off. `botToken` is a secret: never log it. */
+  telegram: { botToken: string; chatId: string; publicBaseUrl: string } | null;
   /** The automatic slip reading (D-26); null when it is off. */
   slipOcr: { lang: string; timeoutMs: number } | null;
   /** The slip's small QR is read as well (D-26); only when the slip reading is on. */
@@ -305,6 +350,16 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
             publicKey: e.VAPID_PUBLIC_KEY,
             privateKey: e.VAPID_PRIVATE_KEY,
             subject: e.VAPID_SUBJECT,
+          }
+        : null,
+    telegram:
+      e.TELEGRAM_BOT_TOKEN !== undefined &&
+      e.TELEGRAM_CHAT_ID !== undefined &&
+      e.PUBLIC_API_BASE_URL !== undefined
+        ? {
+            botToken: e.TELEGRAM_BOT_TOKEN,
+            chatId: e.TELEGRAM_CHAT_ID,
+            publicBaseUrl: e.PUBLIC_API_BASE_URL,
           }
         : null,
     slipOcr:

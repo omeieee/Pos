@@ -56,6 +56,9 @@ services:
       VAPID_SUBJECT: ${VAPID_SUBJECT:-}
       # V8 heap cap. Default fits the 1 GB Micro VM; on the A1 set API_NODE_OPTIONS in .env (see .env.example).
       NODE_OPTIONS: ${API_NODE_OPTIONS:---max-old-space-size=384}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      PUBLIC_API_BASE_URL: ${PUBLIC_API_BASE_URL:-}
 
       GIT_SHA: ${GIT_SHA:-unknown}
     # Slip images (D-24) live on the VM disk in a named volume, so a redeploy keeps them.

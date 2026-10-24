@@ -120,6 +120,15 @@ await registerV1(app, {
   slips,
   ...(receipts ? { receipts } : {}),
   ...(config.vapid ? { push: { vapid: config.vapid } } : {}),
+  ...(config.telegram
+    ? {
+        telegram: {
+          token: config.telegram.botToken,
+          chatId: config.telegram.chatId,
+          publicBaseUrl: config.telegram.publicBaseUrl,
+        },
+      }
+    : {}),
 });
 
 // 0.0.0.0 so Caddy can reach the container over the Docker network.

@@ -45,6 +45,7 @@ import {
   DEFAULT_PRINTING,
   DEFAULT_RECEIPT_SETTINGS,
   DEFAULT_SHOP_SETTINGS,
+  DEFAULT_UNPAID_TIMEOUT,
   type DeliverySettings,
   deliveryPatchInputSchema,
   deliverySettingsSchema,
@@ -82,6 +83,9 @@ import {
   type StaffRole,
   shopPatchInputSchema,
   shopSettingsSchema,
+  type UnpaidTimeoutSettings,
+  unpaidTimeoutPatchInputSchema,
+  unpaidTimeoutSettingsSchema,
 } from '@sds/shared';
 import type { z } from 'zod';
 import {
@@ -179,6 +183,16 @@ export const RESOURCES: readonly Resource[] = [
     schema: printingSettingsSchema,
     defaults: DEFAULT_PRINTING,
     patch: printingPatchInputSchema,
+    editPermission: 'settings.edit',
+  },
+  {
+    // Unpaid pay-first LINE orders are cancelled after this many minutes (D-41). Not a money
+    // setting: settings.edit, no step-up, an audit row. Not on the realtime feed.
+    route: 'unpaid-timeout',
+    key: 'unpaid_timeout',
+    schema: unpaidTimeoutSettingsSchema,
+    defaults: DEFAULT_UNPAID_TIMEOUT,
+    patch: unpaidTimeoutPatchInputSchema,
     editPermission: 'settings.edit',
   },
   {
@@ -384,6 +398,12 @@ export async function lineOrderingNow(db: Db, instant: Date) {
 export async function currentPrintingEnabled(db: Db): Promise<boolean> {
   const row = await getSettingRow(db, 'printing');
   return (row ? printingSettingsSchema.parse(row.value) : DEFAULT_PRINTING).enabled;
+}
+
+/** The unpaid-order timeout now in force: the saved one, or the default (on, 60 minutes). */
+export async function currentUnpaidTimeout(db: Db): Promise<UnpaidTimeoutSettings> {
+  const row = await getSettingRow(db, 'unpaid_timeout');
+  return row ? unpaidTimeoutSettingsSchema.parse(row.value) : DEFAULT_UNPAID_TIMEOUT;
 }
 
 /** The payment methods the shop takes now: the saved switches, or the defaults when never saved. */

@@ -310,3 +310,40 @@ describe('log redaction of credentials', () => {
     expect(lines.join('')).toContain('"staffId":"abc"');
   });
 });
+
+describe('Telegram bot token (D-42)', () => {
+  // Real shape, not a real bot.
+  const TOKEN = '123456789:AAFAKE_token_for_tests_only_0123456789ab';
+
+  test('a Bot API URL and a bare token are masked, in text, errors, logs and Sentry', () => {
+    const url = `fetch failed: https://api.telegram.org/bot${TOKEN}/sendMessage`;
+    expect(redactQueryParams(url)).toBe(
+      'fetch failed: https://api.telegram.org/bot[redacted]/sendMessage',
+    );
+    expect(redactQueryParams(`token ${TOKEN} here`)).toBe('token [redacted] here');
+    expect(redactQueryParams(`https://api.telegram.org/file/bot${TOKEN}/photos/1.jpg`)).toContain(
+      '/file/bot[redacted]/',
+    );
+
+    const err = serializeErr(new TypeError(url, { cause: new Error(`GET ${TOKEN}`) }));
+    expect(JSON.stringify(err)).not.toContain(TOKEN);
+
+    const event = scrubSentryEvent({
+      message: url,
+      exception: { values: [{ value: url }] },
+      request: { url: `https://api.telegram.org/bot${TOKEN}/sendMessage` },
+      breadcrumbs: [
+        { message: url, data: { url: `https://api.telegram.org/bot${TOKEN}/sendPhoto?x=1` } },
+      ],
+    });
+    expect(JSON.stringify(event)).not.toContain(TOKEN);
+    expect(JSON.stringify(event)).not.toContain('123456789');
+  });
+
+  test('the token and chat id fields are redacted wherever a logger is handed them', () => {
+    for (const field of ['botToken', 'chatId']) {
+      expect(LOG_REDACT_PATHS).toContain(field);
+      expect(LOG_REDACT_PATHS).toContain(`*.${field}`);
+    }
+  });
+});
