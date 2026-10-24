@@ -12,7 +12,7 @@ import { z } from 'zod';
 import { buildingNameSchema, deliveryNoteSchema, recipientNameSchema } from './delivery.ts';
 import { ORDER_PAYMENT_STATUSES, ORDER_STATUSES, PAYMENT_STATUSES } from './enums.ts';
 import { memberInputSchema, memberProfileSchema } from './member.ts';
-import { orderLineInputSchema } from './schemas.ts';
+import { isoDateSchema, orderLineInputSchema } from './schemas.ts';
 
 const isoInstant = z.iso.datetime();
 
@@ -131,23 +131,44 @@ export const myPaymentSchema = z.object({
 });
 export type MyPayment = z.infer<typeof myPaymentSchema>;
 
-/** `none`: no slip sent. `checking`: sent, the bank check is still running. `staff_review`: staff look at it. */
-export const CUSTOMER_SLIP_CHECKS = ['none', 'checking', 'staff_review'] as const;
+/**
+ * `none`: no slip sent. `checking`: sent, the bank check is still running. `staff_review`: staff look
+ * at it. `amount_mismatch`: the bank check found a different amount (D-42; the only failure told
+ * apart). `verified_waiting`: the bank check passed but the shop still has to confirm (A2).
+ */
+export const CUSTOMER_SLIP_CHECKS = [
+  'none',
+  'checking',
+  'staff_review',
+  'amount_mismatch',
+  'verified_waiting',
+] as const;
 export type CustomerSlipCheck = (typeof CUSTOMER_SLIP_CHECKS)[number];
 
 /**
  * What the customer is told about the slip of their open PromptPay payment. Neutral on purpose
- * (owner decision): every finished bank check, whatever it found (a pass that staff still tick, a
- * wrong amount or receiver, not found, fraud, a duplicate, not checked), is the same `staff_review`,
- * so a cheater cannot learn which check failed. Only a check still running is `checking`; a slip
- * that has no check marked at all (the bank check was off when it arrived) is staff's to look at.
+ * (owner decision) with one exception (D-42, 2026-10-24): a bank-checked amount mismatch. Every
+ * other finished check (wrong receiver or date, not found, fraud, a duplicate, not checked) is the
+ * same `staff_review`, so a cheater cannot learn which check failed. A pass on a payment that is
+ * still open (held back from auto-confirm: ceiling, flagged customer) is `verified_waiting`; one
+ * that auto-confirms leaves no open payment, so the app shows "paid" instead. Only a check still
+ * running is `checking`; a slip with no check marked at all is staff's to look at.
  */
 export function customerSlipCheck(slip: {
   hasSlip: boolean;
   slipVerify: string | null;
 }): CustomerSlipCheck {
   if (!slip.hasSlip) return 'none';
-  return slip.slipVerify === 'pending' ? 'checking' : 'staff_review';
+  switch (slip.slipVerify) {
+    case 'pending':
+      return 'checking';
+    case 'amount_mismatch':
+      return 'amount_mismatch';
+    case 'valid':
+      return 'verified_waiting';
+    default:
+      return 'staff_review';
+  }
 }
 
 export const myOrderSchema = z.object({
@@ -203,6 +224,13 @@ export const myOrderSchema = z.object({
    * ("โอนแล้ว") is never held back by it.
    */
   slipRetryAfterSeconds: z.number().int().positive().optional(),
+  /**
+   * Why a cancelled order was cancelled (D-39, D-41), for the plain-words line on the order page.
+   * Null while the order is open, or when no reason was recorded.
+   */
+  cancelReason: z.enum(['customer_cancel', 'unpaid_timeout', 'merged', 'other']).nullable(),
+  /** For `cancelReason: 'merged'`: the number of the order that took the lines; else null. */
+  mergedInto: z.string().nullable(),
   /** What the customer may do next. The server decides; the app shows. */
   actions: z.object({
     /** "โอนแล้ว": only for a pending PromptPay payment. It makes the payment `claimed`; staff confirm. */
@@ -215,6 +243,10 @@ export const myOrderSchema = z.object({
     attachSlip: z.boolean(),
     /** The methods the customer can switch to right now. */
     methods: z.array(appPayMethodSchema),
+    /** Change the dishes (D-39): only while `canCustomerEdit` holds. */
+    edit: z.boolean(),
+    /** Cancel the order (D-39): the same condition as `edit`. */
+    cancel: z.boolean(),
   }),
 });
 export type MyOrder = z.infer<typeof myOrderSchema>;
@@ -247,3 +279,83 @@ export const myQrResponseSchema = z.object({
   promptpayId: z.string(),
 });
 export type MyQrResponse = z.infer<typeof myQrResponseSchema>;
+
+// ---------- Edit, cancel, merge (D-39) ----------
+
+const orderVersion = z.number().int().min(1);
+
+/** `PUT /v1/app/orders/:id/items`: replaces all the lines. The server reprices and replaces the payment. */
+export const appOrderEditInputSchema = z.strictObject({
+  expectedVersion: orderVersion,
+  items: z.array(orderLineInputSchema).min(1).max(50),
+});
+export type AppOrderEditInput = z.infer<typeof appOrderEditInputSchema>;
+
+/** `POST /v1/app/orders/:id/cancel`. */
+export const appOrderCancelInputSchema = z.strictObject({ expectedVersion: orderVersion });
+export type AppOrderCancelInput = z.infer<typeof appOrderCancelInputSchema>;
+
+/** Most orders folded into one in a single merge. */
+export const MAX_MERGE_SOURCES = 10;
+
+/**
+ * `POST /v1/app/orders/:id/merge`: the order in the path survives and takes the lines of
+ * `sourceIds`. `expectedVersion` is the survivor's; `expectedVersions[i]` is for `sourceIds[i]`.
+ */
+export const appOrderMergeInputSchema = z
+  .strictObject({
+    expectedVersion: orderVersion,
+    sourceIds: z.array(z.uuid()).min(1).max(MAX_MERGE_SOURCES),
+    expectedVersions: z.array(orderVersion).min(1).max(MAX_MERGE_SOURCES),
+  })
+  .refine((v) => v.sourceIds.length === v.expectedVersions.length, {
+    message: 'one expected version for each source order',
+    path: ['expectedVersions'],
+  })
+  .refine((v) => new Set(v.sourceIds).size === v.sourceIds.length, {
+    message: 'each source order once',
+    path: ['sourceIds'],
+  });
+export type AppOrderMergeInput = z.infer<typeof appOrderMergeInputSchema>;
+
+/**
+ * `GET /v1/app/orders/open`: the customer's unpaid, open LINE orders, for the checkout warning.
+ * Carries what `isDuplicateCart` and the name/building/date merge check read; the server still
+ * decides every merge.
+ */
+export const appOpenOrderSchema = z.object({
+  id: z.uuid(),
+  orderNo: z.string(),
+  totalSatang: z.number().int().nonnegative(),
+  version: orderVersion,
+  businessDate: isoDateSchema,
+  deliveryBuilding: z.string().nullable(),
+  recipientName: z.string().nullable(),
+  placedAt: isoInstant,
+  items: z.array(
+    z.object({
+      menuItemId: z.uuid(),
+      nameTh: z.string(),
+      nameEn: z.string().nullable(),
+      qty: z.number().int().min(1),
+      modifierOptionIds: z.array(z.uuid()),
+      /** The line's note, so an edit or a merge from the app does not lose it. Absent from an older server. */
+      note: z.string().nullable().optional(),
+    }),
+  ),
+});
+export type AppOpenOrder = z.infer<typeof appOpenOrderSchema>;
+
+export const appOpenOrdersSchema = z.object({ orders: z.array(appOpenOrderSchema) });
+export type AppOpenOrders = z.infer<typeof appOpenOrdersSchema>;
+
+/**
+ * The answer (`details` of the 409 `NEEDS_COMBINE`) to a slip upload whose amount equals this order
+ * plus the customer's other open orders (D-40). The slip is not stored; the app asks to combine.
+ */
+export const slipNeedsCombineSchema = z.object({
+  orderNos: z.array(z.string()).min(2),
+  orderIds: z.array(z.uuid()).min(2),
+  totalSatang: z.number().int().positive(),
+});
+export type SlipNeedsCombine = z.infer<typeof slipNeedsCombineSchema>;

@@ -100,4 +100,23 @@ export const enSettings = {
   'settings.changedElsewhere':
     'This setting was changed on another device. What you see may be out of date.',
   'settings.reload': 'Load the latest',
+  // Cancel LINE orders that are not paid in time (D-41)
+  'settings.unpaidTimeout.title': 'Cancel unpaid orders',
+  'settings.unpaidTimeout.desc': 'Cancel LINE orders the customer does not pay within a set time',
+  'settings.unpaidTimeout.switch': 'Cancel unpaid orders automatically',
+  'settings.unpaidTimeout.switchHint':
+    'A LINE order with no transfer claim or payment is cancelled by itself when the time is up.',
+  'settings.unpaidTimeout.minutes': 'Cancel after how many minutes',
+  'settings.unpaidTimeout.minutesHint':
+    'From {min} to {max} minutes, counted from when the customer ordered.',
+  'settings.unpaidTimeout.error': 'Enter a whole number of minutes between {min} and {max}.',
+  'settings.unpaidTimeout.stateOn':
+    'On now. An order not paid within {minutes} minutes is cancelled.',
+  'settings.unpaidTimeout.stateOff': 'Off now. Unpaid orders stay until staff cancel them.',
+  'settings.unpaidTimeout.explainAuto':
+    'The system cancels them by itself and does not message the customer. The customer sees “Cancelled” when they open the order page.',
+  'settings.unpaidTimeout.explainClaimed':
+    'An order the customer has claimed as paid, or that has a payment, is never cancelled.',
+  'settings.unpaidTimeout.explainLate':
+    'If the customer sends a slip after the cancel, it goes to staff review and is not dropped.',
 } as const satisfies Record<keyof typeof thSettings, string>;

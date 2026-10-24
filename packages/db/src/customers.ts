@@ -272,6 +272,7 @@ export async function takeCustomerSlipKeys(
         slipUploadedAt: null,
         slipVerifyCycles: 0,
         slipStaffCalls: 0,
+        slipAutoconfirmBlocked: false,
       })
       .where(eq(payments.id, row.id));
     keys.push(row.key);

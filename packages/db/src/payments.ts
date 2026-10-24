@@ -74,6 +74,32 @@ export function isOpenPaymentConflict(error: unknown): boolean {
   return false;
 }
 
+/** The partial unique index that lets one transfer (its QR key) back one confirmed payment (PAY-06). */
+export const SLIP_TRANSFER_INDEX = 'payments_slip_qr_confirmed_key';
+
+/** True when `error` is a unique violation of {@link SLIP_TRANSFER_INDEX}: a second confirmation of one transfer. */
+export function isSlipTransferConflict(error: unknown): boolean {
+  let current: unknown = error;
+  for (let depth = 0; depth < 3 && typeof current === 'object' && current !== null; depth += 1) {
+    const e = current as {
+      code?: unknown;
+      constraint?: unknown;
+      constraint_name?: unknown;
+      message?: unknown;
+      cause?: unknown;
+    };
+    if (e.code === '23505') {
+      const name = e.constraint ?? e.constraint_name;
+      if (name === SLIP_TRANSFER_INDEX) return true;
+      if (typeof e.message === 'string' && e.message.includes(`"${SLIP_TRANSFER_INDEX}"`)) {
+        return true;
+      }
+    }
+    current = e.cause;
+  }
+  return false;
+}
+
 /**
  * A new payment. There is no qr_payload here on purpose: the payload holds the PromptPay ID in
  * clear, so it is rebuilt from the current setting whenever the QR is shown and never stored
@@ -140,6 +166,8 @@ export interface PaymentPatch {
   slipBlockedAt?: Date | null;
   slipBlockReason?: string | null;
   slipReviewedAt?: Date | null;
+  /** D-40: the server never confirms this claim by itself; staff do. */
+  slipAutoconfirmBlocked?: boolean;
   /** Confirmed by the server itself after a valid bank check (D-27), not by a staff member. */
   autoConfirmed?: boolean;
 }

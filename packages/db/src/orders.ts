@@ -53,6 +53,10 @@ export interface OrderPatch {
   paymentStatus?: OrderPaymentStatus;
   /** Derived from the order's payments, written together with `paymentStatus`. */
   claimWithoutSlip?: boolean;
+  /** Derived with `paymentStatus` from the order's payments (D-38). */
+  paymentMethod?: string | null;
+  /** Derived from the order's payments (D-42). */
+  needsManualConfirm?: boolean;
 }
 
 export interface NewOrder {
@@ -409,6 +413,23 @@ export async function findOrderForCustomer(
 }
 
 /**
+ * The customer's LINE orders that are still `new`, oldest first (D-39): the candidates for the
+ * checkout warning and a merge. The caller narrows them with the payment rules.
+ */
+export async function listNewLineOrdersForCustomer(
+  db: Db,
+  customerId: string,
+): Promise<OrderRow[]> {
+  return db
+    .select()
+    .from(orders)
+    .where(
+      and(eq(orders.customerId, customerId), eq(orders.channel, 'line'), eq(orders.status, 'new')),
+    )
+    .orderBy(asc(orders.placedAt), asc(orders.id));
+}
+
+/**
  * The customer's most recent order with this display number. Numbers repeat from day to day, so
  * the newest one of THEIR orders is the one they mean.
  */
@@ -461,4 +482,51 @@ export async function latestRecipientForCustomer(
     recipientName: row.recipientName,
     deliveryNote: row.deliveryNote,
   };
+}
+
+// ---------- Unpaid timeout (D-41) ----------
+
+/**
+ * LINE orders still `new` that were placed before `placedBefore`, oldest first and bounded: the
+ * unpaid-timeout job's candidates. The job decides under the order lock whether each one is
+ * really unpaid and pay-first.
+ */
+export async function listNewLineOrdersPlacedBefore(
+  db: Db,
+  placedBefore: Date,
+  limit: number,
+): Promise<OrderRow[]> {
+  return db
+    .select()
+    .from(orders)
+    .where(
+      and(eq(orders.channel, 'line'), eq(orders.status, 'new'), lt(orders.placedAt, placedBefore)),
+    )
+    .orderBy(asc(orders.placedAt), asc(orders.id))
+    .limit(limit);
+}
+
+/**
+ * The customer's most recent order that the unpaid timeout cancelled at or after `since`: where a
+ * slip that arrives late is kept for staff (D-41).
+ */
+export async function findTimeoutCancelledOrderForCustomer(
+  db: Db,
+  customerId: string,
+  since: Date,
+): Promise<OrderRow | undefined> {
+  const [row] = await db
+    .select()
+    .from(orders)
+    .where(
+      and(
+        eq(orders.customerId, customerId),
+        eq(orders.status, 'cancelled'),
+        eq(orders.cancelReason, 'unpaid_timeout'),
+        gte(orders.cancelledAt, since),
+      ),
+    )
+    .orderBy(desc(orders.cancelledAt), desc(orders.id))
+    .limit(1);
+  return row;
 }

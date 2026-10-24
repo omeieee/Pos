@@ -29,6 +29,23 @@ export const enOrders = {
   'order.cancel.hasPayment':
     'This order has a payment the customer claimed or that was received. Tap “Money not found”, or ask a manager to cancel the payment on this page, then cancel the order.',
   'order.cancel.reasonShown': 'Cancelled because: {reason}',
+  'order.cancel.why.unpaidTimeout':
+    'Cancelled automatically: the customer did not pay within the time the shop set (no message was sent to the customer).',
+  'order.cancel.why.customer': 'The customer cancelled the order.',
+  'order.cancel.why.merged':
+    'The customer combined it into order {orderNo}, so this one was cancelled.',
+  // Start an unpaid PromptPay order from LINE (manager and owner only, D-38)
+  'order.move.startUnpaid': 'Start without payment',
+  'order.startUnpaid.wait':
+    'The customer pays this order by PromptPay and has not paid yet. It starts by itself once the payment is confirmed.',
+  'order.startUnpaid.title': 'Start order {orderNo} without payment',
+  'order.startUnpaid.explain':
+    'The kitchen gets the order before the money is in. If the customer does not pay, the shop loses the food. Your name and the reason are recorded.',
+  'order.startUnpaid.reason': 'Why start it first',
+  'order.startUnpaid.reasonPlaceholder':
+    'e.g. regular customer says they paid but it has not arrived',
+  'order.startUnpaid.confirm': 'Confirm start',
+  'order.startUnpaid.back': 'Back',
   // Owner: correct or void a past order (2026-10-11)
   'order.fix.edit': 'Edit order',
   'order.fix.void': 'Void order',
@@ -135,6 +152,12 @@ export const enOrders = {
   'orders.hint.awaiting':
     'The customer tapped “I have paid” · check the amount in your bank app before confirming',
   'orders.flag.noSlip': 'Says paid, no slip yet',
+  'orders.flag.manualConfirm': 'Confirm by hand',
+  'orders.flag.manualConfirmHint':
+    'A slip is in, but the shop must check and confirm it. The system did not confirm it.',
+  'orders.flag.awaitingPay': 'Awaiting payment',
+  'orders.flag.awaitingPayHint':
+    'The customer has not paid yet. The kitchen does not see this order yet.',
   'orders.notifyCustomer': 'Money not found · tell the customer',
   'orders.auditNote':
     'Who confirmed and when is saved in the audit log · cancelling or refunding after confirmation asks for identity again',

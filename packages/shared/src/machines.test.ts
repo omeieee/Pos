@@ -1,7 +1,13 @@
 import { describe, expect, test } from 'vitest';
 import { ORDER_STATUSES, type OrderStatus, PAYMENT_STATUSES, type PaymentStatus } from './enums.ts';
 import { satang } from './money.ts';
-import { initialOrderStatus, orderMachine } from './order-machine.ts';
+import {
+  initialOrderStatus,
+  mergedReason,
+  ORDER_REASONS,
+  orderMachine,
+  parseOrderReason,
+} from './order-machine.ts';
 import { derivePaymentStatus, paymentMachine } from './payment-machine.ts';
 import type { Actor, TransitionContext, TransitionResult } from './state-machine.ts';
 
@@ -26,7 +32,8 @@ interface Expected {
  * Any pair missing here must be rejected as invalid_transition.
  */
 const ORDER_EXPECTED: Partial<Record<`${OrderStatus}>${OrderStatus}`, Expected>> = {
-  'new>preparing': { actors: ['owner', 'manager', 'cashier', 'kitchen'] },
+  // D-38: the server starts a pay-first order itself when it becomes paid (reason `paid`).
+  'new>preparing': { actors: ['owner', 'manager', 'cashier', 'kitchen', 'system'] },
   'new>cancelled': { actors: ['owner', 'manager', 'cashier', 'customer', 'system'], reason: true },
   'preparing>ready': { actors: ['owner', 'manager', 'cashier', 'kitchen'] },
   'ready>completed': { actors: ['owner', 'manager', 'cashier', 'kitchen'] },
@@ -170,5 +177,40 @@ describe('derivePaymentStatus', () => {
     ['refunded then paid again', [p('refunded', 14500), p('confirmed', 14500)], 'paid'],
   ] as const)('%s → %s', (_label, payments, expected) => {
     expect(derivePaymentStatus(total, payments)).toBe(expected);
+  });
+});
+
+describe('order reasons (D-38 to D-41)', () => {
+  test('the stored words', () => {
+    expect(ORDER_REASONS).toEqual({
+      paid: 'paid',
+      customer_cancel: 'customer_cancel',
+      unpaid_timeout: 'unpaid_timeout',
+      merged: 'merged',
+    });
+    expect(mergedReason('L-012')).toBe('merged:L-012');
+  });
+
+  test('parseOrderReason reads each back, and anything else is other', () => {
+    expect(parseOrderReason('paid')).toEqual({ kind: 'paid' });
+    expect(parseOrderReason('customer_cancel')).toEqual({ kind: 'customer_cancel' });
+    expect(parseOrderReason('unpaid_timeout')).toEqual({ kind: 'unpaid_timeout' });
+    expect(parseOrderReason('merged:L-012')).toEqual({ kind: 'merged', orderNo: 'L-012' });
+    expect(parseOrderReason('merged:')).toEqual({ kind: 'other' });
+    expect(parseOrderReason('out of noodles')).toEqual({ kind: 'other' });
+    expect(parseOrderReason(null)).toEqual({ kind: 'other' });
+  });
+
+  test('the system may start a new order with reason paid, and the customer may not', () => {
+    expect(
+      orderMachine.transition('new', 'preparing', { actor: { kind: 'system' }, reason: 'paid' }),
+    ).toEqual({
+      ok: true,
+      stepUp: false,
+    });
+    expect(orderMachine.transition('new', 'preparing', { actor: { kind: 'customer' } })).toEqual({
+      ok: false,
+      error: 'forbidden',
+    });
   });
 });

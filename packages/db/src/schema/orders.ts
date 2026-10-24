@@ -73,6 +73,19 @@ export const orders = pgTable(
      * the order gets a new rev and the change reaches every device. A boolean only: no key leaves.
      */
     claimWithoutSlip: boolean('claim_without_slip').notNull().default(false),
+    /**
+     * The method of the order's current payment (pending, claimed or confirmed; a PromptPay claim
+     * staff rejected still counts): `cash`, `promptpay`, `gov_copay`, ... or null when none (a LINE
+     * cash order has no record). Written with `paymentStatus` in `settleOrder`, so every device and
+     * the kitchen (which gets no payment frames) can tell a pay-first order apart (D-38).
+     */
+    paymentMethod: text('payment_method'),
+    /**
+     * True while a payment is `claimed` with a slip whose bank check said valid but the server did
+     * not confirm it (ceiling, flagged customer, blocked, auto-confirm off): staff must tick it.
+     * Written in the transaction that changes the payment, so the order gets a new rev (D-42).
+     */
+    needsManualConfirm: boolean('needs_manual_confirm').notNull().default(false),
     subtotalSatang: money('subtotal_satang').notNull(),
     discountSatang: money('discount_satang').notNull().default(0),
     discountReason: text('discount_reason'),

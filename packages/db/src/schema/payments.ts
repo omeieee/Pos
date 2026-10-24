@@ -139,6 +139,12 @@ export const payments = pgTable(
     slipBlockedAt: ts('slip_blocked_at'),
     slipBlockReason: text('slip_block_reason'),
     slipReviewedAt: ts('slip_reviewed_at'),
+    /**
+     * D-40: the server must never confirm this claim by itself (a chat slip whose amount could not
+     * be matched to one order, or a customer's "send it to the shop anyway"). Staff confirm by
+     * hand as usual. Set per picture; cleared with the slip. Never in sync or realtime.
+     */
+    slipAutoconfirmBlocked: boolean('slip_autoconfirm_blocked').notNull().default(false),
     referenceNote: text('reference_note'),
     claimedAt: ts('claimed_at'),
     confirmedByStaffId: uuid('confirmed_by_staff_id').references(() => staff.id),
@@ -172,6 +178,11 @@ export const payments = pgTable(
     index('payments_slip_image_hash_idx').on(t.slipImageHash),
     index('payments_slip_ref_hash_idx').on(t.slipRefHash),
     index('payments_slip_qr_hash_idx').on(t.slipQrHash),
+    // PAY-06 backstop (D-40): one transfer can never be confirmed twice. Only `confirmed` is
+    // indexed: two photos of one transfer may both be `claimed` (staff see the duplicate hint).
+    uniqueIndex('payments_slip_qr_confirmed_key')
+      .on(t.slipQrHash)
+      .where(sql`status = 'confirmed' and slip_qr_hash is not null`),
     check('payments_method', oneOf('method', PAYMENT_METHODS)),
     check('payments_status', oneOf('status', PAYMENT_STATUSES)),
     check(

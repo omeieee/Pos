@@ -505,3 +505,34 @@ export const cashOpeningPatchInputSchema = z
   })
   .refine(needsAField, needsAFieldMessage);
 export type CashOpeningPatchInput = z.infer<typeof cashOpeningPatchInputSchema>;
+
+// ---------- Unpaid LINE orders (D-41) ----------
+
+/** Smallest and largest wait, in minutes, before an unpaid LINE order is cancelled. */
+export const UNPAID_TIMEOUT_MIN_MINUTES = 15;
+export const UNPAID_TIMEOUT_MAX_MINUTES = 240;
+
+/**
+ * Whether a LINE order that is still `new` with no claimed or confirmed payment is cancelled by
+ * the server after `minutes` (D-41). On at 60 minutes until the manager or owner changes it.
+ */
+const unpaidMinutes = z
+  .number()
+  .int()
+  .min(UNPAID_TIMEOUT_MIN_MINUTES)
+  .max(UNPAID_TIMEOUT_MAX_MINUTES);
+
+export const unpaidTimeoutSettingsSchema = z.object({
+  enabled: z.boolean().default(true),
+  minutes: unpaidMinutes.default(60),
+});
+export type UnpaidTimeoutSettings = z.infer<typeof unpaidTimeoutSettingsSchema>;
+
+export const DEFAULT_UNPAID_TIMEOUT: UnpaidTimeoutSettings = { enabled: true, minutes: 60 };
+
+export const unpaidTimeoutPatchInputSchema = z.strictObject({
+  expectedVersion,
+  enabled: z.boolean(),
+  minutes: unpaidMinutes,
+});
+export type UnpaidTimeoutPatchInput = z.infer<typeof unpaidTimeoutPatchInputSchema>;
