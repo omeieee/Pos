@@ -56,6 +56,27 @@ The owner reports (2026-10-01) that the Oracle account is **Pay-As-You-Go**. Fro
 | Set a **budget** (Billing → Budgets, about US$1 a month, alert at 50% and 100% to the owner's email) and look at **Cost Analysis** monthly. Zero spend is the expected value | PAYG has no spending cap: the budget only alerts |
 | The second Micro VM for the deferred rebuild test is inside the free allowance (2 allowed) **only if** its boot volume keeps the total at or below 200 GB; **terminate it and its volume right after the test** | Avoids a forgotten, billable leftover |
 
+### 3.2 Moving the API VM to an Ampere A1 (plan, D-43 Proposed)
+Why: the 1 GB Micro caps the API heap at 384 MB and keeps Tesseract and the QR worker tight. Checked 2026-10-25 (owner logged in; read-only):
+
+| Fact | Result |
+|---|---|
+| ✅ Current VM | one instance `omeie_pos`, E2.1.Micro, AD-1, Always Free; one 47 GB boot volume; no other volumes |
+| ✅ Free A1 size | **2 OCPU / 12 GB in total** (1,500 OCPU-h and 9,000 GB-h a month; the Oracle page says so for Always Free tenancies). The console shows the A1 limits as "Dynamic" with usage 0, so it does not state the cap. A note quoting 4 OCPU / 24 GB does **not** apply here; anything above 2 / 12 is billed |
+| ✅ Storage | 47 GB boot volume per instance at minimum; Micro + A1 = 94 GB of the 200 GB |
+| ✅ Reserved IP | `sds-pos-api` 161.118.211.42 assigned. Re-attach it to the A1 and the sslip.io host, the LINE webhook, the Slip2Go whitelist and `API_HOST` stay unchanged |
+| ✅ Budget | `pos-always-free-cap`, monthly US$2, spent US$0 (alerts not inspected) |
+| ✅ Backups | bucket `sds-backups` has `daily/ hourly/ monthly/ predeploy/`; restore drill PASSED 2026-10-25 on `hourly/sds-20261024T170512Z` (43 migrations, row counts equal to production) |
+| ⚠️ Capacity | "out of host capacity" in ap-singapore-1 is common: retry later or use another availability domain; never pick a paid shape |
+
+Order (the old VM stays up until the new one is verified):
+1. CI builds `linux/amd64,linux/arm64` (this change); the compose limits default to the Micro values, so the same bundle runs on both VMs.
+2. Owner approves, then create `VM.Standard.A1.Flex` 2 OCPU / 12 GB, Ubuntu aarch64, **no ephemeral public IP**; run `infra/oracle/bootstrap.sh`; join the tailnet as a temporary name; copy `/opt/sds/.env` and add the A1 memory lines from `infra/compose/.env.example`.
+3. Cutover in a quiet hour: stop the old API, final dump, move the reserved IP to the A1, rename the tailnet nodes (`sds-pos` goes to the A1), `deploy.sh`, then check `/healthz`, the LINE webhook verify, a test order and slip, Slip2Go, UptimeRobot.
+4. Keep the old VM about 7 days, then terminate it **and its boot volume**.
+Rollback before step 4: move the reserved IP back and start the old stack. Images built before this change are amd64 only and will not pull on the A1.
+Idle reclamation still applies to the A1 (7 days under 20% CPU p95, network and memory): the verified backups and the rebuild procedure are the mitigation.
+
 ## 4. Environments
 | Environment | Where | LINE | Data |
 |---|---|---|---|

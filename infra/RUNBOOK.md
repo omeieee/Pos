@@ -36,7 +36,7 @@ Playbooks for when something breaks. Setup lives in [SETUP.md](SETUP.md); the de
      ssh deploy@sds-pos '/opt/sds/dc logs --tail 200 api'
      ssh deploy@sds-pos '/opt/sds/dc logs --tail 100 caddy'
      ```
-   - Check memory with `ssh pos-ts 'free -m; dmesg -T | grep -i -E "killed process|oom" | tail'`. An OOM kill means the 1 GB is exhausted; the API heap cap is 384 MB (`--max-old-space-size=384` in `apps/api/Dockerfile`; the container limit is 512 MB).
+   - Check memory with `ssh pos-ts 'free -m; dmesg -T | grep -i -E "killed process|oom" | tail'`. An OOM kill means the 1 GB is exhausted; the API heap cap defaults to 384 MB (`NODE_OPTIONS` in `apps/api/Dockerfile`, overridable with `API_NODE_OPTIONS` in `.env`) and the container limit to 768 MB (`API_MEM_LIMIT`).
 3. **Restart one service:** `ssh deploy@sds-pos '/opt/sds/dc restart api'`.
    - If it started after a deploy, see **Rollback**.
    - Caddy certificate errors in the logs: see "Certificate problems" below.

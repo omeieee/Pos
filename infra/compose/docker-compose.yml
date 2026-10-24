@@ -1,4 +1,5 @@
-# SDS POS production stack on the Oracle E2.1.Micro (1 GB RAM, Path B).
+# SDS POS production stack on Oracle Always Free (Path B: Supabase database).
+# Defaults fit the E2.1.Micro (1 GB RAM); on the Ampere A1 raise the limits in .env (.env.example).
 # Lives at /opt/sds on the VM; CI copies it there (deploy-api.yml).
 #
 # Always run compose through ./dc (adds --env-file .deploy-state, which holds
@@ -53,6 +54,8 @@ services:
       VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
       VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
       VAPID_SUBJECT: ${VAPID_SUBJECT:-}
+      # V8 heap cap. Default fits the 1 GB Micro VM; on the A1 set API_NODE_OPTIONS in .env (see .env.example).
+      NODE_OPTIONS: ${API_NODE_OPTIONS:---max-old-space-size=384}
 
       GIT_SHA: ${GIT_SHA:-unknown}
     # Slip images (D-24) live on the VM disk in a named volume, so a redeploy keeps them.
@@ -63,9 +66,10 @@ services:
       - "3000"
     networks:
       - edge
-    # The image's CMD caps the V8 heap at 384 MB (apps/api/Dockerfile). The extra room is for the
+    # Defaults suit the 1 GB Micro VM: heap capped at 384 MB (NODE_OPTIONS above), the extra room is for the
     # Tesseract slip reader (one at a time); set SLIP_OCR=off in .env if memory gets tight.
-    mem_limit: 768m
+    # On the A1 (12 GB) set API_MEM_LIMIT and API_NODE_OPTIONS in .env.
+    mem_limit: ${API_MEM_LIMIT:-768m}
     security_opt:
       - no-new-privileges:true
     healthcheck:
@@ -120,7 +124,7 @@ services:
     # Own network: outbound only, cannot reach the api container.
     networks:
       - jobs
-    mem_limit: 256m
+    mem_limit: ${BACKUP_MEM_LIMIT:-256m}
     security_opt:
       - no-new-privileges:true
     healthcheck:
@@ -151,7 +155,7 @@ services:
     restart: "no"
     healthcheck:
       disable: true
-    mem_limit: 512m
+    mem_limit: ${DRILL_MEM_LIMIT:-512m}
     tmpfs:
       - /tmp/drill:size=256m,mode=1777
 
