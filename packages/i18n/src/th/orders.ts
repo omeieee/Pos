@@ -28,6 +28,21 @@ export const thOrders = {
   'order.cancel.hasPayment':
     'ออเดอร์นี้มีการชำระเงินที่ลูกค้าแจ้งโอนแล้วหรือรับเงินแล้ว ต้องกด “ยังไม่พบยอดเข้า” หรือให้ผู้จัดการยกเลิกรายการชำระที่หน้านี้ก่อน แล้วจึงยกเลิกออเดอร์ได้',
   'order.cancel.reasonShown': 'เหตุผลที่ยกเลิก: {reason}',
+  'order.cancel.why.unpaidTimeout':
+    'ยกเลิกอัตโนมัติ เพราะลูกค้าไม่ได้ชำระเงินภายในเวลาที่ร้านกำหนด (ไม่ได้ส่งข้อความหาลูกค้า)',
+  'order.cancel.why.customer': 'ลูกค้ายกเลิกออเดอร์เอง',
+  'order.cancel.why.merged': 'ลูกค้ารวมเข้ากับออเดอร์ {orderNo} แล้ว จึงยกเลิกใบนี้',
+  // Start an unpaid PromptPay order from LINE (manager and owner only, D-38)
+  'order.move.startUnpaid': 'เริ่มทำโดยยังไม่ชำระ',
+  'order.startUnpaid.wait':
+    'ออเดอร์นี้ลูกค้าจะจ่ายด้วยพร้อมเพย์และยังไม่ได้ชำระ ออเดอร์จะเริ่มทำเองเมื่อยืนยันการชำระแล้ว',
+  'order.startUnpaid.title': 'เริ่มทำออเดอร์ {orderNo} โดยยังไม่ชำระ',
+  'order.startUnpaid.explain':
+    'ครัวจะได้รับออเดอร์ก่อนที่เงินเข้า ถ้าลูกค้าไม่จ่ายร้านจะเสียอาหาร ระบบจะบันทึกชื่อคุณและเหตุผลไว้',
+  'order.startUnpaid.reason': 'เหตุผลที่เริ่มทำก่อน',
+  'order.startUnpaid.reasonPlaceholder': 'เช่น ลูกค้าประจำ บอกว่าโอนแล้วแต่ยอดยังไม่เข้า',
+  'order.startUnpaid.confirm': 'ยืนยันเริ่มทำ',
+  'order.startUnpaid.back': 'กลับ',
   // Owner: correct or void a past order (2026-10-11)
   'order.fix.edit': 'แก้ไขออเดอร์',
   'order.fix.void': 'ยกเลิกทั้งออเดอร์',
@@ -127,6 +142,10 @@ export const thOrders = {
   'orders.cta.open': 'เปิดออเดอร์',
   'orders.hint.awaiting': 'ลูกค้ากด “โอนแล้ว” · ตรวจยอดในแอปธนาคารก่อนยืนยัน',
   'orders.flag.noSlip': 'โอนแล้ว แต่ยังไม่มีสลิป',
+  'orders.flag.manualConfirm': 'ต้องยืนยันเอง',
+  'orders.flag.manualConfirmHint': 'มีสลิปแล้ว แต่ร้านต้องตรวจและกดยืนยันเอง ระบบไม่ได้ยืนยันให้',
+  'orders.flag.awaitingPay': 'รอชำระ',
+  'orders.flag.awaitingPayHint': 'ลูกค้ายังไม่ชำระ ครัวยังไม่เห็นออเดอร์นี้',
   'orders.notifyCustomer': 'ยังไม่พบเงินเข้า · แจ้งลูกค้า',
   'orders.auditNote': 'บันทึกผู้ยืนยันและเวลาใน audit log · การยกเลิกหรือคืนเงินหลังยืนยันต้องยืนยันตัวตนอีกครั้ง',
   'orders.paidToday': 'รับเงินแล้ววันนี้',

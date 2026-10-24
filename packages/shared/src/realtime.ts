@@ -207,6 +207,23 @@ export const newOrderAlertFrameSchema = z.object({
   }),
 });
 
+/**
+ * A payment needs eyes (D-42): an order became paid, or a slip waits for staff review. Ids only:
+ * the pop-up reads the order from its own store. Like the new-order alert it is not a stored row.
+ */
+export const PAYMENT_ALERT_KINDS = ['paid', 'slip_review'] as const;
+export type PaymentAlertKind = (typeof PAYMENT_ALERT_KINDS)[number];
+
+export const paymentAlertFrameSchema = z.object({
+  type: z.literal('alert.payment'),
+  id: z.uuid(),
+  data: z.object({
+    orderId: z.uuid(),
+    orderNo: z.string(),
+    kind: z.enum(PAYMENT_ALERT_KINDS),
+  }),
+});
+
 /** Every type of frame. An audience is chosen for each in the API; a new one must be listed here. */
 export const FRAME_TYPES = [
   'order.upserted',
@@ -215,6 +232,7 @@ export const FRAME_TYPES = [
   'settings.updated',
   'customer.upserted',
   'alert.new_order',
+  'alert.payment',
 ] as const;
 export type FrameType = (typeof FRAME_TYPES)[number];
 
@@ -228,7 +246,11 @@ export const syncChangeSchema = z.union([
 ]);
 export type SyncChange = z.infer<typeof syncChangeSchema>;
 
-export const realtimeFrameSchema = z.union([syncChangeSchema, newOrderAlertFrameSchema]);
+export const realtimeFrameSchema = z.union([
+  syncChangeSchema,
+  newOrderAlertFrameSchema,
+  paymentAlertFrameSchema,
+]);
 export type RealtimeFrame = z.infer<typeof realtimeFrameSchema>;
 
 export const wsReadyMessageSchema = z.object({

@@ -74,6 +74,17 @@ export const orderDtoSchema = z.object({
    * Absent from an older server (treat as false).
    */
   claimWithoutSlip: z.boolean().optional(),
+  /**
+   * The method of the order's current payment, or null when none (a LINE cash order has no
+   * record). A pay-first order (D-38) is a LINE order whose method is `promptpay`: the kitchen has
+   * no payment frames, so it reads this. Absent from an older server.
+   */
+  paymentMethod: z.enum(['cash', 'promptpay', 'gov_copay']).nullable().optional(),
+  /**
+   * A payment is `claimed` with a slip the bank check passed, yet the server did not confirm it
+   * (ceiling, flagged customer, blocked): staff must confirm by hand (D-42). Absent from an older server.
+   */
+  needsManualConfirm: z.boolean().optional(),
   subtotalSatang: nonNegativeSatangSchema,
   discountSatang: nonNegativeSatangSchema,
   totalSatang: nonNegativeSatangSchema,
@@ -133,6 +144,11 @@ export const transitionOrderInputSchema = z.object({
   reason: z.string().trim().max(200).optional(),
   /** Optional: the status check under the row lock already refuses a stale move. */
   expectedVersion: version.optional(),
+  /**
+   * Manager or owner only (D-38): start a pay-first LINE order that is not paid yet. Needs a
+   * `reason`; the server audits it as `order.start_unpaid`. Ignored for every other move.
+   */
+  startUnpaid: z.boolean().optional(),
 });
 export type TransitionOrderInput = z.infer<typeof transitionOrderInputSchema>;
 

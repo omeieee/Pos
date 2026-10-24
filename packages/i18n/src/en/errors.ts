@@ -79,6 +79,8 @@ export const enErrors = {
   'error.qrLinkExpired': 'The QR link has expired. Please make a new one.',
   'error.orderHasPayment':
     'This order has a payment. Cancel the transfer claim or the payment first.',
+  'error.paymentRequired':
+    'This order is paid by PromptPay and is not paid yet, so it cannot be started. It starts by itself once the payment is confirmed.',
   'error.unknownItem': 'That dish no longer exists. Please reload the menu.',
   'error.itemUnavailable': 'A dish is sold out or off the menu. Please check the order.',
   'error.itemNotOnChannel': 'A dish is not sold on this channel',

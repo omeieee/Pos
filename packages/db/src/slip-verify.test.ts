@@ -459,3 +459,52 @@ describe('daily Slip2Go usage', () => {
     expect(await repo.claimSlipVerifyAlert(db, '2026-10-02', 'account')).toBe(true);
   });
 });
+
+describe('one transfer can never be confirmed twice (PAY-06, D-40)', () => {
+  const confirm = (row: repo.PaymentRow) =>
+    repo.updatePaymentIfVersion(db, row.id, row.version, {
+      status: 'confirmed',
+      confirmedAt: new Date('2026-10-01T04:00:00Z'),
+      autoConfirmed: true,
+    });
+
+  test('two claimed payments may hold one QR key, but only one of them can be confirmed', async () => {
+    const key = `qr-twice-${unique()}`;
+    const first = await claimedPayment(null, { slipQrHash: key });
+    const second = await claimedPayment(null, { slipQrHash: key });
+    expect((await confirm(first))?.status).toBe('confirmed');
+    const error = await confirm(second).then(
+      () => null,
+      (e: unknown) => e,
+    );
+    expect(repo.isSlipTransferConflict(error)).toBe(true);
+    expect((await repo.findPaymentById(db, second.id))?.status).toBe('claimed');
+  });
+
+  test('a voided confirmation frees the key, and payments without a key are never in conflict', async () => {
+    const key = `qr-void-${unique()}`;
+    const first = await claimedPayment(null, { slipQrHash: key });
+    const confirmed = await confirm(first);
+    await repo.updatePaymentIfVersion(db, first.id, confirmed?.version ?? 0, {
+      status: 'voided',
+      voidReason: 'no money',
+    });
+    const other = await claimedPayment(null, { slipQrHash: key });
+    expect((await confirm(other))?.status).toBe('confirmed');
+    const a = await claimedPayment(null);
+    const b = await claimedPayment(null);
+    expect((await confirm(a))?.status).toBe('confirmed');
+    expect((await confirm(b))?.status).toBe('confirmed');
+  });
+
+  test('the auto-confirm block is never in the sync feed', async () => {
+    const row = await claimedPayment(null, { slipAutoconfirmBlocked: true });
+    expect(row.slipAutoconfirmBlocked).toBe(true);
+    const batch = await sync.readChanges(db, {
+      since: 0,
+      limit: 500,
+      include: { orders: false, payments: true, menu: false, settings: false, customers: false },
+    });
+    expect(JSON.stringify(batch)).not.toMatch(/autoconfirm/i);
+  });
+});
