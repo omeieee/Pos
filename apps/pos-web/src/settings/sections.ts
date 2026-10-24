@@ -17,6 +17,7 @@ export const SECTION_IDS = [
   'delivery',
   'line-ordering',
   'printing',
+  'unpaid-timeout',
   'promptpay',
   'bank-account',
   'receipt',
@@ -93,6 +94,15 @@ export const SECTIONS: readonly SectionDef[] = [
     id: 'printing',
     titleKey: 'settings.printing.title',
     descKey: 'settings.printing.desc',
+    view: 'settings.edit',
+    edit: 'settings.edit',
+    stepUpToOpen: false,
+  },
+  {
+    // Manager and owner only, like printing: the API lets `settings.view` read it, a cashier has no use for it.
+    id: 'unpaid-timeout',
+    titleKey: 'settings.unpaidTimeout.title',
+    descKey: 'settings.unpaidTimeout.desc',
     view: 'settings.edit',
     edit: 'settings.edit',
     stepUpToOpen: false,

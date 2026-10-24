@@ -50,7 +50,7 @@ function Wait({ order, now }: { order: OrderDto; now: number }) {
 }
 
 /** The LINE name next to a small round picture (when LINE gave one and it loads). */
-function LineWho({ line }: { line: NonNullable<OrderDto['line']> }) {
+export function LineWho({ line }: { line: NonNullable<OrderDto['line']> }) {
   const tr = useT();
   const [broken, setBroken] = useState(false);
   if (!line.displayName && !line.pictureUrl) return null;

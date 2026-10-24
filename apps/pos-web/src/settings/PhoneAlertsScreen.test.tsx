@@ -25,7 +25,9 @@ async function open(
   return env;
 }
 
-const sw = async () => (await screen.findByRole('checkbox')) as HTMLInputElement;
+// The page also holds the payment pop-up switch (D-42): this is the phone alerts one.
+const sw = async () =>
+  (await screen.findByRole('checkbox', { name: tr('push.switch') })) as HTMLInputElement;
 const heading = () => screen.getByRole('heading', { level: 1, name: tr('push.title') });
 
 describe('phone alerts page', () => {
@@ -103,17 +105,32 @@ describe('phone alerts page', () => {
   });
 });
 
+describe('phone alerts page: the payment pop-up switch (D-42)', () => {
+  test('is on by default, whatever the browser can do, and the choice is remembered', async () => {
+    const env = await open({ browser: { availability: 'unsupported' } });
+    const box = (await screen.findByRole('checkbox', {
+      name: tr('payPopup.switch'),
+    })) as HTMLInputElement;
+    expect(box.checked).toBe(true);
+    expect(screen.getByText(tr('payPopup.state.on'))).toBeTruthy();
+    fireEvent.click(box);
+    await waitFor(() => expect(box.checked).toBe(false));
+    expect(screen.getByText(tr('payPopup.state.off'))).toBeTruthy();
+    await waitFor(() => expect(env.popupPrefs.value()).toBe(false));
+  });
+});
+
 describe('phone alerts page: when the switch is not available', () => {
   test('the server is not set up: the owner has to act, and there is no switch', async () => {
     await open({ push: { config: async () => ({ enabled: false, publicKey: null }) } });
     expect(await screen.findByText(th['push.notConfigured'])).toBeTruthy();
-    expect(screen.queryByRole('checkbox')).toBeNull();
+    expect(screen.queryByRole('checkbox', { name: tr('push.switch') })).toBeNull();
   });
 
   test('the browser has no push', async () => {
     await open({ browser: { availability: 'unsupported' } });
     expect(await screen.findByText(th['push.unsupported'])).toBeTruthy();
-    expect(screen.queryByRole('checkbox')).toBeNull();
+    expect(screen.queryByRole('checkbox', { name: tr('push.switch') })).toBeNull();
   });
 
   test('an iPhone in a Safari tab gets the Home Screen steps', async () => {
@@ -122,7 +139,7 @@ describe('phone alerts page: when the switch is not available', () => {
     for (const step of [1, 2, 3, 4] as const) {
       expect(screen.getByText(th[`push.needsInstall.step${step}`])).toBeTruthy();
     }
-    expect(screen.queryByRole('checkbox')).toBeNull();
+    expect(screen.queryByRole('checkbox', { name: tr('push.switch') })).toBeNull();
   });
 
   test('a blocked permission explains how to allow it, and can be checked again', async () => {

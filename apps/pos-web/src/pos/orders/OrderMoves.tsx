@@ -2,9 +2,10 @@ import type { OrderDto, StaffRole } from '@sds/shared';
 import { useEffect, useState } from 'react';
 import { errorText } from '../../api/errors.ts';
 import { s } from '../../design/style.ts';
-import { useActivityHold, useServices, useStoreState, useT } from '../../ui/hooks.ts';
+import { useActivityHold, useEntities, useServices, useStoreState, useT } from '../../ui/hooks.ts';
 import { Callout, PayModal, SheetBody, SheetTitle, TextRow } from '../payments/PayParts.tsx';
-import { type OrderMove, orderMoves } from './order-board.ts';
+import { promptpayOrderIds, startPlan } from '../payments/pay-first-model.ts';
+import { type OrderMove, orderMovesFor } from './order-board.ts';
 
 /**
  * The status moves this role may make on the order (read from the shared order machine). A move
@@ -17,17 +18,28 @@ export function OrderMoves({ order, role }: { order: OrderDto; role: StaffRole }
   const { orderMoves: moveStore } = useServices();
   const flow = useStoreState(moveStore);
   const tr = useT();
+  const { payments } = useEntities();
+  // An unpaid pay-first order has no plain accept (D-38): it waits for the payment, or a manager
+  // or owner starts it with the explicit unpaid action.
+  const plan =
+    order.status === 'new'
+      ? startPlan(order, role, promptpayOrderIds(payments.values()))
+      : 'normal';
   // The owner's void (with its payment choice) replaces the plain cancel of a finished order.
-  const moves = orderMoves(order.status, role).filter(
+  const moves = orderMovesFor(order.status, role, plan).filter(
     (move) => !(move.kind === 'cancel' && order.status === 'completed'),
   );
   const [cancelling, setCancelling] = useState(false);
-  if (moves.length === 0) return null;
+  const [startingUnpaid, setStartingUnpaid] = useState(false);
+  if (moves.length === 0 && plan === 'normal') return null;
 
   const pending = flow.pending.includes(order.id);
   // An error belongs to the status it was refused from; once the order has moved on it is stale.
   const failure = flow.errors[order.id];
-  const shown = failure && failure.from === order.status && !cancelling ? failure.error : null;
+  const shown =
+    failure && failure.from === order.status && !cancelling && !startingUnpaid
+      ? failure.error
+      : null;
 
   function choose(move: OrderMove) {
     if (move.kind === 'cancel') setCancelling(true);
@@ -40,6 +52,18 @@ export function OrderMoves({ order, role }: { order: OrderDto; role: StaffRole }
         style={s('border:0;margin:0;padding:0;min-width:0;display:flex;gap:10px;flex-wrap:wrap')}
       >
         <legend className="visually-hidden">{tr('order.moves.label')}</legend>
+        {plan === 'override' ? (
+          <button
+            type="button"
+            className="g-btn g-btn-p g-btn-lg"
+            style={s('flex:1 1 auto')}
+            disabled={pending}
+            aria-busy={pending}
+            onClick={() => setStartingUnpaid(true)}
+          >
+            {tr('order.move.startUnpaid')}
+          </button>
+        ) : null}
         {moves.map((move) => (
           <button
             key={move.to}
@@ -54,13 +78,77 @@ export function OrderMoves({ order, role }: { order: OrderDto; role: StaffRole }
           </button>
         ))}
       </fieldset>
+      {plan !== 'normal' ? (
+        <Callout tone="info" role="status">
+          {tr('order.startUnpaid.wait')}
+        </Callout>
+      ) : null}
       {shown ? (
         <Callout tone="bad" role="alert">
           {errorText(tr, shown)}
         </Callout>
       ) : null}
       {cancelling ? <CancelOrderDialog order={order} onClose={() => setCancelling(false)} /> : null}
+      {startingUnpaid ? (
+        <StartUnpaidDialog order={order} onClose={() => setStartingUnpaid(false)} />
+      ) : null}
     </div>
+  );
+}
+
+/** Manager or owner: start an unpaid pay-first order anyway. A reason is required; the server audits it. */
+function StartUnpaidDialog({ order, onClose }: { order: OrderDto; onClose: () => void }) {
+  const { orderMoves: moveStore } = useServices();
+  const flow = useStoreState(moveStore);
+  const tr = useT();
+  const [reason, setReason] = useState('');
+  useActivityHold(true);
+  useEffect(() => moveStore.dismiss(order.id), [moveStore, order.id]);
+
+  const pending = flow.pending.includes(order.id);
+  const error = flow.errors[order.id]?.error ?? null;
+
+  async function submit() {
+    const text = reason.trim();
+    if (text === '' || pending) return;
+    const outcome = await moveStore.startUnpaid(order, text);
+    if (outcome.ok) onClose();
+  }
+
+  return (
+    <PayModal labelledBy="start-unpaid-title" onClose={onClose}>
+      <SheetBody>
+        <SheetTitle id="start-unpaid-title">
+          {tr('order.startUnpaid.title', { orderNo: order.orderNo })}
+        </SheetTitle>
+        <Callout tone="info">{tr('order.startUnpaid.explain')}</Callout>
+        <TextRow
+          id="start-unpaid-reason"
+          label={tr('order.startUnpaid.reason')}
+          placeholder={tr('order.startUnpaid.reasonPlaceholder')}
+          value={reason}
+          disabled={pending}
+          onChange={setReason}
+        />
+        {error ? (
+          <Callout tone="bad" role="alert">
+            {errorText(tr, error)}
+          </Callout>
+        ) : null}
+        <button
+          type="button"
+          className="g-btn g-btn-p g-btn-lg g-btn-block"
+          disabled={pending || reason.trim() === ''}
+          aria-busy={pending}
+          onClick={() => void submit()}
+        >
+          {tr('order.startUnpaid.confirm')}
+        </button>
+        <button type="button" className="g-btn g-btn-block" onClick={onClose}>
+          {tr('order.startUnpaid.back')}
+        </button>
+      </SheetBody>
+    </PayModal>
   );
 }
 

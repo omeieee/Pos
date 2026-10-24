@@ -91,7 +91,7 @@ test.describe('phone alerts (P8)', () => {
     await signInWithPin(page, 'cashier');
     await openFromSettings(page);
     await expect(page.getByText(tr('push.notConfigured'))).toBeVisible();
-    await expect(page.getByRole('checkbox')).toHaveCount(0);
+    await expect(page.getByRole('checkbox', { name: tr('push.switch') })).toHaveCount(0);
   });
 
   test('an iPhone or iPad in a Safari tab is told how to add the app to the Home Screen', async ({
@@ -102,7 +102,7 @@ test.describe('phone alerts (P8)', () => {
     await openFromSettings(page);
     await expect(page.getByText(tr('push.needsInstall.title'))).toBeVisible();
     await expect(page.getByText(tr('push.needsInstall.step3'))).toBeVisible();
-    await expect(page.getByRole('checkbox')).toHaveCount(0);
+    await expect(page.getByRole('checkbox', { name: tr('push.switch') })).toHaveCount(0);
     expect(await noSideways(page)).toBe(true);
   });
 

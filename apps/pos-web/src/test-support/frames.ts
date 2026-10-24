@@ -40,6 +40,8 @@ export function orderDto(id: string, rev: number, over: Partial<OrderDto> = {}):
     customerId: null,
     status: 'new',
     paymentStatus: 'unpaid',
+    paymentMethod: null,
+    needsManualConfirm: false,
     subtotalSatang: satang(10000),
     discountSatang: satang(0),
     totalSatang: satang(10000),
@@ -316,3 +318,11 @@ export const alertFrame = (id: string): Extract<RealtimeFrame, { type: 'alert.ne
       createdOnDeviceId: null,
     },
   });
+
+export const paymentAlertFrame = (
+  id: string,
+  orderId: string,
+  kind: 'paid' | 'slip_review' = 'paid',
+  orderNo = 'L-001',
+): Extract<RealtimeFrame, { type: 'alert.payment' }> =>
+  parse({ type: 'alert.payment', id, data: { orderId, orderNo, kind } });

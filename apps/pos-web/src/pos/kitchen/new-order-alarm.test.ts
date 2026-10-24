@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { createEntityStore } from '../../realtime/entity-store.ts';
-import { alertFrame, orderFrame, uuid } from '../../test-support/frames.ts';
+import { alertFrame, orderFrame, paymentAlertFrame, uuid } from '../../test-support/frames.ts';
 import {
   createNewOrderAlarm,
   MAX_REMINDERS,
@@ -57,6 +57,12 @@ function setup(options: { deviceId?: string | null; played?: boolean } = {}) {
 }
 
 describe('the chime for a new order', () => {
+  test('a payment alert (D-42) is for the pop-up and makes no chime', () => {
+    const { entities, play } = setup();
+    entities.apply(paymentAlertFrame(uuid(1), uuid(2), 'paid'));
+    expect(play).not.toHaveBeenCalled();
+  });
+
   test('plays when an order arrives', () => {
     const { entities, play } = setup();
     entities.apply(alertFrame(uuid(1)));

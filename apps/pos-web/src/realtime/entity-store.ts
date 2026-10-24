@@ -36,7 +36,9 @@ import { createStore, type ReadableStore } from '../lib/store.ts';
 
 export type GroupEntity = Omit<GroupDto, 'options'>;
 export type SettingsEntry = Extract<SyncChange, { type: 'settings.updated' }>;
-export type AlertFrame = Extract<RealtimeFrame, { type: 'alert.new_order' }>;
+export type NewOrderAlertFrame = Extract<RealtimeFrame, { type: 'alert.new_order' }>;
+export type PaymentAlertFrame = Extract<RealtimeFrame, { type: 'alert.payment' }>;
+export type AlertFrame = NewOrderAlertFrame | PaymentAlertFrame;
 
 export interface EntityState {
   orders: ReadonlyMap<string, OrderDto>;
@@ -153,6 +155,10 @@ export function createEntityStore(): EntityStore {
   function applyTo(draft: Draft, frame: RealtimeFrame): boolean {
     switch (frame.type) {
       case 'alert.new_order':
+        alert(frame);
+        return false;
+      case 'alert.payment':
+        // Not a stored row: the payment pop-up (D-42) listens for it, like the new-order sound.
         alert(frame);
         return false;
       case 'order.upserted':

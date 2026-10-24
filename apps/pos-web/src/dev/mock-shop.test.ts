@@ -330,6 +330,28 @@ describe('the dev shop socket', () => {
     expect(shop.simulateIncomingOrder().id).not.toBe(order.id);
   });
 
+  test('a pay-first incoming order carries a pending PromptPay payment, so accepting it is refused', () => {
+    const { shop } = setup();
+    const order = shop.simulateIncomingOrder({ payFirst: true });
+    const after = orderDtoSchema.parse(
+      (
+        shop.handle('GET', `/v1/orders/${order.id}`, new URLSearchParams(), undefined, {
+          role: 'owner',
+          stepUpFresh: false,
+        }) as { body: unknown }
+      ).body,
+    );
+    expect(after).toMatchObject({ status: 'new', paymentMethod: 'promptpay' });
+    const accept = shop.handle(
+      'POST',
+      `/v1/orders/${order.id}/transition`,
+      new URLSearchParams(),
+      { to: 'preparing' },
+      { role: 'cashier', stepUpFresh: false },
+    );
+    expect((accept as { body: { code: string } }).body.code).toBe('PAYMENT_REQUIRED');
+  });
+
   test('it pings, so a quiet dev session is not dropped as dead', async () => {
     const { shop } = setup();
     const seen: unknown[] = [];

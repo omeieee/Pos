@@ -8,6 +8,7 @@ import {
   DEFAULT_PRINTING,
   DEFAULT_RECEIPT_SETTINGS,
   DEFAULT_SHOP_SETTINGS,
+  DEFAULT_UNPAID_TIMEOUT,
 } from '@sds/shared';
 import { vi } from 'vitest';
 import type { ApiClient } from '../api/client.ts';
@@ -36,6 +37,7 @@ const DEFAULT_READS = {
   payments: { cash: true, promptpay: true, platform: true, other: false },
   deliveryList: DEFAULT_DELIVERY_SETTINGS,
   printing: DEFAULT_PRINTING,
+  unpaidTimeout: DEFAULT_UNPAID_TIMEOUT,
   receipt: DEFAULT_RECEIPT_SETTINGS,
   bankAccount: { bankCode: null, accountMasked: null, configured: false },
   promptpayMasked: { idType: 'phone', idMasked: '******1234' },

@@ -7,6 +7,7 @@ import {
   itemFrame,
   optionFrame,
   orderFrame,
+  paymentAlertFrame,
   paymentFrame,
   settingsFrame,
   uuid,
@@ -172,6 +173,20 @@ describe('alerts', () => {
     expect(store.getState()).toBe(before);
     expect(heard).toHaveBeenCalledTimes(1);
     expect(heard.mock.calls[0]?.[0]).toMatchObject({ type: 'alert.new_order', id: uuid(9) });
+  });
+
+  test('alert.payment (D-42) goes to listeners the same way: not a row, no lastRev', () => {
+    const store = createEntityStore();
+    const heard = vi.fn();
+    store.onAlert(heard);
+    store.apply(orderFrame(uuid(1), 5));
+    const before = store.getState();
+    expect(store.apply(paymentAlertFrame(uuid(8), uuid(1), 'slip_review'))).toBe(false);
+    expect(store.getState()).toBe(before);
+    expect(heard.mock.calls[0]?.[0]).toMatchObject({
+      type: 'alert.payment',
+      data: { orderId: uuid(1), kind: 'slip_review' },
+    });
   });
 
   test('a listener can be removed, and a throwing listener does not stop the others', () => {

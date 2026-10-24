@@ -12,6 +12,7 @@ import {
   buildNumberingPatch,
   buildPaymentsPatch,
   buildShopPatch,
+  buildUnpaidTimeoutPatch,
   hasOtherHoursRules,
   hoursFormFrom,
   minutesToText,
@@ -19,9 +20,11 @@ import {
   parseTimeText,
   removeBuilding,
   shopFormFrom,
+  unpaidTimeoutFormFrom,
   validateHoursForm,
   validateNumberingForm,
   validateShopForm,
+  validateUnpaidTimeoutForm,
 } from './model.ts';
 
 describe('time text', () => {
@@ -319,5 +322,53 @@ describe('delivery buildings', () => {
       buildings: ['B2', 'A1'],
     });
     expect(DEFAULT_DELIVERY_SETTINGS.buildings.length).toBeGreaterThan(0);
+  });
+});
+
+describe('cancelling unpaid LINE orders (D-41)', () => {
+  const base = { enabled: true, minutes: 60 };
+
+  test('the form starts from the saved value', () => {
+    expect(unpaidTimeoutFormFrom(base)).toEqual({ enabled: true, minutes: '60' });
+    expect(unpaidTimeoutFormFrom({ enabled: false, minutes: 15 })).toEqual({
+      enabled: false,
+      minutes: '15',
+    });
+  });
+
+  test('minutes must be a whole number from 15 to 240', () => {
+    const ok = (minutes: string) => validateUnpaidTimeoutForm({ enabled: true, minutes });
+    expect(ok('15')).toEqual([]);
+    expect(ok('240')).toEqual([]);
+    expect(ok(' 90 ')).toEqual([]);
+    for (const bad of ['14', '241', '', 'abc', '60.5', '-60', '1e2', '0x20']) {
+      expect(ok(bad), bad).toEqual(['minutes']);
+    }
+  });
+
+  test('a switched-off form still checks the minutes it will save', () => {
+    expect(validateUnpaidTimeoutForm({ enabled: false, minutes: '5' })).toEqual(['minutes']);
+  });
+
+  test('nothing changed sends nothing', () => {
+    expect(buildUnpaidTimeoutPatch(base, 3, { enabled: true, minutes: '60' })).toBeNull();
+    expect(buildUnpaidTimeoutPatch(base, 3, { enabled: true, minutes: ' 60 ' })).toBeNull();
+  });
+
+  test('a change sends both fields (the server replaces the value) with the version seen', () => {
+    expect(buildUnpaidTimeoutPatch(base, 3, { enabled: true, minutes: '90' })).toEqual({
+      expectedVersion: 3,
+      enabled: true,
+      minutes: 90,
+    });
+    expect(buildUnpaidTimeoutPatch(base, 3, { enabled: false, minutes: '60' })).toEqual({
+      expectedVersion: 3,
+      enabled: false,
+      minutes: 60,
+    });
+  });
+
+  test('an invalid form sends nothing', () => {
+    expect(buildUnpaidTimeoutPatch(base, 3, { enabled: true, minutes: '5' })).toBeNull();
   });
 });

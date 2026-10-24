@@ -18,6 +18,7 @@ import {
   DEFAULT_OPENING_HOURS,
   DEFAULT_PRINTING,
   DEFAULT_SHOP_SETTINGS,
+  DEFAULT_UNPAID_TIMEOUT,
   deliveryPatchInputSchema,
   deliverySettingsSchema,
   lineOrderingPatchInputSchema,
@@ -32,6 +33,8 @@ import {
   SHOP_TIME_ZONE,
   shopPatchInputSchema,
   shopSettingsSchema,
+  unpaidTimeoutPatchInputSchema,
+  unpaidTimeoutSettingsSchema,
 } from '@sds/shared';
 import type { z } from 'zod';
 import type { MockAnswer, MockCaller } from './mock-payments.ts';
@@ -87,6 +90,13 @@ const RESOURCES: readonly Resource[] = [
     schema: printingSettingsSchema,
     patch: printingPatchInputSchema,
     defaults: DEFAULT_PRINTING,
+  },
+  {
+    route: 'unpaid-timeout',
+    key: 'unpaid_timeout',
+    schema: unpaidTimeoutSettingsSchema,
+    patch: unpaidTimeoutPatchInputSchema,
+    defaults: DEFAULT_UNPAID_TIMEOUT,
   },
   {
     route: 'numbering',

@@ -12,6 +12,7 @@ import {
   matchesPhoneFilter,
   matchesQuery,
   orderMoves,
+  orderMovesFor,
   ordersForDay,
   paidByHour,
   paidToday,
@@ -293,5 +294,25 @@ describe('what was received today', () => {
   test('one hour or none is no line', () => {
     expect(paidByHour([])).toEqual([]);
     expect(paidByHour([placed(1, '2030-10-15T04:10:00Z', { paymentStatus: 'paid' })])).toEqual([]);
+  });
+});
+
+describe('the moves offered on an order that pays first (D-38)', () => {
+  const toIds = (moves: ReturnType<typeof orderMovesFor>) => moves.map((m) => m.to);
+
+  test('a plan of wait or override takes the plain accept away and keeps the cancel', () => {
+    for (const plan of ['wait', 'override'] as const) {
+      expect(toIds(orderMovesFor('new', 'cashier', plan))).toEqual(['cancelled']);
+      expect(toIds(orderMovesFor('new', 'owner', plan))).toEqual(['cancelled']);
+    }
+  });
+
+  test('the kitchen, which cannot cancel, is left with nothing while it waits', () => {
+    expect(orderMovesFor('new', 'kitchen', 'wait')).toEqual([]);
+  });
+
+  test('a normal plan is the plain list for the role', () => {
+    expect(orderMovesFor('new', 'cashier', 'normal')).toEqual(orderMoves('new', 'cashier'));
+    expect(toIds(orderMovesFor('preparing', 'manager', 'normal'))).toEqual(['ready', 'cancelled']);
   });
 });

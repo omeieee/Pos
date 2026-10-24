@@ -43,6 +43,33 @@ export function NoSlipFlag() {
   );
 }
 
+/**
+ * "Confirm by hand": a slip is on the claim and the payment is not confirmed, so the shop must
+ * check the bank app and confirm it (D-42). Words and icon, with the longer reason as a tooltip.
+ */
+export function ManualConfirmFlag() {
+  const tr = useT();
+  return (
+    <span className="g-badge g-b-warn status" title={tr('orders.flag.manualConfirmHint')}>
+      <Gi n="shieldCheck" />
+      {tr('orders.flag.manualConfirm')}
+      <span className="visually-hidden">. {tr('orders.flag.manualConfirmHint')}</span>
+    </span>
+  );
+}
+
+/** A pay-first LINE order that waits for the customer's money: muted, the kitchen does not see it yet (D-38). */
+export function AwaitingPayBadge() {
+  const tr = useT();
+  return (
+    <span className="g-badge g-b-mute status" title={tr('orders.flag.awaitingPayHint')}>
+      <Gi n="clock" />
+      {tr('orders.flag.awaitingPay')}
+      <span className="visually-hidden">. {tr('orders.flag.awaitingPayHint')}</span>
+    </span>
+  );
+}
+
 export function OrderStatusBadge({ status }: { status: OrderStatus }) {
   const tr = useT();
   const { tone, icon } = ORDER[status];
