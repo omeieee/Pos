@@ -1,5 +1,6 @@
 # Backup image for the SDS POS (runs on the VM as the `backup` service).
-# Built in GitHub Actions (deploy-api.yml), never on the VM.
+# Built in GitHub Actions (deploy-api.yml), never on the VM, for linux/amd64 and linux/arm64
+# (the Oracle Micro VM and the Ampere A1).
 # postgres:17 gives the pg_dump/pg_restore 17 client (>= Supabase 17.x) and a
 # server binary for the restore drill; age encrypts; rclone talks to OCI's
 # S3-compatible endpoint.
