@@ -1,9 +1,10 @@
 import { type Locale, type MessageKey, t } from '@sds/i18n';
-import type { CheckoutInfo, PublicMenuResponse } from '@sds/shared';
+import type { AppOpenOrder, CheckoutInfo, PublicMenuResponse } from '@sds/shared';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { type Api, createApi } from './api/client.ts';
 import type { Cart } from './model/cart.ts';
 import { shopPhoneOf } from './model/contact.ts';
+import { type EditSession, startEditSession } from './model/open-orders.ts';
 import { apiBaseUrl } from './platform/config.ts';
 import { type Platform, startPlatform } from './platform/liff.ts';
 import {
@@ -104,10 +105,11 @@ export function App() {
 
 function Screens({ path }: { path: string }) {
   const tr = useT();
-  const { api } = useApp();
+  const { api, go } = useApp();
   const [menu, setMenu] = useState<PublicMenuResponse | null>(null);
   const [info, setInfo] = useState<CheckoutInfo | null>(null);
   const [cart, setCart] = useState<Cart>([]);
+  const [editing, setEditing] = useState<EditSession | null>(null);
   const [failure, setFailure] = useState<unknown>(null);
 
   const refreshInfo = useCallback(async () => {
@@ -151,7 +153,23 @@ function Screens({ path }: { path: string }) {
     // First use (or a new notice version): the notice comes before anything else.
     return <PrivacyGate refreshInfo={refreshInfo} />;
   }
-  if (orderId) return <OrderScreen id={orderId} flag={flag} shopPhone={shopPhoneOf(info)} />;
+  /** The order page's change-dishes button: the cart becomes that order's lines, then the menu. */
+  const beginEdit = (order: AppOpenOrder) => {
+    const started = startEditSession(order, editing ? editing.stash : cart);
+    setEditing(started.session);
+    setCart(started.cart);
+    go('/menu');
+  };
+  /** Saved or dropped: the cart the customer had before comes back. */
+  const endEdit = () => {
+    if (editing) setCart(editing.stash);
+    setEditing(null);
+  };
+  if (orderId) {
+    return (
+      <OrderScreen id={orderId} flag={flag} shopPhone={shopPhoneOf(info)} onEdit={beginEdit} />
+    );
+  }
   if (pathname === '/orders') return <OrdersScreen />;
   // The rich menu's "ข้อมูลสมาชิก" tile opens `{LIFF_BASE_URL}/member`; it needs no menu.
   if (pathname === '/member') return <MemberScreen />;
@@ -175,8 +193,18 @@ function Screens({ path }: { path: string }) {
         setCart={setCart}
         clearCart={() => setCart([])}
         refreshInfo={refreshInfo}
+        editing={editing}
+        endEdit={endEdit}
       />
     );
   }
-  return <MenuScreen menu={menu} info={info} cart={cart} setCart={setCart} />;
+  return (
+    <MenuScreen
+      menu={menu}
+      info={info}
+      cart={cart}
+      setCart={setCart}
+      {...(editing ? { editingOrderNo: editing.orderNo } : {})}
+    />
+  );
 }
