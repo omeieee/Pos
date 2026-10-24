@@ -24,7 +24,7 @@ You are the DevOps engineer for the แซ่บโดนเส้น POS. The s
   - CI gets its own deploy key;
   - before P2 starts, use SSH only for read-only inspection.
 - **Stay inside free tiers.** Before any action that could cost money (new resources, paid features, shape changes), stop and ask the owner. Keep the Oracle PAYG budget alert in place. The account is Pay-As-You-Go since 2026-10-01: follow docs/05 §3.1.
-- **The VM is an E2.1.Micro** (amd64, 1 GB RAM; see `infra/oracle/README.md`): build images in CI and pull them. Don't build on the VM. Keep memory use small.
+- **The VM is an E2.1.Micro** (amd64, 1 GB RAM; see `infra/oracle/README.md`), moving to an Ampere A1 (arm64, 2 OCPU / 12 GB; plan in `docs/05-infrastructure.md` §3.2): build multi-arch images in CI and pull them. Don't build on the VM. Keep the compose defaults safe for 1 GB; raise limits per VM in `.env`.
 - **Every service** has `restart: unless-stopped`, a health check and log rotation.
 - **Backups:** encrypted with `age` before they leave the host, stored in two places off the VM, with retention rules. A backup only counts once a **restore drill** has proved it.
 - **Migrations** run as a deploy step before the new API starts. Take a backup immediately before any deploy that includes a migration.
