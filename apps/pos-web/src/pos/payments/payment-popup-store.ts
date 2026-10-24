@@ -33,7 +33,7 @@ export interface PaymentPopupStore extends ReadableStore<PaymentPopupState> {
   reset(): void;
 }
 
-/** How many alert ids are remembered, so a frame delivered twice is one pop-up. */
+/** How many alert keys (id and kind) are remembered, so a frame delivered twice is one pop-up. */
 const SEEN_FRAMES = 50;
 
 export function createPaymentPopupStore(deps: {
@@ -72,8 +72,10 @@ export function createPaymentPopupStore(deps: {
       return deps.entities.onAlert((frame) => {
         if (frame.type !== 'alert.payment') return;
         if (!store.getState().enabled) return;
-        if (seen.includes(frame.id)) return;
-        seen.push(frame.id);
+        // The frame id is the order's, and one order can alert `slip_review` and then `paid`.
+        const key = `${frame.id}:${frame.data.kind}`;
+        if (seen.includes(key)) return;
+        seen.push(key);
         if (seen.length > SEEN_FRAMES) seen.shift();
         const { orderId, orderNo, kind } = frame.data;
         store.setState({ queue: enqueue(store.getState().queue, { orderId, orderNo, kind }) });

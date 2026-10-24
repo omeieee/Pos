@@ -60,6 +60,16 @@ describe('the payment pop-up store', () => {
     expect(popup.getState().queue).toHaveLength(1);
   });
 
+  test('a paid alert after a slip_review alert of the same order is not dropped', () => {
+    const { entities, popup } = setup();
+    entities.apply(paymentAlertFrame(uuid(10), uuid(10), 'slip_review'));
+    popup.dismiss();
+    entities.apply(paymentAlertFrame(uuid(10), uuid(10), 'paid'));
+    expect(popup.getState().queue.map((e) => e.kind)).toEqual(['paid']);
+    entities.apply(paymentAlertFrame(uuid(10), uuid(10), 'paid'));
+    expect(popup.getState().queue).toHaveLength(1);
+  });
+
   test('nothing is queued while off, and turning off empties what waits', async () => {
     const { entities, popup } = setup();
     entities.apply(paymentAlertFrame(uuid(1), uuid(10)));
