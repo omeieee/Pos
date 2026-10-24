@@ -11,3 +11,8 @@ minimumReleaseAgeExclude:
   - '@turbo/windows-64@2.11.5'
   - '@turbo/windows-arm64@2.11.5'
   - turbo@2.11.5
+# Security patches for transitive dependencies (pnpm audit --prod): bump until the parents ship them.
+overrides:
+  ip-address: '>=10.7.4'
+  fast-uri@3: '>=3.1.9 <4'
+  fast-uri@4: '>=4.2.3 <5'
