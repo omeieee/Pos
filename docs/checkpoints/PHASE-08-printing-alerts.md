@@ -1,6 +1,6 @@
 # Phase 8 — Kitchen Printing and Phone Alerts
 
-**Status:** 🟡 In progress (started 2026-10-22; built, not deployed) · **Depends on:** P5; XP-80T bought, a Windows 11 notebook as print host (D-37, no Mini PC) · **Agents:** backend-engineer, devops-engineer, ux-ui-designer
+**Status:** 🟡 In progress (started 2026-10-22; built and deployed, inactive until keys and printer) · **Depends on:** P5; XP-80T bought, a Windows 11 notebook as print host (D-37, no Mini PC) · **Agents:** backend-engineer, devops-engineer, ux-ui-designer
 
 ## Goal
 Every order, whatever its source (LINE, storefront, Grab, LINE MAN), prints in the kitchen and rings staff phones.
@@ -29,5 +29,9 @@ Slices 1-3 built 2026-10-22, **uncommitted, not deployed, no real printer yet** 
 - **Screens (slice 3):** Settings "Printing" section (switch plus recent jobs), Reprint button on order screens, `print_agent` device label.
 
 ## Log
+- 2026-10-25: pay-first / edit-merge / slip allocation / auto-cancel / payment pop-up / Telegram built (D-38 to D-42, uncommitted, migrations 0043-0044): see "2026-10-25 · P8 · Built: pay-first LINE orders". The print trigger for LINE PromptPay orders is now payment, not accept.
+- 2026-10-24: pay-first / edit-merge / Telegram plan approved, D-38 to D-42 Proposed, no code: see "2026-10-24 · P8 · Plan: pay-first LINE orders". When built, print on payment replaces "print on accept" for LINE PromptPay orders (D-38).
+- 2026-10-24: full-system review; P8-relevant: SEC-01 (owner sign-in accepts the print_agent token; fix before registering the device), BE-01 (kitchen ticket can be lost), OPS-02 (repeat alerts silent): see "2026-10-24 · P8 · Full-system review" and `docs/11-review-findings.md`.
+- 2026-10-22: deployed at `c96c033`: see "2026-10-22 · P8 · Deployed".
 - 2026-10-22: phone alerts (Web Push) built: see "2026-10-22 · P8 · Phone alerts with Web Push".
 - 2026-10-22: P8 slices 1-3 built, uncommitted: see the PROGRESS entry "2026-10-22 · P8 · Print queue, ticket drawing, print agent, Printing screens".

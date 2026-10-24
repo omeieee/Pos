@@ -286,3 +286,14 @@ Written while the owner slept. Per the standing rule, no P7 code is written unti
 - **Notebook and printer (owner, 2026-10-22):** the print host runs Windows 11. Printer is the Xprinter XP-80T (USB + LAN). Proposed: connect by LAN with a fixed IP (reservation in the AIS router) and send raw ESC/POS to port 9100, which needs no Windows driver; USB stays as the fallback.
 - **Still open (defaults proposed, not yet confirmed):** jobs created while printing is off are skipped, with a reprint button.
 - **Print queue decisions (owner, 2026-10-22):** counter/phone orders print at creation, LINE/Grab/LINE MAN orders print **on accept**; the kitchen role cannot reprint (cashier, manager, owner can); manager and owner switch printing on/off (no step-up); a reprint while printing is off is refused (409 PRINTING_OFF). Slice 1 (queue API) built 2026-10-22.
+
+## Pay-first LINE orders, merge, Telegram · owner, 2026-10-24
+Plan: `~/.claude/plans/pasted-content-id-2a22-i-suggest-goofy-walrus.md`; decisions D-38 to D-42 (Proposed).
+- **Telegram content:** full (LINE picture and name, order name, building, dishes with photos, total), never phone, room or note; one private group. Amends CLAUDE.md rule 10 (D-42).
+- **Pay-first scope:** LINE + PromptPay only; LINE cash/co-pay keep staff accept; counter and platforms unchanged (D-38).
+- **Chat slip with several open orders:** match by the locally read amount, merge when it equals the sum of eligible orders, otherwise staff review (D-40, answers PAY-05 in `11-review-findings.md` §5).
+- **Auto-cancel:** after 1 hour, no LINE message (D-41).
+- **"ยอดเงินไม่ตรง":** shown for amount mismatches; once Slip2Go verifies and the order is paid, show "ชำระเงินสำเร็จ" at once instead of "checking" (D-42).
+- **Customer prompts:** only inside the ordering web app; the owner worries the 300 LINE messages a month are not enough, so this work adds no pushes.
+- **Staff pop-up and Telegram fire on:** paid, and slip needs review. Pop-up switch per device.
+- **Confirmed by the owner (2026-10-24):** A1 the checkout warning follows the plan but appears **only in the ordering web app, never in LINE chat**; A2 yes, and an **icon next to the order in the staff order list** shows that manual confirmation is needed; A3 the time limit is on, 60 minutes; A4 an edit replaces all items and is allowed only before any slip has been sent.
