@@ -58,3 +58,25 @@ export function createWorkerQrReader(
     readRaw: run,
   };
 }
+
+let installedScreen: SlipQrReader | null = null;
+
+/** Installs the reader the LINE chat uses to tell a slip from any other picture (null: no screening). */
+export function installSlipScreen(reader: SlipQrReader | null): void {
+  installedScreen = reader;
+}
+
+/**
+ * Does this picture hold a bank-slip QR (the parser accepts nothing else)? Used before a chat
+ * picture is kept, so a photo that is not a slip costs no storage, no claim, no reply and no
+ * Slip2Go call. True when screening is off, and when the reader fails: a broken reader must not
+ * silently drop a real slip.
+ */
+export async function looksLikeSlip(image: Buffer): Promise<boolean> {
+  if (!installedScreen) return true;
+  try {
+    return (await installedScreen.read(image)) !== null;
+  } catch {
+    return true;
+  }
+}

@@ -25,6 +25,7 @@
 - **Verification:** `biome check apps packages` 0 errors; `vitest` api 1614 of 1615 (push.test.ts failed once in the full run, 39/39 alone); `pnpm build` once failed at `@sds/ui` typecheck, passes alone. Not run: real LINE slip, real Slip2Go.
 - **Decisions:** D-44 added (Proposed).
 - **Open issues:** a real slip with an unreadable QR is no longer auto-verified (staff tick by hand); `verifyImage` in `slip2go.ts` is now unused by the checker; flaky push test and build need a clean re-run.
+- **Later the same day:** LINE chat now drops a picture silently when the sender has no order waiting for payment, or when it has no slip QR (`looksLikeSlip` in `slips/qr.ts`, `installSlipScreen` in `server.ts`, `line/handlers.ts:handleSlip`); tests in `line/ordering-chat.test.ts`; `vitest` line+slips+customer-app 431 passed, biome clean.
 - **Next:** owner confirms D-44; try a real slip and a non-slip photo on the test OA.
 - **Commit:** `6adcb29`, `65c578d` on `claude/nifty-ramanujan-c7obvx` (not merged); docs and privacy-text edits uncommitted.
 

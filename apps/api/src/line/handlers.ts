@@ -21,6 +21,7 @@ import type { EventBus } from '../events.ts';
 import { currentBusinessDate } from '../orders/business-day.ts';
 import { currentPromptpayId, lineOrderingNow } from '../settings/service.ts';
 import { MAX_SLIP_BYTES } from '../slips/image.ts';
+import { looksLikeSlip } from '../slips/qr.ts';
 import { attachSlip } from '../slips/service.ts';
 import type { SlipStore } from '../slips/store.ts';
 import type { CoreContext } from '../tx.ts';
@@ -267,23 +268,24 @@ async function handleClaim(
  * A picture in the chat. When the sender has a PromptPay payment waiting (their latest open
  * order), the picture is fetched from LINE, kept as the slip and the payment becomes `claimed`
  * (the same service as the app's upload and the "โอนแล้ว" button); staff still confirm. With no
- * such order, or no way to fetch it, the picture is not kept and the sender hears the usual
- * reply. A fetch that failed for a reason that may pass is thrown, so the retry sweep tries again.
+ * such order, or when the picture is not a bank slip, it is dropped in silence (no reply). A
+ * picture that cannot be fetched is not kept and the sender hears the usual reply. A fetch that failed for a reason that may pass is thrown, so the retry sweep tries again.
  */
 async function handleSlip(
   ctx: HandlerContext,
   event: Extract<RoutedEvent, { kind: 'slip_image' }>,
 ): Promise<void> {
   const customer = await lineRepo.findCustomerByLineUserId(ctx.db, event.userId);
+  const fetchContent = ctx.client?.getMessageContent?.bind(ctx.client);
+  // No order waiting for a payment: nothing to check, nothing to say (no reply, no fetch, no call).
+  if (!customer || !fetchContent) return;
+  const waiting = await waitingPromptpayOrder(ctx, customer.id);
+  if (!waiting) return;
   const noOrder = () =>
     say(ctx, event.replyToken, [botText('lineBot.slip.reply')], {
       template: 'slip_received',
-      ...(customer ? { customerId: customer.id } : {}),
+      customerId: customer.id,
     });
-  const fetchContent = ctx.client?.getMessageContent?.bind(ctx.client);
-  if (!customer || !fetchContent) return noOrder();
-  const waiting = await waitingPromptpayOrder(ctx, customer.id);
-  if (!waiting) return noOrder();
 
   const content = await fetchContent(event.messageId, MAX_SLIP_BYTES);
   if (!content.ok) {
@@ -291,6 +293,8 @@ async function handleSlip(
     if (content.definite) return;
     throw new Error('slip image could not be fetched');
   }
+  // Not a bank slip (no slip QR): dropped without a trace, and without a reply.
+  if (!(await looksLikeSlip(content.bytes))) return;
   try {
     const order = await attachSlip(core(ctx), ctx.slips, customer.id, waiting, content.bytes, {
       ip: null,

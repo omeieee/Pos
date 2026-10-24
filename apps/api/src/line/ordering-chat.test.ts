@@ -9,6 +9,7 @@ import { createHmac } from 'node:crypto';
 import type { LineClient, LineMessage } from '@sds/line';
 import { orderPlacedText } from '@sds/line';
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'vitest';
+import { installSlipScreen } from '../slips/qr.ts';
 import { createMemorySlipStore } from '../slips/store.ts';
 import { createHarness, type Harness, type OwnerFixture } from '../test-support/harness.ts';
 import { LiffUnavailableError, type LiffVerifier } from './liff-verify.ts';
@@ -735,7 +736,7 @@ describe('a picture in the chat', () => {
     expect(await slipStore.get(second as string)).toEqual(JPEG);
   });
 
-  test("with no order waiting (none, cash, or another customer's order) nothing is downloaded or kept, and the usual reply is sent", async () => {
+  test("with no order waiting (none, cash, or another customer's order) nothing is downloaded, kept or answered", async () => {
     const tokenA = await signIn('id-token-a-0000000000000000000000');
     await signIn('id-token-b-0000000000000000000000');
     const cash = await place(tokenA, 'cash');
@@ -743,8 +744,21 @@ describe('a picture in the chat', () => {
     await deliver(image(U_B));
     expect(fetched).toEqual([]);
     expect(await slipKey(cash.id)).toBeUndefined();
-    expect(replies()).toHaveLength(2);
-    expect(allText(lastReply())).toContain('โอนแล้ว');
+    expect(replies()).toHaveLength(0);
+  });
+
+  test('a picture that is not a bank slip is dropped in silence: not kept, not claimed, no reply', async () => {
+    installSlipScreen({ read: async () => null });
+    try {
+      const token = await signIn('id-token-a-0000000000000000000000');
+      const order = await place(token);
+      await deliver(image(U_A, '4201'));
+      expect(await paymentOf(order.id)).toMatchObject([{ status: 'pending' }]);
+      expect(await slipKey(order.id)).toBeNull();
+      expect(replies()).toHaveLength(0);
+    } finally {
+      installSlipScreen(null);
+    }
   });
 
   describe('too many slips, and a blocked order', () => {
