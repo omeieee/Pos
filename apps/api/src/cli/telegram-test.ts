@@ -13,6 +13,7 @@ import { alertText } from '../telegram/message.ts';
 import { fail } from './common.ts';
 
 const SAMPLE = alertText({
+  full: true,
   kind: 'paid',
   orderNo: 'TEST-001',
   totalSatang: 6200,

@@ -12,7 +12,7 @@
  * photos (a bad URL, a timeout) the text goes alone, so a photo problem never loses the alert.
  * A 429 waits `retry_after` (at most 5 s) and a 5xx waits a moment; each is tried once more.
  */
-import { type Db, menuRepo, ordersRepo } from '@sds/db';
+import { customersRepo, type Db, menuRepo, ordersRepo } from '@sds/db';
 import { itemPhotoPath } from '@sds/shared';
 import type { EventBus } from '../events.ts';
 import {
@@ -21,6 +21,7 @@ import {
   alertText,
   CAPTION_LIMIT,
   isLinePictureUrl,
+  noticeCoversTelegram,
   type TelegramAlert,
 } from './message.ts';
 
@@ -164,7 +165,11 @@ export function registerTelegramNotifier(deps: {
     const order = await ordersRepo.findOrderById(db, orderId);
     if (!order) return null;
     const items = (await ordersRepo.loadOrderItems(db, [orderId])).get(orderId) ?? [];
+    const full = noticeCoversTelegram(
+      order.customerId ? await customersRepo.getPrivacyAckVersion(db, order.customerId) : null,
+    );
     const alert: TelegramAlert = {
+      full,
       kind,
       orderNo: order.orderNo,
       totalSatang: order.totalSatang,
@@ -174,6 +179,7 @@ export function registerTelegramNotifier(deps: {
       lines: items.map((item) => ({ name: item.nameThSnapshot, qty: item.qty })),
     };
     const photos: string[] = [];
+    if (!full) return { alert, photos };
     if (isLinePictureUrl(order.linePictureUrl) && order.linePictureUrl) {
       photos.push(order.linePictureUrl);
     }
