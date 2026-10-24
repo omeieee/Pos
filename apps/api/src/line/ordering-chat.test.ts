@@ -9,7 +9,7 @@ import { createHmac } from 'node:crypto';
 import type { LineClient, LineMessage } from '@sds/line';
 import { orderPlacedText } from '@sds/line';
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'vitest';
-import { installSlipScreen } from '../slips/qr.ts';
+import { installSlipQrReader } from '../slips/checker.ts';
 import { createMemorySlipStore } from '../slips/store.ts';
 import { createHarness, type Harness, type OwnerFixture } from '../test-support/harness.ts';
 import { LiffUnavailableError, type LiffVerifier } from './liff-verify.ts';
@@ -748,7 +748,7 @@ describe('a picture in the chat', () => {
   });
 
   test('a picture that is not a bank slip is dropped in silence: not kept, not claimed, no reply', async () => {
-    installSlipScreen({ read: async () => null });
+    installSlipQrReader({ read: async () => null });
     try {
       const token = await signIn('id-token-a-0000000000000000000000');
       const order = await place(token);
@@ -757,7 +757,7 @@ describe('a picture in the chat', () => {
       expect(await slipKey(order.id)).toBeNull();
       expect(replies()).toHaveLength(0);
     } finally {
-      installSlipScreen(null);
+      installSlipQrReader(null);
     }
   });
 

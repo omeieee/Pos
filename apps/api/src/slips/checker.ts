@@ -806,3 +806,43 @@ export const installSlipChecker = (checker: SlipChecker | null): void => {
   installed = checker;
 };
 export const activeSlipChecker = (): SlipChecker | null => installed;
+
+/**
+ * The local QR reader, for a slip that is kept but never checked (a late slip, D-41): it only needs
+ * the duplicate key. Installed at start-up like the checker; null when `SLIP_QR` is off.
+ */
+let installedQr: SlipQrReader | null = null;
+export const installSlipQrReader = (reader: SlipQrReader | null): void => {
+  installedQr = reader;
+};
+export const activeSlipQrReader = (): SlipQrReader | null => installedQr;
+
+/**
+ * Does this picture hold a bank-slip QR (the parser accepts nothing else)? Used before a chat
+ * picture is kept, so a photo that is not a slip costs no storage, no claim, no reply and no
+ * Slip2Go call. True when no reader is installed, and when the reader fails: a broken reader must
+ * not silently drop a real slip.
+ */
+export async function looksLikeSlip(image: Buffer): Promise<boolean> {
+  if (!installedQr) return true;
+  try {
+    return (await installedQr.read(image)) !== null;
+  } catch {
+    return true;
+  }
+}
+
+/** The duplicate key of a slip picture from its own QR, read locally; null when none (or on any failure). */
+export async function localSlipQrHash(bytes: Buffer): Promise<string | null> {
+  const reader = installedQr;
+  if (!reader) return null;
+  try {
+    const parsed = reader.readRaw
+      ? ((await reader.readRaw(bytes))?.qr ?? null)
+      : await reader.read(bytes);
+    const keyText = parsed ? slipQrKeyText(parsed.sendingBank, parsed.transRef) : null;
+    return keyText ? sha256(keyText) : null;
+  } catch {
+    return null;
+  }
+}

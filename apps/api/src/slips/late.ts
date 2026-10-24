@@ -4,6 +4,7 @@ import type { RequestMeta } from '../auth/service.ts';
 import { notFound, versionConflict } from '../errors.ts';
 import { emitPayment } from '../payments/internal.ts';
 import { type CoreContext, withTransaction } from '../tx.ts';
+import { localSlipQrHash } from './checker.ts';
 import { slipUploadRefusal } from './guard.ts';
 import { checkSlipBytes } from './service.ts';
 import { newSlipKey, type SlipStore } from './store.ts';
@@ -19,7 +20,10 @@ export const LATE_SLIP_WINDOW_MS = 24 * 3_600_000;
  * slip_review`. No bank check or amount reading runs (no Slip2Go call is spent), so nothing can
  * confirm it. Staff see the picture through the usual slip view and settle it by hand (a new
  * order or a refund). One transaction under the order lock; the same picture twice is a no-op
- * (chat events are retried). The file is deleted again if the write fails.
+ * (chat events are retried). The file is deleted again if the write fails. The slip's own QR is
+ * read locally and stored, and the row stays visible to duplicate detection (`slipAutoconfirmBlocked`
+ * marks it, see `findEarlierSlipUse` and `findOtherSlipUse`): the same transfer sent again for another
+ * order is never confirmed by the machine and shows "used on #…" to staff.
  * Returns the order's number, or null when there is no payment to keep it on.
  */
 export async function keepLateSlip(
@@ -32,6 +36,9 @@ export async function keepLateSlip(
 ): Promise<{ orderNo: string } | null> {
   checkSlipBytes(bytes);
   const hash = createHash('sha256').update(bytes).digest('hex');
+  // The slip's own QR, read here for free (no bank call): with the picture hash it is what lets a
+  // later claim of the same transfer on another order be seen as a duplicate (D-26, D-27).
+  const qrHash = await localSlipQrHash(bytes);
   const key = newSlipKey();
   await slips.put(key, bytes);
   let replaced = null as string | null;
@@ -57,7 +64,7 @@ export async function keepLateSlip(
         slipCheck: null,
         slipAmountSatang: null,
         slipRefHash: null,
-        slipQrHash: null,
+        slipQrHash: qrHash,
         slipRecipientCheck: null,
         slipVerify: 'unchecked',
         slipVerifyCode: null,
