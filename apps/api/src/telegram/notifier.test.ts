@@ -34,15 +34,25 @@ async function newOrder(
     picture?: string | null;
     items?: { menuItemId: string; name: string; qty: number; removed?: boolean }[];
     total?: number;
+    /** The privacy notice version the customer acknowledged; `null` for none. Default: the Telegram one. */
+    ack?: string | null;
   } = {},
 ) {
   orderCounter += 1;
+  const [customer] = await h.db
+    .insert(schema.customers)
+    .values({
+      lineUserId: `U-tg-${orderCounter}`,
+      privacyAckVersion: options.ack === undefined ? '2026-10-24' : options.ack,
+    })
+    .returning({ id: schema.customers.id });
   const total = options.total ?? 6200;
   const [order] = await h.db
     .insert(schema.orders)
     .values({
       orderNo: `L-${String(orderCounter).padStart(3, '0')}`,
       businessDate: '2026-10-01',
+      customerId: customer?.id ?? null,
       channel: 'line',
       fulfillment: 'entrance_delivery',
       deliveryBuilding: 'ตึก B',
@@ -176,6 +186,22 @@ describe('what is sent', () => {
     const sent = everythingSent();
     for (const secret of [PHONE, ROOM, NOTE, DELIVERY_NOTE, 'NICK-X', 'FULL-X', 'slip']) {
       expect(sent, secret).not.toContain(secret);
+    }
+  });
+
+  test('a customer who acknowledged an older notice: number and total only, no names, dishes or photos', async () => {
+    await withPhoto(menu.noodles);
+    for (const ack of [null, '2026-09-01']) {
+      fake.reset();
+      const order = await newOrder({ ack });
+      await alert(order);
+      expect(fake.calls).toHaveLength(1);
+      expect(fake.calls[0]?.method).toBe('sendMessage');
+      expect(fake.calls[0]?.body.text).toBe(`✅ ชำระแล้ว #${order.orderNo} · 62฿`);
+      const sent = everythingSent();
+      for (const detail of ['Somsri', 'คุณสมศรี', 'ตึก B', 'ก๋วยเตี๋ยวต้มยำ', PICTURE]) {
+        expect(sent, detail).not.toContain(detail);
+      }
     }
   });
 

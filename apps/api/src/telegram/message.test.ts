@@ -4,6 +4,7 @@ import {
   alertText,
   CAPTION_LIMIT,
   isLinePictureUrl,
+  noticeCoversTelegram,
   type TelegramAlert,
 } from './message.ts';
 
@@ -19,6 +20,7 @@ const alert: TelegramAlert = {
     { name: 'ก๋วยเตี๋ยวต้มยำ', qty: 2 },
     { name: 'น้ำเปล่า', qty: 1 },
   ],
+  full: true,
 };
 
 describe('alertText', () => {
@@ -90,4 +92,17 @@ describe('isLinePictureUrl', () => {
 
 test('CAPTION_LIMIT is the Telegram caption limit', () => {
   expect(CAPTION_LIMIT).toBe(1024);
+});
+
+describe('the notice gate', () => {
+  test('only a notice that names Telegram allows customer details', () => {
+    expect(noticeCoversTelegram(null)).toBe(false);
+    expect(noticeCoversTelegram('2026-10-23')).toBe(false);
+    expect(noticeCoversTelegram('2026-10-24')).toBe(true);
+    expect(noticeCoversTelegram('2026-11-01')).toBe(true);
+  });
+
+  test('without it the text is the header only', () => {
+    expect(alertText({ ...alert, full: false })).toBe('✅ ชำระแล้ว #L-012 · 62฿');
+  });
 });

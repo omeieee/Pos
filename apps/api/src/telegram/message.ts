@@ -9,6 +9,18 @@
 import { formatBaht } from '@sds/i18n';
 import type { PaymentAlertKind } from '@sds/shared';
 
+/**
+ * The first privacy notice version that names Telegram (D-42). A customer who acknowledged an
+ * older one never agreed to their name and dishes going to a chat: their alert is the order
+ * number and the total only.
+ */
+export const TELEGRAM_NOTICE_SINCE = '2026-10-24';
+
+/** True when the acknowledged notice version (a date, `YYYY-MM-DD`) already names Telegram. */
+export function noticeCoversTelegram(ackVersion: string | null): boolean {
+  return ackVersion !== null && ackVersion >= TELEGRAM_NOTICE_SINCE;
+}
+
 export interface TelegramAlert {
   kind: PaymentAlertKind;
   orderNo: string;
@@ -17,6 +29,8 @@ export interface TelegramAlert {
   recipientName: string | null;
   building: string | null;
   lines: { name: string; qty: number }[];
+  /** Customer details may be sent (see `noticeCoversTelegram`). */
+  full: boolean;
 }
 
 /** Telegram's limit for a photo caption. */
@@ -49,7 +63,9 @@ export function alertHeader(
   return `${HEADERS[alert.kind]} #${oneLine(alert.orderNo)} · ${baht(alert.totalSatang)}`;
 }
 
+/** `full` false: the header only (number and total), for a customer who has not seen the Telegram notice. */
 export function alertText(alert: TelegramAlert): string {
+  if (!alert.full) return alertHeader(alert);
   return [
     alertHeader(alert),
     ...field('LINE', alert.lineName),
