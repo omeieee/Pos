@@ -19,6 +19,15 @@
 > - **Maintenance:** the architecture refactor (code moved, behaviour unchanged) is deployed; see the entry "2026-10-16 · Maintenance · Architecture refactor". Not yet checked on a real iPad/iPhone. The as-built code index `ARCHITECTURE.md` (verified at `7ff9951`) is committed (`070e0b4`) and pushed with the owner's OK; see the newest entry.
 > - **Workflow (owner rule 2026-10-16):** after each completed part, ask the owner "save checkpoint or next step?" and wait for the answer (`CLAUDE.md` workflow, `3d8481c`).
 
+## 2026-10-25 · P4 · Slip2Go pre-screen and neutral LINE slip reply
+- **Summary:** owner asked to stop non-slip images from spending Slip2Go calls. Owner chose QR-only screening and no LINE push (reply first, status on the order page). Slip2Go is now called only with the text of a slip QR our own `jsqr` check parsed; the picture is never sent.
+- **Changed:** `apps/api/src/slips/checker.ts` (`readVerify`: no QR means no call, stays `unchecked`), `slip-verify.test.ts` (1 rewritten, 3 removed, 1 renamed), LINE slip reply wording th/en, privacy notice th/en (picture no longer sent).
+- **Verification:** `biome check apps packages` 0 errors; `vitest` api 1614 of 1615 (push.test.ts failed once in the full run, 39/39 alone); `pnpm build` once failed at `@sds/ui` typecheck, passes alone. Not run: real LINE slip, real Slip2Go.
+- **Decisions:** D-44 added (Proposed).
+- **Open issues:** a real slip with an unreadable QR is no longer auto-verified (staff tick by hand); `verifyImage` in `slip2go.ts` is now unused by the checker; flaky push test and build need a clean re-run.
+- **Next:** owner confirms D-44; try a real slip and a non-slip photo on the test OA.
+- **Commit:** `6adcb29`, `65c578d` on `claude/nifty-ramanujan-c7obvx` (not merged); docs and privacy-text edits uncommitted.
+
 ## 2026-10-25 · Maintenance · API moved to an Ampere A1
 - **Summary:** the API stack moved from the 1 GB E2.1.Micro to an Always Free Ampere A1 (2 OCPU / 12 GB, arm64), D-43. Cutover 21:03 to 21:22 UTC (about 19 min down). Reserved IP `161.118.211.42` moved with it, so the hostname, LINE webhook and Slip2Go whitelist are unchanged.
 - **Changed:** `.github/workflows/deploy-api.yml` (amd64+arm64, QEMU), `apps/api/Dockerfile` (build stage on the builder arch, heap cap via `NODE_OPTIONS`), `infra/compose/docker-compose.yml` + `.env.example` + `deploy.sh` (limits from `.env`), `infra/backup/Dockerfile` (comment), audit fixes (zod 4.6.6, fastify ^5.12.6, pnpm overrides ip-address, fast-uri), docs 05 §3.2, RUNBOOK, oracle README, D-43, Q1.

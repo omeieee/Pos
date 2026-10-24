@@ -45,6 +45,7 @@ This is the **single source of truth for technology and design choices**. Other 
 | D-35 | P7 receipts and payments report (รายงานรับ-จ่าย): columns after the Revenue Department form, receipts = all methods tied to revenue, buying goods by a per-category flag, a running net from an owner-set start amount (no cash drawer), owner-only | **Accepted** (proposed by Claude 2026-10-21; accepted with the owner's amendments the same day) | 2026-10-21 |
 | D-36 | Slip images and expense receipt photos move to Cloudflare R2 (Standard class, free quota only), superseding D-24 for storage; zero-fee rule for Cloudflare | **Accepted** (owner chose R2; live and tested 2026-10-21) | 2026-10-21 |
 | D-37 | P8 printing: a Windows 11 notebook runs the print agent, which pulls jobs over HTTPS (replaces the Mini PC and outbound WSS); Thai tickets rasterised with bundled Sarabun (fontkit); printed-job ids kept locally; printing on/off setting; Web Push proposed instead of self-hosted ntfy | **Proposed** (owner chose the notebook and the print rules 2026-10-22; Web Push and the other build choices to approve) | 2026-10-22 |
+| D-44 | Slip2Go is called only with the text of a slip QR read locally; no QR, no call (staff verify by hand); LINE slip reply is neutral and the result shows on the order page, no push | **Proposed** (owner chose QR-only and no push 2026-10-25) | 2026-10-25 |
 
 ---
 
@@ -402,3 +403,9 @@ This is the **single source of truth for technology and design choices**. Other 
 - **Not decided:** running Postgres on the VM (a separate, larger change). Any step in the Oracle console needs the owner's OK first.
 - **As built (2026-10-25):** A1 `omeie_pos_a1` (2 OCPU / 12 GB, Ubuntu 24.04 arm64, private IP 10.0.0.82) runs api, caddy and backup; about 19 min of downtime; the old Micro is stopped as `sds-pos-old` and is terminated, with its boot volume, after about 7 days. It amends the VM shape in D-10. A new VM in this subnet has no internet without a public IP, so a rebuild keeps an ephemeral IP until the reserved one is attached (RUNBOOK). Audit fixes `05dba20` (zod 4.6.6, fastify 5.12.6, overrides for ip-address and fast-uri) were needed to get CI green first. Details: docs/05 §3.2.
 - **Revisit if:** Oracle has no A1 capacity for weeks, or the free A1 size changes.
+
+## D-44 · Local slip screening before Slip2Go — Proposed (owner chose the options, 2026-10-25)
+- **Decision:** the checker sends Slip2Go only the text of a slip QR that our own parser accepted. A picture with no such QR (a photo, a cropped slip, junk) makes no call, stays `unchecked`, and is left to staff. It does not count toward the cooldown. Amends D-27, which sent the picture when no QR was read.
+- **Customer messages:** the LINE reply to a slip is neutral ("received, checking the transfer, see the status on your order page"). No push is sent, so the 300-message quota is untouched. The order page shows "โอนเงินสำเร็จ" when the payment is confirmed (D-28).
+- **Privacy notice:** now says the picture is never sent to Slip2Go.
+- **Revisit if:** many real slips lack a readable QR (consider OCR keyword screening, then the picture), or the LINE quota allows a "paid" push.
