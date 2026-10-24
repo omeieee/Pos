@@ -10,7 +10,7 @@ import { alertOnAttempt, superviseJobs } from './jobs/supervisor.ts';
 import { createLineRuntime } from './line/runtime.ts';
 import { createPoolWatchdog } from './pool-watchdog.ts';
 import { sentryOptions } from './redact.ts';
-import { createSlipChecker, installSlipChecker } from './slips/checker.ts';
+import { createSlipChecker, installSlipChecker, installSlipQrReader } from './slips/checker.ts';
 import { createTesseractOcr } from './slips/ocr.ts';
 import { createWorkerQrReader } from './slips/qr.ts';
 import { createR2SlipStore, R2_RECEIPT_PREFIX, R2_SLIP_PREFIX } from './slips/r2-store.ts';
@@ -91,13 +91,16 @@ const verifier = config.slipVerifier
   ? createSlip2goVerifier({ ...config.slipVerifier, log: app.log })
   : null;
 installSlipVerifier(verifier);
+// One reader serves the checker and the late-slip keeper (D-41).
+const qrReader = config.slipQr ? createWorkerQrReader() : null;
+installSlipQrReader(qrReader);
 if (config.slipOcr || verifier) {
   installSlipChecker(
     createSlipChecker({
       ctx: { db, now: () => new Date(), events },
       slips,
       ...(config.slipOcr ? { ocr: createTesseractOcr(config.slipOcr) } : {}),
-      ...(config.slipQr ? { qr: createWorkerQrReader() } : {}),
+      ...(qrReader ? { qr: qrReader } : {}),
       ...(verifier && config.slipVerifier
         ? {
             verifier,

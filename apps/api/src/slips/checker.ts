@@ -811,3 +811,28 @@ export const installSlipChecker = (checker: SlipChecker | null): void => {
   installed = checker;
 };
 export const activeSlipChecker = (): SlipChecker | null => installed;
+
+/**
+ * The local QR reader, for a slip that is kept but never checked (a late slip, D-41): it only needs
+ * the duplicate key. Installed at start-up like the checker; null when `SLIP_QR` is off.
+ */
+let installedQr: SlipQrReader | null = null;
+export const installSlipQrReader = (reader: SlipQrReader | null): void => {
+  installedQr = reader;
+};
+export const activeSlipQrReader = (): SlipQrReader | null => installedQr;
+
+/** The duplicate key of a slip picture from its own QR, read locally; null when none (or on any failure). */
+export async function localSlipQrHash(bytes: Buffer): Promise<string | null> {
+  const reader = installedQr;
+  if (!reader) return null;
+  try {
+    const parsed = reader.readRaw
+      ? ((await reader.readRaw(bytes))?.qr ?? null)
+      : await reader.read(bytes);
+    const keyText = parsed ? slipQrKeyText(parsed.sendingBank, parsed.transRef) : null;
+    return keyText ? sha256(keyText) : null;
+  } catch {
+    return null;
+  }
+}
