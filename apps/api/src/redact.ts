@@ -5,12 +5,23 @@
  */
 
 /** Everything after the "params:" line of a Drizzle "Failed query" message. The SQL text stays. */
-export function redactQueryParams(text: string): string {
+export function redactQueryParams(input: string): string {
+  const text = redactTelegramToken(input);
   const start = text.indexOf('Failed query:');
   if (start < 0) return text;
   // First "params:" line, so a value that itself contains "params:" cannot leave a tail.
   const cut = text.indexOf('\nparams:', start);
   return cut < 0 ? text : `${text.slice(0, cut)}\nparams: [redacted]`;
+}
+
+/**
+ * The Telegram bot token (D-42), as a Bot API URL (`api.telegram.org/bot<token>/sendMessage`, which
+ * a fetch error or a Sentry breadcrumb can carry) or bare (`<digits>:<35 characters>`).
+ */
+export function redactTelegramToken(text: string): string {
+  return text
+    .replace(/(api\.telegram\.org\/(?:file\/)?bot)[^/\s"'?#]+/gi, '$1[redacted]')
+    .replace(/\b\d{6,}:[A-Za-z0-9_-]{30,}/g, '[redacted]');
 }
 
 /**
@@ -45,6 +56,9 @@ const CREDENTIAL_KEYS = [
   'accesstoken',
   'token',
   'lineuserid',
+  // Telegram alerts (D-42): the bot token and the staff group's chat id.
+  'bottoken',
+  'chatid',
 ];
 const CREDENTIAL_FIELDS = [
   'password',
@@ -68,6 +82,8 @@ const CREDENTIAL_FIELDS = [
   'accessToken',
   'token',
   'lineUserId',
+  'botToken',
+  'chatId',
 ];
 
 /**
@@ -186,9 +202,11 @@ export function scrubSentryEvent<T extends SentryEventLike>(event: T): T {
     if (typeof ex.value === 'string') ex.value = withoutSig(redactQueryParams(ex.value));
   }
   for (const crumb of event.breadcrumbs ?? []) {
-    if (typeof crumb.message === 'string') crumb.message = withoutSig(crumb.message);
+    if (typeof crumb.message === 'string')
+      crumb.message = withoutSig(redactTelegramToken(crumb.message));
     const url = crumb.data?.url;
-    if (crumb.data && typeof url === 'string') crumb.data.url = withoutQuery(url);
+    if (crumb.data && typeof url === 'string')
+      crumb.data.url = withoutQuery(redactTelegramToken(url));
     // Sentry's HTTP integrations put the query string under this key, apart from the URL.
     if (crumb.data) delete crumb.data['http.query'];
   }
@@ -198,7 +216,8 @@ export function scrubSentryEvent<T extends SentryEventLike>(event: T): T {
     delete request.cookies;
     // The 5-minute QR link credential (`sig`) sits in the query string of a 5xx on qr.png.
     delete request.query_string;
-    if (typeof request.url === 'string') request.url = withoutQuery(request.url);
+    if (typeof request.url === 'string')
+      request.url = withoutQuery(redactTelegramToken(request.url));
     for (const name of Object.keys(request.headers ?? {})) {
       if (CREDENTIAL_KEYS.includes(name.toLowerCase())) delete request.headers?.[name];
     }

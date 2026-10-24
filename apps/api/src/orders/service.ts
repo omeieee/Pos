@@ -3,7 +3,7 @@
  * trigger does it) and publishes its events only after the commit. Status changes go through the
  * state machine in `@sds/shared`; the server prices every order from the menu.
  */
-import { customersRepo, type Db, insertAudit, lineRepo, ordersRepo } from '@sds/db';
+import { customersRepo, type Db, insertAudit, lineRepo, ordersRepo, paymentsRepo } from '@sds/db';
 import {
   allowedFulfillments,
   businessDate,
@@ -14,6 +14,7 @@ import {
   type MemberInput,
   mergeMember,
   ORDER_NO_PREFIX,
+  ORDER_REASONS,
   type OrderDto,
   type OrderStatus,
   type OrdersSummaryQuery,
@@ -41,10 +42,12 @@ import {
   stepUpRequired,
   versionConflict,
 } from '../errors.ts';
+import { payFirstOf } from '../payments/internal.ts';
 import { settlePaymentsForOrderCancel } from '../payments/service.ts';
 import { currentDeliverySettings } from '../settings/service.ts';
 import { type CoreContext, type Emit, withTransaction } from '../tx.ts';
 import { currentBusinessDate, loadBusinessDay } from './business-day.ts';
+import { customerCanEdit } from './customer-edit.ts';
 import { toOrderDto } from './dto.ts';
 import { orderRequestHash } from './request-hash.ts';
 
@@ -377,6 +380,40 @@ function stampsFor(to: OrderStatus, now: Date, reason: string | undefined): orde
 }
 
 /**
+ * D-38: staff cannot accept a pay-first order (LINE + PromptPay) that is not paid yet, because the
+ * kitchen and the printer only get it once the money is in. A manager or owner may start it anyway
+ * with `startUnpaid` and a reason; that is audited. The kitchen and the cashier never can.
+ */
+async function guardUnpaidPayFirstStart(
+  tx: Db,
+  actor: Principal,
+  row: ordersRepo.OrderRow,
+  input: TransitionOrderInput,
+  reason: string | undefined,
+): Promise<void> {
+  if (row.paymentStatus === 'paid') return;
+  if (!payFirstOf(row, await paymentsRepo.listPaymentsForOrder(tx, row.id))) return;
+  if (!input.startUnpaid) {
+    throw conflict(
+      'PAYMENT_REQUIRED',
+      'This order is paid by PromptPay and is not paid yet. It starts by itself once the payment is confirmed',
+      { orderId: row.id, paymentStatus: row.paymentStatus },
+    );
+  }
+  if (actor.role !== 'owner' && actor.role !== 'manager') throw forbidden();
+  if (!reason) throw new ApiError(400, 'REASON_REQUIRED', 'A reason is required for this change');
+  await insertAudit(tx, {
+    actorType: 'staff',
+    actorId: actor.staffId,
+    deviceId: actor.deviceId,
+    action: 'order.start_unpaid',
+    entity: 'orders',
+    entityId: row.id,
+    after: { reason, paymentStatus: row.paymentStatus, totalSatang: row.totalSatang },
+  });
+}
+
+/**
  * Moves an order to another status. The state machine decides whether the move exists, whether
  * this role may make it, and whether it needs a reason or a step-up. `cancel` is the same move
  * to `cancelled`, and it also settles the order's payments (see `settlePaymentsForOrderCancel`):
@@ -402,6 +439,9 @@ export async function transitionOrder(
     });
     if (!result.ok) throw transitionFailure(result.error, row.status, input.to);
     if (result.stepUp && !hasFreshStepUp(actor, ctx.now())) throw stepUpRequired();
+    if (input.to === 'preparing' && row.status === 'new') {
+      await guardUnpaidPayFirstStart(tx, actor, row, input, reason);
+    }
 
     const patch = stampsFor(input.to, ctx.now(), reason);
     if (input.to === 'cancelled') {
@@ -413,5 +453,47 @@ export async function transitionOrder(
     emitUpserted(emit, updated, dto);
     if (input.to === 'preparing') emit({ type: 'order.sent_to_kitchen', orderId: updated.id });
     return dto;
+  });
+}
+
+/**
+ * D-41: the server cancels a pay-first LINE order that nobody paid for (actor `system`, reason
+ * `unpaid_timeout`). One transaction under the order lock, which re-checks everything the job's
+ * list could not know: still `new`, still placed before `placedBefore`, PromptPay is its method,
+ * and no payment was ever claimed, confirmed or given a slip. Its pending payment is cancelled with
+ * it (`settlePaymentsForOrderCancel`). Sends no LINE message. Returns whether it cancelled.
+ */
+export async function cancelUnpaidOrder(
+  ctx: CoreContext,
+  orderId: string,
+  placedBefore: Date,
+): Promise<boolean> {
+  return withTransaction(ctx, async (tx, emit) => {
+    const row = await ordersRepo.lockOrderById(tx, orderId);
+    if (row?.status !== 'new' || row.channel !== 'line') return false;
+    if (row.placedAt.getTime() >= placedBefore.getTime()) return false;
+    const payments = await paymentsRepo.listPaymentsForOrder(tx, row.id);
+    if (!payFirstOf(row, payments) || !customerCanEdit(row, payments)) return false;
+    const reason = ORDER_REASONS.unpaid_timeout;
+    const move = orderMachine.transition('new', 'cancelled', { actor: { kind: 'system' }, reason });
+    if (!move.ok) throw transitionFailure(move.error, row.status, 'cancelled');
+    const paymentStatus = await settlePaymentsForOrderCancel(tx, row, emit);
+    const updated = await ordersRepo.updateOrderIfVersion(tx, row.id, row.version, {
+      status: 'cancelled',
+      cancelledAt: ctx.now(),
+      cancelReason: reason,
+      paymentStatus,
+    });
+    if (!updated) throw versionConflict(row.version); // cannot happen under the row lock
+    emitUpserted(emit, updated, await withItems(tx, updated));
+    await insertAudit(tx, {
+      actorType: 'system',
+      action: 'order.unpaid_timeout',
+      entity: 'orders',
+      entityId: row.id,
+      before: { status: row.status, totalSatang: row.totalSatang },
+      after: { status: 'cancelled', reason },
+    });
+    return true;
   });
 }

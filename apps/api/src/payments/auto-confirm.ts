@@ -55,6 +55,8 @@ export async function autoConfirmClaimedPayment(
   if (payment.status !== 'claimed' || payment.method !== 'promptpay')
     return no('not_claimed_promptpay');
   if (payment.amountSatang > input.maxSatang) return no('over_ceiling');
+  // D-40: a slip the server could not match to one order (or the customer asked staff to check).
+  if (payment.slipAutoconfirmBlocked) return no('autoconfirm_blocked');
   // Never for a slip-blocked order or a slip-flagged customer: staff confirm those by hand.
   if (orderSlipBlocked(await paymentsRepo.listPaymentsForOrder(tx, order.id)))
     return no('order_blocked');
@@ -77,12 +79,22 @@ export async function autoConfirmClaimedPayment(
     slipQrHash: patch.slipQrHash !== undefined ? patch.slipQrHash : payment.slipQrHash,
   });
   if (earlier) return no('slip_used_elsewhere');
-  const updated = await paymentsRepo.updatePaymentIfVersion(tx, payment.id, payment.version, {
-    ...patch,
-    status: 'confirmed',
-    confirmedAt: ctx.now(),
-    autoConfirmed: true,
-  });
+  // In a savepoint: the unique index on a confirmed transfer (PAY-06) is the backstop for a race
+  // the check above cannot see, and its violation must refuse the confirm, not abort the caller.
+  let updated: paymentsRepo.PaymentRow | undefined;
+  try {
+    updated = await tx.transaction((savepoint) =>
+      paymentsRepo.updatePaymentIfVersion(savepoint, payment.id, payment.version, {
+        ...patch,
+        status: 'confirmed',
+        confirmedAt: ctx.now(),
+        autoConfirmed: true,
+      }),
+    );
+  } catch (error) {
+    if (paymentsRepo.isSlipTransferConflict(error)) return no('slip_used_elsewhere');
+    throw error;
+  }
   if (!updated) throw versionConflict(payment.version); // cannot happen under the row lock
   await insertAudit(tx, {
     actorType: 'system',
@@ -96,7 +108,7 @@ export async function autoConfirmClaimedPayment(
     },
   });
   emitPayment(emit, updated);
-  await settleOrder(tx, order, emit);
+  await settleOrder(tx, order, emit, ctx.now());
   emit(
     securityAlert(ctx, 'payment.auto_confirmed', 'info', {
       subject: { paymentId: payment.id, orderId: order.id },

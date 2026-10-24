@@ -9,6 +9,7 @@ import type { MyOrder } from '@sds/shared';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from 'vitest';
 import { LiffUnavailableError, type LiffVerifier } from '../line/liff-verify.ts';
 import { createLineRuntime } from '../line/runtime.ts';
+import { frameForRole, frameFromEvent } from '../realtime/frames.ts';
 import { createHarness, type Harness, type Menu } from '../test-support/harness.ts';
 import { createSlipChecker, installSlipChecker, type SlipChecker } from './checker.ts';
 import type { SlipOcr } from './ocr.ts';
@@ -1382,7 +1383,7 @@ describe('what the customer is told about the slip (neutral)', () => {
   const claimOnly = (token: string, orderId: string) =>
     call('POST', `/v1/app/orders/${orderId}/claim`, token);
 
-  test('none with no picture, checking while the bank check runs, then staff_review', async () => {
+  test('none with no picture, checking while the bank check runs, then verified_waiting', async () => {
     const { token, order } = await start();
     expect(await slipCheckOf(token, order.id)).toBe('none');
     await claimOnly(token, order.id);
@@ -1395,8 +1396,8 @@ describe('what the customer is told about the slip (neutral)', () => {
     expect(await slipCheckOf(token, order.id)).toBe('checking');
     release({ body: answer('200200', currentAmountBaht) });
     await checker.idle();
-    // A valid answer with auto-confirm off is still staff's to tick.
-    expect(await slipCheckOf(token, order.id)).toBe('staff_review');
+    // A valid answer with auto-confirm off is still staff's to tick (D-42, A2): the customer is told so.
+    expect(await slipCheckOf(token, order.id)).toBe('verified_waiting');
   });
 
   test.each([
@@ -1745,7 +1746,7 @@ function freshTransfer(): string {
   return String(900_000 + transferNo).padStart(25, '0');
 }
 const NEUTRAL_LEAK =
-  /fraud|flag|suspect|fake|forg|ปลอม|200500|verdict|verify|blocked_at|slipBlockedAt|invalid_count|reason/i;
+  /fraud|flag|suspect|fake|forg|ปลอม|200500|verdict|verify|blocked_at|slipBlockedAt|invalid_count|(?<![a-z])reason/i;
 
 describe('QA fixes in the staff recheck', () => {
   beforeEach(() => {
@@ -3141,5 +3142,326 @@ describe('the first call waits longer for a slow bank (per-bank hold), and costs
     await checker.idle();
     expect(calls).toHaveLength(1);
     expect(await row(order.id)).toMatchObject({ slip_verify: 'fraud' });
+  });
+});
+describe('pay-first LINE orders (D-38, D-42)', () => {
+  let ipad: { id: string; token: string };
+  const roles = {} as Record<'cashier' | 'manager' | 'kitchen', string>;
+
+  beforeAll(async () => {
+    ipad = await h.newDevice('ipad');
+    for (const role of ['cashier', 'manager', 'kitchen'] as const) {
+      const member = await h.newStaff(role, '4821');
+      roles[role] = await h.pinSession(ipad.token, member.id, member.pin);
+    }
+    await h.client.query(
+      `insert into settings (key, value, updated_by) values ('printing', '{"enabled": true}'::jsonb, $1)
+       on conflict (key) do update set value = excluded.value`,
+      [ownerId],
+    );
+  });
+
+  beforeEach(async () => {
+    // The earlier tests used up the day's Slip2Go calls (the cap is per business date).
+    await h.client.query('delete from slip_verify_daily');
+  });
+  const on = () => {
+    autoConfirm = { maxSatang: 100_000 };
+    checker = buildChecker();
+    installSlipChecker(checker);
+  };
+  const orderRow = async (id: string) =>
+    (
+      await h.client.query<{
+        status: string;
+        payment_status: string;
+        accepted_at: string | null;
+        payment_method: string | null;
+        needs_manual_confirm: boolean;
+        rev: string;
+      }>(
+        'select status, payment_status, accepted_at, payment_method, needs_manual_confirm, rev from orders where id = $1',
+        [id],
+      )
+    ).rows[0];
+  const jobs = async (id: string) =>
+    (await h.client.query('select id from print_jobs where order_id = $1', [id])).rows;
+  const alertsFor = (orderId: string, kind: string) =>
+    h.events.filter((e) => e.type === 'alert.payment' && e.orderId === orderId && e.kind === kind);
+  const kitchenFor = (orderId: string) =>
+    h.events.filter((e) => e.type === 'order.sent_to_kitchen' && e.orderId === orderId);
+  const staffCall = (url: string, token: string, payload: unknown) =>
+    h.app.inject({
+      method: 'POST',
+      url,
+      headers: { authorization: `Bearer ${token}` },
+      payload: payload as Record<string, unknown>,
+      remoteAddress: h.nextIp(),
+    });
+  const transition = (id: string, token: string, extra: Record<string, unknown> = {}) =>
+    staffCall(`/v1/orders/${id}/transition`, token, { to: 'preparing', ...extra });
+  const paymentOf = async (orderId: string) =>
+    (
+      await h.client.query<{ id: string }>(
+        'select id from payments where order_id = $1 order by rev desc limit 1',
+        [orderId],
+      )
+    ).rows[0]?.id as string;
+
+  test('a bank-verified slip that auto-confirms starts the order, prints once and alerts "paid"', async () => {
+    on();
+    const { token, order } = await start();
+    expect((await orderRow(order.id))?.status).toBe('new');
+    expect(await jobs(order.id)).toHaveLength(0);
+    await upload(token, order.id, picture());
+    await checker.idle();
+    await h.settle();
+
+    expect(await orderRow(order.id)).toMatchObject({ status: 'preparing', payment_status: 'paid' });
+    expect((await orderRow(order.id))?.accepted_at).not.toBeNull();
+    expect(await jobs(order.id)).toHaveLength(1);
+    expect(kitchenFor(order.id)).toHaveLength(1);
+    expect(alertsFor(order.id, 'paid')).toHaveLength(1);
+    // The slip ended in payment, not in review.
+    expect(alertsFor(order.id, 'slip_review')).toHaveLength(0);
+    const mine = await call('GET', `/v1/app/orders/${order.id}`, token);
+    expect(mine.json()).toMatchObject({ status: 'preparing', paymentStatus: 'paid' });
+  });
+
+  test('a staff confirm gives the same result, and confirming again changes nothing', async () => {
+    const { token, order } = await start();
+    await h.app.inject({
+      method: 'POST',
+      url: `/v1/app/orders/${order.id}/claim`,
+      headers: { authorization: `Bearer ${token}` },
+      remoteAddress: h.nextIp(),
+    });
+    const paymentId = await paymentOf(order.id);
+    expect((await orderRow(order.id))?.status).toBe('new');
+    const confirm = () =>
+      staffCall(`/v1/payments/${paymentId}/confirm`, roles.cashier, { attestedBankCheck: true });
+    expect((await confirm()).statusCode).toBe(200);
+    expect((await confirm()).statusCode).toBe(200);
+    await h.settle();
+
+    expect(await orderRow(order.id)).toMatchObject({ status: 'preparing', payment_status: 'paid' });
+    expect(await jobs(order.id)).toHaveLength(1);
+    expect(kitchenFor(order.id)).toHaveLength(1);
+    expect(alertsFor(order.id, 'paid')).toHaveLength(1);
+  });
+
+  test('a LINE cash order is unchanged: paying it starts nothing, staff still accept', async () => {
+    const token = await customer();
+    const res = await h.app.inject({
+      method: 'POST',
+      url: '/v1/app/orders',
+      headers: { authorization: `Bearer ${token}` },
+      payload: {
+        clientRequestId: crypto.randomUUID(),
+        items: [{ menuItemId: menu.water, qty: 1 }],
+        deliveryBuilding: 'B1',
+        recipientName: 'ฟ้าทดสอบ',
+        paymentMethod: 'cash',
+      },
+      remoteAddress: h.nextIp(),
+    });
+    const order = res.json().order as MyOrder;
+    const pay = await staffCall(`/v1/orders/${order.id}/payments`, roles.cashier, {
+      method: 'cash',
+      tendered: 1000,
+      clientRequestId: crypto.randomUUID(),
+    });
+    expect(pay.statusCode).toBe(201);
+    await h.settle();
+    expect(await orderRow(order.id)).toMatchObject({ status: 'new', payment_status: 'paid' });
+    expect(await jobs(order.id)).toHaveLength(0);
+    expect(alertsFor(order.id, 'paid')).toHaveLength(0);
+    // Staff accept it as before, without any override.
+    expect((await transition(order.id, roles.cashier)).statusCode).toBe(200);
+    await h.settle();
+    expect(await jobs(order.id)).toHaveLength(1);
+  });
+
+  test('a PromptPay storefront order is unchanged: it prints on creation, paying adds nothing', async () => {
+    const created = await staffCall('/v1/orders', roles.cashier, {
+      clientRequestId: crypto.randomUUID(),
+      channel: 'storefront',
+      fulfillment: 'entrance_delivery',
+      deliveryBuilding: 'B1',
+      recipientName: 'หน้าร้าน',
+      items: [{ menuItemId: menu.water, qty: 1 }],
+    });
+    expect(created.statusCode).toBe(201);
+    const id = created.json().id as string;
+    await h.settle();
+    expect(await jobs(id)).toHaveLength(1);
+    const pay = await staffCall(`/v1/orders/${id}/payments`, roles.cashier, {
+      method: 'promptpay',
+      clientRequestId: crypto.randomUUID(),
+    });
+    expect(pay.statusCode).toBe(201);
+    const confirm = await staffCall(
+      `/v1/payments/${pay.json().payment.id}/confirm`,
+      roles.cashier,
+      { attestedBankCheck: true },
+    );
+    expect(confirm.statusCode).toBe(200);
+    await h.settle();
+    expect(await orderRow(id)).toMatchObject({ status: 'preparing', payment_status: 'paid' });
+    expect(await jobs(id)).toHaveLength(1);
+    expect(kitchenFor(id)).toHaveLength(1);
+    expect(alertsFor(id, 'paid')).toHaveLength(0);
+  });
+
+  describe('staff accepting an unpaid pay-first order', () => {
+    test('is refused with 409 PAYMENT_REQUIRED for every role', async () => {
+      const { order } = await start();
+      for (const role of ['cashier', 'manager', 'kitchen'] as const) {
+        const res = await transition(order.id, roles[role]);
+        expect(res.statusCode).toBe(409);
+        expect(res.json().code).toBe('PAYMENT_REQUIRED');
+      }
+      const owner = await transition(order.id, staffToken);
+      expect(owner.statusCode).toBe(409);
+      expect((await orderRow(order.id))?.status).toBe('new');
+    });
+
+    test('a manager may start it unpaid with a reason, and it is audited; others cannot', async () => {
+      const { order } = await start();
+      for (const role of ['cashier', 'kitchen'] as const) {
+        const res = await transition(order.id, roles[role], {
+          startUnpaid: true,
+          reason: 'ลูกค้าโทรบอกว่าโอนแล้ว',
+        });
+        expect(res.statusCode).toBe(403);
+      }
+      const noReason = await transition(order.id, roles.manager, { startUnpaid: true });
+      expect(noReason.statusCode).toBe(400);
+      expect(noReason.json().code).toBe('REASON_REQUIRED');
+      expect((await orderRow(order.id))?.status).toBe('new');
+
+      const ok = await transition(order.id, roles.manager, {
+        startUnpaid: true,
+        reason: 'ลูกค้าโทรบอกว่าโอนแล้ว',
+      });
+      expect(ok.statusCode).toBe(200);
+      await h.settle();
+      expect((await orderRow(order.id))?.status).toBe('preparing');
+      expect((await orderRow(order.id))?.payment_status).not.toBe('paid');
+      expect(await jobs(order.id)).toHaveLength(1);
+      const audit = (await h.auditRows(order.id)).filter((a) => a.action === 'order.start_unpaid');
+      expect(audit).toHaveLength(1);
+      expect(audit[0]?.after).toMatchObject({ reason: 'ลูกค้าโทรบอกว่าโอนแล้ว' });
+    });
+
+    test('a customer who dropped PromptPay for cash is not pay-first any more', async () => {
+      const { token, order } = await start();
+      await h.app.inject({
+        method: 'POST',
+        url: `/v1/app/orders/${order.id}/payment`,
+        headers: { authorization: `Bearer ${token}` },
+        payload: { method: 'cash' },
+        remoteAddress: h.nextIp(),
+      });
+      expect((await transition(order.id, roles.cashier)).statusCode).toBe(200);
+    });
+  });
+
+  describe('a slip that ends in review alerts staff once (D-42)', () => {
+    test('valid bank check but held back from auto-confirm (above the ceiling)', async () => {
+      autoConfirm = { maxSatang: 1 };
+      checker = buildChecker();
+      installSlipChecker(checker);
+      const { token, order } = await start();
+      await upload(token, order.id, picture());
+      await checker.idle();
+      expect((await row(order.id))?.status).toBe('claimed');
+      expect(alertsFor(order.id, 'slip_review')).toHaveLength(1);
+      expect(alertsFor(order.id, 'paid')).toHaveLength(0);
+      // The same picture again does not alert twice.
+      await upload(token, order.id, picture());
+      await checker.idle();
+      expect(alertsFor(order.id, 'slip_review')).toHaveLength(1);
+    });
+
+    test('a wrong amount from the bank', async () => {
+      const { token, order } = await start();
+      respond = () => ({ body: answer('200200', currentAmountBaht + 1) });
+      await upload(token, order.id, picture());
+      await checker.idle();
+      expect(alertsFor(order.id, 'slip_review')).toHaveLength(1);
+    });
+
+    test('no alert while the check is still running', async () => {
+      const { token, order } = await start();
+      respond = () => new Promise(() => undefined);
+      await upload(token, order.id, picture());
+      expect(alertsFor(order.id, 'slip_review')).toHaveLength(0);
+    });
+
+    test('with no checker at all the upload itself is the review', async () => {
+      installSlipChecker(null);
+      const { token, order } = await start();
+      await upload(token, order.id, picture());
+      expect(alertsFor(order.id, 'slip_review')).toHaveLength(1);
+    });
+  });
+
+  describe('what devices and the customer see of a slip', () => {
+    test('the order carries its payment method; the kitchen frame has it too', async () => {
+      const { order } = await start();
+      expect((await orderRow(order.id))?.payment_method).toBe('promptpay');
+      const frame = [...h.events]
+        .reverse()
+        .find((e) => e.type === 'order.upserted' && e.id === order.id);
+      expect(frame && frame.type === 'order.upserted' && frame.data.paymentMethod).toBe(
+        'promptpay',
+      );
+      const built = frame ? frameFromEvent(frame) : null;
+      if (built?.kind !== 'frame') throw new Error('no frame');
+      const kitchen = frameForRole('kitchen', built.frame);
+      expect(kitchen.type === 'order.upserted' && kitchen.data.paymentMethod).toBe('promptpay');
+    });
+
+    test('a bank-valid slip held back from auto-confirm flags the order and moves its rev', async () => {
+      autoConfirm = { maxSatang: 1 };
+      checker = buildChecker();
+      installSlipChecker(checker);
+      const { token, order } = await start();
+      const before = Number((await orderRow(order.id))?.rev);
+      await upload(token, order.id, picture());
+      await checker.idle();
+      const after = await orderRow(order.id);
+      expect(after?.needs_manual_confirm).toBe(true);
+      expect(Number(after?.rev)).toBeGreaterThan(before);
+      const last = [...h.events]
+        .reverse()
+        .find((e) => e.type === 'order.upserted' && e.id === order.id);
+      expect(last && last.type === 'order.upserted' && last.data.needsManualConfirm).toBe(true);
+      // The customer is told the slip is fine and the shop is confirming (A2).
+      const mine = await call('GET', `/v1/app/orders/${order.id}`, token);
+      expect(mine.json().slipCheck).toBe('verified_waiting');
+      // Staff confirm: the flag clears and the order starts.
+      const confirm = await staffCall(
+        `/v1/payments/${await paymentOf(order.id)}/confirm`,
+        roles.manager,
+        {
+          attestedBankCheck: true,
+        },
+      );
+      expect(confirm.statusCode).toBe(200);
+      expect((await orderRow(order.id))?.needs_manual_confirm).toBe(false);
+    });
+
+    test('a bank amount mismatch reaches the customer as amount_mismatch', async () => {
+      const { token, order } = await start();
+      respond = () => ({ body: answer('200402', currentAmountBaht) });
+      await upload(token, order.id, picture());
+      await checker.idle();
+      expect((await row(order.id))?.slip_verify).toBe('amount_mismatch');
+      const mine = await call('GET', `/v1/app/orders/${order.id}`, token);
+      expect(mine.json().slipCheck).toBe('amount_mismatch');
+      expect((await orderRow(order.id))?.needs_manual_confirm).toBe(false);
+    });
   });
 });

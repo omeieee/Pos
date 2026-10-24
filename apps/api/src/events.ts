@@ -3,7 +3,14 @@
  * them only after it commits, so a subscriber never sees a change that was rolled back.
  * Events carry ids and facts, never secrets.
  */
-import type { ExpenseDto, OrderChannel, OrderDto, OrderStatus, PaymentDto } from '@sds/shared';
+import type {
+  ExpenseDto,
+  OrderChannel,
+  OrderDto,
+  OrderStatus,
+  PaymentAlertKind,
+  PaymentDto,
+} from '@sds/shared';
 
 /** A security-relevant fact the owner should hear about (CLAUDE.md rule 9). Delivery comes in P8 (ntfy). */
 export interface SecurityAlertEvent {
@@ -60,6 +67,17 @@ export interface NewOrderAlertEvent {
   channel: OrderChannel;
   status: OrderStatus;
   createdOnDeviceId: string | null;
+}
+
+/**
+ * A payment needs eyes (D-42): the order became paid, or a slip waits for staff review. Ids and
+ * the order number only; devices read the order from their own store. Not a stored row.
+ */
+export interface PaymentAlertEvent {
+  type: 'alert.payment';
+  orderId: string;
+  orderNo: string;
+  kind: PaymentAlertKind;
 }
 
 /**
@@ -143,6 +161,7 @@ export type AppEvent =
   | OrderUpsertedEvent
   | PaymentUpsertedEvent
   | NewOrderAlertEvent
+  | PaymentAlertEvent
   | SettingsUpdatedEvent
   | MenuUpsertedEvent
   | ExpenseUpsertedEvent;

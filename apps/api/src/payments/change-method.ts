@@ -114,7 +114,7 @@ export async function changePaymentMethod(
         { method: source.method, status: 'pending' },
         { method: row.method, paymentId: row.id },
       );
-      const updated = await settleOrder(tx, order, emit);
+      const updated = await settleOrder(tx, order, emit, ctx.now());
       return {
         result: { payment, cancelledPayment: cancelledDto, order: updated },
         replay: false,
@@ -180,6 +180,6 @@ export async function withdrawPendingPayment(
       { method: pending.method, status: 'pending' },
       { status: 'cancelled' },
     );
-    return settleOrder(tx, order, emit);
+    return settleOrder(tx, order, emit, ctx.now());
   });
 }

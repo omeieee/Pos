@@ -13,6 +13,7 @@
     "owner:unlock": "node build.ts && node dist/owner-unlock.js",
     "richmenu:upload": "node build.ts && node dist/richmenu-upload.js",
     "push:keys": "node build.ts && node dist/push-keys.js",
+    "telegram:test": "node build.ts && node dist/telegram-test.js",
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run"
   },
