@@ -266,8 +266,6 @@ export function createSlipChecker(args: {
   /** The bank check: one call to Slip2Go, or a reason not to make it. */
   async function readVerify(
     row: paymentsRepo.PaymentRow,
-    bytes: Buffer | null,
-    usable: boolean,
     rawQr: string | null,
     businessDate: string,
   ): Promise<{ outcome: VerifyOutcome; qrHash: string | null }> {
@@ -426,7 +424,7 @@ export function createSlipChecker(args: {
     let verifyPart: VerifyOutcome | null = null;
     let remoteHash: string | null = null;
     if (wantVerify) {
-      const done = await readVerify(row, bytes ?? null, usable, rawQr, businessDate);
+      const done = await readVerify(row, rawQr, businessDate);
       verifyPart = done.outcome;
       remoteHash = done.qrHash;
     }
