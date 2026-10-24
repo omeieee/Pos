@@ -2,6 +2,7 @@ import { Buffer } from 'node:buffer';
 import {
   addDishAndCheckout,
   BUILDING,
+  DISH_NAME,
   expect,
   expectNoSideScroll,
   type FakeApi,
@@ -215,5 +216,293 @@ test.describe('saving the QR in a normal browser', () => {
     await page.getByRole('button', { name: tr('liff.qr.save') }).click();
     expect((await download).suggestedFilename()).toBe('promptpay-S-001.png');
     await expect(page.getByRole('dialog')).toHaveCount(0);
+  });
+});
+async function reachCheckout(
+  page: import('@playwright/test').Page,
+  api: FakeApi,
+  name = RECIPIENT,
+) {
+  await openMenu(page, api);
+  await addDishAndCheckout(page);
+  await page.getByLabel(tr('liff.checkout.name')).fill(name);
+  await page.getByLabel(tr('liff.checkout.building')).selectOption(BUILDING);
+  await page.getByRole('radio', { name: new RegExp(tr('payment.method.promptpay')) }).check();
+  await page.getByRole('button', { name: tr('liff.checkout.order') }).click();
+}
+
+const orderTitle = (orderNo: string) => tr('liff.order.title', { orderNo });
+const qrAlt = (amount: string) => tr('liff.qr.alt', { amount });
+
+test.describe('an unpaid order is already open at checkout', () => {
+  test.use({ fakeOptions: { acknowledged: true } });
+
+  test('ask, then add to the earlier order: one edit, no new order', async ({ page, api }) => {
+    const old = api.seedOrder({ no: 'L-001' });
+    await reachCheckout(page, api);
+    const sheet = page.getByRole('dialog');
+    await expect(
+      sheet.getByText(tr('liff.openOrder.title', { orderNo: 'L-001', amount: '฿60.00' })),
+    ).toBeVisible();
+    await expectNoSideScroll(page);
+    await sheet.getByRole('button', { name: tr('liff.openOrder.continue') }).click();
+    await expect(
+      sheet.getByText(tr('liff.openOrder.mergeTitle', { orderNo: 'L-001' })),
+    ).toBeVisible();
+    await sheet.getByRole('button', { name: tr('liff.openOrder.merge') }).click();
+
+    // The earlier order now holds both dishes at the new total; nothing was placed.
+    await expect(page.getByText(orderTitle('L-001'))).toBeVisible();
+    await expect(page.getByRole('img', { name: qrAlt('฿110.00') })).toBeVisible();
+    expect(api.placed).toHaveLength(0);
+    expect(api.edits).toHaveLength(1);
+    expect(api.edits[0]?.body.expectedVersion).toBe(1);
+    expect(api.edits[0]?.key).toBeTruthy();
+    expect(api.edits[0]?.body.items).toEqual([
+      { menuItemId: IDS.dish, qty: 1, modifierOptionIds: [IDS.wide] },
+      { menuItemId: IDS.dish, qty: 1, modifierOptionIds: [IDS.thin] },
+    ]);
+    expect(old.lines).toHaveLength(2);
+    await expectNoSideScroll(page);
+  });
+
+  test('ask, then a separate order: the cart is placed as it is', async ({ page, api }) => {
+    api.seedOrder({ no: 'L-001' });
+    await reachCheckout(page, api);
+    const sheet = page.getByRole('dialog');
+    await sheet.getByRole('button', { name: tr('liff.openOrder.continue') }).click();
+    await sheet.getByRole('button', { name: tr('liff.openOrder.separate') }).click();
+    await expect(page.getByText(tr('liff.order.placed'))).toBeVisible();
+    expect(api.placed).toHaveLength(1);
+    expect(api.edits).toHaveLength(0);
+    expect(api.orders).toHaveLength(2);
+  });
+
+  test('the same dishes get the stronger wording; "view" opens the earlier order', async ({
+    page,
+    api,
+  }) => {
+    api.seedOrder({
+      no: 'L-001',
+      lines: [{ menuItemId: IDS.dish, qty: 1, optionIds: [IDS.thin], note: null }],
+    });
+    await reachCheckout(page, api);
+    const sheet = page.getByRole('dialog');
+    await expect(
+      sheet.getByText(tr('liff.openOrder.titleDuplicate', { orderNo: 'L-001', amount: '฿50.00' })),
+    ).toBeVisible();
+    await sheet.getByRole('button', { name: tr('liff.openOrder.viewOld') }).click();
+    await expect(page.getByText(orderTitle('L-001'))).toBeVisible();
+    expect(api.placed).toHaveLength(0);
+  });
+
+  test('another name: no add choice, "order more" places the order', async ({ page, api }) => {
+    api.seedOrder({ no: 'L-001', recipient: 'คุณคนอื่น' });
+    await reachCheckout(page, api);
+    const sheet = page.getByRole('dialog');
+    await sheet.getByRole('button', { name: tr('liff.openOrder.continue') }).click();
+    await expect(page.getByText(tr('liff.order.placed'))).toBeVisible();
+    expect(api.placed).toHaveLength(1);
+    expect(api.edits).toHaveLength(0);
+  });
+});
+
+test.describe('changing and cancelling an unpaid order', () => {
+  test('change the dishes: the cart reopens with the lines and saving replaces them', async ({
+    page,
+    api,
+  }) => {
+    await openPromptPayOrder(page, api);
+    await page.getByRole('button', { name: tr('liff.edit.button') }).click();
+    await expect(page.getByText(tr('liff.edit.title', { orderNo: 'S-001' }))).toBeVisible();
+    // The cart holds the order's own line; add a second one with the wide noodles.
+    await page.getByRole('button', { name: `${tr('liff.cart.inc')} ${DISH_NAME}` }).click();
+    const picker = page.getByRole('dialog');
+    await picker.getByRole('radio', { name: /เส้นใหญ่/ }).check();
+    await picker.getByRole('button', { name: tr('liff.option.add', { amount: '฿60.00' }) }).click();
+    await page.getByRole('button', { name: new RegExp(tr('liff.menu.toPay')) }).click();
+
+    // Only the lines are edited: no recipient or payment form.
+    await expect(
+      page.getByRole('heading', { name: tr('liff.edit.title', { orderNo: 'S-001' }) }),
+    ).toBeVisible();
+    await expect(page.getByLabel(tr('liff.checkout.name'))).toHaveCount(0);
+    await page.getByRole('button', { name: tr('liff.edit.save') }).click();
+
+    await expect(page.getByRole('img', { name: qrAlt('฿110.00') })).toBeVisible();
+    expect(api.placed).toHaveLength(1);
+    expect(api.edits).toHaveLength(1);
+    expect(api.edits[0]?.body.items).toHaveLength(2);
+    expect(api.edits[0]?.key).toBeTruthy();
+    await expectNoSideScroll(page);
+  });
+
+  test('cancel: asks first, then says the order was cancelled by the customer', async ({
+    page,
+    api,
+  }) => {
+    await openPromptPayOrder(page, api);
+    await page.getByRole('button', { name: tr('liff.cancel.button') }).click();
+    const sheet = page.getByRole('dialog');
+    await expect(sheet.getByText(tr('liff.cancel.title', { orderNo: 'S-001' }))).toBeVisible();
+    // Keeping the order closes the question and sends nothing.
+    await sheet.getByRole('button', { name: tr('liff.cancel.keep') }).click();
+    await expect(sheet).toBeHidden();
+    expect(api.cancels).toHaveLength(0);
+
+    await page.getByRole('button', { name: tr('liff.cancel.button') }).click();
+    await page
+      .getByRole('dialog')
+      .getByRole('button', { name: tr('liff.cancel.confirm') })
+      .click();
+    await expect(page.getByText(tr('liff.cancel.reason.customer_cancel'))).toBeVisible();
+    expect(api.cancels).toHaveLength(1);
+    expect(api.cancels[0]?.body).toEqual({ expectedVersion: 1 });
+    expect(api.cancels[0]?.key).toBeTruthy();
+    await expect(page.getByRole('button', { name: tr('liff.cancel.button') })).toHaveCount(0);
+    await expect(page.getByRole('img', { name: /QR/ })).toHaveCount(0);
+  });
+
+  test('once a slip is sent the order can be neither changed nor cancelled', async ({
+    page,
+    api,
+  }) => {
+    await openPromptPayOrder(page, api);
+    await page.locator('input[type="file"]').setInputFiles(SLIP);
+    await page
+      .getByRole('dialog')
+      .getByRole('button', { name: tr('liff.close') })
+      .click();
+    await expect(page.getByRole('button', { name: tr('liff.edit.button') })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: tr('liff.cancel.button') })).toHaveCount(0);
+  });
+});
+
+test.describe('cancelled orders say why', () => {
+  test.use({ fakeOptions: { acknowledged: true } });
+
+  test('the unpaid timeout, in plain words', async ({ page, api }) => {
+    const order = api.seedOrder();
+    api.cancel('unpaid_timeout', order);
+    await page.goto(`/orders/${order.id}`);
+    await expect(page.getByText(tr('liff.cancel.reason.unpaid_timeout'))).toBeVisible();
+    await expectNoSideScroll(page);
+  });
+
+  test('merged into another order, by its number', async ({ page, api }) => {
+    const order = api.seedOrder();
+    api.cancel('merged', order, 'L-004');
+    await page.goto(`/orders/${order.id}`);
+    await expect(
+      page.getByText(tr('liff.cancel.reason.merged', { orderNo: 'L-004' })),
+    ).toBeVisible();
+  });
+});
+
+test.describe('a slip that matches several orders', () => {
+  test.use({ fakeOptions: { acknowledged: true } });
+
+  /** L-001 (60 baht) and L-002 (50 baht); the slip reads 110 baht and is sent on L-002. */
+  async function sendCombinedSlip(page: import('@playwright/test').Page, api: FakeApi) {
+    api.seedOrder({ no: 'L-001' });
+    const second = api.seedOrder({
+      no: 'L-002',
+      lines: [{ menuItemId: IDS.dish, qty: 1, optionIds: [IDS.thin], note: null }],
+    });
+    api.slipAmountSatang = 11_000;
+    await page.goto(`/orders/${second.id}`);
+    await page.locator('input[type="file"]').setInputFiles(SLIP);
+    const sheet = page.getByRole('dialog');
+    await expect(
+      sheet.getByText(tr('liff.combine.title', { amount: '฿110.00', orders: '#L-002 + #L-001' })),
+    ).toBeVisible();
+    // Asked first: nothing was stored.
+    expect(api.slips).toHaveLength(0);
+    await expectNoSideScroll(page);
+    return { second, sheet };
+  }
+
+  test('yes: the orders are combined and the slip goes to the combined order', async ({
+    page,
+    api,
+  }) => {
+    const { second, sheet } = await sendCombinedSlip(page, api);
+    await sheet.getByRole('button', { name: tr('liff.combine.yes') }).click();
+    await expect(page.getByRole('dialog').getByText(tr('liff.slipProgress.title'))).toBeVisible();
+    expect(api.slips).toHaveLength(1);
+    expect(api.slips[0]?.query).toBe('?combine=1');
+    expect(api.merges).toBe(1);
+    expect(api.total(second)).toBe(11_000);
+    await page
+      .getByRole('dialog')
+      .getByRole('button', { name: tr('liff.close') })
+      .click();
+    await expect(page.getByRole('img', { name: qrAlt('฿110.00') })).toBeVisible();
+
+    // The earlier order is gone and points at the one that took it.
+    await page.goto(`/orders/${IDS.order}`);
+    await expect(
+      page.getByText(tr('liff.cancel.reason.merged', { orderNo: 'L-002' })),
+    ).toBeVisible();
+  });
+
+  test('no: "amount does not match", then send it to the shop to check', async ({ page, api }) => {
+    const { sheet } = await sendCombinedSlip(page, api);
+    await sheet.getByRole('button', { name: tr('liff.combine.no') }).click();
+    const mismatch = page.getByRole('dialog');
+    await expect(mismatch.getByText(tr('liff.mismatch.title'))).toBeVisible();
+    expect(api.slips).toHaveLength(0);
+    await mismatch.getByRole('button', { name: tr('liff.mismatch.review') }).click();
+    await expect(page.getByRole('dialog').getByText(tr('liff.slipProgress.title'))).toBeVisible();
+    expect(api.slips).toHaveLength(1);
+    expect(api.slips[0]?.query).toBe('?review=1');
+    expect(api.merges).toBe(0);
+  });
+
+  test('no: pick another slip and send it as usual', async ({ page, api }) => {
+    const { sheet } = await sendCombinedSlip(page, api);
+    await sheet.getByRole('button', { name: tr('liff.combine.no') }).click();
+    // The new slip reads as this order's own amount.
+    api.slipAmountSatang = 5000;
+    await page.getByRole('dialog').locator('input[type="file"]').setInputFiles(SLIP);
+    await expect(page.getByRole('dialog').getByText(tr('liff.slipProgress.title'))).toBeVisible();
+    expect(api.slips).toHaveLength(1);
+    expect(api.slips[0]?.query).toBe('');
+  });
+});
+
+test.describe('the slip result the customer sees', () => {
+  test('paid shows at once, without the 5 second hold', async ({ page, api }) => {
+    await openPromptPayOrder(page, api);
+    await page.getByRole('button', { name: tr('liff.order.claim'), exact: true }).click();
+    await expect(page.getByText(tr('liff.order.claimedTitle'))).toBeVisible();
+    await page.locator('input[type="file"]').setInputFiles(SLIP);
+    const progress = page.getByRole('dialog');
+    await expect(progress.getByText(tr('liff.slipProgress.title'))).toBeVisible();
+    api.confirmPaid();
+    // The next quick poll (2 s) sees it; the old hold would keep "checking" up to 5 s.
+    await expect(progress.getByText(tr('liff.paidPopup.title'))).toBeVisible({ timeout: 4400 });
+    await expect(progress.getByText('ชำระเงินสำเร็จ')).toBeVisible();
+  });
+
+  test('a wrong amount is named; a valid slip waits for the shop and is not "paid"', async ({
+    page,
+    api,
+  }) => {
+    await openPromptPayOrder(page, api);
+    await page.locator('input[type="file"]').setInputFiles(SLIP);
+    const progress = page.getByRole('dialog');
+    api.amountMismatch();
+    await expect(progress.getByText(tr('liff.slipProgress.mismatchTitle'))).toBeVisible({
+      timeout: 20_000,
+    });
+    await progress.getByRole('button', { name: tr('liff.close') }).click();
+    await expect(page.getByText(tr('liff.slipStatus.amountMismatch'))).toBeVisible();
+
+    api.verifiedWaiting();
+    await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+    await expect(page.getByText(tr('liff.slipStatus.verifiedWaiting'))).toBeVisible();
+    await expect(page.getByText(tr('liff.order.paid'))).toHaveCount(0);
+    await expectNoSideScroll(page);
   });
 });

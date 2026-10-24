@@ -12,22 +12,37 @@ export const SLIP_PROGRESS_GIVE_UP_MS = 6 * 60_000;
 /** In the checking phase for this long, the pop-up adds a line that it may take a minute. */
 export const SLIP_PROGRESS_SLOW_HINT_AFTER_MS = 8000;
 
-export type SlipProgressPhase = 'checking' | 'paid' | 'staff_review';
+export type SlipProgressPhase =
+  | 'checking'
+  | 'paid'
+  | 'staff_review'
+  | 'amount_mismatch'
+  | 'verified_waiting';
 
 type Seen = Pick<MyOrder, 'paymentStatus' | 'slipCheck'>;
 
-/** Whether the server has an answer: money received, or any finished check (all neutral). */
+/** Whether the server has an answer: money received, or any finished check. */
 export function slipResolved(order: Seen | null): boolean {
-  return order !== null && (order.paymentStatus === 'paid' || order.slipCheck === 'staff_review');
+  return (
+    order !== null &&
+    (order.paymentStatus === 'paid' ||
+      order.slipCheck === 'staff_review' ||
+      order.slipCheck === 'amount_mismatch' ||
+      order.slipCheck === 'verified_waiting')
+  );
 }
 
 /**
- * What the pop-up shows. Never a failure: every non-success result and a timeout are the same
- * `staff_review`. An answer that arrives early is held back until the minimum time has passed.
+ * What the pop-up shows. "Paid" shows the moment the server says so (D-42). Every other answer
+ * is held back until the minimum time has passed. Only an amount mismatch (`amount_mismatch`) and
+ * a pass the shop still has to confirm (`verified_waiting`) are named; every other failure and a
+ * timeout are the same neutral `staff_review`.
  */
 export function slipProgressPhase(elapsedMs: number, order: Seen | null): SlipProgressPhase {
-  if (elapsedMs < SLIP_PROGRESS_MIN_MS) return 'checking';
   if (order?.paymentStatus === 'paid') return 'paid';
+  if (elapsedMs < SLIP_PROGRESS_MIN_MS) return 'checking';
+  if (order?.slipCheck === 'amount_mismatch') return 'amount_mismatch';
+  if (order?.slipCheck === 'verified_waiting') return 'verified_waiting';
   if (order?.slipCheck === 'staff_review' || elapsedMs >= SLIP_PROGRESS_GIVE_UP_MS) {
     return 'staff_review';
   }

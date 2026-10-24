@@ -2,11 +2,14 @@
  * Order page: what the customer sees for one order (status, items, payment, actions).
  */
 import { formatBaht, type Locale } from '@sds/i18n';
-import type { AppPayMethod, MyOrder } from '@sds/shared';
+import type { AppOpenOrder, AppPayMethod, MyOrder, SlipNeedsCombine } from '@sds/shared';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { ApiFailure, type SlipMode } from '../../api/client.ts';
 import { Gi } from '../../design/icons.tsx';
 import { s } from '../../design/style.ts';
+import { createRequestIds } from '../../model/checkout.ts';
 import { telHref } from '../../model/contact.ts';
+import { cancelReasonView, openOrderFor } from '../../model/open-orders.ts';
 import { markPaidPopupSeen, paidPopupSeen, shouldShowPaidPopup } from '../../model/paid-popup.ts';
 import { canDownloadReceipt, receiptFileName, receiptHtml } from '../../model/receipt.ts';
 import {
@@ -21,6 +24,7 @@ import { BarButton, Body, Header, Notice } from '../Chrome.tsx';
 import { PayButton } from '../PayOption.tsx';
 import { PromptPayPanel } from './PromptPayPanel.tsx';
 import { PaidPopup, SlipProgressPopup } from './popups.tsx';
+import { CancelSheet, CombineSheet, MismatchSheet } from './sheets.tsx';
 import { PAYMENT_BADGE, PAYMENT_KEY, STATUS_BADGE, STATUS_KEY, STEP_KEY } from './status-maps.ts';
 
 /** The loaded order page. Split from the polling shell so it can be rendered on its own. */
@@ -30,6 +34,7 @@ export function OrderView({
   flag,
   shopPhone,
   onSlipSent,
+  onEdit,
 }: {
   order: MyOrder;
   setOrder: (order: MyOrder) => void;
@@ -37,6 +42,8 @@ export function OrderView({
   shopPhone: string | null;
   /** Called when a slip upload succeeds, so the page can poll faster. */
   onSlipSent?: (startedAt: number) => void;
+  /** Called with the order lines and version when the customer taps change dishes. */
+  onEdit?: (order: AppOpenOrder) => void;
 }) {
   const tr = useT();
   const { api, locale, go, platform } = useApp();
@@ -48,6 +55,13 @@ export function OrderView({
   const [slipStamp, setSlipStamp] = useState(0);
   const tel = telHref(shopPhone);
   const [paidPopup, setPaidPopup] = useState(false);
+  /** The slip the server asked about (its amount adds up to several orders), kept to be re-sent. */
+  const [combine, setCombine] = useState<{ file: File; info: SlipNeedsCombine } | null>(null);
+  /** The customer would not combine: the slip waits for send-to-the-shop or a new picture. */
+  const [mismatch, setMismatch] = useState<File | null>(null);
+  const [cancelOpen, setCancelOpen] = useState(false);
+  /** One key per cancel attempt, kept on a retry so a lost answer never cancels twice. */
+  const cancelKeys = useRef(createRequestIds()).current;
   /** When the slip-check pop-up opened (null when it is closed) and the clock that drives it. */
   const [slipProgress, setSlipProgress] = useState<number | null>(null);
   const [now, setNow] = useState(0);
@@ -83,11 +97,21 @@ export function OrderView({
     setSlipProgress(null);
   }, []);
 
-  function sendSlip(file: File) {
+  function sendSlip(file: File, mode?: SlipMode): Promise<void> {
     progressOwnsPaid.current = true;
-    void act(() => api.attachSlip(order.id, file)).then((ok) => {
+    return act(
+      () => api.attachSlip(order.id, file, mode),
+      (e) => {
+        // The amount adds up to several orders: ask, and keep the picture for the answer.
+        if (e instanceof ApiFailure && e.status === 409 && e.combine) {
+          setCombine({ file, info: e.combine });
+          return true;
+        }
+        return false;
+      },
+    ).then((ok) => {
       if (!ok) {
-        // Refused (a wait, a block, a bad file): the message under the buttons says why.
+        // Refused (a wait, a block, a bad file) or a question is open: no check is running.
         progressOwnsPaid.current = false;
         return;
       }
@@ -100,7 +124,11 @@ export function OrderView({
     });
   }
 
-  async function act(run: () => Promise<MyOrder>): Promise<boolean> {
+  /** `onError` returns true when it handled the failure itself (no message under the buttons). */
+  async function act(
+    run: () => Promise<MyOrder>,
+    onError?: (error: unknown) => boolean,
+  ): Promise<boolean> {
     if (busy) return false;
     setBusy(true);
     setError(null);
@@ -109,10 +137,50 @@ export function OrderView({
       setChanging(false);
       return true;
     } catch (e) {
-      setError(errorText(tr, e));
+      if (!onError?.(e)) setError(errorText(tr, e));
       return false;
     } finally {
       setBusy(false);
+    }
+  }
+
+  /** The open list has what the order page lacks: the version and the dish ids. */
+  async function openOrder(): Promise<AppOpenOrder | null> {
+    const found = openOrderFor((await api.openOrders()).orders, order.id);
+    if (!found) setError(tr('liff.error.ORDER_NOT_EDITABLE'));
+    return found ?? null;
+  }
+
+  async function startEdit() {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const found = await openOrder();
+      if (found) onEdit?.(found);
+    } catch (e) {
+      setError(errorText(tr, e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function cancelOrder() {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const found = await openOrder();
+      if (found) {
+        const key = cancelKeys.forSignature(`${found.id}:${found.version}`);
+        setOrder(await api.cancelOrder(found.id, found.version, key));
+        cancelKeys.reset();
+      }
+    } catch (e) {
+      setError(errorText(tr, e));
+    } finally {
+      setBusy(false);
+      setCancelOpen(false);
     }
   }
 
@@ -126,6 +194,7 @@ export function OrderView({
   const steps = orderSteps(order);
   const badge =
     order.status === 'cancelled' ? STATUS_BADGE.cancelled : PAYMENT_BADGE[order.paymentStatus];
+  const reason = cancelReasonView(order);
   const badgeKey =
     order.status === 'cancelled' ? STATUS_KEY.cancelled : PAYMENT_KEY[order.paymentStatus];
 
@@ -200,6 +269,16 @@ export function OrderView({
           ) : (
             <Notice tone="bad" icon="x">
               {tr('lineBot.status.cancelled')}
+              {reason ? (
+                <>
+                  <br />
+                  <span data-testid="cancel-reason">
+                    {reason.key === 'merged'
+                      ? tr('liff.cancel.reason.merged', { orderNo: reason.orderNo })
+                      : tr(`liff.cancel.reason.${reason.key}`)}
+                  </span>
+                </>
+              ) : null}
             </Notice>
           )}
           {awaitsTransferConfirmation(order) ? (
@@ -212,12 +291,14 @@ export function OrderView({
             <>
               {rejected || (method === 'promptpay' && waiting) ? (
                 <PromptPayPanel
+                  // A new payment or total (edit, combine) needs a QR for the new amount at once.
+                  key={`${order.payment?.id ?? ''}:${order.totalSatang}`}
                   order={order}
                   busy={busy}
                   onClaim={() => void act(() => api.claim(order.id))}
                   slipSent={slipSent}
                   slipStamp={slipStamp}
-                  onSlip={sendSlip}
+                  onSlip={(file) => void sendSlip(file)}
                 />
               ) : null}
               {method === 'gov_copay' && waiting ? (
@@ -245,6 +326,33 @@ export function OrderView({
                     {tr('liff.order.changeMethod')}
                   </button>
                 )
+              ) : null}
+              {(order.actions.edit && onEdit) || order.actions.cancel ? (
+                <div style={s('display:flex;gap:10px')}>
+                  {order.actions.edit && onEdit ? (
+                    <button
+                      type="button"
+                      className="g-btn"
+                      style={s('flex:1')}
+                      disabled={busy}
+                      aria-busy={busy}
+                      onClick={() => void startEdit()}
+                    >
+                      {busy ? tr('liff.edit.opening') : tr('liff.edit.button')}
+                    </button>
+                  ) : null}
+                  {order.actions.cancel ? (
+                    <button
+                      type="button"
+                      className="g-btn"
+                      style={s('flex:1')}
+                      disabled={busy}
+                      onClick={() => setCancelOpen(true)}
+                    >
+                      {tr('liff.cancel.button')}
+                    </button>
+                  ) : null}
+                </div>
               ) : null}
               {error ? (
                 <Notice tone="bad" icon="warn" alert>
@@ -341,6 +449,37 @@ export function OrderView({
           orderNo={order.orderNo}
           slowHint={slipSlowHintShown(Math.max(0, now - (slipProgress ?? now)), phase)}
           onClose={closeSlipProgress}
+        />
+      ) : null}
+      {cancelOpen ? (
+        <CancelSheet
+          orderNo={order.orderNo}
+          busy={busy}
+          onConfirm={() => void cancelOrder()}
+          onClose={() => setCancelOpen(false)}
+        />
+      ) : null}
+      {combine ? (
+        <CombineSheet
+          totalSatang={combine.info.totalSatang}
+          orderNos={combine.info.orderNos}
+          busy={busy}
+          onYes={() => void sendSlip(combine.file, 'combine').then(() => setCombine(null))}
+          onNo={() => {
+            setMismatch(combine.file);
+            setCombine(null);
+          }}
+        />
+      ) : null}
+      {mismatch ? (
+        <MismatchSheet
+          busy={busy}
+          onReview={() => void sendSlip(mismatch, 'review').then(() => setMismatch(null))}
+          onPick={(file) => {
+            setMismatch(null);
+            void sendSlip(file);
+          }}
+          onClose={() => setMismatch(null)}
         />
       ) : null}
       {paidPopup && !phase ? (

@@ -6,6 +6,7 @@
  * The token is kept in memory only. A 401 on any call gets one fresh sign-in and one retry.
  */
 import type {
+  AppOpenOrders,
   AppOrderInput,
   AppOrderResult,
   AppPayMethod,
@@ -18,6 +19,7 @@ import type {
   MyQrResponse,
   PrivacyAckResponse,
   PublicMenuResponse,
+  SlipNeedsCombine,
 } from '@sds/shared';
 
 /** `GET`/`PUT /v1/app/member`: the saved member profile. */
@@ -36,6 +38,8 @@ export class ApiFailure extends Error {
     readonly fields: readonly string[] = [],
     /** From a SLIP_COOLDOWN: how long until the next slip may be sent. */
     readonly retryAfterSeconds?: number,
+    /** From a 409 NEEDS_COMBINE: the orders the slip's amount adds up to. */
+    readonly combine?: SlipNeedsCombine,
   ) {
     super(`${status} ${code}`);
     this.name = 'ApiFailure';
@@ -47,6 +51,26 @@ export interface ApiOptions {
   credential: () => Credential | null;
   fetch?: typeof fetch;
 }
+
+/** The 409 body of a slip that adds up to several orders; null when it is not shaped like one. */
+function combineOf(details: Partial<SlipNeedsCombine> | undefined): SlipNeedsCombine | undefined {
+  if (
+    !details ||
+    !Array.isArray(details.orderNos) ||
+    !Array.isArray(details.orderIds) ||
+    typeof details.totalSatang !== 'number'
+  ) {
+    return undefined;
+  }
+  return {
+    orderNos: details.orderNos,
+    orderIds: details.orderIds,
+    totalSatang: details.totalSatang,
+  };
+}
+
+/** How a slip upload is sent after the server asked whether to combine (D-40). */
+export type SlipMode = 'combine' | 'review';
 
 const join = (base: string, path: string) =>
   `${base.replace(/\/+$/, '')}/${path.replace(/^\/+/, '')}`;
@@ -67,13 +91,18 @@ export function createApi(options: ApiOptions) {
     let code = 'ERROR';
     let fields: string[] = [];
     let retry: unknown;
+    let combine: SlipNeedsCombine | undefined;
     try {
       const body = (await response.json()) as {
         code?: unknown;
-        details?: { issues?: { path?: unknown }[]; retryAfterSeconds?: unknown };
+        details?: {
+          issues?: { path?: unknown }[];
+          retryAfterSeconds?: unknown;
+        } & Partial<SlipNeedsCombine>;
       };
       if (typeof body.code === 'string') code = body.code;
       retry = body.details?.retryAfterSeconds;
+      combine = code === 'NEEDS_COMBINE' ? combineOf(body.details) : undefined;
       fields = (body.details?.issues ?? []).flatMap((i) =>
         typeof i.path === 'string' ? [i.path] : [],
       );
@@ -86,6 +115,7 @@ export function createApi(options: ApiOptions) {
       code,
       fields,
       typeof retry === 'number' && retry > 0 ? retry : undefined,
+      combine,
     );
   }
 
@@ -135,6 +165,14 @@ export function createApi(options: ApiOptions) {
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
 
+  /** A write that changes an order. The same key is sent on a retry of the same action. */
+  const write = <T>(method: 'PUT' | 'POST', path: string, body: unknown, key: string) =>
+    authed<T>(path, {
+      method,
+      body: JSON.stringify(body),
+      headers: { 'idempotency-key': key },
+    });
+
   return {
     /** The public menu for the LINE channel: LINE prices, nothing sold out, no costs. */
     async menu(): Promise<PublicMenuResponse> {
@@ -158,9 +196,23 @@ export function createApi(options: ApiOptions) {
         clientRequestId: crypto.randomUUID(),
       }),
     claim: (id: string) => post<MyOrder>(`/v1/app/orders/${id}/claim`),
-    /** The slip picture as the raw body; the shop still confirms the money by hand. */
-    attachSlip: (id: string, file: Blob) =>
-      authed<MyOrder>(`/v1/app/orders/${id}/slip`, {
+    /** The customer's unpaid, open orders: the checkout warning and the data an edit starts from. */
+    openOrders: () => authed<AppOpenOrders>('/v1/app/orders/open'),
+    /** Replace all the lines of an unpaid order (`key`: one per action, kept on a retry). */
+    editOrder: (
+      id: string,
+      input: { expectedVersion: number; items: AppOrderInput['items'] },
+      key: string,
+    ) => write<MyOrder>('PUT', `/v1/app/orders/${id}/items`, input, key),
+    cancelOrder: (id: string, expectedVersion: number, key: string) =>
+      write<MyOrder>('POST', `/v1/app/orders/${id}/cancel`, { expectedVersion }, key),
+    /**
+     * The slip picture as the raw body; the shop still confirms the money by hand. After a 409
+     * NEEDS_COMBINE, `combine` merges the orders into this one first, `review` sends it to the shop
+     * with auto-confirm held back.
+     */
+    attachSlip: (id: string, file: Blob, mode?: SlipMode) =>
+      authed<MyOrder>(`/v1/app/orders/${id}/slip${mode ? `?${mode}=1` : ''}`, {
         method: 'POST',
         body: file,
         headers: { 'content-type': file.type },

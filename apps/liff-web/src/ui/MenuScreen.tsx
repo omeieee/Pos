@@ -26,11 +26,14 @@ export function MenuScreen({
   info,
   cart,
   setCart,
+  editingOrderNo,
 }: {
   menu: PublicMenuResponse;
   info: CheckoutInfo | null;
   cart: Cart;
   setCart: (cart: Cart) => void;
+  /** Set while the customer changes an unpaid order: the menu says which one. */
+  editingOrderNo?: string;
 }) {
   const tr = useT();
   const { go, locale, platform } = useApp();
@@ -144,6 +147,13 @@ export function MenuScreen({
       {more ? <MoreMenu tel={telHref(shopPhoneOf(info))} onClose={() => setMore(false)} /> : null}
 
       <Body label={tr('liff.menu.title')} bottom={count > 0 ? 132 : 28} fade={count > 0 ? 170 : 0}>
+        {editingOrderNo ? (
+          <div style={s('margin-bottom:12px')}>
+            <Notice icon="info">
+              <span role="status">{tr('liff.edit.title', { orderNo: editingOrderNo })}</span>
+            </Notice>
+          </div>
+        ) : null}
         {info && !info.delivery.open ? (
           <div style={s('margin-bottom:12px')}>
             <Notice tone="warn" icon="clock">

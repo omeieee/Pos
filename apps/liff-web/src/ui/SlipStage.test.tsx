@@ -61,6 +61,18 @@ describe('slip stage on a claimed PromptPay payment', () => {
     expect(html).not.toMatch(/ไม่ผ่าน|ปลอม|ไม่ตรง|ซ้ำ|ผิดพลาด|ยอดไม่/);
   });
 
+  test('amount_mismatch is the one failure that is named', () => {
+    const html = render(order({ hasSlip: true, slipCheck: 'amount_mismatch' }));
+    expect(html).toContain('ยอดเงินไม่ตรง ร้านกำลังตรวจสอบ');
+    expect(html).not.toContain('ได้รับสลิปแล้ว ร้านกำลังตรวจสอบ');
+  });
+
+  test('verified_waiting says the slip is valid and the shop is confirming, not paid', () => {
+    const html = render(order({ hasSlip: true, slipCheck: 'verified_waiting' }));
+    expect(html).toContain('สลิปถูกต้อง ร้านกำลังยืนยัน');
+    expect(html).not.toContain('ชำระเงินแล้ว ขอบคุณค่ะ');
+  });
+
   test('without slipCheck the old hint stays and no stage line shows', () => {
     const html = render(order({}));
     expect(html).toContain('ส่งสลิปเพิ่มได้');
@@ -75,7 +87,7 @@ describe('paid pop-up', () => {
     expect(html).toContain('role="dialog"');
     expect(html).toContain('aria-modal="true"');
     expect(html).toContain('aria-labelledby="paid-popup-title"');
-    expect(html).toContain('โอนเงินสำเร็จ ✓');
+    expect(html).toContain('ชำระเงินสำเร็จ ✓');
     expect(html).toContain('ร้านได้รับเงินแล้ว');
     expect(html).toContain('A-001');
     expect(html).toContain('ปิด');

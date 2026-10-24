@@ -6,6 +6,7 @@ interface Call {
   method: string;
   auth: string | null;
   type: string | null;
+  key: string | null;
   body: string;
 }
 
@@ -17,6 +18,7 @@ function server(handler: (call: Call, n: number) => { status: number; body?: unk
       method: init?.method ?? 'GET',
       auth: new Headers(init?.headers).get('authorization'),
       type: new Headers(init?.headers).get('content-type'),
+      key: new Headers(init?.headers).get('idempotency-key'),
       body: String(init?.body ?? ''),
     };
     calls.push(call);
@@ -245,5 +247,76 @@ describe('the customer API client', () => {
     });
     expect(calls[2]).toMatchObject({ method: 'PUT', auth: 'Bearer tok-1' });
     expect(JSON.parse(calls[2]?.body ?? '')).toEqual({ nickname: '' });
+  });
+  test('edit, cancel and the open list use the right paths, bodies and idempotency key', async () => {
+    const { calls, fetcher } = server((call) =>
+      call.url.endsWith('/session') ? session('tok-1') : { status: 200, body: { orders: [] } },
+    );
+    const api = createApi({
+      baseUrl: 'https://api.example.test',
+      credential: () => ({ idToken: 'x' }),
+      fetch: fetcher,
+    });
+    await api.openOrders();
+    await api.editOrder('o-1', { expectedVersion: 3, items: [] }, 'key-1');
+    await api.cancelOrder('o-1', 4, 'key-2');
+    expect(calls[1]).toMatchObject({
+      method: 'GET',
+      url: 'https://api.example.test/v1/app/orders/open',
+    });
+    expect(calls[2]).toMatchObject({
+      method: 'PUT',
+      url: 'https://api.example.test/v1/app/orders/o-1/items',
+      key: 'key-1',
+      type: 'application/json',
+      auth: 'Bearer tok-1',
+    });
+    expect(JSON.parse(calls[2]?.body ?? '')).toEqual({ expectedVersion: 3, items: [] });
+    expect(calls[3]).toMatchObject({
+      method: 'POST',
+      url: 'https://api.example.test/v1/app/orders/o-1/cancel',
+      key: 'key-2',
+    });
+    expect(JSON.parse(calls[3]?.body ?? '')).toEqual({ expectedVersion: 4 });
+  });
+
+  test('a slip re-sent after the combine question carries its query', async () => {
+    const { calls, fetcher } = server((call) =>
+      call.url.endsWith('/session') ? session('tok-1') : { status: 200, body: { id: 'o' } },
+    );
+    const api = createApi({
+      baseUrl: 'https://api.example.test',
+      credential: () => ({ idToken: 'x' }),
+      fetch: fetcher,
+    });
+    const file = new Blob(['x'], { type: 'image/png' });
+    await api.attachSlip('o-1', file, 'combine');
+    await api.attachSlip('o-1', file, 'review');
+    expect(calls[1]?.url).toBe('https://api.example.test/v1/app/orders/o-1/slip?combine=1');
+    expect(calls[2]?.url).toBe('https://api.example.test/v1/app/orders/o-1/slip?review=1');
+  });
+
+  test('a 409 NEEDS_COMBINE carries the orders to combine; a malformed one does not', async () => {
+    const details = { orderNos: ['L-001', 'L-002'], orderIds: ['a', 'b'], totalSatang: 10_000 };
+    for (const [body, expected] of [
+      [{ code: 'NEEDS_COMBINE', details }, details],
+      [{ code: 'NEEDS_COMBINE', details: { orderNos: 'x' } }, undefined],
+      [{ code: 'OTHER', details }, undefined],
+    ] as const) {
+      const { fetcher } = server((call) =>
+        call.url.endsWith('/session') ? session('tok-1') : { status: 409, body },
+      );
+      const api = createApi({
+        baseUrl: 'https://api.example.test',
+        credential: () => ({ idToken: 'x' }),
+        fetch: fetcher,
+      });
+      const failure = await api
+        .attachSlip('o-1', new Blob(['x'], { type: 'image/png' }))
+        .catch((e: unknown) => e);
+      expect(failure).toBeInstanceOf(ApiFailure);
+      expect((failure as ApiFailure).status).toBe(409);
+      expect((failure as ApiFailure).combine).toEqual(expected);
+    }
   });
 });
