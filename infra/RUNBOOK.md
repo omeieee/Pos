@@ -5,7 +5,7 @@ Playbooks for when something breaks. Setup lives in [SETUP.md](SETUP.md); the de
 ## Where things are
 | Thing | Where |
 |---|---|
-| VM | Oracle `omeie_pos`, ap-singapore-1, E2.1.Micro. Public `161.118.211.42`, tailnet name `sds-pos` |
+| VM | Oracle `omeie_pos_a1`, ap-singapore-1, Ampere A1 (2 OCPU / 12 GB, arm64) since 2026-10-25. Public `161.118.211.42`, tailnet name `sds-pos`. The old Micro `omeie_pos` is stopped as `sds-pos-old` |
 | Admin SSH | `ssh pos-ts` (ubuntu) or `ssh deploy@sds-pos`, over Tailscale only |
 | Stack | `/opt/sds` (`docker-compose.yml`, `Caddyfile`, `.env` (600, deploy), `.deploy-state`, `deploy.sh`, `dc`, `run-restore-drill.sh`) |
 | Compose | **always** `/opt/sds/dc …` (it adds `.deploy-state`); e.g. `./dc ps`, `./dc logs --tail 100 api` |
@@ -144,15 +144,15 @@ The API image is `ghcr.io/omeieee/pos-api:<git sha>`. `/opt/sds/.deploy-state` h
 ## Oracle instance lost (reclaimed, terminated, or region trouble). Target ≤ 2 h
 Only three things live only on the VM: the Caddy certificate, `/opt/sds/.env` (recreated in step 5 from your copy) and `/opt/sds/.deploy-state` (the current image tags; the next deploy rewrites it). Data is in Supabase, backups are in OCI Object Storage, and images are in GHCR.
 1. **(10 min)** OCI console → Compute → Create instance:
-   - **VM.Standard.E2.1.Micro** (Always Free), Ubuntu 24.04;
+   - **VM.Standard.A1.Flex**, 2 OCPU / 12 GB (Always Free, the current shape; retry or pick another availability domain on "out of host capacity") or **VM.Standard.E2.1.Micro**; Ubuntu 24.04. The images are multi-arch, so either works. Do not assign more than 2 OCPU / 12 GB of A1 in total;
    - same VCN/subnet (the security list already allows 80/443 only);
    - SSH key: your existing `.pub`.
-   - Note the new public IP.
+   - Keep the **ephemeral public IP** on for now: without a public IP (or a NAT gateway) the VM has no internet and `bootstrap.sh` cannot install anything. Note the new public IP. To keep the reserved IP, later set the old VM to "No public IP", set this one to "No public IP" and then attach `sds-pos-api` in a second edit (the console offers Reserved only after the ephemeral IP is gone);
    - If you rebuild in another region, the backup bucket stays in Singapore; that's fine.
 2. **(5 min)** Open TCP 22 from your IP/32 temporarily. Put the new IP in `~/.ssh/config` → `pos-oracle`.
 3. **(10 min)** `ssh pos-oracle 'sudo bash -s' < infra/oracle/bootstrap.sh` → `bootstrap: OK`.
 4. **(10 min)** Tailscale:
-   1. admin console → remove the old `sds-pos` machine;
+   1. admin console → remove the old `sds-pos` machine, or rename it first (`sudo tailscale set --hostname=sds-pos-old` on the old VM). A new machine that joins while the name is taken becomes `sds-pos-1`; free the name, then `tailscale set --hostname=sds-pos`. After the rename, update `~/.ssh/known_hosts` (`ssh-keygen -R sds-pos`);
    2. on the new VM: `sudo tailscale up --ssh --advertise-tags=tag:server --hostname=sds-pos`;
    3. check key expiry is disabled;
    4. `ssh pos-ts true`;

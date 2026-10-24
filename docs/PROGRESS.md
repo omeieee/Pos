@@ -9,6 +9,7 @@
 > - Keep this file short: when it holds more than about 8 entries, move the oldest into the matching month archive unchanged.
 
 > **State (from the entries below; git checked 2026-10-16):**
+> - **Hosting (2026-10-25):** the VM is now an Oracle **Ampere A1** (2 OCPU / 12 GB, arm64), `sds-pos`; `/healthz` shows `8649bf7`; the old Micro is stopped (`sds-pos-old`). See the first entry below.
 > - **Deployed and live:** `9aaf0b6` (pushed and deployed 2026-10-21: CI, Deploy API and Deploy web succeeded; `/healthz` shows `9aaf0b6`, `/readyz` 200). It includes the P6 follow-ups and all of P7 (parts 1 to 6, migrations 0037 and 0038). The new P6/P7 screens and routes have not been used on the live server or on a real iPad/iPhone. P7 stays open for one exit criterion: the owner agreeing a sample-month P&L ([checkpoint](checkpoints/PHASE-07-costs-pnl-tax.md)).
 > - **Slip checking:** Slip2Go (D-27) and the slip status, cooldown, fake-slip block and customer flag (D-28) are deployed. `SLIP_AUTOCONFIRM` is **on** (VM `.env` and running API, checked 2026-10-17; default ceiling 1,000 THB). The Slip2Go trial ends **2026-10-19**; package not chosen yet.
 > - **Last full verification (2026-10-15, on main):** biome 0 errors; build 12/12; tests shared 1117, db 299, api 1376, pos-web 1890, liff-web 114, i18n 22, line 69, ui 118, promptpay 1276.
@@ -17,6 +18,15 @@
 > - **Before any push:** `pnpm lint` (CI gates on Biome, and a lint error skips the deploy), `pnpm build`, tests; `main` auto-deploys, so new env vars go into the VM `.env` first and migrations take the next free number. Check `/healthz` for the new sha after the push.
 > - **Maintenance:** the architecture refactor (code moved, behaviour unchanged) is deployed; see the entry "2026-10-16 · Maintenance · Architecture refactor". Not yet checked on a real iPad/iPhone. The as-built code index `ARCHITECTURE.md` (verified at `7ff9951`) is committed (`070e0b4`) and pushed with the owner's OK; see the newest entry.
 > - **Workflow (owner rule 2026-10-16):** after each completed part, ask the owner "save checkpoint or next step?" and wait for the answer (`CLAUDE.md` workflow, `3d8481c`).
+
+## 2026-10-25 · Maintenance · API moved to an Ampere A1
+- **Summary:** the API stack moved from the 1 GB E2.1.Micro to an Always Free Ampere A1 (2 OCPU / 12 GB, arm64), D-43. Cutover 21:03 to 21:22 UTC (about 19 min down). Reserved IP `161.118.211.42` moved with it, so the hostname, LINE webhook and Slip2Go whitelist are unchanged.
+- **Changed:** `.github/workflows/deploy-api.yml` (amd64+arm64, QEMU), `apps/api/Dockerfile` (build stage on the builder arch, heap cap via `NODE_OPTIONS`), `infra/compose/docker-compose.yml` + `.env.example` + `deploy.sh` (limits from `.env`), `infra/backup/Dockerfile` (comment), audit fixes (zod 4.6.6, fastify ^5.12.6, pnpm overrides ip-address, fast-uri), docs 05 §3.2, RUNBOOK, oracle README, D-43, Q1.
+- **Verification:** run this session: `pnpm audit --prod` 0 vulnerabilities (was 11); `pnpm install --frozen-lockfile`; `pnpm build` 16/16; `pnpm test` all packages (api 1618); `biome check apps packages` 0 errors. CI green on `05dba20` and `8649bf7`; Deploy API #89 (manual, image `8649bf7`) green. Live after the move: `/healthz` ok `8649bf7`, api/backup/caddy healthy, images arm64, API ~112 MB of 3 GB, hourly backup from the A1 uploaded, restore drill PASSED before the move (43 migrations, row counts equal). **Not verified:** real LINE webhook delivery, a test order and slip, Slip2Go on the A1.
+- **Decisions:** D-43 accepted.
+- **Open issues:** owner checks (LINE Verify, test order, Slip2Go); old Micro `omeie_pos` stopped, no public IP, terminate it **and its boot volume** after about 7 days; `SLIP_OCR` still off; idle-reclaim risk on the A1 (7 days under 20%); the `pos-oracle` ssh alias is stale; `feat/pay-first-orders` must be rebased onto the new `main` (dependency and compose changes); branch `chore/a1-arm64-migration` on GitHub still carries the pay-first commits and should be deleted.
+- **Next:** owner checks above; decide the old VM's end date; then the pay-first review fixes (H1/M1/M2) and rebase.
+- **Commit:** `96c52b4`, `05dba20`, `8649bf7` on main (deployed); this checkpoint's doc edits uncommitted.
 
 ## 2026-10-22 · P8 · Print follow-ups: cancelled tickets, silent-notebook alert, Reprint hidden when cancelled
 - **Summary:** two D-37 known gaps closed and one owner-recommended UI rule applied (auto next step). Cancelled-order tickets are skipped at claim (`ORDER_CANCELLED`, no failure alert); a `print-agent-silent-check` job warns once when printing is on and a job waits over 3 minutes; Reprint is hidden on cancelled orders.
