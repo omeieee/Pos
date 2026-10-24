@@ -15,6 +15,8 @@ const FEED_KEY: Record<ResourceName, string> = {
   lineOrdering: 'line_ordering',
   // Not on the realtime feed: nothing to compare.
   printing: 'printing',
+  // Not on the realtime feed either.
+  unpaidTimeout: 'unpaid_timeout',
   promptpay: 'promptpay',
   // Never on the realtime feed (the server keeps the tax ID off it): nothing to compare.
   receipt: 'receipt',

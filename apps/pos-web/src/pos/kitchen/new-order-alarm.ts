@@ -60,6 +60,8 @@ export function createNewOrderAlarm(deps: {
       }
 
       const stopAlerts = deps.entities.onAlert((frame) => {
+        // A payment alert (D-42) is for the pop-up, not for this chime.
+        if (frame.type !== 'alert.new_order') return;
         const own = frame.data.createdOnDeviceId;
         if (own !== null && own === deps.deviceId()) return;
         ring('newOrder');

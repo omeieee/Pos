@@ -10,6 +10,7 @@ import { useAuthState, useEntities, useNow, useT } from '../../ui/hooks.ts';
 import { SyncPill } from '../../ui/SyncPill.tsx';
 import { currentBusinessDay } from '../orders/order-board.ts';
 import { useLoadOrders } from '../orders/use-load-orders.ts';
+import { PaymentPopupSwitch } from '../payments/PaymentPopupSwitch.tsx';
 import { KitchenTicket } from './KitchenTicket.tsx';
 import { handedOverToday, kitchenQueue, WAIT_WARN_MINUTES } from './kitchen-model.ts';
 import { SoundControl } from './SoundControl.tsx';
@@ -139,7 +140,7 @@ export function KitchenScreen() {
   useKitchenDisplay();
 
   if (!role) return null;
-  const queue = kitchenQueue(state.orders.values(), now);
+  const queue = kitchenQueue(state.orders.values(), now, state.payments.values());
   const fresh: OrderDto[] = queue.toMake.filter((o) => o.status === 'new');
   const cooking: OrderDto[] = queue.toMake.filter((o) => o.status === 'preparing');
   const counts = [fresh.length, cooking.length, queue.ready.length];
@@ -235,6 +236,7 @@ export function KitchenScreen() {
             {clock}
             <div style={s('display:flex;align-items:center;gap:12px;flex:1 1 100%')}>
               <SoundControl />
+              <PaymentPopupSwitch />
               <span style={s('margin-left:auto')}>
                 <SyncPill compact />
               </span>
@@ -244,6 +246,7 @@ export function KitchenScreen() {
         ) : (
           <>
             <SoundControl />
+            <PaymentPopupSwitch />
             <SyncPill />
             {clock}
             {account}

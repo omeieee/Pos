@@ -7,8 +7,9 @@
  * `orderMoves`), so the view never offers a move the server would refuse for the role; the server
  * still checks every call. Money does not appear: the kitchen view never reads a price or a total.
  */
-import type { OrderDto, OrderStatus, StaffRole } from '@sds/shared';
+import type { OrderDto, OrderStatus, PaymentDto, StaffRole } from '@sds/shared';
 import { elapsedMinutes, type OrderMove, orderMoves } from '../orders/order-board.ts';
+import { heldBackFromKitchen, promptpayOrderIds } from '../payments/pay-first-model.ts';
 
 export interface KitchenQueue {
   /** New and preparing, oldest first: first in, first made. */
@@ -35,11 +36,21 @@ export const isStale = (order: Pick<OrderDto, 'status' | 'placedAt' | 'readyAt'>
 /**
  * The open orders of the store, split for the kitchen. The input is not changed. With `nowMs`, a
  * stale order (see `STALE_MINUTES`) goes to the end of its list, so today's tickets come first.
+ *
+ * With `payments`, a `new` LINE PromptPay order that is not paid is left out (D-38): it waits for
+ * the customer's money and the kitchen sees it once the server moves it to `preparing`. Without
+ * them (a role that does not receive payments) nothing is held back.
  */
-export function kitchenQueue(orders: Iterable<OrderDto>, nowMs?: number): KitchenQueue {
+export function kitchenQueue(
+  orders: Iterable<OrderDto>,
+  nowMs?: number,
+  payments?: Iterable<PaymentDto>,
+): KitchenQueue {
   const toMake: OrderDto[] = [];
   const ready: OrderDto[] = [];
+  const promptpayIds = payments ? promptpayOrderIds(payments) : new Set<string>();
   for (const order of orders) {
+    if (heldBackFromKitchen(order, promptpayIds)) continue;
     if (order.status === 'new' || order.status === 'preparing') toMake.push(order);
     else if (order.status === 'ready') ready.push(order);
   }

@@ -555,6 +555,8 @@ export function createMockShop(options: MockShopOptions = {}) {
           : null,
       status: initialOrderStatus(input.data.channel),
       paymentStatus: 'unpaid',
+      paymentMethod: null,
+      needsManualConfirm: false,
       subtotalSatang: priced.totals.subtotal,
       discountSatang: priced.totals.discount,
       totalSatang: priced.totals.total,
@@ -612,7 +614,7 @@ export function createMockShop(options: MockShopOptions = {}) {
    * second device. Dishes rotate so the tickets differ.
    */
   let incomingSeq = 0;
-  function simulateIncomingOrder(): OrderDto {
+  function simulateIncomingOrder(options: { payFirst?: boolean } = {}): OrderDto {
     const samples = [
       {
         building: 'D1',
@@ -652,7 +654,35 @@ export function createMockShop(options: MockShopOptions = {}) {
       ...(sample.note ? { note: sample.note } : {}),
       items: sample.items,
     });
-    return answer.body as OrderDto;
+    const created = answer.body as OrderDto;
+    // Pay first (D-38): the customer picked PromptPay in LINE, so a pending payment is on the order.
+    if (options.payFirst) {
+      payments.handle(
+        'POST',
+        `/v1/orders/${created.id}/payments`,
+        { clientRequestId: newUuid(), method: 'promptpay' },
+        { role: 'owner', stepUpFresh: true },
+      );
+      return orders.get(created.id) ?? created;
+    }
+    return created;
+  }
+
+  /**
+   * Dev and tests: the server says a payment arrived (`alert.payment`, D-42) on every open socket.
+   * Without an order id a new LINE order is made first, so the pop-up has something to show; it
+   * returns the order id. Only the live frame is sent: nothing is stored, so a reload shows none.
+   */
+  function simulatePaymentAlert(kind: 'paid' | 'slip_review', orderId?: string): string {
+    const order = orderId ? orders.get(orderId) : simulateIncomingOrder();
+    if (!order) throw new Error('no such order in the mock');
+    const alert: RealtimeFrame = {
+      type: 'alert.payment',
+      id: newUuid(),
+      data: { orderId: order.id, orderNo: order.orderNo, kind },
+    };
+    for (const socket of sockets) if (socket.ready) socket.handlers.message(JSON.stringify(alert));
+    return order.id;
   }
 
   function sync(query: URLSearchParams): MockAnswer {
@@ -809,6 +839,7 @@ export function createMockShop(options: MockShopOptions = {}) {
     handle,
     createSocket,
     simulateIncomingOrder,
+    simulatePaymentAlert,
     seedDemoOrders: reports.seedDemoOrders,
     setOffline,
     isOffline: () => offline,

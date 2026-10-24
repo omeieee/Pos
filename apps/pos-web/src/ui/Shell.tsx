@@ -102,7 +102,8 @@ export function Shell() {
 
   if (!session) return null;
 
-  const toMake = kitchenQueue(entities.orders.values()).toMake.length;
+  const toMake = kitchenQueue(entities.orders.values(), undefined, entities.payments.values())
+    .toMake.length;
   const awaiting = [...entities.orders.values()].filter(
     (o) => o.paymentStatus === 'awaiting_confirmation',
   ).length;

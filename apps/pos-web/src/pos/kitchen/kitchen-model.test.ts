@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { orderDto, uuid } from '../../test-support/frames.ts';
+import { orderDto, paymentDto, uuid } from '../../test-support/frames.ts';
 import {
   handedOverToday,
   isFresh,
@@ -21,6 +21,65 @@ const NOW = Date.parse('2030-01-01T05:30:00.000Z');
 const minutesAgo = (n: number) => new Date(NOW - n * 60_000).toISOString();
 const at = (n: number, over: Parameters<typeof orderDto>[2] = {}) =>
   orderDto(uuid(n), n, { orderNo: `S-${String(n).padStart(3, '0')}`, ...over });
+
+describe('the kitchen queue and pay-first orders (D-38)', () => {
+  const pp = (n: number, over: Parameters<typeof paymentDto>[3] = {}) =>
+    paymentDto(uuid(900 + n), uuid(n), 1, { method: 'promptpay', status: 'pending', ...over });
+
+  test('leaves out a new LINE PromptPay order that is not paid, and shows it once preparing', () => {
+    const orders = [
+      at(1, { channel: 'line', status: 'new', paymentMethod: undefined }),
+      at(2, { channel: 'line', status: 'preparing', paymentMethod: undefined }),
+      at(3, { channel: 'line', status: 'new', paymentStatus: 'paid', paymentMethod: undefined }),
+    ];
+    const payments = [pp(1), pp(2, { status: 'confirmed' }), pp(3, { status: 'confirmed' })];
+    expect(kitchenQueue(orders, undefined, payments).toMake.map((o) => o.orderNo)).toEqual([
+      'S-002',
+      'S-003',
+    ]);
+  });
+
+  test('a claimed but unconfirmed PromptPay order is still held back', () => {
+    const orders = [
+      at(1, { channel: 'line', paymentStatus: 'awaiting_confirmation', paymentMethod: undefined }),
+    ];
+    expect(kitchenQueue(orders, undefined, [pp(1, { status: 'claimed' })]).toMake).toEqual([]);
+  });
+
+  test('LINE cash, storefront and platform orders are unchanged', () => {
+    const orders = [
+      at(1, { channel: 'line' }),
+      at(2, { channel: 'storefront' }),
+      at(3, { channel: 'grab' }),
+    ];
+    const payments = [pp(1, { method: 'cash' }), pp(2), pp(3)];
+    expect(kitchenQueue(orders, undefined, payments).toMake).toHaveLength(3);
+  });
+
+  test('without payments (the kitchen role gets none) an order with no method is not held back', () => {
+    expect(kitchenQueue([at(1, { channel: 'line' })]).toMake).toHaveLength(1);
+  });
+
+  test('the method on the order is enough: the kitchen holds back an unpaid PromptPay order with no payments', () => {
+    const orders = [
+      at(1, { channel: 'line', paymentMethod: 'promptpay' }),
+      at(2, { channel: 'line', paymentMethod: 'promptpay', status: 'preparing' }),
+      at(3, { channel: 'line', paymentMethod: 'cash' }),
+      at(4, { channel: 'line', paymentMethod: 'promptpay', paymentStatus: 'paid' }),
+    ];
+    expect(kitchenQueue(orders).toMake.map((o) => o.orderNo)).toEqual(['S-002', 'S-003', 'S-004']);
+  });
+
+  test('the order field wins over a stale payment on the device', () => {
+    const orders = [at(1, { channel: 'line', paymentMethod: 'cash' })];
+    expect(kitchenQueue(orders, undefined, [pp(1)]).toMake).toHaveLength(1);
+  });
+
+  test('an older server (no field) still reads the stored payments', () => {
+    const orders = [at(1, { channel: 'line', paymentMethod: undefined })];
+    expect(kitchenQueue(orders, undefined, [pp(1)]).toMake).toEqual([]);
+  });
+});
 
 describe('the kitchen queue', () => {
   test('has the orders to make (new and preparing, oldest first) and, apart, the ones ready for hand-over', () => {

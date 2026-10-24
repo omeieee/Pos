@@ -20,6 +20,7 @@ import { apiBaseUrl } from './platform/config.ts';
 import { type FileOutput, webFileOutput } from './platform/fileOutput.ts';
 import { type Lifecycle, webLifecycle } from './platform/lifecycle.ts';
 import { type LocalStore, openLocalStore } from './platform/localStore.ts';
+import { createPaymentPopupPrefs } from './platform/paymentPopupPrefs.ts';
 import { createWebPhotoEngine } from './platform/photo.ts';
 import { createWebPush, type PushPlatform } from './platform/push.ts';
 import { webServiceWorker } from './platform/serviceWorker.ts';
@@ -35,6 +36,10 @@ import { createRecipientStore, type RecipientStore } from './pos/cart/recipient-
 import { createNewOrderAlarm } from './pos/kitchen/new-order-alarm.ts';
 import { createOrderMovesStore, type OrderMovesStore } from './pos/orders/order-moves-store.ts';
 import { createOutboxStore, type OutboxStore } from './pos/outbox/outbox-store.ts';
+import {
+  createPaymentPopupStore,
+  type PaymentPopupStore,
+} from './pos/payments/payment-popup-store.ts';
 import { createPaymentStore, type PaymentStore } from './pos/payments/payment-store.ts';
 import { createPromptpayCache, type PromptpayCache } from './pos/payments/promptpay-cache.ts';
 import { createPrintStore, type PrintStore } from './pos/print/print-store.ts';
@@ -92,6 +97,8 @@ export interface Services {
   pushAlerts: PushAlertsStore;
   /** The chime for a new order and its remembered on/off choice (a platform seam). */
   sound: SoundPlayer;
+  /** The big pop-up when an order is paid or a slip needs review (D-42): this device's switch and the queue. */
+  paymentPopup: PaymentPopupStore;
   /** Keeps the screen awake while a display needs it (a platform seam). */
   wakeLock: ScreenWakeLock;
   /** Copies text to the clipboard (a platform seam): the invite link, the recovery codes. */
@@ -228,6 +235,10 @@ export function createServices(
       prefs: createSoundPrefs(openStore),
       lifecycle,
     });
+  const paymentPopup = createPaymentPopupStore({
+    entities,
+    prefs: createPaymentPopupPrefs(openStore),
+  });
   const wakeLock = options.wakeLock ?? createWebWakeLock({ lifecycle });
   const alarm = createNewOrderAlarm({
     entities,
@@ -255,6 +266,7 @@ export function createServices(
     settingsEditor,
     adminEditor,
     sound,
+    paymentPopup,
     wakeLock,
     clipboard: options.clipboard ?? webClipboard,
     files: options.files ?? webFileOutput,
@@ -274,6 +286,7 @@ export function createServices(
           orderMoves.reset();
           print.reset();
           pushAlerts.reset();
+          paymentPopup.reset();
           menuEditor.reset();
           settingsEditor.reset();
           adminEditor.reset();
@@ -286,6 +299,8 @@ export function createServices(
       const unbindCatalogue = catalogue.bind();
       const unbindPromptpay = promptpay.bind();
       void sound.init();
+      void paymentPopup.init();
+      const stopPopup = paymentPopup.bind();
       const stopAlarm = alarm.start();
       // Replays the outbox while someone is signed in; sign-out keeps what is waiting.
       const unbindOutbox = outbox.bind();
@@ -294,6 +309,7 @@ export function createServices(
         unbindCatalogue();
         unbindPromptpay();
         stopAlarm();
+        stopPopup();
         unbindOutbox();
       };
     },

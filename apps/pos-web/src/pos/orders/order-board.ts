@@ -17,6 +17,7 @@ import {
   type StaffRole,
 } from '@sds/shared';
 import type { EntityState } from '../../realtime/entity-store.ts';
+import type { StartPlan } from '../payments/pay-first-model.ts';
 
 /** The business date now: the shop's cutoff setting, or the default cutoff if it never arrived. */
 export function currentBusinessDay(settings: EntityState['settings'], nowMs: number): string {
@@ -99,6 +100,16 @@ export function orderMoves(status: OrderStatus, role: StaffRole): OrderMove[] {
     });
   }
   return moves;
+}
+
+/**
+ * The moves to offer on an order, given its start plan (D-38). An unpaid pay-first order has no
+ * plain accept: it waits for the payment (`wait`), or a manager or owner starts it with the
+ * explicit unpaid action (`override`, its own button), so `preparing` is not in this list.
+ */
+export function orderMovesFor(status: OrderStatus, role: StaffRole, plan: StartPlan): OrderMove[] {
+  const moves = orderMoves(status, role);
+  return plan === 'normal' ? moves : moves.filter((move) => move.to !== 'preparing');
 }
 
 // ---------- The orders table and the phone list (design "Orders") ----------

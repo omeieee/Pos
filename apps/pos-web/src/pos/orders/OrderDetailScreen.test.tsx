@@ -472,3 +472,170 @@ describe('cancelling the order', () => {
     expect(alert.textContent).toContain(th['error.forbidden']);
   });
 });
+
+describe('why a cancelled order was cancelled, in plain words', () => {
+  async function shows(reason: string) {
+    const { services } = await setup({
+      order: withItems({ status: 'cancelled', cancelReason: reason }),
+    });
+    renderScreen(<OrderDetailScreen id={ID} />, services);
+  }
+
+  test('the unpaid timeout is not shown as a code', async () => {
+    await shows('unpaid_timeout');
+    expect(screen.getByText(th['order.cancel.why.unpaidTimeout'])).toBeTruthy();
+    expect(screen.queryByText(/unpaid_timeout/)).toBeNull();
+  });
+
+  test('a merged order names the order it went into', async () => {
+    await shows('merged:L-012');
+    expect(screen.getByText(tr('order.cancel.why.merged', { orderNo: 'L-012' }))).toBeTruthy();
+    expect(screen.queryByText(/merged:/)).toBeNull();
+  });
+});
+
+describe('the confirm-by-hand icon follows the server flag', () => {
+  test('shown when needsManualConfirm is true, hidden when false', async () => {
+    const yes = await setup({
+      order: withItems({ paymentStatus: 'awaiting_confirmation', needsManualConfirm: true }),
+    });
+    renderScreen(<OrderDetailScreen id={ID} />, yes.services);
+    expect(screen.getAllByText(th['orders.flag.manualConfirm']).length).toBe(1);
+    cleanup();
+    const no = await setup({
+      order: withItems({
+        paymentStatus: 'awaiting_confirmation',
+        claimWithoutSlip: false,
+        needsManualConfirm: false,
+      }),
+    });
+    renderScreen(<OrderDetailScreen id={ID} />, no.services);
+    expect(screen.queryByText(th['orders.flag.manualConfirm'])).toBeNull();
+  });
+});
+
+describe('accepting an unpaid PromptPay order from LINE (D-38)', () => {
+  const unpaid = (over: Partial<OrderDto> = {}) =>
+    withItems({ channel: 'line', paymentMethod: 'promptpay', status: 'new', ...over });
+  const buttons = () => screen.queryAllByRole('button').map((b) => b.textContent ?? '');
+  const later = (over: Partial<OrderDto>): OrderDto => ({ ...unpaid(over), rev: 41 });
+
+  test.each(['cashier', 'kitchen'] as const)(
+    'a %s has no way to start it and is told it waits for the payment',
+    async (role) => {
+      const env = await setup({ role, order: unpaid() });
+      renderScreen(<OrderDetailScreen id={ID} />, env.services);
+      expect(buttons()).not.toContain(th['order.move.preparing']);
+      expect(buttons()).not.toContain(th['order.move.startUnpaid']);
+      expect(screen.getByText(th['order.startUnpaid.wait'])).toBeTruthy();
+    },
+  );
+
+  test('a cashier can still cancel it', async () => {
+    const env = await setup({ order: unpaid() });
+    renderScreen(<OrderDetailScreen id={ID} />, env.services);
+    expect(buttons()).toContain(th['order.move.cancelled']);
+  });
+
+  test.each(['manager', 'owner'] as const)(
+    'a %s sees only the explicit unpaid start, not the plain accept',
+    async (role) => {
+      const env = await setup({ role, order: unpaid() });
+      renderScreen(<OrderDetailScreen id={ID} />, env.services);
+      expect(buttons()).toContain(th['order.move.startUnpaid']);
+      expect(buttons()).not.toContain(th['order.move.preparing']);
+    },
+  );
+
+  test('the unpaid start asks for a reason, then sends startUnpaid with it', async () => {
+    const env = await setup({
+      role: 'manager',
+      order: unpaid(),
+      services: { orders: { transition: async () => later({ status: 'preparing' }) } },
+    });
+    renderScreen(<OrderDetailScreen id={ID} />, env.services);
+    fireEvent.click(screen.getByRole('button', { name: th['order.move.startUnpaid'] }));
+    const dialog = screen.getByRole('dialog');
+    const confirm = within(dialog).getByRole('button', {
+      name: th['order.startUnpaid.confirm'],
+    }) as HTMLButtonElement;
+    expect(confirm.disabled).toBe(true);
+    expect(env.api.orders.transition).not.toHaveBeenCalled();
+    fireEvent.change(within(dialog).getByLabelText(th['order.startUnpaid.reason']), {
+      target: { value: '  ลูกค้าประจำ  ' },
+    });
+    expect(confirm.disabled).toBe(false);
+    fireEvent.click(confirm);
+    await waitFor(() => expect(env.entities.getState().orders.get(ID)?.status).toBe('preparing'));
+    expect(env.api.orders.transition).toHaveBeenCalledWith(ID, {
+      to: 'preparing',
+      startUnpaid: true,
+      reason: 'ลูกค้าประจำ',
+    });
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  test('backing out of the dialog sends nothing', async () => {
+    const env = await setup({ role: 'owner', order: unpaid() });
+    renderScreen(<OrderDetailScreen id={ID} />, env.services);
+    fireEvent.click(screen.getByRole('button', { name: th['order.move.startUnpaid'] }));
+    fireEvent.click(
+      within(screen.getByRole('dialog')).getByRole('button', {
+        name: th['order.startUnpaid.back'],
+      }),
+    );
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(env.api.orders.transition).not.toHaveBeenCalled();
+  });
+
+  test('PAYMENT_REQUIRED from the server is explained in plain Thai, and the dialog stays', async () => {
+    const env = await setup({
+      role: 'manager',
+      order: unpaid(),
+      services: {
+        orders: {
+          transition: async () => {
+            throw new ApiClientError('PAYMENT_REQUIRED', { status: 409 });
+          },
+          get: async () => unpaid(),
+        },
+      },
+    });
+    renderScreen(<OrderDetailScreen id={ID} />, env.services);
+    fireEvent.click(screen.getByRole('button', { name: th['order.move.startUnpaid'] }));
+    const dialog = screen.getByRole('dialog');
+    fireEvent.change(within(dialog).getByLabelText(th['order.startUnpaid.reason']), {
+      target: { value: 'x' },
+    });
+    fireEvent.click(within(dialog).getByRole('button', { name: th['order.startUnpaid.confirm'] }));
+    const alert = await within(dialog).findByRole('alert');
+    expect(alert.textContent).toContain(th['error.paymentRequired']);
+    expect(
+      (within(dialog).getByLabelText(th['order.startUnpaid.reason']) as HTMLInputElement).value,
+    ).toBe('x');
+  });
+
+  test('once the payment is confirmed the server starts it: the page shows preparing and no unpaid start', async () => {
+    const env = await setup({ role: 'manager', order: unpaid() });
+    renderScreen(<OrderDetailScreen id={ID} />, env.services);
+    expect(buttons()).toContain(th['order.move.startUnpaid']);
+    act(() => {
+      env.entities.apply(
+        orderFrame(ID, 99, unpaid({ status: 'preparing', paymentStatus: 'paid' })),
+      );
+    });
+    expect(buttons()).not.toContain(th['order.move.startUnpaid']);
+    expect(buttons()).toContain(th['order.move.ready']);
+    expect(screen.queryByText(th['order.startUnpaid.wait'])).toBeNull();
+  });
+
+  test('a LINE cash order and a storefront order keep the plain accept', async () => {
+    const cash = await setup({
+      role: 'manager',
+      order: withItems({ channel: 'line', paymentMethod: 'cash', status: 'new' }),
+    });
+    renderScreen(<OrderDetailScreen id={ID} />, cash.services);
+    expect(buttons()).toContain(th['order.move.preparing']);
+    expect(buttons()).not.toContain(th['order.move.startUnpaid']);
+  });
+});

@@ -19,6 +19,7 @@ import { SettingsPage } from './SettingsPage.tsx';
 import { ShopForm } from './ShopForm.tsx';
 import { StaffScreen } from './StaffScreen.tsx';
 import { type SectionDef, sectionById } from './sections.ts';
+import { UnpaidTimeoutForm } from './UnpaidTimeoutForm.tsx';
 
 function BackLink() {
   const tr = useT();
@@ -74,6 +75,12 @@ function SectionBody({ def, editable }: { def: SectionDef; editable: boolean }) 
       return (
         <SettingSection name="printing" editable={editable}>
           {(p) => <PrintingForm {...p} />}
+        </SettingSection>
+      );
+    case 'unpaid-timeout':
+      return (
+        <SettingSection name="unpaidTimeout" editable={editable}>
+          {(p) => <UnpaidTimeoutForm {...p} />}
         </SettingSection>
       );
     case 'promptpay':

@@ -221,3 +221,58 @@ describe('sign-out (reset)', () => {
     expect(entities.getState().orders.size).toBe(0);
   });
 });
+
+describe('starting an unpaid pay-first order (D-38)', () => {
+  const fresh = { id: ID, status: 'new' } as const;
+
+  test('sends startUnpaid with the trimmed reason and shows the order the server returns', async () => {
+    const { store, api, entities } = setup();
+    api.orders.transition.mockResolvedValueOnce(order(11, { status: 'preparing' }));
+    expect(await store.startUnpaid(fresh, '  ลูกค้าประจำ  ')).toEqual({ ok: true });
+    expect(api.orders.transition).toHaveBeenCalledWith(ID, {
+      to: 'preparing',
+      startUnpaid: true,
+      reason: 'ลูกค้าประจำ',
+    });
+    expect(entities.getState().orders.get(ID)?.status).toBe('preparing');
+  });
+
+  test('a plain move never carries startUnpaid', async () => {
+    const { store, api } = setup();
+    await store.transition(fresh, 'preparing');
+    expect(api.orders.transition).toHaveBeenCalledWith(ID, { to: 'preparing' });
+  });
+
+  test('a refusal for a cashier (FORBIDDEN) is kept, and the order is not read again', async () => {
+    const { store, api } = setup();
+    api.orders.transition.mockRejectedValueOnce(new ApiClientError('FORBIDDEN', { status: 403 }));
+    const outcome = await store.startUnpaid(fresh, 'x');
+    expect(outcome).toMatchObject({ ok: false, reason: 'error' });
+    expect(store.getState().errors[ID]?.error.code).toBe('FORBIDDEN');
+    expect(api.orders.get).not.toHaveBeenCalled();
+  });
+});
+
+describe('PAYMENT_REQUIRED on a plain accept', () => {
+  const fresh = { id: ID, status: 'new' } as const;
+  const refused = () => new ApiClientError('PAYMENT_REQUIRED', { status: 409 });
+
+  test('the order is read again: if the payment just arrived and it already started, no error', async () => {
+    const { store, api, entities } = setup();
+    api.orders.transition.mockRejectedValueOnce(refused());
+    api.orders.get.mockResolvedValueOnce(order(20, { status: 'preparing', paymentStatus: 'paid' }));
+    expect(await store.transition(fresh, 'preparing')).toEqual({ ok: true });
+    expect(store.getState().errors[ID]).toBeUndefined();
+    expect(entities.getState().orders.get(ID)?.status).toBe('preparing');
+  });
+
+  test('still unpaid: the refusal is shown and the card is corrected from the server', async () => {
+    const { store, api, entities } = setup();
+    api.orders.transition.mockRejectedValueOnce(refused());
+    api.orders.get.mockResolvedValueOnce(order(20, { status: 'new', paymentMethod: 'promptpay' }));
+    const outcome = await store.transition(fresh, 'preparing');
+    expect(outcome).toMatchObject({ ok: false, reason: 'error' });
+    expect(store.getState().errors[ID]?.error.code).toBe('PAYMENT_REQUIRED');
+    expect(entities.getState().orders.get(ID)?.paymentMethod).toBe('promptpay');
+  });
+});

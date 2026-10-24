@@ -18,9 +18,10 @@ export function Modal({
   onClose: () => void;
   /**
    * A layout variant: `options` and `cart` are a wide card on iPad and a bottom sheet on a phone;
-   * `customer` fills the screen (the PromptPay QR turned to the customer).
+   * `customer` fills the screen (the PromptPay QR turned to the customer); `payment` is the wide
+   * pop-up for a payment that arrived (D-42).
    */
-  variant?: 'options' | 'cart' | 'customer';
+  variant?: 'options' | 'cart' | 'customer' | 'payment';
   children: ReactNode;
 }) {
   const sheet = useRef<HTMLDivElement>(null);

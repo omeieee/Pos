@@ -78,7 +78,11 @@ export async function devBackend(): Promise<
     // Try the kitchen view without a second device: __sdsMock.incomingOrder() in the console.
     Object.assign(globalThis, {
       __sdsMock: {
-        incomingOrder: () => server.simulateIncomingOrder(),
+        // { payFirst: true }: a LINE PromptPay order that is not paid yet (D-38).
+        incomingOrder: (options?: { payFirst?: boolean }) => server.simulateIncomingOrder(options),
+        // The payment pop-up (D-42): __sdsMock.paymentAlert('paid') or ('slip_review', orderId); returns the order id.
+        paymentAlert: (kind: 'paid' | 'slip_review', orderId?: string) =>
+          server.simulatePaymentAlert(kind, orderId),
         // Two weeks of paid orders for the overview (the report API reads the mock's orders).
         demoOrders: () => server.seedDemoOrders(),
         setOffline,

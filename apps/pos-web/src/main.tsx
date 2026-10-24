@@ -18,6 +18,7 @@ import './pos.css';
 import './order-entry.css';
 import './orders.css';
 import './payment.css';
+import './pay-popup.css';
 import './kitchen.css';
 import './outbox.css';
 import './menu-editor.css';
