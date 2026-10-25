@@ -41,6 +41,15 @@ Newest entries first. Add entries with `/checkpoint`. Each entry covers what cha
 
 ---
 
+## 2026-10-25 · Maintenance · AGENTS.md for non-Claude agents
+- **Summary:** owner wants to hand execution work to Gemini (Antigravity, "agy") to save Claude usage. Added `AGENTS.md`: read `CLAUDE.md` first (source of truth), the shared memory files, the 11 domain rules in brief, and by-hand versions of what Claude gets automatically (protect-files and format-typecheck hooks, role playbooks in `.claude/agents/`, `.claude/agent-memory/`, the checkpoint skill). Gemini entries start with "(Gemini)"; plans from Claude go in `docs/plans/`.
+- **Changed:** `AGENTS.md` (new); `CLAUDE.md` (one line: keep `AGENTS.md` in step); this file.
+- **Verification:** commands named in `AGENTS.md` checked against `package.json` scripts and `packages/db` (`db:generate`). Not run: lint/build/tests (docs only); not tried with Gemini itself.
+- **Decisions:** none.
+- **Open issues:** Gemini CLI reads `GEMINI.md` by default (set `context.fileName` to include `AGENTS.md`); Antigravity's rules file not checked. `AGENTS.md` repeats the domain rules in brief, so it can drift from `CLAUDE.md`.
+- **Next:** rebase `feat/pay-first-orders`; try a real slip and a non-slip photo on the test OA.
+- **Commit:** `b213e05` (AGENTS.md), merged to `main` with this entry.
+
 ## 2026-10-25 · P4 · Slip2Go pre-screen and neutral LINE slip reply
 - **Summary:** owner asked to stop non-slip images from spending Slip2Go calls. Owner chose QR-only screening and no LINE push (reply first, status on the order page). Slip2Go is now called only with the text of a slip QR our own `jsqr` check parsed; the picture is never sent.
 - **Changed:** `apps/api/src/slips/checker.ts` (`readVerify`: no QR means no call, stays `unchecked`), `slip-verify.test.ts` (1 rewritten, 3 removed, 1 renamed), LINE slip reply wording th/en, privacy notice th/en (picture no longer sent).

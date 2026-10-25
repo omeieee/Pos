@@ -30,6 +30,7 @@ Slices 1-3 built 2026-10-22, **uncommitted, not deployed, no real printer yet** 
 - **Screens (slice 3):** Settings "Printing" section (switch plus recent jobs), Reprint button on order screens, `print_agent` device label.
 
 ## Log
+- 2026-10-26: review fix UX-02 (5 s undo on the kitchen "ทำเสร็จ" before the move and the LINE ready push), `c6eda7a`: see "2026-10-26 · P8 · Review fix UX-02".
 - 2026-10-26: review fix POS-01 (REST answers no longer move the pos-web sync cursor), `388dd8b` on the session branch: see "2026-10-26 · P8 · Review fix POS-01".
 - 2026-10-25: kitchen tickets (and every other reader of order lines) now list dishes in cart order: see "2026-10-25 · Maintenance · Order items keep cart order (D-45)".
 - 2026-10-25: main merged into pay-first, M4 fixed, two stale/flaky tests fixed (branch `claude/compassionate-franklin-gaz2oh`, not deployed): see "2026-10-25 · P8 · Pay-first merged with main; M4 fixed" in PROGRESS.
