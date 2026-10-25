@@ -3,7 +3,8 @@
  *
  * One attempt goes: open, send `auth` as the FIRST message (a browser socket cannot send headers),
  * wait for `ready`, then catch up while HOLDING any live frames, then apply what was held and go
- * live. The catch-up starts at `lastRev - SYNC_SAFETY_REVS` once (not per page) and follows each
+ * live. The catch-up starts at `lastRev - SYNC_SAFETY_REVS` (the sync cursor, moved only by live frames and
+ * `nextSince`, never by REST answers) once (not per page) and follows each
  * page's `nextSince`; applying a frame twice is harmless because the store only takes newer revs.
  * If `ready.serverRev` is below our `lastRev` the database was restored from a backup: the store
  * is reset and the sync starts from 0.
@@ -169,7 +170,7 @@ export function createConnection(deps: ConnectionDeps): Connection {
 
   function onFrame(frame: RealtimeFrame) {
     if (phase === 'live') {
-      deps.entities.apply(frame);
+      deps.entities.applyLive([frame]);
       return;
     }
     held.push(frame);
@@ -205,7 +206,7 @@ export function createConnection(deps: ConnectionDeps): Connection {
     const frames = held;
     held = [];
     phase = 'live';
-    deps.entities.applyMany(frames);
+    deps.entities.applyLive(frames);
     attempts = 0;
     state.setState({ status: 'online', synced: true });
   }

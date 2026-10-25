@@ -2,7 +2,14 @@ import { SYNC_SAFETY_REVS, type SyncResponse, WS_CLOSE } from '@sds/shared';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { ApiClientError } from '../api/errors.ts';
 import { createFakeLifecycle, createFakeSockets } from '../test-support/fake-realtime.ts';
-import { alertFrame, itemFrame, orderFrame, settingsFrame, uuid } from '../test-support/frames.ts';
+import {
+  alertFrame,
+  govCopayFrame,
+  itemFrame,
+  orderFrame,
+  settingsFrame,
+  uuid,
+} from '../test-support/frames.ts';
 import { type ConnectionDeps, createConnection } from './connection.ts';
 import { createEntityStore } from './entity-store.ts';
 
@@ -104,7 +111,7 @@ describe('catch-up', () => {
 
   test('rewinds by the safety margin once, then follows nextSince page by page', async () => {
     const env = setup();
-    env.entities.apply(orderFrame(uuid(1), 1000));
+    env.entities.applyLive([orderFrame(uuid(1), 1000)]);
     env.fetchSync
       .mockResolvedValueOnce(page({ nextSince: 900, hasMore: true, serverRev: 1100 }))
       .mockResolvedValueOnce(page({ nextSince: 1100, hasMore: false, serverRev: 1100 }));
@@ -116,7 +123,7 @@ describe('catch-up', () => {
 
   test('never rewinds to 0 once the device holds rows: since=0 is the fresh-device bootstrap, which the server bounds to open and recent rows', async () => {
     const env = setup();
-    env.entities.apply(orderFrame(uuid(1), 50));
+    env.entities.applyLive([orderFrame(uuid(1), 50)]);
     await bringOnline(env, 50);
     expect(env.fetchSync.mock.calls[0]?.[0].since).toBe(1);
   });
@@ -156,10 +163,46 @@ describe('catch-up', () => {
 
   test('a server rev below ours means a restored database: the store is reset and synced from 0', async () => {
     const env = setup();
-    env.entities.apply(orderFrame(uuid(1), 800));
+    env.entities.applyLive([orderFrame(uuid(1), 800)]);
     await bringOnline(env, 40);
     expect(env.entities.getState().orders.size).toBe(0);
     expect(env.fetchSync.mock.calls[0]?.[0].since).toBe(0);
+  });
+
+  test('POS-01: rows from a REST answer do not move the cursor, so the catch-up still fetches older rows', async () => {
+    const env = setup();
+    // A REST load (orders board) brought in a row at rev 5000; the co-pay settings (rev 40) never arrived.
+    env.entities.applyMany([orderFrame(uuid(1), 5000)]);
+    expect(env.entities.getState().lastRev).toBe(0);
+    env.fetchSync.mockResolvedValueOnce(
+      page({
+        changes: [govCopayFrame(40)],
+        nextSince: 5000,
+        hasMore: false,
+        serverRev: 5000,
+      }),
+    );
+    await bringOnline(env, 5000);
+    expect(env.fetchSync.mock.calls[0]?.[0].since).toBe(0);
+    expect(env.entities.getState().settings.has('gov_copay')).toBe(true);
+    expect(env.entities.getState().lastRev).toBe(5000);
+  });
+
+  test('POS-01: a live frame after the catch-up still advances the cursor', async () => {
+    const env = setup();
+    await bringOnline(env);
+    env.sockets.last().receive(itemFrame(uuid(3), 12));
+    expect(env.entities.getState().lastRev).toBe(12);
+  });
+
+  test('POS-01: a frame held during the catch-up advances the cursor once it is applied', async () => {
+    const env = setup();
+    env.connection.start();
+    env.sockets.last().open();
+    env.sockets.last().receive({ type: 'ready', serverRev: 9, heartbeatSeconds: 25 });
+    env.sockets.last().receive(itemFrame(uuid(3), 9));
+    await flush();
+    expect(env.entities.getState().lastRev).toBe(9);
   });
 
   test('a PromptPay settings frame marks the stored ID stale', async () => {

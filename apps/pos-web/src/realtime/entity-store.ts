@@ -7,9 +7,12 @@
  *   than the rev stored for that entity. The server hands out one global rev sequence, so a rev is
  *   comparable across entities, but ordering is only ever decided per entity. Replaying frames
  *   (the catch-up rewinds on purpose) is therefore harmless.
- * - `lastRev` is the highest rev APPLIED, plus the final `nextSince` of a finished catch-up
- *   (`advance`). It is never taken from a ping or from `serverRev`: those can include revisions
- *   that were not committed when the client looked.
+ * - `lastRev` is the sync cursor: the highest rev of a LIVE frame (`applyLive`: the socket and the
+ *   frames held during a catch-up), plus the final `nextSince` of a finished catch-up (`advance`).
+ *   Rows from a REST answer (`apply`, `applyMany`) update the maps but never the cursor: a REST
+ *   answer holds only part of the rows, so moving the cursor past them would let the next catch-up
+ *   skip older rows this device never got (POS-01). It is never taken from a ping or from
+ *   `serverRev`: those can include revisions that were not committed when the client looked.
  * - A group's embedded `options` are a convenience copy. The group is stored without them and each
  *   option is applied by its own rev, so a "sold out" toggle (which bumps only the option) can
  *   never be undone by an older group frame. Join options to groups with `groupsWithOptions` (selectors.ts).
@@ -89,10 +92,12 @@ const emptyState = (): EntityState => ({
 });
 
 export interface EntityStore extends ReadableStore<EntityState> {
-  /** Applies one frame; true if the stored state changed. */
+  /** Applies one frame (a REST answer, a catch-up page); true if the stored state changed. `lastRev` does not move. */
   apply(frame: RealtimeFrame): boolean;
-  /** Applies frames in order and notifies once. */
+  /** Applies frames in order and notifies once. `lastRev` does not move. */
   applyMany(frames: readonly RealtimeFrame[]): void;
+  /** Applies live frames (socket, or those held during a catch-up) in order; raises `lastRev`. */
+  applyLive(frames: readonly RealtimeFrame[]): void;
   /**
    * Puts a saved copy of the menu and the settings in (start-up, before the network). Same rev rule
    * as `apply`, but `lastRev` does not move, so the catch-up still starts as for a fresh device and
@@ -118,6 +123,8 @@ export function createEntityStore(): EntityStore {
     changed: boolean;
     /** A saved copy: record the rev as `cachedRev`, not `lastRev`. */
     saved?: boolean;
+    /** A live frame: it also raises the sync cursor `lastRev`. */
+    live?: boolean;
   }
 
   function put(draft: Draft, family: FamilyKey, id: string, entity: unknown, rev: number): boolean {
@@ -135,7 +142,7 @@ export function createEntityStore(): EntityStore {
     (draft.state[family] as Map<string, unknown>).set(id, entity);
     if (draft.saved) {
       if (rev > draft.state.cachedRev) draft.state = { ...draft.state, cachedRev: rev };
-    } else if (rev > draft.state.lastRev) {
+    } else if (draft.live && rev > draft.state.lastRev) {
       draft.state = { ...draft.state, lastRev: rev };
     }
     draft.changed = true;
@@ -195,11 +202,13 @@ export function createEntityStore(): EntityStore {
     }
   }
 
-  function applyMany(frames: readonly RealtimeFrame[]): void {
-    const draft: Draft = { state: store.getState(), cloned: new Set(), changed: false };
+  function applyAll(frames: readonly RealtimeFrame[], live: boolean): void {
+    const draft: Draft = { state: store.getState(), cloned: new Set(), changed: false, live };
     for (const frame of frames) applyTo(draft, frame);
     if (draft.changed) store.setState(draft.state);
   }
+
+  const applyMany = (frames: readonly RealtimeFrame[]): void => applyAll(frames, false);
 
   return {
     getState: store.getState,
@@ -211,6 +220,7 @@ export function createEntityStore(): EntityStore {
       return applied;
     },
     applyMany,
+    applyLive: (frames) => applyAll(frames, true),
     hydrate(frames) {
       const draft: Draft = {
         state: store.getState(),
