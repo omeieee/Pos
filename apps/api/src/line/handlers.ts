@@ -30,6 +30,7 @@ import { openPromptpayCandidates, planChatSlip, slipFree } from '../slips/alloca
 import { activeSlipChecker } from '../slips/checker.ts';
 import { MAX_SLIP_BYTES } from '../slips/image.ts';
 import { keepLateSlip, LATE_SLIP_WINDOW_MS } from '../slips/late.ts';
+import { looksLikeSlip } from '../slips/qr.ts';
 import { attachSlip } from '../slips/service.ts';
 import type { SlipStore } from '../slips/store.ts';
 import type { CoreContext } from '../tx.ts';
@@ -276,21 +277,18 @@ async function handleClaim(
  * A picture in the chat. When the sender has a PromptPay payment waiting (D-40 picks which open
  * order), the picture is fetched from LINE, kept as the slip and the payment becomes `claimed`
  * (the same service as the app's upload and the "โอนแล้ว" button); staff still confirm. With no
- * such order, or no way to fetch it, the picture is not kept and the sender hears the usual
- * reply. A fetch that failed for a reason that may pass is thrown, so the retry sweep tries again.
+ * such order, or when the picture is not a bank slip, it is dropped in silence (no reply). A
+ * picture that cannot be fetched is not kept and the sender hears the usual reply. A fetch that
+ * failed for a reason that may pass is thrown, so the retry sweep tries again.
  */
 async function handleSlip(
   ctx: HandlerContext,
   event: Extract<RoutedEvent, { kind: 'slip_image' }>,
 ): Promise<void> {
   const customer = await lineRepo.findCustomerByLineUserId(ctx.db, event.userId);
-  const noOrder = () =>
-    say(ctx, event.replyToken, [botText('lineBot.slip.reply')], {
-      template: 'slip_received',
-      ...(customer ? { customerId: customer.id } : {}),
-    });
   const fetchContent = ctx.client?.getMessageContent?.bind(ctx.client);
-  if (!customer || !fetchContent) return noOrder();
+  // No order waiting for a payment: nothing to check, nothing to say (no reply, no fetch, no call).
+  if (!customer || !fetchContent) return;
   const candidates = await openPromptpayCandidates(ctx.db, customer.id);
   // No open order: a slip for an order the unpaid timeout just cancelled is kept for staff (D-41).
   const late =
@@ -301,7 +299,12 @@ async function handleSlip(
           new Date(ctx.now().getTime() - LATE_SLIP_WINDOW_MS),
         )
       : undefined;
-  if (candidates.length === 0 && !late) return noOrder();
+  if (candidates.length === 0 && !late) return;
+  const noOrder = () =>
+    say(ctx, event.replyToken, [botText('lineBot.slip.reply')], {
+      template: 'slip_received',
+      customerId: customer.id,
+    });
 
   const content = await fetchContent(event.messageId, MAX_SLIP_BYTES);
   if (!content.ok) {
@@ -309,6 +312,8 @@ async function handleSlip(
     if (content.definite) return;
     throw new Error('slip image could not be fetched');
   }
+  // Not a bank slip (no slip QR): dropped without a trace, and without a reply (D-44).
+  if (!(await looksLikeSlip(content.bytes))) return;
   const reply = (order: { id?: string; orderNo: string }) =>
     say(
       ctx,

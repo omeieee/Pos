@@ -58,3 +58,4 @@ Customers order and pay through the shop's LINE OA, within the free message budg
 - 2026-10-17: customer-app (LIFF) E2E ([PROGRESS](../PROGRESS.md)).
 - 2026-10-17: QR save inside LINE (Android) fix deployed, not yet confirmed on a phone ([PROGRESS](../PROGRESS.md)).
 - 2026-10-17: session check-in, no code change; open items wait on the owner ([PROGRESS](../PROGRESS.md)).
+- 2026-10-25: Slip2Go pre-screen, QR-only (D-44), see [PROGRESS](../PROGRESS.md).

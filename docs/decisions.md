@@ -50,6 +50,8 @@ This is the **single source of truth for technology and design choices**. Other 
 | D-40 | A chat slip with several open PromptPay orders is allocated by the amount read locally (fixes PAY-05); DB backstop for one slip, one payment (PAY-06) | **Proposed** (owner chose "match by amount" 2026-10-24) | 2026-10-24 |
 | D-41 | Unpaid LINE orders are cancelled automatically after 60 min (setting), no LINE message | **Proposed** (owner request 2026-10-24) | 2026-10-24 |
 | D-42 | Telegram alerts with customer data (amends CLAUDE.md rule 10); staff payment pop-up per device; customer sees "amount doesn't match" and instant "paid" (amends D-28) | **Proposed** (owner chose full content 2026-10-24) | 2026-10-24 |
+| D-43 | Move the API VM from the 1 GB Micro to an Always Free Ampere A1 (2 OCPU / 12 GB, arm64); reserved IP moves with it | **Accepted** (done 2026-10-25) | 2026-10-25 |
+| D-44 | Slip2Go is called only with the text of a slip QR read locally; no QR, no call (staff verify by hand); LINE slip reply is neutral and the result shows on the order page, no push | **Accepted** (owner chose QR-only and no push 2026-10-25) | 2026-10-25 |
 
 ---
 
@@ -420,7 +422,7 @@ This is the **single source of truth for technology and design choices**. Other 
 
 ## D-41 · Unpaid LINE orders are cancelled automatically — Proposed 2026-10-24
 - **Decision:** a job every 5 minutes cancels LINE orders that are still `new` with no claimed or confirmed payment after `unpaid-timeout.minutes` (default 60, range 15-240, manager/owner can switch it off). Actor `system`, reason `unpaid_timeout`. **No LINE message** (owner, quota); the customer app's order page explains it. Reverses `03-data-model.md` §4 "automatic cancellation is off by default".
-- **Late slip:** a slip that arrives for an order cancelled by the timeout in the last 24 h is kept for staff review (never auto-confirmed), not dropped.
+- **Late slip:** a slip that arrives for an order cancelled by the timeout in the last 24 h is kept for staff review (never auto-confirmed), not dropped. With D-44 (merged 2026-10-25): such an order counts as waiting, so the chat picture is fetched; a picture with no bank-slip QR is still dropped in silence.
 
 ## D-42 · Payment pop-up, Telegram alerts with customer data, customer slip wording — Proposed 2026-10-24
 - **Triggers (owner):** an order becomes paid, or a slip needs staff review. One event `alert.payment {orderId, orderNo, kind: paid|slip_review}` (ids only on the wire) after commit.
@@ -428,3 +430,18 @@ This is the **single source of truth for technology and design choices**. Other 
 - **Telegram (owner chose full content, 2026-10-24):** the same content goes to one private Telegram group of the owner and staff through a bot (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `PUBLIC_API_BASE_URL` all or none). **Never** the phone number, room, note or slip image. This **amends CLAUDE.md domain rule 10** ("no real customer data in notifications") and `04-integrations.md` ("keep customer names out of notifications") for this one channel only; Web Push (D-37) stays ids only. Telegram is a new processor that may hold data abroad: `06-legal-compliance.md` §6 lists it, the privacy notice (th/en) names it and `PRIVACY_NOTICE_VERSION` is bumped so customers acknowledge again. Logs carry ids only; the bot token is redacted.
 - **Customer slip wording (amends D-28):** "ยอดเงินไม่ตรง" is shown for an amount mismatch only (the combine decline and a bank-checked amount mismatch); every other failure stays neutral. When the order turns paid, "ชำระเงินสำเร็จ" shows at once (no 5-second "checking" hold). A Slip2Go `200200` that is held back from auto-confirm (ceiling, flagged customer) shows "สลิปถูกต้อง ร้านกำลังยืนยัน" (owner confirmed 2026-10-24). Staff lists show an icon next to such an order ("needs manual confirmation").
 - **No new LINE pushes** come from D-38 to D-42 (owner: the 300 a month is tight).
+## D-43 · Move the API VM from the 1 GB Micro to an Ampere A1 — Accepted and done 2026-10-25 (owner request; memory was too tight; the owner approved each Oracle step in chat)
+- **Decision:** run the API stack on one `VM.Standard.A1.Flex` of **2 OCPU / 12 GB** (the Always Free size; checked 2026-10-25), keeping Supabase as the database (Path B). The old Micro stays until the A1 is verified, then is terminated with its boot volume.
+- **Images:** CI builds `linux/amd64,linux/arm64` for the API and backup images. The API bundle is plain JS, so its build stage runs on the builder's architecture and only the runtime stage is emulated.
+- **Limits:** compose memory limits and the Node heap cap are `.env` variables whose defaults keep the Micro values, so one bundle serves both VMs. `SLIP_OCR` is re-enabled only after memory is observed on the A1.
+- **Public IP:** the reserved IP `sds-pos-api` moves to the A1, so the hostname, LINE webhook and Slip2Go whitelist do not change.
+- **Not decided:** running Postgres on the VM (a separate, larger change). Any step in the Oracle console needs the owner's OK first.
+- **As built (2026-10-25):** A1 `omeie_pos_a1` (2 OCPU / 12 GB, Ubuntu 24.04 arm64, private IP 10.0.0.82) runs api, caddy and backup; about 19 min of downtime; the old Micro is stopped as `sds-pos-old` and is terminated, with its boot volume, after about 7 days. It amends the VM shape in D-10. A new VM in this subnet has no internet without a public IP, so a rebuild keeps an ephemeral IP until the reserved one is attached (RUNBOOK). Audit fixes `05dba20` (zod 4.6.6, fastify 5.12.6, overrides for ip-address and fast-uri) were needed to get CI green first. Details: docs/05 §3.2.
+- **Revisit if:** Oracle has no A1 capacity for weeks, or the free A1 size changes.
+
+## D-44 · Local slip screening before Slip2Go — Accepted (owner chose the options, 2026-10-25)
+- **Decision:** the checker sends Slip2Go only the text of a slip QR that our own parser accepted. A picture with no such QR (a photo, a cropped slip, junk) makes no call, stays `unchecked`, and is left to staff. It does not count toward the cooldown. Amends D-27, which sent the picture when no QR was read.
+- **Customer messages:** the LINE reply to a slip is neutral ("received, checking the transfer, see the status on your order page"). No push is sent, so the 300-message quota is untouched. The order page shows "โอนเงินสำเร็จ" when the payment is confirmed (D-28).
+- **Privacy notice:** now says the picture is never sent to Slip2Go.
+- **Revisit if:** many real slips lack a readable QR (consider OCR keyword screening, then the picture), or the LINE quota allows a "paid" push.
+- **Addendum (owner, 2026-10-25):** in the LINE chat, a picture from a customer with no order waiting for payment is dropped in silence (not fetched, no reply, no check). A picture with no bank-slip QR is also dropped in silence (not kept, not claimed, no reply). If the QR reader fails, the picture is treated as a slip so a real one is never lost. Cost: a real slip with an unreadable QR gets no reply; the customer can still tap "โอนแล้ว" or use the app.

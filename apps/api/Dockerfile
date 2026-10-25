@@ -2,7 +2,8 @@
 # Build from the REPO ROOT:  docker build -f apps/api/Dockerfile --build-arg GIT_SHA=$(git rev-parse HEAD) -t ghcr.io/omeieee/pos-api:<sha> .
 # Run migrations:            docker run --rm --env-file .env <image> node dist/migrate.js
 
-FROM node:24-slim AS build
+# Runs on the builder's own architecture: the bundle is plain JS, so an arm64 image needs no emulation here.
+FROM --platform=$BUILDPLATFORM node:24-slim AS build
 WORKDIR /repo
 # pnpm version pinned to package.json "packageManager".
 RUN npm install -g pnpm@12.6.0
@@ -29,4 +30,6 @@ USER node
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
   CMD ["node", "-e", "fetch('http://127.0.0.1:3000/healthz').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
-CMD ["node", "--max-old-space-size=384", "dist/server.js"]
+# Default heap cap for the 1 GB VM. The compose file overrides it per VM (API_NODE_OPTIONS in .env).
+ENV NODE_OPTIONS=--max-old-space-size=384
+CMD ["node", "dist/server.js"]

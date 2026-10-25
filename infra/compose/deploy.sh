@@ -131,9 +131,8 @@ cmd_apply() {
   fi
 
   log "migrations"
-  # Same V8 heap cap as the api image's CMD (apps/api/Dockerfile): 1 GB VM.
-  dc_with "$STATE.new" run --rm --no-deps -T -e NODE_OPTIONS=--max-old-space-size=384 \
-    api node dist/migrate.js
+  # NODE_OPTIONS (V8 heap cap) comes from the api service in docker-compose.yml, so it matches this VM.
+  dc_with "$STATE.new" run --rm --no-deps -T api node dist/migrate.js
 
   mv "$STATE.new" "$STATE"
   SWITCHED=1

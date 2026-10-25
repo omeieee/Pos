@@ -497,17 +497,13 @@ describe('what is sent', () => {
     }
   });
 
-  test('a picture with no readable QR is sent as an image when it is a PNG or JPEG', async () => {
+  test('a picture with no readable slip QR is never sent: unchecked, and no call is made', async () => {
     localQr = null;
     const { token, order } = await start();
     await upload(token, order.id, picture());
     await checker.idle();
-    expect(urls()).toEqual(['/api/verify-slip/qr-image/info']);
-    const form = calls[0]?.body as FormData;
-    expect(form.get('file')).toBeInstanceOf(Blob);
-    // The conditions are at the root of the payload on this endpoint.
-    expect(JSON.parse(String(form.get('payload')))).toHaveProperty('checkReceiver');
-    expect((await row(order.id))?.slip_verify).toBe('valid');
+    expect(calls).toHaveLength(0);
+    expect(await row(order.id)).toMatchObject({ slip_verify: 'unchecked', slip_verify_code: null });
   });
 
   test('a WebP picture is never sent: unchecked, and no call is made', async () => {
@@ -537,7 +533,7 @@ describe('what is sent', () => {
 });
 
 describe('the duplicate key', () => {
-  test('a valid answer stores Slip2Go key; any other answer keeps the local decode; the Slip2Go key fills it when the decode gave none', async () => {
+  test('a valid answer stores Slip2Go key; any other answer keeps the local decode', async () => {
     const { token, order } = await start();
     await upload(token, order.id, picture());
     await checker.idle();
@@ -549,12 +545,6 @@ describe('the duplicate key', () => {
     await checker.idle();
     expect((await row(mismatch.order.id))?.slip_qr_hash).toBe(sha256(`014:${localRef()}`));
     respond = () => ({ body: answer('200200', currentAmountBaht) });
-
-    localQr = null;
-    const other = await start();
-    await upload(other.token, other.order.id, picture(2));
-    await checker.idle();
-    expect((await row(other.order.id))?.slip_qr_hash).toBe(sha256(`002:${remoteRef()}`));
   });
 });
 
@@ -1014,32 +1004,6 @@ describe('auto-confirm (D-27)', () => {
     expect((await row(second.order.id))?.slip_verify).toBe('valid');
     const staff = await call('GET', `/v1/orders/${second.order.id}/payments`, staffToken);
     expect(staff.json().slipDuplicates[0]).toMatchObject({ paymentStatus: 'confirmed' });
-  });
-
-  test('a duplicate found only through the Slip2Go reference stops it too', async () => {
-    on();
-    localQr = null;
-    const first = await sendSlip();
-    expect((await state(first.order.id))?.status).toBe('confirmed');
-    const second = await sendSlip(picture(9));
-    expect((await state(second.order.id))?.status).toBe('claimed');
-  });
-
-  test('one transfer cannot confirm two orders, whichever is checked first', async () => {
-    on();
-    localQr = null;
-    // A: the first call fails, so A has no Slip2Go key yet. B (another photo of the same transfer,
-    // claimed later) is checked and confirmed. Then A's retry answers valid with the same key.
-    respond = (_c, n) =>
-      n === 1 ? new Error('reset') : { body: answer('200200', currentAmountBaht) };
-    const a = await sendSlip(picture(1));
-    expect((await state(a.order.id))?.status).toBe('claimed');
-    const b = await sendSlip(picture(2));
-    expect((await state(b.order.id))?.status).toBe('confirmed');
-    await checker.sweep();
-    await checker.idle();
-    expect(await state(a.order.id)).toMatchObject({ status: 'claimed', auto_confirmed: false });
-    expect((await row(a.order.id))?.slip_verify).toBe('valid');
   });
 
   test('the payment must still be claimed when the answer commits', async () => {
@@ -3038,20 +3002,6 @@ describe('the first call waits longer for a slow bank (per-bank hold), and costs
     await checker.idle();
     expect((await row(order.id))?.slip_verify).toBe('valid');
     expect(calls).toHaveLength(1);
-  });
-
-  test('an unreadable QR gets the default hold, not the long one', async () => {
-    firstCallDelayMs = 80;
-    firstCallDelayByBankMs = { '002': 800 };
-    checker = buildChecker();
-    installSlipChecker(checker);
-    localQr = null;
-    const { token, order } = await start();
-    await upload(token, order.id, picture());
-    await waitFor(() => calls.length === 1);
-    await checker.idle();
-    expect(calls).toHaveLength(1);
-    expect(urls()).toEqual(['/api/verify-slip/qr-image/info']);
   });
 
   test('a bank-lag 404 at the first call is retried up to 4 calls in all, then final once', async () => {

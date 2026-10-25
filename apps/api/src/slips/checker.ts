@@ -277,8 +277,6 @@ export function createSlipChecker(args: {
   /** The bank check: one call to Slip2Go, or a reason not to make it. */
   async function readVerify(
     row: paymentsRepo.PaymentRow,
-    bytes: Buffer | null,
-    usable: boolean,
     rawQr: string | null,
     businessDate: string,
   ): Promise<{ outcome: VerifyOutcome; qrHash: string | null }> {
@@ -321,11 +319,10 @@ export function createSlipChecker(args: {
     // Calls already made for this picture that never reached a verdict (a commit that failed
     // after the answer, or retries): at most 3 (6 in its not-found grace), then unchecked.
     if (row.slipVerifyAttempts >= attemptCeiling(row.id, row.slipVerifyCode, row)) return noCall();
-    const mime = bytes ? sniffSlip(bytes) : null;
-    // The QR text goes first (no picture leaves the machine); the picture only when no QR was read,
-    // and only as JPEG or PNG (Slip2Go documents nothing else).
-    const image = !rawQr && usable && bytes && (mime === 'image/jpeg' || mime === 'image/png');
-    if (!rawQr && !image) return noCall();
+    // Local screening: only a picture holding a real bank-slip QR (the parser accepts nothing else)
+    // is sent on, and only its text, so no picture leaves the machine. Any other image (a photo, a
+    // cropped slip, a flood of junk) costs no Slip2Go call and stays `unchecked` for staff.
+    if (!rawQr) return noCall();
     const promptpay = await currentPromptpayId(ctx.db);
     const bank = await currentBankAccount(ctx.db);
     // Nothing to check the receiver against: a call would let a transfer to anyone pass.
@@ -351,9 +348,7 @@ export function createSlipChecker(args: {
     );
     if (attempt === null) return noCall();
     await paymentsRepo.recordSlipVerifyCall(ctx.db, businessDate);
-    const result = rawQr
-      ? await verifier.verifyQr(rawQr, conditions)
-      : await verifier.verifyImage(bytes as Buffer, mime as string, conditions);
+    const result = await verifier.verifyQr(rawQr, conditions);
     if (result.kind === 'transient') {
       return { outcome: { kind: 'retry', code: null, alert: null }, qrHash: null };
     }
@@ -440,7 +435,7 @@ export function createSlipChecker(args: {
     let verifyPart: VerifyOutcome | null = null;
     let remoteHash: string | null = null;
     if (wantVerify) {
-      const done = await readVerify(row, bytes ?? null, usable, rawQr, businessDate);
+      const done = await readVerify(row, rawQr, businessDate);
       verifyPart = done.outcome;
       remoteHash = done.qrHash;
     }

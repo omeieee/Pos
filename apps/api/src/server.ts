@@ -12,7 +12,7 @@ import { createPoolWatchdog } from './pool-watchdog.ts';
 import { sentryOptions } from './redact.ts';
 import { createSlipChecker, installSlipChecker, installSlipQrReader } from './slips/checker.ts';
 import { createTesseractOcr } from './slips/ocr.ts';
-import { createWorkerQrReader } from './slips/qr.ts';
+import { createWorkerQrReader, installSlipScreen } from './slips/qr.ts';
 import { createR2SlipStore, R2_RECEIPT_PREFIX, R2_SLIP_PREFIX } from './slips/r2-store.ts';
 import { createSlip2goVerifier, installSlipVerifier } from './slips/slip2go.ts';
 import { createFsSlipStore } from './slips/store.ts';
@@ -91,8 +91,9 @@ const verifier = config.slipVerifier
   ? createSlip2goVerifier({ ...config.slipVerifier, log: app.log })
   : null;
 installSlipVerifier(verifier);
-// One reader serves the checker and the late-slip keeper (D-41).
+// One reader serves the chat-picture screen (D-44), the checker and the late-slip keeper (D-41).
 const qrReader = config.slipQr ? createWorkerQrReader() : null;
+installSlipScreen(qrReader);
 installSlipQrReader(qrReader);
 if (config.slipOcr || verifier) {
   installSlipChecker(

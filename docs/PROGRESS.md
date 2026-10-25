@@ -9,6 +9,7 @@
 > - Keep this file short: when it holds more than about 8 entries, move the oldest into the matching month archive unchanged.
 
 > **State (from the entries below; git checked 2026-10-16):**
+> - **Hosting (2026-10-25):** the VM is now an Oracle **Ampere A1** (2 OCPU / 12 GB, arm64), `sds-pos`; `/healthz` shows `8649bf7`; the old Micro is stopped (`sds-pos-old`). See the first entry below.
 > - **Deployed and live (2026-10-22):** `c96c033` = P8 print queue, Printing screens and Web Push (migrations 0040-0042; inactive until the owner sets keys and buys the printer). Earlier: `9aaf0b6` (pushed and deployed 2026-10-21: CI, Deploy API and Deploy web succeeded; `/healthz` shows `9aaf0b6`, `/readyz` 200). It includes the P6 follow-ups and all of P7 (parts 1 to 6, migrations 0037 and 0038). The new P6/P7 screens and routes have not been used on the live server or on a real iPad/iPhone. P7 stays open for one exit criterion: the owner agreeing a sample-month P&L ([checkpoint](checkpoints/PHASE-07-costs-pnl-tax.md)).
 > - **Slip checking:** Slip2Go (D-27) and the slip status, cooldown, fake-slip block and customer flag (D-28) are deployed. `SLIP_AUTOCONFIRM` is **on** (VM `.env` and running API, checked 2026-10-17; default ceiling 1,000 THB). Owner bought **BASIC-1** (seen 2026-10-24: 88 tokens, Verify Slip API about 352 slips at 0.25 token, **expires 2026-11-20 23:59**). Chat slips already go through our webhook to the API; do NOT enable Slip2Go's own chat bot on the OA (one webhook per OA). If Slip2Go issued a new key, the owner updates `SLIP2GO_SECRET_KEY` in the VM `.env` (not checked).
 > - **Last full verification (2026-10-15, on main):** biome 0 errors; build 12/12; tests shared 1117, db 299, api 1376, pos-web 1890, liff-web 114, i18n 22, line 69, ui 118, promptpay 1276.
@@ -17,6 +18,36 @@
 > - **Before any push:** `pnpm lint` (CI gates on Biome, and a lint error skips the deploy), `pnpm build`, tests; `main` auto-deploys, so new env vars go into the VM `.env` first and migrations take the next free number. Check `/healthz` for the new sha after the push.
 > - **Maintenance:** the architecture refactor (code moved, behaviour unchanged) is deployed; see the entry "2026-10-16 · Maintenance · Architecture refactor". Not yet checked on a real iPad/iPhone. The as-built code index `ARCHITECTURE.md` (verified at `7ff9951`) is committed (`070e0b4`) and pushed with the owner's OK; see the newest entry.
 > - **Workflow (owner rule 2026-10-16):** after each completed part, ask the owner "save checkpoint or next step?" and wait for the answer (`CLAUDE.md` workflow, `3d8481c`).
+> - **Other agents (2026-10-25):** `AGENTS.md` lets Gemini/Antigravity follow the same rules and memory as Claude; their PROGRESS entries start with "(Gemini)".
+
+## 2026-10-25 · Maintenance · AGENTS.md for non-Claude agents
+- **Summary:** owner wants to hand execution work to Gemini (Antigravity, "agy") to save Claude usage. Added `AGENTS.md`: read `CLAUDE.md` first (source of truth), the shared memory files, the 11 domain rules in brief, and by-hand versions of what Claude gets automatically (protect-files and format-typecheck hooks, role playbooks in `.claude/agents/`, `.claude/agent-memory/`, the checkpoint skill). Gemini entries start with "(Gemini)"; plans from Claude go in `docs/plans/`.
+- **Changed:** `AGENTS.md` (new); `CLAUDE.md` (one line: keep `AGENTS.md` in step); this file.
+- **Verification:** commands named in `AGENTS.md` checked against `package.json` scripts and `packages/db` (`db:generate`). Not run: lint/build/tests (docs only); not tried with Gemini itself.
+- **Decisions:** none.
+- **Open issues:** Gemini CLI reads `GEMINI.md` by default (set `context.fileName` to include `AGENTS.md`); Antigravity's rules file not checked. `AGENTS.md` repeats the domain rules in brief, so it can drift from `CLAUDE.md`.
+- **Next:** rebase `feat/pay-first-orders`; try a real slip and a non-slip photo on the test OA.
+- **Commit:** `b213e05` (AGENTS.md), merged to `main` with this entry.
+
+## 2026-10-25 · P4 · Slip2Go pre-screen and neutral LINE slip reply
+- **Summary:** owner asked to stop non-slip images from spending Slip2Go calls. Owner chose QR-only screening and no LINE push (reply first, status on the order page). Slip2Go is now called only with the text of a slip QR our own `jsqr` check parsed; the picture is never sent.
+- **Changed:** `apps/api/src/slips/checker.ts` (`readVerify`: no QR means no call, stays `unchecked`), `slip-verify.test.ts` (1 rewritten, 3 removed, 1 renamed), LINE slip reply wording th/en, privacy notice th/en (picture no longer sent).
+- **Verification:** `biome check apps packages` 0 errors; `vitest` api 1614 of 1615 (push.test.ts failed once in the full run, 39/39 alone); `pnpm build` once failed at `@sds/ui` typecheck, passes alone. Not run: real LINE slip, real Slip2Go.
+- **Decisions:** D-44 added (Proposed).
+- **Open issues:** a real slip with an unreadable QR is no longer auto-verified (staff tick by hand); `verifyImage` in `slip2go.ts` is now unused by the checker; flaky push test and build need a clean re-run.
+- **Later the same day:** LINE chat now drops a picture silently when the sender has no order waiting for payment, or when it has no slip QR (`looksLikeSlip` in `slips/qr.ts`, `installSlipScreen` in `server.ts`, `line/handlers.ts:handleSlip`); tests in `line/ordering-chat.test.ts`; `vitest` line+slips+customer-app 431 passed, biome clean.
+- **Owner answers (2026-10-25):** merge D-44 to main (done after all packages passed: lint, typecheck, tests, pos-web build; the LINE flex snapshot was updated for the new privacy text). Slip2Go package: 1 month, 88 tokens; 87.250 remaining; expires 2026-11-20 23:59 (not in the repo or logs elsewhere). Old Micro VM `sds-pos-old`: terminate it and its boot volume on 2026-11-01. Next work: rebase `feat/pay-first-orders`.
+- **Next:** try a real slip and a non-slip photo on the test OA.
+- **Commit:** `6adcb29`, `65c578d` on `claude/nifty-ramanujan-c7obvx` (not merged); docs and privacy-text edits uncommitted.
+
+## 2026-10-25 · Maintenance · API moved to an Ampere A1
+- **Summary:** the API stack moved from the 1 GB E2.1.Micro to an Always Free Ampere A1 (2 OCPU / 12 GB, arm64), D-43. Cutover 21:03 to 21:22 UTC (about 19 min down). Reserved IP `161.118.211.42` moved with it, so the hostname, LINE webhook and Slip2Go whitelist are unchanged.
+- **Changed:** `.github/workflows/deploy-api.yml` (amd64+arm64, QEMU), `apps/api/Dockerfile` (build stage on the builder arch, heap cap via `NODE_OPTIONS`), `infra/compose/docker-compose.yml` + `.env.example` + `deploy.sh` (limits from `.env`), `infra/backup/Dockerfile` (comment), audit fixes (zod 4.6.6, fastify ^5.12.6, pnpm overrides ip-address, fast-uri), docs 05 §3.2, RUNBOOK, oracle README, D-43, Q1.
+- **Verification:** run this session: `pnpm audit --prod` 0 vulnerabilities (was 11); `pnpm install --frozen-lockfile`; `pnpm build` 16/16; `pnpm test` all packages (api 1618); `biome check apps packages` 0 errors. CI green on `05dba20` and `8649bf7`; Deploy API #89 (manual, image `8649bf7`) green. Live after the move: `/healthz` ok `8649bf7`, api/backup/caddy healthy, images arm64, API ~112 MB of 3 GB, hourly backup from the A1 uploaded, restore drill PASSED before the move (43 migrations, row counts equal). **Not verified:** real LINE webhook delivery, a test order and slip, Slip2Go on the A1.
+- **Decisions:** D-43 accepted.
+- **Open issues:** owner checks (LINE Verify, test order, Slip2Go); old Micro `omeie_pos` stopped, no public IP, terminate it **and its boot volume** after about 7 days; `SLIP_OCR` still off; idle-reclaim risk on the A1 (7 days under 20%); the `pos-oracle` ssh alias is stale; `feat/pay-first-orders` must be rebased onto the new `main` (dependency and compose changes); branch `chore/a1-arm64-migration` on GitHub still carries the pay-first commits and should be deleted.
+- **Next:** owner checks above; decide the old VM's end date; then the pay-first review fixes (H1/M1/M2) and rebase.
+- **Commit:** `96c52b4`, `05dba20`, `8649bf7` on main (deployed); this checkpoint's doc edits uncommitted.
 
 ## 2026-10-25 · P8 · Built: pay-first LINE orders, edit/cancel/merge, slip allocation, auto-cancel, payment pop-up, Telegram (D-38 to D-42)
 - **Summary:** all ten slices of the 2026-10-24 plan built by repo agents (Sonnet) while the owner was away. The Opus review (`qa-security-reviewer`) found no automatic path that confirms the wrong order or one transfer twice, but says the phase is NOT ready to merge: fix H1, M1, M2, verify H2/H3 (list under Open issues). Nothing committed, pushed or deployed.

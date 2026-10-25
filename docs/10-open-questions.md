@@ -18,6 +18,8 @@ Which shape is the VM: **VM.Standard.A1.Flex (ARM)** or **VM.Standard.E2.1.Micro
 - *Default:* A1 Flex, and you upgrade to PAYG with a US$1 budget alert.
 - **Answer (2026-09-29, from the owner's OCI console screenshots):** **VM.Standard.E2.1.Micro** (AMD, 1 OCPU shown, 1 GB RAM, 0.5 Gbps), region **ap-singapore-1** (AD-1, FD-1), Ubuntu 24.04, login user `ubuntu`. The account is **Free Tier, not PAYG**. Full record in [infra/oracle/README.md](../infra/oracle/README.md). → **Path B** (database on managed Postgres).
 
+- **Update (2026-10-25):** the API moved to a **VM.Standard.A1.Flex (2 OCPU / 12 GB, arm64)**, still Path B (Supabase) and still Always Free; see D-43 and docs/05 §3.2.
+
 ### Q2 · How are LINE orders fulfilled?
 Pickup at the storefront only? Delivery to rooms in the condo (by your staff)? Dine-in orders placed through LINE?
 - *Why it matters:* checkout fields (room number); whether gov co-pay is possible for that order (it must be face-to-face at the storefront); whether payment is required before cooking.

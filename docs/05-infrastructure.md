@@ -56,6 +56,28 @@ The owner reports (2026-10-01) that the Oracle account is **Pay-As-You-Go**. Fro
 | Set a **budget** (Billing → Budgets, about US$1 a month, alert at 50% and 100% to the owner's email) and look at **Cost Analysis** monthly. Zero spend is the expected value | PAYG has no spending cap: the budget only alerts |
 | The second Micro VM for the deferred rebuild test is inside the free allowance (2 allowed) **only if** its boot volume keeps the total at or below 200 GB; **terminate it and its volume right after the test** | Avoids a forgotten, billable leftover |
 
+### 3.2 Moving the API VM to an Ampere A1 (done 2026-10-25, D-43)
+Why: the 1 GB Micro caps the API heap at 384 MB and keeps Tesseract and the QR worker tight. Facts checked 2026-10-25 before the move (owner logged in; read-only):
+
+| Fact | Result |
+|---|---|
+| ✅ Current VM | one instance `omeie_pos`, E2.1.Micro, AD-1, Always Free; one 47 GB boot volume; no other volumes |
+| ✅ Free A1 size | **2 OCPU / 12 GB in total** (1,500 OCPU-h and 9,000 GB-h a month; the Oracle page says so for Always Free tenancies). The console shows the A1 limits as "Dynamic" with usage 0, so it does not state the cap. A note quoting 4 OCPU / 24 GB does **not** apply here; anything above 2 / 12 is billed |
+| ✅ Storage | 47 GB boot volume per instance at minimum; Micro + A1 = 94 GB of the 200 GB |
+| ✅ Reserved IP | `sds-pos-api` 161.118.211.42 assigned. Re-attach it to the A1 and the sslip.io host, the LINE webhook, the Slip2Go whitelist and `API_HOST` stay unchanged |
+| ✅ Budget | `pos-always-free-cap`, monthly US$2, spent US$0 (alerts not inspected) |
+| ✅ Backups | bucket `sds-backups` has `daily/ hourly/ monthly/ predeploy/`; restore drill PASSED 2026-10-25 on `hourly/sds-20261024T170512Z` (43 migrations, row counts equal to production) |
+| ⚠️ Capacity | "out of host capacity" in ap-singapore-1 is common: retry later or use another availability domain; never pick a paid shape |
+
+What happened (UTC, 2026-10-24/25):
+1. CI builds `linux/amd64,linux/arm64`; the compose limits default to the Micro values and the A1 overrides them in `.env` (`96c52b4`; `05dba20` fixed the audit advisories; `8649bf7` rebuilt the backup image). The A1 images report `arm64`.
+2. The A1 was created with no public IP, which left it **without internet** (no NAT gateway), and SSH from the old VM was blocked by the security list. Fixes: a temporary TCP 22 rule from the old VM only and a temporary ephemeral public IP. Both were removed afterwards.
+3. Cutover 21:03 to 21:22 (about 19 min of downtime): old stack stopped, final dump `predeploy/sds-20261024T210323Z`, `.env` and the 31 slip files copied (checksums equal), Tailscale names swapped, reserved IP moved (old VM set to "No public IP", then the A1's ephemeral IP removed, then the reserved IP attached), Deploy API started by hand with the existing image tag.
+4. Verified: `/healthz` on `8649bf7`, three healthy containers, API about 112 MB of its 3 GB limit, Let's Encrypt certificate issued, an unsigned webhook POST gives 401, an hourly backup from the A1 uploaded, egress IP still `161.118.211.42` (the Slip2Go whitelist needs no change).
+
+Still open: LINE webhook Verify, a test order and slip, and Slip2Go on the A1 (owner); `SLIP_OCR` stays off until memory is observed; terminate the old Micro **and its boot volume** after about 7 days. The full rebuild drill on a fresh VM is not run as a drill, but this move exercised most of the procedure (lessons are in the RUNBOOK).
+Idle reclamation still applies to the A1 (7 days under 20% CPU p95, network and memory): the verified backups and the rebuild procedure are the mitigation.
+
 ## 4. Environments
 | Environment | Where | LINE | Data |
 |---|---|---|---|

@@ -27,7 +27,7 @@ Run the real shop on the system safely, with trained staff and written procedure
 - [ ] Owner signs off go-live; P6/P8 priorities set
 
 ## As built
-_Fill in with `/checkpoint`._
+- **Hosting (2026-10-25, D-43):** the API stack runs on an Oracle Ampere A1 (`omeie_pos_a1`, 2 OCPU / 12 GB, arm64), reserved IP `161.118.211.42`, Tailscale name `sds-pos`; CI builds amd64 and arm64 images; memory limits come from `.env` (`API_MEM_LIMIT`, `API_NODE_OPTIONS`, `BACKUP_MEM_LIMIT`, `DRILL_MEM_LIMIT`). The old Micro is stopped as `sds-pos-old`. Rest of P5: _fill in with `/checkpoint`._
 
 ## Log
-_Empty._
+- 2026-10-25: API moved to the Ampere A1 (D-43); this exercised most of the rebuild-on-new-host procedure and its lessons are in `infra/RUNBOOK.md`, but the carried "rebuild drill" criterion stays open until the owner decides it counts. See the PROGRESS entry "2026-10-25 · Maintenance · API moved to an Ampere A1".
