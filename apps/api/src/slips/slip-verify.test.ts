@@ -1364,16 +1364,9 @@ describe('what the customer is told about the slip (neutral)', () => {
     expect(await slipCheckOf(token, order.id)).toBe('verified_waiting');
   });
 
-  test.each([
-    ['200200'],
-    ['200000'],
-    ['200401'],
-    ['200402'],
-    ['200403'],
-    ['200404'],
-    ['200500'],
-    ['401004'],
-  ])(
+  // D-42 (amends D-28) names two exceptions, tested on their own: 200200 is `verified_waiting`
+  // (above) and a bank-checked amount mismatch, 200402, is `amount_mismatch`. Every other code stays neutral.
+  test.each([['200000'], ['200401'], ['200403'], ['200404'], ['200500'], ['401004']])(
     'code %s: the customer sees the same staff_review and not a trace of the verdict',
     async (code) => {
       const { token, order } = await start();
