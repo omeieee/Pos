@@ -6,6 +6,8 @@
  * undo before then sends nothing at all. Client-side only: no server or order-machine change.
  *
  * - Each ticket counts on its own; several can wait at once.
+ * - An undo in the first `READY_UNDO_GUARD_MS` is ignored: it is the second tap of a double tap on
+ *   "ทำเสร็จ", whose place the undo button has just taken.
  * - The time left is read from the clock (`Date.now()`), not counted tick by tick, so a page whose
  *   timers were held back (iOS in the background) sends as soon as it runs again, never later
  *   than the cook could expect and never twice.
@@ -30,6 +32,11 @@ import type { OrderMovesStore } from '../orders/order-moves-store.ts';
 
 /** How long the cook has to take "done" back. */
 export const READY_UNDO_SECONDS = 5;
+/**
+ * The undo button takes the place of "ทำเสร็จ" at once, so the second half of a fast double tap
+ * would land on it: an undo this soon after the start is ignored.
+ */
+export const READY_UNDO_GUARD_MS = 500;
 
 export interface ReadyCountdown {
   /** The status the order was in at the tap; the move is dropped if it is not there any more. */
@@ -54,7 +61,10 @@ export interface ReadyUndoStore extends ReadableStore<ReadyUndoState> {
    * it is on its way, or the order is no longer in the status the card showed.
    */
   start(order: Pick<OrderDto, 'id' | 'status'>): boolean;
-  /** Takes "done" back: the countdown stops and nothing is sent. */
+  /**
+   * Takes "done" back: the countdown stops and nothing is sent. Ignored for `READY_UNDO_GUARD_MS`
+   * after the start (a double tap), so the countdown goes on.
+   */
   undo(orderId: string): void;
   /** Sign-out: drops every countdown, sends nothing. */
   reset(): void;
@@ -62,6 +72,7 @@ export interface ReadyUndoStore extends ReadableStore<ReadyUndoState> {
 
 interface Entry {
   from: OrderStatus;
+  startedAt: number;
   endsAt: number;
   timer?: ReturnType<typeof setTimeout>;
 }
@@ -145,9 +156,11 @@ export function createReadyUndoStore(deps: ReadyUndoDeps): ReadyUndoStore {
       // The card was drawn from an older view of the order: it is not where the cook saw it.
       const current = deps.entities.getState().orders.get(order.id);
       if (current && current.status !== order.status) return false;
+      const now = Date.now();
       entries.set(order.id, {
         from: order.status,
-        endsAt: Date.now() + READY_UNDO_SECONDS * 1000,
+        startedAt: now,
+        endsAt: now + READY_UNDO_SECONDS * 1000,
       });
       unfollow ??= deps.entities.subscribe(onEntities);
       schedule(order.id);
@@ -155,7 +168,9 @@ export function createReadyUndoStore(deps: ReadyUndoDeps): ReadyUndoStore {
       return true;
     },
     undo(orderId) {
-      if (!entries.has(orderId)) return;
+      const entry = entries.get(orderId);
+      if (!entry) return;
+      if (Date.now() < entry.startedAt + READY_UNDO_GUARD_MS) return;
       drop(orderId);
       publish();
     },

@@ -2,7 +2,11 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { createEntityStore } from '../../realtime/entity-store.ts';
 import { orderDto, orderFrame, uuid } from '../../test-support/frames.ts';
 import { createOrderMovesStore, type OrderMovesDeps } from '../orders/order-moves-store.ts';
-import { createReadyUndoStore, READY_UNDO_SECONDS } from './ready-undo-store.ts';
+import {
+  createReadyUndoStore,
+  READY_UNDO_GUARD_MS,
+  READY_UNDO_SECONDS,
+} from './ready-undo-store.ts';
 
 const A = uuid(910);
 const B = uuid(911);
@@ -50,6 +54,29 @@ describe('the 5-second undo of “done”', () => {
     expect(undo.getState().waiting[A]).toBeUndefined();
     await vi.advanceTimersByTimeAsync(60_000);
     expect(api.orders.transition).not.toHaveBeenCalled();
+  });
+
+  test('a fast double tap does not take “done” back: undo is ignored for the first 500 ms', async () => {
+    const { undo, api } = setup();
+    expect(READY_UNDO_GUARD_MS).toBe(500);
+    undo.start(cooking(A));
+    await vi.advanceTimersByTimeAsync(200);
+    undo.undo(A); // the second half of a double tap on the same spot
+    expect(left(undo, A)).toBe(5);
+    await vi.advanceTimersByTimeAsync(400); // 600 ms in
+    undo.undo(A);
+    expect(undo.getState().waiting[A]).toBeUndefined();
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(api.orders.transition).not.toHaveBeenCalled();
+  });
+
+  test('a tap ignored by the guard leaves the countdown to send as normal', async () => {
+    const { undo, api } = setup();
+    undo.start(cooking(A));
+    await vi.advanceTimersByTimeAsync(100);
+    undo.undo(A);
+    await vi.advanceTimersByTimeAsync(4_900);
+    expect(api.orders.transition).toHaveBeenCalledTimes(1);
   });
 
   test('no undo: exactly one PATCH to ready, only when the 5 seconds are over', async () => {

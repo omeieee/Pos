@@ -11,7 +11,7 @@ import {
 } from './platform/tokenStore.ts';
 import { createServices } from './services.ts';
 import { createFakeLifecycle } from './test-support/fake-realtime.ts';
-import { alertFrame, uuid } from './test-support/frames.ts';
+import { alertFrame, orderFrame, uuid } from './test-support/frames.ts';
 
 afterEach(() => {
   window.history.replaceState(null, '', '/');
@@ -60,6 +60,23 @@ describe('signing out', () => {
     window.location.hash = '#/orders';
     await services.auth.signOut();
     expect(window.location.hash).toBe('');
+  });
+
+  test('drops a running “done” countdown: no move to ready goes out after sign-out', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const { services, server, unbind } = await signedIn('kitchen');
+      const id = uuid(70);
+      services.entities.apply(orderFrame(id, 1_000_000, { status: 'preparing' }));
+      expect(services.readyUndo.start({ id, status: 'preparing' })).toBe(true);
+      await services.auth.signOut();
+      expect(services.readyUndo.getState().waiting).toEqual({});
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(server.calls.filter((c) => c.path === `/v1/orders/${id}/transition`)).toEqual([]);
+      unbind();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

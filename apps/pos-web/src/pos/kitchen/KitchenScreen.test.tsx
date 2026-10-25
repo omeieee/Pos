@@ -728,6 +728,23 @@ describe('the 5-second undo of “done” (UX-02)', () => {
     expect(numbersIn('cooking')).toEqual(['L-001']);
   });
 
+  test('a fast double tap on “ทำเสร็จ” does not take it back at once', async () => {
+    const env = await mount({
+      orders: [ticket(1, { status: 'preparing' })],
+      services: { orders: { transition: readyAnswer } },
+    });
+    await waitFor(() => ticketOf('L-001'));
+    withClock();
+    fireEvent.click(
+      within(ticketOf('L-001')).getByRole('button', { name: th['kitchen.move.ready'] }),
+    );
+    await tick(200);
+    fireEvent.click(undoButton('L-001')); // the second tap lands on the undo button
+    expect(undoButton('L-001').textContent).toContain(tr('kitchen.undo', { seconds: 5 }));
+    await tick(5_000);
+    expect(env.api.orders.transition).toHaveBeenCalledTimes(1);
+  });
+
   test('“เลิกทำ” takes it back: the done button returns and no request ever goes out', async () => {
     const env = await mount({
       orders: [ticket(1, { status: 'preparing' })],
@@ -784,6 +801,7 @@ describe('the 5-second undo of “done” (UX-02)', () => {
     );
     expect(undoButton('L-001').textContent).toContain(tr('kitchen.undo', { seconds: 3 }));
     expect(undoButton('L-002').textContent).toContain(tr('kitchen.undo', { seconds: 5 }));
+    await tick(1_000); // past the double-tap guard
     fireEvent.click(undoButton('L-002'));
     await tick(10_000);
     expect(env.api.orders.transition).toHaveBeenCalledTimes(1);
