@@ -20,6 +20,15 @@
 > - **Workflow (owner rule 2026-10-16):** after each completed part, ask the owner "save checkpoint or next step?" and wait for the answer (`CLAUDE.md` workflow, `3d8481c`).
 > - **Other agents (2026-10-25):** `AGENTS.md` lets Gemini/Antigravity follow the same rules and memory as Claude; their PROGRESS entries start with "(Gemini)".
 
+## 2026-10-25 · Maintenance · Sync local repo to main, collect worktree memory notes, remove 53 old worktrees
+- **Summary:** (Gemini) Fast-forwarded `main` to `origin/main` (`87e63df`, matching live `/healthz`), merged `main` into `agy/gitignore-local-tools` (`d481eb5`), committed 5 Windows/worktree memory notes from old subagent worktrees onto `chore/agent-memory-windows-notes` (`4907742`), tagged `archive/d51d18a`, and removed all 53 `.claude/worktrees/agent-*` worktrees and 58 merged/archived local branches.
+- **Changed:** `docs/PROGRESS.md` (this entry + merge on `agy/gitignore-local-tools`); `.claude/agent-memory/{backend-engineer,pos-frontend-engineer}/` on `chore/agent-memory-windows-notes`.
+- **Verification:** `pnpm install --frozen-lockfile` up to date; `pnpm lint` on `agy/gitignore-local-tools` (`biome check .`: 1126 files, 0 errors); `pnpm build` 16/16; full-repo `pnpm test` hit a parallel PGlite worker crash in `packages/db/src/invites.test.ts` (exit code `3221226505`) and a 5000ms timeout in `packages/db/src/orders.test.ts` (`5874ms`; the test had no timeout of its own; Claude gave it 30 s in 395c244 (on claude/bold-keller-ayi3pf, not yet merged)) — PGlite tests on Windows need `--no-file-parallelism`; re-run with `--no-file-parallelism` on `@sds/db` passed all 12 packages (shared 1251, db 353, api 1709, pos-web 2416, liff-web 148, promptpay 1276, finance 223, ui 123, line 69, print-agent 35, i18n 26, escpos 22).
+- **Decisions:** none.
+- **Open issues:** empty .claude/worktrees folders: close tools, run git worktree prune, list what's left, delete each with cmd /c rmdir /s /q (never rm -rf: pnpm node_modules are junctions); never delete inside .git by hand; `docs/11-review-findings.md` left untracked.
+- **Next:** owner reviews checkpoint, merges `agy/gitignore-local-tools`, `chore/agent-memory-windows-notes` and `origin/claude/bold-keller-ayi3pf` into `main`, and cleans up `.claude/worktrees`.
+- **Commit:** `4907742` (`chore/agent-memory-windows-notes`), `d481eb5` (`agy/gitignore-local-tools`).
+
 ## 2026-10-25 · Maintenance · Keep local tool files out of git and lint
 - **Summary:** (Gemini) Ignored local agent and editor tool paths in `.gitignore` (keeping `!.claude/skills/checkpoint/` tracked) so root `pnpm lint` (`biome check .`) skips local skills and settings, and committed the clean `payments-finance-engineer` and `pos-frontend-engineer` role memory files.
 - **Changed:** `.gitignore`; `.claude/agent-memory/payments-finance-engineer/{MEMORY.md,project_p7_tax_rules.md}`; `.claude/agent-memory/pos-frontend-engineer/{MEMORY.md,feedback_tooling_quirks.md}`.
