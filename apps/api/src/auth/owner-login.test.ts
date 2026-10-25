@@ -246,6 +246,38 @@ describe('POST /v1/auth/owner', () => {
     expect(bad.json()).toMatchObject({ code: 'DEVICE_UNREGISTERED' });
   });
 
+  // SEC-01: like /staff and /pin, the owner sign-in never binds a session to the print agent.
+  test('refuses the print agent device token before checking the password', async () => {
+    await fresh();
+    const agent = await h.newDevice('print_agent');
+    const res = await login(withTotp(owner), { 'x-device-token': agent.token });
+    expect(res.statusCode).toBe(403);
+    expect(res.json()).toMatchObject({ code: 'FORBIDDEN' });
+    // No session, no sign-in audit row, and no failed try counted against the owner.
+    expect(await h.auditRows(owner.staffId)).toEqual([]);
+    const rows = await h.client.query<{ failed_login_count: number }>(
+      'select failed_login_count from owner_credentials where staff_id = $1',
+      [owner.staffId],
+    );
+    expect(rows.rows[0]?.failed_login_count).toBe(0);
+    // The TOTP code was not spent, so the owner can still sign in from a staff device.
+    const ipad = await h.newDevice('ipad');
+    const ok = await login(withTotp(owner), { 'x-device-token': ipad.token });
+    expect(ok.statusCode).toBe(200);
+  });
+
+  test('still signs in with no device token', async () => {
+    await fresh();
+    const res = await login(withTotp(owner));
+    expect(res.statusCode).toBe(200);
+    const me = await h.app.inject({
+      method: 'GET',
+      url: '/v1/auth/me',
+      headers: { authorization: `Bearer ${res.json().sessionToken}` },
+    });
+    expect(me.json()).toMatchObject({ deviceId: null });
+  });
+
   test('is rate limited per IP', async () => {
     await fresh();
     let limited = 0;
