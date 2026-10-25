@@ -1,5 +1,5 @@
 /*
- * Design lab styles (dev-only page, see DesignLab.tsx). Three directions, each one scope of
+ * Design lab styles (dev-only page, see DesignLab.tsx). Four directions, each one scope of
  * variables, like the kitchen's `.g-dk` in @sds/ui design.css. Section 1 holds every colour;
  * the rest of the file reads only variables, so adopting a direction means moving its block into
  * the token files. Class names are prefixed `dl-` and describe parts, not screens.
@@ -20,111 +20,226 @@
   --dl-speed: 1;
 }
 
-/* Graphite: the owner's second reference (a dark transit dashboard). Near-black with grey
-   cards, thin type, white lines; colour only for status (green done and paid, orange cooking or
-   waiting, red late or sold out). */
-.dl-dir-graphite {
+/* Studio dark: the owner's third set of references (Iconly cards). Slate at the top fading to
+   black instead of flat grey, frosted cards with big radii, a white pill for the active tab,
+   thin numbers, a blue-to-violet chart line, and colour only in small status chips. Studio
+   light borrows this block for its kitchen, as Today+ does with Brand night. */
+.dl-dir-studio-dark,
+.dl-dir-studio-light .dl-frame[data-screen="kitchen"] {
   color-scheme: dark;
-  --lab-bg: #050506;
-  --canvas: #0c0d0f;
-  --orb1: rgba(255, 255, 255, 0.06);
-  --orb2: rgba(140, 150, 160, 0.08);
-  --orb3: rgba(255, 255, 255, 0.04);
-  --orb4: rgba(90, 96, 104, 0.1);
-  --dots: rgba(255, 255, 255, 0.045);
-  --ink: #f2f2f3;
-  --ink2: rgba(242, 242, 243, 0.66);
-  --ink3: rgba(242, 242, 243, 0.52);
-  --on-ink: #0c0d0f;
-  --frac: rgba(242, 242, 243, 0.42);
-  --glass: rgba(30, 31, 35, 0.74);
-  --glass2: rgba(38, 39, 44, 0.88);
-  --glass-solid: #1a1b1e;
-  --glass-solid2: #222327;
-  --sunk: rgba(255, 255, 255, 0.05);
+  --lab-bg: #040507;
+  --canvas: #07090c;
+  --canvas-image: linear-gradient(180deg, #2a3646 0%, #161d27 34%, #0a0d12 70%, #050608 100%);
+  --orb1: rgba(110, 150, 215, 0.2);
+  --orb2: rgba(135, 115, 225, 0.12);
+  --orb3: rgba(255, 255, 255, 0.03);
+  --orb4: rgba(80, 110, 160, 0.1);
+  --dots: rgba(255, 255, 255, 0.035);
+  --ink: #f4f6f8;
+  --ink2: rgba(235, 240, 246, 0.7);
+  --ink3: rgba(235, 240, 246, 0.56);
+  --on-ink: #0b0e12;
+  --frac: rgba(235, 240, 246, 0.45);
+  --glass: rgba(255, 255, 255, 0.06);
+  --glass2: rgba(38, 46, 58, 0.82);
+  --glass-solid: #161c24;
+  --glass-solid2: #1d2430;
+  --sunk: rgba(255, 255, 255, 0.06);
   --control: rgba(255, 255, 255, 0.07);
-  --seg-on: rgba(255, 255, 255, 0.14);
-  --line: rgba(255, 255, 255, 0.07);
+  --seg-on: #f4f6f8;
+  --seg-on-ink: #0b0e12;
+  --seg-badge: #0b0e12;
+  --on-seg-badge: #f4f6f8;
+  --line: rgba(255, 255, 255, 0.09);
   --hair: rgba(255, 255, 255, 0.08);
-  --edge-hi: rgba(255, 255, 255, 0.22);
-  --edge-lo: rgba(255, 255, 255, 0.04);
-  --edge-tint: rgba(255, 255, 255, 0.08);
-  --hi: rgba(255, 255, 255, 0.1);
-  --hi-side: rgba(255, 255, 255, 0.05);
-  --hi-wash: rgba(255, 255, 255, 0.03);
+  --edge-hi: rgba(255, 255, 255, 0.26);
+  --edge-lo: rgba(255, 255, 255, 0.05);
+  --edge-tint: rgba(140, 170, 230, 0.14);
+  --hi: rgba(255, 255, 255, 0.14);
+  --hi-side: rgba(255, 255, 255, 0.06);
+  --hi-wash: rgba(255, 255, 255, 0.04);
   --shade: rgba(0, 0, 0, 0.2);
   --hi-on-fill: rgba(255, 255, 255, 0.5);
-  --sh1: 0 1px 2px rgba(0, 0, 0, 0.4), 0 10px 30px rgba(0, 0, 0, 0.35);
-  --sh2: 0 2px 4px rgba(0, 0, 0, 0.4), 0 24px 60px -12px rgba(0, 0, 0, 0.6);
-  --sheen: rgba(255, 255, 255, 0.08);
-  --sheen-tint: rgba(255, 255, 255, 0.02);
-  --caustic: rgba(255, 255, 255, 0.07);
-  --btn: rgba(255, 255, 255, 0.08);
-  --fill-primary: linear-gradient(180deg, #ffffff, #dcdcdf);
-  --on-primary: #0c0d0f;
-  --glow-primary: rgba(255, 255, 255, 0.12);
+  --sh1: 0 1px 2px rgba(0, 0, 0, 0.35), 0 12px 32px rgba(0, 0, 0, 0.3);
+  --sh2: 0 2px 4px rgba(0, 0, 0, 0.35), 0 28px 60px -12px rgba(0, 0, 0, 0.6);
+  --sheen: rgba(255, 255, 255, 0.1);
+  --sheen-tint: rgba(140, 170, 255, 0.04);
+  --caustic: rgba(255, 255, 255, 0.08);
+  --btn: rgba(255, 255, 255, 0.09);
+  --fill-primary: linear-gradient(180deg, #ffffff, #d9dee5);
+  --on-primary: #0b0e12;
+  --glow-primary: rgba(255, 255, 255, 0.14);
   --fill-money: linear-gradient(180deg, #3ad46a, #28b455);
   --on-money: #04140a;
-  --glow-money: rgba(48, 209, 88, 0.22);
-  --fill-start: linear-gradient(180deg, #ffffff, #dcdcdf);
-  --on-start: #0c0d0f;
+  --glow-money: rgba(52, 199, 89, 0.24);
+  --fill-start: linear-gradient(180deg, #ffffff, #d9dee5);
+  --on-start: #0b0e12;
   --fill-done: linear-gradient(180deg, #3ad46a, #28b455);
   --on-done: #04140a;
-  --st-new: #d8d8dc;
-  --st-new-soft: rgba(255, 255, 255, 0.08);
-  --st-new-ink: #f2f2f3;
-  --st-cooking: #ff9f0a;
-  --st-cooking-soft: rgba(255, 159, 10, 0.14);
-  --st-cooking-ink: #ffbe5c;
-  --st-ready: #30d158;
-  --st-ready-soft: rgba(48, 209, 88, 0.14);
-  --st-ready-ink: #6ee08d;
-  --warn: #ff9f0a;
-  --warn-soft: rgba(255, 159, 10, 0.14);
-  --warn-ink: #ffbe5c;
-  --late: #ff453a;
-  --late-soft: rgba(255, 69, 58, 0.16);
-  --late-ink: #ff8a80;
-  --ok-ink: #6ee08d;
-  --ok-soft: rgba(48, 209, 88, 0.14);
-  --info-ink: #9fc4ff;
-  --info-soft: rgba(100, 160, 255, 0.16);
-  --accent: #f2f2f3;
-  --accent-soft: rgba(242, 242, 243, 0.2);
-  --area-alpha: 0.1;
-  --line-w: 1.75;
-  --compare: rgba(242, 242, 243, 0.32);
-  --series1: #f2f2f3;
-  --series2: #8e8e93;
-  --series3: #ff9f0a;
-  --series4: #48484e;
-  --heat1: rgba(255, 255, 255, 0.06);
-  --heat2: rgba(255, 255, 255, 0.16);
-  --heat3: #8e8e93;
-  --heat4: #e5e5ea;
-  --on-heat1: #f2f2f3;
-  --on-heat2: #f2f2f3;
-  --on-heat3: #0c0d0f;
-  --on-heat4: #0c0d0f;
-  --tint-peach: linear-gradient(160deg, #35292a, #17181b);
-  --tint-gold: linear-gradient(160deg, #332d24, #17181b);
-  --tint-rose: linear-gradient(160deg, #34282c, #17181b);
-  --tint-sky: linear-gradient(160deg, #252b33, #17181b);
-  --tint-sand: linear-gradient(160deg, #302c27, #17181b);
+  --st-new: #8fb4ff;
+  --st-new-soft: rgba(120, 160, 255, 0.14);
+  --st-new-ink: #b6ceff;
+  --st-cooking: #ffb340;
+  --st-cooking-soft: rgba(255, 179, 64, 0.14);
+  --st-cooking-ink: #ffcf85;
+  --st-ready: #34c759;
+  --st-ready-soft: rgba(52, 199, 89, 0.14);
+  --st-ready-ink: #7ee39b;
+  --warn: #ffb340;
+  --warn-soft: rgba(255, 179, 64, 0.14);
+  --warn-ink: #ffcf85;
+  --late: #ff5a4f;
+  --late-soft: rgba(255, 90, 79, 0.16);
+  --late-ink: #ff9a92;
+  --ok-ink: #7ee39b;
+  --ok-soft: rgba(52, 199, 89, 0.14);
+  --info-ink: #a9c4ff;
+  --info-soft: rgba(110, 150, 255, 0.16);
+  --accent: #6fa8ff;
+  --accent2: #9a85ff;
+  --accent-soft: rgba(111, 168, 255, 0.3);
+  --area-alpha: 0.14;
+  --line-w: 2.5;
+  --compare: rgba(235, 240, 246, 0.3);
+  --series1: #6fa8ff;
+  --series2: #9a85ff;
+  --series3: #34c759;
+  --series4: #ffb340;
+  --heat1: rgba(111, 168, 255, 0.14);
+  --heat2: rgba(111, 168, 255, 0.32);
+  --heat3: #6fa8ff;
+  --heat4: #b6ceff;
+  --on-heat1: #f4f6f8;
+  --on-heat2: #f4f6f8;
+  --on-heat3: #0b0e12;
+  --on-heat4: #0b0e12;
+  --tint-peach: linear-gradient(160deg, #3c3034, #171c24);
+  --tint-gold: linear-gradient(160deg, #3a3529, #171c24);
+  --tint-rose: linear-gradient(160deg, #3c2d35, #171c24);
+  --tint-sky: linear-gradient(160deg, #283649, #171c24);
+  --tint-sand: linear-gradient(160deg, #37332d, #171c24);
   --art-shadow: rgba(0, 0, 0, 0.5);
   --off-filter: grayscale(1) brightness(0.5);
-  --stamp: #ff453a;
+  --stamp: #ff5a4f;
   --on-stamp: #ffffff;
   --stamp-edge: rgba(255, 255, 255, 0.85);
-  --switch-on: #f2f2f3;
-  --knob: #0c0d0f;
+  --switch-on: #f4f6f8;
+  --knob: #0b0e12;
   --knob-shadow: rgba(0, 0, 0, 0.4);
-  --focus: #64a8ff;
-  --scrim: rgba(0, 0, 0, 0.62);
+  --focus: #8fb8ff;
+  --scrim: rgba(3, 5, 8, 0.62);
 }
-/* The soft light in the top-left corner of each graphite card. A tinted kitchen card keeps its own. */
-.dl-dir-graphite .dl-glass.dl-glass {
-  background-image: radial-gradient(120% 80% at 0% 0%, rgba(255, 255, 255, 0.07), transparent 60%);
+/* The soft light in the top-left corner of each dark Studio card. A tinted kitchen card keeps its own. */
+.dl-dir-studio-dark .dl-glass.dl-glass,
+.dl-dir-studio-light .dl-frame[data-screen="kitchen"] .dl-glass.dl-glass {
+  background-image: radial-gradient(120% 80% at 0% 0%, rgba(255, 255, 255, 0.08), transparent 60%);
+}
+
+/* Studio light: the light Iconly cards. Soft grey fading to white, frosted white cards with
+   wide soft shadows, a black main button, a white pill for the active tab. */
+.dl-dir-studio-light {
+  color-scheme: light;
+  --lab-bg: #d9dce0;
+  --canvas: #eceef1;
+  --canvas-image: linear-gradient(180deg, #f5f6f8 0%, #eceef1 45%, #e3e6ea 100%);
+  --orb1: rgba(255, 255, 255, 0.9);
+  --orb2: rgba(190, 205, 235, 0.35);
+  --orb3: rgba(255, 255, 255, 0.7);
+  --orb4: rgba(215, 205, 235, 0.3);
+  --dots: rgba(17, 19, 22, 0.05);
+  --ink: #111316;
+  --ink2: #5b6068;
+  --ink3: #6b7078;
+  --on-ink: #ffffff;
+  --frac: #8a8f97;
+  --glass: rgba(255, 255, 255, 0.62);
+  --glass2: rgba(255, 255, 255, 0.88);
+  --glass-solid: #f8f9fa;
+  --glass-solid2: #ffffff;
+  --sunk: rgba(17, 19, 22, 0.045);
+  --control: rgba(17, 19, 22, 0.055);
+  --seg-on: #ffffff;
+  --seg-on-ink: #111316;
+  --seg-badge: #111316;
+  --on-seg-badge: #ffffff;
+  --line: rgba(255, 255, 255, 0.92);
+  --hair: rgba(17, 19, 22, 0.07);
+  --edge-hi: rgba(255, 255, 255, 1);
+  --edge-lo: rgba(255, 255, 255, 0.5);
+  --edge-tint: rgba(170, 190, 225, 0.45);
+  --hi: rgba(255, 255, 255, 0.9);
+  --hi-side: rgba(255, 255, 255, 0.6);
+  --hi-wash: rgba(255, 255, 255, 0.3);
+  --shade: rgba(17, 19, 22, 0.04);
+  --hi-on-fill: rgba(255, 255, 255, 0.22);
+  --sh1: 0 1px 2px rgba(17, 19, 22, 0.04), 0 10px 30px rgba(17, 19, 22, 0.06);
+  --sh2: 0 2px 6px rgba(17, 19, 22, 0.05), 0 30px 60px -12px rgba(17, 19, 22, 0.16);
+  --sheen: rgba(255, 255, 255, 0.7);
+  --sheen-tint: rgba(170, 190, 255, 0.08);
+  --caustic: rgba(255, 255, 255, 0.5);
+  --btn: #ffffff;
+  --fill-primary: linear-gradient(180deg, #2b2d31, #0d0e10);
+  --on-primary: #ffffff;
+  --glow-primary: rgba(0, 0, 0, 0.22);
+  --fill-money: linear-gradient(180deg, #22a55b, #1a8a4a);
+  --on-money: #ffffff;
+  --glow-money: rgba(34, 165, 91, 0.25);
+  --fill-start: linear-gradient(180deg, #2b2d31, #0d0e10);
+  --on-start: #ffffff;
+  --fill-done: linear-gradient(180deg, #22a55b, #1a8a4a);
+  --on-done: #ffffff;
+  --st-new: #3b82f6;
+  --st-new-soft: #e7effe;
+  --st-new-ink: #1f5fc8;
+  --st-cooking: #f59e0b;
+  --st-cooking-soft: #fff3dc;
+  --st-cooking-ink: #8a5300;
+  --st-ready: #22a55b;
+  --st-ready-soft: #e3f6ea;
+  --st-ready-ink: #177a41;
+  --warn: #f59e0b;
+  --warn-soft: #fff3dc;
+  --warn-ink: #8a5300;
+  --late: #e5484d;
+  --late-soft: #fdeaea;
+  --late-ink: #b4232a;
+  --ok-ink: #177a41;
+  --ok-soft: #e3f6ea;
+  --info-ink: #1f5fc8;
+  --info-soft: #e7effe;
+  --accent: #4f7cff;
+  --accent2: #8b5cf6;
+  --accent-soft: rgba(79, 124, 255, 0.24);
+  --area-alpha: 0.16;
+  --line-w: 2.5;
+  --compare: rgba(17, 19, 22, 0.28);
+  --series1: #4f7cff;
+  --series2: #8b5cf6;
+  --series3: #22a55b;
+  --series4: #f59e0b;
+  --heat1: #dfe8ff;
+  --heat2: #a9c1ff;
+  --heat3: #3b66e6;
+  --heat4: #2346b8;
+  --on-heat1: #111316;
+  --on-heat2: #111316;
+  --on-heat3: #ffffff;
+  --on-heat4: #ffffff;
+  --tint-peach: linear-gradient(160deg, #fff1ea, #fbdccf);
+  --tint-gold: linear-gradient(160deg, #fff7e3, #fbe7b5);
+  --tint-rose: linear-gradient(160deg, #ffeef1, #f9d2da);
+  --tint-sky: linear-gradient(160deg, #eef4ff, #d3e2fb);
+  --tint-sand: linear-gradient(160deg, #f7f3ec, #e9dfcf);
+  --art-shadow: rgba(17, 19, 22, 0.15);
+  --off-filter: grayscale(1) opacity(0.5);
+  --stamp: #e5484d;
+  --on-stamp: #ffffff;
+  --stamp-edge: #ffffff;
+  --switch-on: #111316;
+  --knob: #ffffff;
+  --knob-shadow: rgba(17, 19, 22, 0.25);
+  --focus: #2563eb;
+  --scrim: rgba(17, 19, 22, 0.32);
 }
 
 /* Brand night: chili red, amber and jade on warm dark glass. Today's kitchen (.g-dk) is the
@@ -330,9 +445,13 @@
   background: rgba(0, 0, 0, 0.5);
 }
 /* The page behind the lab (seen around a device frame and under the phone's safe areas). */
-:root:has(.dl-dir-graphite),
-:root:has(.dl-dir-graphite) body {
-  background: #050506;
+:root:has(.dl-dir-studio-dark),
+:root:has(.dl-dir-studio-dark) body {
+  background: #040507;
+}
+:root:has(.dl-dir-studio-light),
+:root:has(.dl-dir-studio-light) body {
+  background: #d9dce0;
 }
 :root:has(.dl-dir-ember),
 :root:has(.dl-dir-ember) body {
@@ -409,7 +528,8 @@ body:has(.dl),
   height: 100%;
   overflow: hidden;
   isolation: isolate;
-  background: var(--canvas);
+  background-color: var(--canvas);
+  background-image: var(--canvas-image, none);
   color: var(--ink);
   transition:
     width var(--dl-smooth-ms) var(--dl-smooth),
@@ -867,7 +987,7 @@ body:has(.dl),
   transition: color 0.25s;
 }
 .dl-seg label[data-on] {
-  color: var(--ink);
+  color: var(--seg-on-ink, var(--ink));
 }
 .dl-seg input {
   position: absolute;
@@ -893,8 +1013,8 @@ body:has(.dl),
   color: var(--ink);
 }
 .dl-seg label[data-on] .dl-seg-badge {
-  background: var(--fill-primary);
-  color: var(--on-primary);
+  background: var(--seg-badge, var(--fill-primary));
+  color: var(--on-seg-badge, var(--on-primary));
 }
 .dl-seg-sm label {
   min-height: 34px;
@@ -1562,7 +1682,7 @@ button.dl-kpi:active {
   border-radius: 50%;
 }
 .dl-swatch-today {
-  background: var(--accent);
+  background: linear-gradient(90deg, var(--accent), var(--accent2, var(--accent)));
 }
 .dl-swatch-last {
   height: 0;
@@ -1608,6 +1728,12 @@ button.dl-kpi:active {
   stop-color: var(--accent);
   stop-opacity: var(--area-alpha, 0.36);
 }
+.dl-line-a {
+  stop-color: var(--accent);
+}
+.dl-line-b {
+  stop-color: var(--accent2, var(--accent));
+}
 .dl-area-bottom {
   stop-color: var(--accent);
   stop-opacity: 0;
@@ -1617,7 +1743,7 @@ button.dl-kpi:active {
 }
 .dl-line {
   fill: none;
-  stroke: var(--accent);
+  stroke: url(#dl-line-paint);
   stroke-width: var(--line-w, 3);
   stroke-linecap: round;
   stroke-dasharray: 1;
@@ -2305,6 +2431,7 @@ button.dl-toast {
 }
 .dl-field .dl-seg label {
   flex: 1;
+  padding: 0 7px;
 }
 .dl-field-hint {
   font-size: 12px;
@@ -2371,7 +2498,7 @@ button.dl-toast {
 }
 
 /* ============================================================================================
-   11. Graphite type: thin big numbers, satang and units dimmed ("78.3 %")
+   11. Studio type: thin big numbers, satang and units dimmed ("78.3 %")
    ============================================================================================ */
 
 .dl-frac,
@@ -2382,30 +2509,30 @@ button.dl-toast {
   margin-left: 0.08em;
   font-size: 0.5em;
 }
-.dl-dir-graphite .dl-h1,
-.dl-dir-graphite .dl-big,
-.dl-dir-graphite .dl-kpi-num,
-.dl-dir-graphite .dl-gauge-num,
-.dl-dir-graphite .dl-amount {
+:is(.dl-dir-studio-dark, .dl-dir-studio-light) .dl-h1,
+:is(.dl-dir-studio-dark, .dl-dir-studio-light) .dl-big,
+:is(.dl-dir-studio-dark, .dl-dir-studio-light) .dl-kpi-num,
+:is(.dl-dir-studio-dark, .dl-dir-studio-light) .dl-gauge-num,
+:is(.dl-dir-studio-dark, .dl-dir-studio-light) .dl-amount {
   font-weight: 300;
 }
-.dl-dir-graphite .dl-big {
+:is(.dl-dir-studio-dark, .dl-dir-studio-light) .dl-big {
   font-size: 52px;
 }
-.dl-dir-graphite .dl-kpi-num {
+:is(.dl-dir-studio-dark, .dl-dir-studio-light) .dl-kpi-num {
   font-size: 34px;
 }
-.dl-dir-graphite .dl-gauge-num {
+:is(.dl-dir-studio-dark, .dl-dir-studio-light) .dl-gauge-num {
   font-size: 48px;
 }
 /* The kitchen stays readable from across the room: lighter, not thin. */
-.dl-dir-graphite .dl-ticket .dl-tk-no,
-.dl-dir-graphite .dl-ticket .dl-q {
+:is(.dl-dir-studio-dark, .dl-dir-studio-light) .dl-ticket .dl-tk-no,
+:is(.dl-dir-studio-dark, .dl-dir-studio-light) .dl-ticket .dl-q {
   font-weight: 500;
 }
-.dl-dir-graphite .dl-ticket .dl-nm,
-.dl-dir-graphite .dl-col-title,
-.dl-dir-graphite .dl-brand-name {
+:is(.dl-dir-studio-dark, .dl-dir-studio-light) .dl-ticket .dl-nm,
+:is(.dl-dir-studio-dark, .dl-dir-studio-light) .dl-col-title,
+:is(.dl-dir-studio-dark, .dl-dir-studio-light) .dl-brand-name {
   font-weight: 600;
 }
 

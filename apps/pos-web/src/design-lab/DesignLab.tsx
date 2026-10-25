@@ -1,7 +1,7 @@
 /**
  * Design lab: UX/UI options for the staff app, drawn from the owner's "liquid glass" reference
  * (2026-10-25). A dev-only page (`/design-lab.html`, never part of the production build) that
- * shows three directions on the kitchen board, the day's overview, the sold-out switches and the
+ * shows four directions on the kitchen board, the day's overview, the sold-out switches and the
  * payment pop-up, with made-up sample orders, so the owner can choose before a real screen changes.
  *
  * Made to be folded into the app later: no new libraries (motion is CSS and the Web Animations
@@ -34,7 +34,7 @@ import { POP, SMOOTH, type SpringEasing, springEasing } from './spring.ts';
 // Options the owner compares
 // ---------------------------------------------------------------------------------------------
 
-const DIRECTIONS = ['graphite', 'ember', 'daylight'] as const;
+const DIRECTIONS = ['studio-dark', 'studio-light', 'ember', 'daylight'] as const;
 const DEPTHS = ['flat', 'frost', 'liquid'] as const;
 const CARDS = ['edge', 'tint', 'timer'] as const;
 const FRAMES = ['full', 'ipad', 'iphone'] as const;
@@ -48,11 +48,11 @@ type Frame = (typeof FRAMES)[number];
 type Screen = (typeof SCREENS)[number];
 
 /**
- * The options, each with its first-visit value (graphite, frosted glass, the time bar, full
+ * The options, each with its first-visit value (Studio dark, frosted glass, the time bar, full
  * speed). A missing or unknown saved value, such as a look that was removed, falls back to it.
  */
 const optionsSchema = z.object({
-  direction: z.enum(DIRECTIONS).catch('graphite'),
+  direction: z.enum(DIRECTIONS).catch('studio-dark'),
   depth: z.enum(DEPTHS).catch('frost'),
   refract: z.boolean().catch(true),
   card: z.enum(CARDS).catch('timer'),
@@ -97,9 +97,14 @@ interface Choice<T> {
 
 const DIRECTION_CHOICES: readonly Choice<Direction>[] = [
   {
-    value: 'graphite',
-    label: 'Graphite',
-    hint: 'Near-black with grey cards, thin numbers and white lines; colour only for status.',
+    value: 'studio-dark',
+    label: 'Studio dark',
+    hint: 'Slate fading to black, frosted cards, white pills, thin numbers, a blue-violet line.',
+  },
+  {
+    value: 'studio-light',
+    label: 'Studio light',
+    hint: 'Soft grey and white, frosted cards, a black main button. The kitchen uses Studio dark.',
   },
   {
     value: 'ember',
@@ -1326,7 +1331,7 @@ function Delta({ text, down }: { text: string; down?: boolean }) {
   );
 }
 
-/** A baht amount with its satang dimmed, so the whole baht reads first (graphite: "฿92.65"). */
+/** A baht amount with its satang dimmed, so the whole baht reads first (Studio: "฿92.65"). */
 function Money({ satang, auto }: { satang: number; auto?: boolean }) {
   const text = formatBaht(satang, 'th', auto ? { decimals: 'auto' } : {});
   const dot = text.lastIndexOf('.');
@@ -1458,6 +1463,10 @@ function SalesChart({
               <linearGradient id="dl-area" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" className="dl-area-top" />
                 <stop offset="100%" className="dl-area-bottom" />
+              </linearGradient>
+              <linearGradient id="dl-line-paint" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0%" className="dl-line-a" />
+                <stop offset="100%" className="dl-line-b" />
               </linearGradient>
             </defs>
             {[0, 0.5, 1].map((share) => (
@@ -2207,17 +2216,22 @@ function Notes({ onClose }: { onClose: () => void }) {
         </button>
       </div>
       <p>
-        Three directions on the same staff screens, with made-up orders. Nothing here touches real
-        data or the live app. Change the options in the panel; your choice is kept on this device.
+        Four looks on the same staff screens, with made-up orders. Nothing here touches real data or
+        the live app. Change the options in the panel; your choice is kept on this device.
       </p>
-      <h3>The three directions</h3>
+      <h3>The four looks</h3>
       <ul>
         <li>
-          <strong>Graphite.</strong> From your second file, the dark transit dashboard: near-black
-          with grey cards, thin large numbers with the decimals dimmed, white chart lines, and
-          colour only for status (green done and paid, orange cooking, red late). The main button is
-          white instead of chili red, which changes the approved brand (decision D-22), so it would
-          need a new decision.
+          <strong>Studio dark.</strong> From your Iconly references: slate at the top fading to
+          black, frosted cards with big rounded corners, a white pill for the active tab, thin large
+          numbers with the decimals dimmed, a blue-to-violet chart line, and colour only in small
+          status chips (green done and paid, orange cooking, red late).
+        </li>
+        <li>
+          <strong>Studio light.</strong> The same layout on soft grey and white, with a black main
+          button; the kitchen stays on Studio dark, as it stays dark today. Both Studio looks
+          replace the chili-red main button (white or black), which changes the approved brand
+          (decision D-22), so either would need a new decision.
         </li>
         <li>
           <strong>Brand night.</strong> The same liquid glass in your chili red, amber and jade on
@@ -2267,8 +2281,9 @@ function Notes({ onClose }: { onClose: () => void }) {
       <p>
         Liquid glass surfaces, slow orbs and the dot grid, sliding pill tabs, cards that glide to
         the next column with a bell when ready, toast pills, the tick dial, the sold-out stamp, the
-        today-against-last-week chart and the busy-hours grid (first file); the graphite palette,
-        thin numbers with dimmed decimals and white chart lines (second file).
+        today-against-last-week chart and the busy-hours grid (first file); thin numbers with dimmed
+        decimals (second file); the slate-to-black and soft-white grounds, white active pills, black
+        main button and blue-violet chart line (Iconly references).
       </p>
       <h3>Left out, and why</h3>
       <ul>
