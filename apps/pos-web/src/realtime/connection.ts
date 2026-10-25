@@ -6,8 +6,9 @@
  * live. The catch-up starts at `lastRev - SYNC_SAFETY_REVS` (the sync cursor, moved only by live frames and
  * `nextSince`, never by REST answers) once (not per page) and follows each
  * page's `nextSince`; applying a frame twice is harmless because the store only takes newer revs.
- * If `ready.serverRev` is below our `lastRev` the database was restored from a backup: the store
- * is reset and the sync starts from 0.
+ * If `ready.serverRev` is below the highest rev this device has heard (`seenRev`, which counts REST
+ * rows too, or the saved menu's `cachedRev`) the database was restored from a backup: the store is
+ * reset and the sync starts from 0.
  *
  * Staying alive:
  * - the server pings every 25 s with `{type:'ping'}`; we answer `{type:'pong'}`. Nothing heard for
@@ -179,8 +180,10 @@ export function createConnection(deps: ConnectionDeps): Connection {
 
   async function catchUp(attempt: number) {
     // 0 means "a fresh device" to the server, which then sends only today's and the open rows.
-    // A device that already holds rows rewinds by the margin but never down to 0, or an old open
-    // order it holds could miss its close.
+    // A device whose cursor has moved (a live frame or a finished catch-up) rewinds by the margin
+    // but never down to 0, or an old open order it holds could miss its close. A device that holds
+    // only REST rows (cursor still 0) does start from 0, on purpose (POS-01): their revs say nothing
+    // about which older rows it has.
     const { lastRev } = deps.entities.getState();
     let since = lastRev === 0 ? 0 : Math.max(1, lastRev - SYNC_SAFETY_REVS);
     let last = since;
@@ -231,9 +234,10 @@ export function createConnection(deps: ConnectionDeps): Connection {
       readyTimer = undefined;
       phase = 'catchup';
       armDeadTimer();
-      // A saved copy of the menu counts too: behind it means a server restored from a backup.
+      // Behind any rev we have heard (REST rows too, not only the cursor) or the saved copy of the
+      // menu means a server restored from a backup. `lastRev` <= `seenRev` always.
       const held = deps.entities.getState();
-      if (message.serverRev < Math.max(held.lastRev, held.cachedRev)) deps.entities.reset();
+      if (message.serverRev < Math.max(held.seenRev, held.cachedRev)) deps.entities.reset();
       void catchUp(attempt);
       return;
     }

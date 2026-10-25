@@ -169,6 +169,22 @@ describe('catch-up', () => {
     expect(env.fetchSync.mock.calls[0]?.[0].since).toBe(0);
   });
 
+  test('a restored database is noticed from revs this device got from REST too, not only from the cursor', async () => {
+    const env = setup();
+    // The cursor stands at 4800; the device's own PATCH answer brought order X in at rev 5000.
+    env.entities.applyLive([orderFrame(uuid(2), 4800)]);
+    env.entities.apply(orderFrame(uuid(1), 5000, { status: 'preparing' }));
+    expect(env.entities.getState().lastRev).toBe(4800);
+    // The database comes back from a backup at 4900: revs 4901-5000 will be handed out again.
+    env.fetchSync.mockResolvedValueOnce(page({ nextSince: 4900, serverRev: 4900 }));
+    await bringOnline(env, 4900);
+    expect(env.fetchSync.mock.calls[0]?.[0].since).toBe(0);
+    expect(env.entities.getState().orders.size).toBe(0);
+    // So the new rev 4950 of X is taken, not dropped as stale.
+    env.sockets.last().receive(orderFrame(uuid(1), 4950, { status: 'ready' }));
+    expect(env.entities.getState().orders.get(uuid(1))?.status).toBe('ready');
+  });
+
   test('POS-01: rows from a REST answer do not move the cursor, so the catch-up still fetches older rows', async () => {
     const env = setup();
     // A REST load (orders board) brought in a row at rev 5000; the co-pay settings (rev 40) never arrived.

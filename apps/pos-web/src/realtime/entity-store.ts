@@ -9,10 +9,15 @@
  *   (the catch-up rewinds on purpose) is therefore harmless.
  * - `lastRev` is the sync cursor: the highest rev of a LIVE frame (`applyLive`: the socket and the
  *   frames held during a catch-up), plus the final `nextSince` of a finished catch-up (`advance`).
+ *   A live frame raises it even when the row already holds that rev (the echo of this device's own
+ *   write, taken from the REST answer first): the server sends live frames in commit order.
  *   Rows from a REST answer (`apply`, `applyMany`) update the maps but never the cursor: a REST
  *   answer holds only part of the rows, so moving the cursor past them would let the next catch-up
  *   skip older rows this device never got (POS-01). It is never taken from a ping or from
  *   `serverRev`: those can include revisions that were not committed when the client looked.
+ * - `seenRev` is the highest rev heard from the server by any road (REST, catch-up, live, applied
+ *   or not, and `advance`). It is not a cursor: the connection only compares the server's rev with
+ *   it to notice a database restored from a backup.
  * - A group's embedded `options` are a convenience copy. The group is stored without them and each
  *   option is applied by its own rev, so a "sold out" toggle (which bumps only the option) can
  *   never be undone by an older group frame. Join options to groups with `groupsWithOptions` (selectors.ts).
@@ -55,6 +60,11 @@ export interface EntityState {
   settings: ReadonlyMap<string, SettingsEntry>;
   lastRev: number;
   /**
+   * The highest rev this device has heard from the server (REST rows included, saved copy not).
+   * Only for noticing a restored database; never a sync cursor.
+   */
+  seenRev: number;
+  /**
    * The rev of the newest PromptPay setting frame applied (0: none yet). A QR that was built at an
    * older value must be rebuilt: compare this with the value you saw when you fetched it.
    */
@@ -87,6 +97,7 @@ const emptyState = (): EntityState => ({
   customers: new Map(),
   settings: new Map(),
   lastRev: 0,
+  seenRev: 0,
   promptpayRev: 0,
   cachedRev: 0,
 });
@@ -96,7 +107,10 @@ export interface EntityStore extends ReadableStore<EntityState> {
   apply(frame: RealtimeFrame): boolean;
   /** Applies frames in order and notifies once. `lastRev` does not move. */
   applyMany(frames: readonly RealtimeFrame[]): void;
-  /** Applies live frames (socket, or those held during a catch-up) in order; raises `lastRev`. */
+  /**
+   * Applies live frames (socket, or those held during a catch-up) in order; raises `lastRev` to each
+   * frame's rev, also for a frame not applied because the row already holds that rev.
+   */
   applyLive(frames: readonly RealtimeFrame[]): void;
   /**
    * Puts a saved copy of the menu and the settings in (start-up, before the network). Same rev rule
@@ -127,7 +141,23 @@ export function createEntityStore(): EntityStore {
     live?: boolean;
   }
 
+  /** A rev from the server (not a saved copy), applied or not: raises `seenRev`, and `lastRev` if live. */
+  function heard(draft: Draft, rev: number): void {
+    if (draft.saved) return;
+    const { seenRev, lastRev } = draft.state;
+    const raiseSeen = rev > seenRev;
+    const raiseLast = draft.live === true && rev > lastRev;
+    if (!raiseSeen && !raiseLast) return;
+    draft.state = {
+      ...draft.state,
+      ...(raiseSeen ? { seenRev: rev } : {}),
+      ...(raiseLast ? { lastRev: rev } : {}),
+    };
+    draft.changed = true;
+  }
+
   function put(draft: Draft, family: FamilyKey, id: string, entity: unknown, rev: number): boolean {
+    heard(draft, rev);
     const index = `${family}:${id}`;
     const stored = revs.get(index);
     if (stored !== undefined && rev <= stored) return false;
@@ -140,10 +170,8 @@ export function createEntityStore(): EntityStore {
       draft.cloned.add(family);
     }
     (draft.state[family] as Map<string, unknown>).set(id, entity);
-    if (draft.saved) {
-      if (rev > draft.state.cachedRev) draft.state = { ...draft.state, cachedRev: rev };
-    } else if (draft.live && rev > draft.state.lastRev) {
-      draft.state = { ...draft.state, lastRev: rev };
+    if (draft.saved && rev > draft.state.cachedRev) {
+      draft.state = { ...draft.state, cachedRev: rev };
     }
     draft.changed = true;
     return true;
@@ -236,7 +264,10 @@ export function createEntityStore(): EntityStore {
       if (draft.changed) store.setState(draft.state);
     },
     advance(rev) {
-      if (rev > store.getState().lastRev) store.setState({ lastRev: rev });
+      const { lastRev, seenRev } = store.getState();
+      if (rev > lastRev || rev > seenRev) {
+        store.setState({ lastRev: Math.max(lastRev, rev), seenRev: Math.max(seenRev, rev) });
+      }
     },
     reset() {
       revs = new Map();

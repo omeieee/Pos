@@ -119,13 +119,21 @@ describe('lastRev', () => {
     expect(store.getState().lastRev).toBe(0);
   });
 
-  test('POS-01: a REST row does not stop a live frame from raising it, and a live frame for a known row only needs a newer rev', () => {
+  test('POS-01: a REST row does not stop a live frame from raising it', () => {
     const store = createEntityStore();
     store.apply(orderFrame(uuid(1), 5000));
-    store.applyLive([orderFrame(uuid(1), 5000)]); // not newer: no change, no cursor
-    expect(store.getState().lastRev).toBe(0);
     store.applyLive([orderFrame(uuid(1), 5001)]);
     expect(store.getState().lastRev).toBe(5001);
+  });
+
+  test('the live echo of this device’s own write (already applied from REST at that rev) still raises it', () => {
+    const store = createEntityStore();
+    expect(store.apply(orderFrame(uuid(1), 5000, { status: 'preparing' }))).toBe(true);
+    const orders = store.getState().orders;
+    store.applyLive([orderFrame(uuid(1), 5000, { status: 'preparing' })]);
+    // The row is not touched again, but the server has committed up to 5000 in order.
+    expect(store.getState().orders).toBe(orders);
+    expect(store.getState().lastRev).toBe(5000);
   });
 
   test('advance() moves it up only (the final nextSince of a catch-up)', () => {
@@ -135,6 +143,35 @@ describe('lastRev', () => {
     expect(store.getState().lastRev).toBe(30);
     store.advance(20);
     expect(store.getState().lastRev).toBe(30);
+  });
+});
+
+describe('seenRev (only for noticing a restored database)', () => {
+  test('counts every rev heard from the server: REST rows, live frames, not-newer frames and advance()', () => {
+    const store = createEntityStore();
+    expect(store.getState().seenRev).toBe(0);
+    store.apply(orderFrame(uuid(1), 5000));
+    expect(store.getState().seenRev).toBe(5000);
+    expect(store.getState().lastRev).toBe(0);
+    store.apply(orderFrame(uuid(2), 40));
+    expect(store.getState().seenRev).toBe(5000);
+    // Not newer for that row, but still a rev the server had.
+    store.apply(orderFrame(uuid(1), 5000));
+    store.applyMany([orderFrame(uuid(3), 6000), orderFrame(uuid(3), 5500)]);
+    expect(store.getState().seenRev).toBe(6000);
+    store.applyLive([orderFrame(uuid(3), 6100)]);
+    expect(store.getState().seenRev).toBe(6100);
+    store.advance(7000);
+    expect(store.getState().seenRev).toBe(7000);
+  });
+
+  test('a saved copy does not count (that is cachedRev), and reset clears it', () => {
+    const store = createEntityStore();
+    store.hydrate([itemFrame(uuid(1), 40)]);
+    expect(store.getState().seenRev).toBe(0);
+    store.apply(orderFrame(uuid(2), 900));
+    store.reset();
+    expect(store.getState().seenRev).toBe(0);
   });
 });
 
@@ -280,6 +317,7 @@ describe('reset', () => {
     expect(state.orders.size).toBe(0);
     expect(state.settings.size).toBe(0);
     expect(state.lastRev).toBe(0);
+    expect(state.seenRev).toBe(0);
     expect(state.promptpayRev).toBe(0);
     // Old revs are forgotten too: the same frame applies again.
     expect(store.apply(orderFrame(uuid(1), 5))).toBe(true);
