@@ -1,15 +1,23 @@
 import type { OrderDto, StaffRole } from '@sds/shared';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { errorText } from '../../api/errors.ts';
 import { clockTime } from '../../design/format.ts';
 import { Gi } from '../../design/icons.tsx';
 import { s } from '../../design/style.ts';
+import { subscribeTicks } from '../../lib/clock.ts';
 import { useLocale, useServices, useStoreState, useT } from '../../ui/hooks.ts';
 import { deliveryLabel } from '../cart/delivery-model.ts';
 import { MemberLine } from '../cart/MemberLine.tsx';
 import { localName } from '../cart/names.ts';
 import { elapsedText } from '../orders/elapsed-text.ts';
-import { isFresh, isStale, kitchenMoves, waitLevel, waitMinutes } from './kitchen-model.ts';
+import {
+  isFresh,
+  isStale,
+  KITCHEN_UNDO_MS,
+  kitchenMoves,
+  waitLevel,
+  waitMinutes,
+} from './kitchen-model.ts';
 
 /** The words for the payment, as plain information (never an action) on a ticket. */
 function payText(tr: ReturnType<typeof useT>, order: OrderDto): string {
@@ -77,7 +85,34 @@ export function LineWho({ line }: { line: NonNullable<OrderDto['line']> }) {
 }
 
 /**
- * The one-tap moves of the kitchen view: start preparing, mark done. The buttons are the moves the
+ * A "ทำเสร็จ" waiting out its undo window: one big button that takes it back, counting down the
+ * seconds left. Nothing has been sent yet (the store sends when the window ends).
+ */
+function UndoReady({ orderId, sendAt }: { orderId: string; sendAt: number }) {
+  const { orderMoves } = useServices();
+  const tr = useT();
+  const [, wake] = useState(0);
+  useEffect(() => subscribeTicks(250, () => wake((n) => n + 1)), []);
+  const seconds = Math.max(1, Math.ceil((sendAt - Date.now()) / 1000));
+  return (
+    <>
+      <button
+        type="button"
+        className="g-btn g-btn-lg g-btn-block kb-go kb-go-undo"
+        onClick={() => orderMoves.undo(orderId)}
+      >
+        {tr('kitchen.move.undo', { seconds })}
+      </button>
+      <p role="status" className="visually-hidden">
+        {tr('kitchen.move.undoHint', { seconds: KITCHEN_UNDO_MS / 1000 })}
+      </p>
+    </>
+  );
+}
+
+/**
+ * The one-tap moves of the kitchen view: start preparing, mark done. "ทำเสร็จ" waits
+ * `KITCHEN_UNDO_MS` before it is sent and can be undone meanwhile (UX-02). The buttons are the moves the
  * shared order machine allows this role (`kitchenMoves`), so a role never sees one the server would
  * refuse; the server still checks. The card changes when the answer comes (the store), not on the
  * tap. A refusal is shown on this card, for as long as the order is still where it was.
@@ -91,6 +126,8 @@ function Moves({ order, role }: { order: OrderDto; role: StaffRole }) {
   const pending = flow.pending.includes(order.id);
   const failure = flow.errors[order.id];
   const shown = failure && failure.from === order.status ? failure.error : null;
+  const waiting = flow.delayed[order.id];
+  if (waiting) return <UndoReady orderId={order.id} sendAt={waiting.sendAt} />;
   return (
     <>
       {moves.map((move) => (
@@ -100,7 +137,11 @@ function Moves({ order, role }: { order: OrderDto; role: StaffRole }) {
           className={`g-btn g-btn-lg g-btn-block kb-go ${move.to === 'ready' ? 'kb-go-done' : 'kb-go-start'}`}
           disabled={pending}
           aria-busy={pending}
-          onClick={() => void orderMoves.transition(order, move.to)}
+          onClick={() =>
+            move.to === 'ready'
+              ? orderMoves.transitionAfter(order, move.to, KITCHEN_UNDO_MS)
+              : void orderMoves.transition(order, move.to)
+          }
         >
           {move.to === 'ready' ? <Gi n="check" /> : null}
           {move.to === 'ready' ? tr('kitchen.move.ready') : tr(`order.move.${move.to}`)}

@@ -1,4 +1,4 @@
-import { describe, expect, test, vi } from 'vitest';
+import { afterEach, describe, expect, test, vi } from 'vitest';
 import { ApiClientError } from '../../api/errors.ts';
 import { createEntityStore } from '../../realtime/entity-store.ts';
 import { orderDto, uuid } from '../../test-support/frames.ts';
@@ -274,5 +274,73 @@ describe('PAYMENT_REQUIRED on a plain accept', () => {
     expect(outcome).toMatchObject({ ok: false, reason: 'error' });
     expect(store.getState().errors[ID]?.error.code).toBe('PAYMENT_REQUIRED');
     expect(entities.getState().orders.get(ID)?.paymentMethod).toBe('promptpay');
+  });
+});
+
+describe('a move with an undo window (UX-02)', () => {
+  afterEach(() => vi.useRealTimers());
+
+  test('nothing is sent during the window; the move goes out when it ends', async () => {
+    vi.useFakeTimers({ now: 1_000_000 });
+    const { store, api, entities } = setup();
+    expect(store.transitionAfter(preparing, 'ready', 5_000)).toBe(true);
+    expect(store.getState().delayed[ID]).toEqual({ to: 'ready', sendAt: 1_005_000 });
+    await vi.advanceTimersByTimeAsync(4_999);
+    expect(api.orders.transition).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(api.orders.transition).toHaveBeenCalledWith(ID, { to: 'ready' });
+    expect(store.getState().delayed[ID]).toBeUndefined();
+    expect(entities.getState().orders.get(ID)?.status).toBe('ready');
+  });
+
+  test('undo inside the window sends nothing, ever', async () => {
+    vi.useFakeTimers();
+    const { store, api } = setup();
+    store.transitionAfter(preparing, 'ready', 5_000);
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(store.undo(ID)).toBe(true);
+    expect(store.getState().delayed[ID]).toBeUndefined();
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(api.orders.transition).not.toHaveBeenCalled();
+    expect(store.undo(ID)).toBe(false);
+  });
+
+  test('a second tap during the window does not start a second move', async () => {
+    vi.useFakeTimers();
+    const { store, api } = setup();
+    expect(store.transitionAfter(preparing, 'ready', 5_000)).toBe(true);
+    expect(store.transitionAfter(preparing, 'ready', 5_000)).toBe(false);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(api.orders.transition).toHaveBeenCalledTimes(1);
+  });
+
+  test('each order has its own window', async () => {
+    vi.useFakeTimers();
+    const { store, api } = setup();
+    store.transitionAfter(preparing, 'ready', 5_000);
+    store.transitionAfter({ id: OTHER, status: 'preparing' }, 'ready', 5_000);
+    store.undo(ID);
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(api.orders.transition).toHaveBeenCalledTimes(1);
+    expect(api.orders.transition).toHaveBeenCalledWith(OTHER, { to: 'ready' });
+  });
+
+  test('sign-out drops every waiting move unsent', async () => {
+    vi.useFakeTimers();
+    const { store, api } = setup();
+    store.transitionAfter(preparing, 'ready', 5_000);
+    store.reset();
+    expect(store.getState().delayed).toEqual({});
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(api.orders.transition).not.toHaveBeenCalled();
+  });
+
+  test('a refusal when it is sent is shown like any other move', async () => {
+    vi.useFakeTimers();
+    const { store, api } = setup();
+    api.orders.transition.mockRejectedValueOnce(new ApiClientError('FORBIDDEN', { status: 403 }));
+    store.transitionAfter(preparing, 'ready', 5_000);
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(store.getState().errors[ID]?.error.code).toBe('FORBIDDEN');
   });
 });

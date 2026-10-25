@@ -118,6 +118,7 @@ Format: **ID · title**, then where it is, status, impact, proposed fix and owne
 - **Impact:** during the live co-pay round (1 Oct – 30 Nov), any reload on the Orders board or Kitchen view can disable co-pay on that device until sign-out. Reloads happen after every deploy and when iOS discards the app.
 - **Fix:** a separate sync cursor moved only by the catch-up's `nextSince` and by live frames. REST `apply` updates rows but not the cursor. Turn the 3 repros into regression tests.
 - **Owner:** no.
+- **Fixed 2026-10-26** (`388dd8b`): `entityStore.applySynced()` is the only cursor mover; regression tests in `realtime/connection.test.ts` and `entity-store.test.ts`.
 
 **UX-02 · Kitchen "ทำเสร็จ" is one tap with no confirm or undo, and it pushes "food ready" to the LINE customer at once**
 - **Where:**
@@ -127,6 +128,7 @@ Format: **ID · title**, then where it is, status, impact, proposed fix and owne
 - **Impact:** a mis-tap on a busy, wet-handed day sends the wrong customer downstairs, spends one of the 300 monthly pushes, and can't be moved back.
 - **Fix:** a 5-second client-side undo ("เลิกทำ · 5") that sends the PATCH only when the countdown ends. Test it with fake timers. A server-side variant (allow `ready → preparing` before the push) would need a decision entry.
 - **Owner:** no for the client undo.
+- **Fixed 2026-10-26** (client undo): `orderMoves.transitionAfter()` / `undo()`, `KITCHEN_UNDO_MS` = 5 s, "เลิกทำ · {seconds}" on the ticket; tests in `order-moves-store.test.ts`, `KitchenScreen.test.tsx`, `e2e/kitchen.e2e.ts`.
 
 **OPS-01 · The GitHub repo is public, but the docs, the trust model and the privacy scrub assume it is private**
 - **Where:**

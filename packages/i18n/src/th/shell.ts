@@ -32,6 +32,8 @@ export const thShell = {
   'kitchen.new.empty': 'ไม่มีออเดอร์ใหม่',
   'kitchen.cooking.empty': 'ไม่มีออเดอร์ที่กำลังทำ',
   'kitchen.move.ready': 'ทำเสร็จ',
+  'kitchen.move.undo': 'เลิกทำ · {seconds}',
+  'kitchen.move.undoHint': 'จะบันทึกว่าทำเสร็จในอีก {seconds} วินาที แตะเลิกทำถ้ากดผิด',
   'kitchen.pay.awaiting': 'ลูกค้ากด “โอนแล้ว”',
   'kitchen.startedAt': 'เริ่มทำ {time} น.',
   'kitchen.waited': 'รอมาแล้ว {time}',

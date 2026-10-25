@@ -18,7 +18,10 @@
  *   re-renders send one call); moves of other orders do not wait for it;
  * - the order on screen changes only from the server's answer (or a realtime frame), never from
  *   the tap;
- * - `reset()` (sign-out) bumps an epoch. An answer, a failure or a reload that belongs to an
+ * - a move can wait out an undo window first (`transitionAfter`, UX-02: the kitchen's "ทำเสร็จ"
+ *   pushes "food ready" to a LINE customer and cannot be moved back). Nothing is sent until the
+ *   window ends; `undo` inside it sends nothing at all. One waiting move per order;
+ * - `reset()` (sign-out) bumps an epoch and drops every waiting move unsent. An answer, a failure or a reload that belongs to an
  *   earlier epoch touches nothing: no frame into the next person's store, no error on their
  *   screen, and no clearing of the guard of their own request.
  */
@@ -42,6 +45,8 @@ export interface OrderMovesState {
   pending: readonly string[];
   /** The last refusal per order, until the next move of that order starts. */
   errors: Readonly<Record<string, MoveFailure>>;
+  /** Moves waiting out their undo window, per order: sent at `sendAt` (epoch ms) unless undone. */
+  delayed: Readonly<Record<string, { to: MoveTarget; sendAt: number }>>;
 }
 
 export type MoveOutcome =
@@ -62,6 +67,13 @@ export interface OrderMovesStore extends ReadableStore<OrderMovesState> {
    * audited by the server; a cashier or the kitchen is refused (403).
    */
   startUnpaid(order: Pick<OrderDto, 'id' | 'status'>, reason: string): Promise<MoveOutcome>;
+  /**
+   * The same move, sent only after `delayMs` (the undo window). False when this order already has
+   * a move waiting or on its way.
+   */
+  transitionAfter(order: Pick<OrderDto, 'id' | 'status'>, to: MoveTarget, delayMs: number): boolean;
+  /** Takes back a waiting move before it is sent; false when there was none. */
+  undo(orderId: string): boolean;
   /** Forgets one order's error (a dialog that was closed). */
   dismiss(orderId: string): void;
   /** Sign-out: forgets everything and makes every answer still on its way harmless. */
@@ -86,11 +98,12 @@ const orderFrame = (o: OrderDto): RealtimeFrame => ({
   data: o,
 });
 
-const initial = (): OrderMovesState => ({ pending: [], errors: {} });
+const initial = (): OrderMovesState => ({ pending: [], errors: {}, delayed: {} });
 
 export function createOrderMovesStore(deps: OrderMovesDeps): OrderMovesStore {
   const store = createStore<OrderMovesState>(initial());
   let epoch = 0;
+  const timers = new Map<string, ReturnType<typeof setTimeout>>();
 
   const without = <T>(record: Readonly<Record<string, T>>, id: string): Record<string, T> => {
     const { [id]: _gone, ...rest } = record;
@@ -141,10 +154,38 @@ export function createOrderMovesStore(deps: OrderMovesDeps): OrderMovesStore {
     }
   }
 
+  const transition = (order: Pick<OrderDto, 'id' | 'status'>, to: MoveTarget) =>
+    run(order, to, () => deps.api.orders.transition(order.id, { to }));
+
+  function stopWaiting(orderId: string): boolean {
+    const timer = timers.get(orderId);
+    if (timer === undefined) return false;
+    clearTimeout(timer);
+    timers.delete(orderId);
+    store.setState({ delayed: without(store.getState().delayed, orderId) });
+    return true;
+  }
+
   return {
     getState: store.getState,
     subscribe: store.subscribe,
-    transition: (order, to) => run(order, to, () => deps.api.orders.transition(order.id, { to })),
+    transition,
+    transitionAfter(order, to, delayMs) {
+      if (timers.has(order.id) || store.getState().pending.includes(order.id)) return false;
+      timers.set(
+        order.id,
+        setTimeout(() => {
+          stopWaiting(order.id);
+          void transition(order, to);
+        }, delayMs),
+      );
+      store.setState({
+        delayed: { ...store.getState().delayed, [order.id]: { to, sendAt: Date.now() + delayMs } },
+        errors: without(store.getState().errors, order.id),
+      });
+      return true;
+    },
+    undo: stopWaiting,
     startUnpaid: (order, reason) =>
       run(order, 'preparing', () =>
         deps.api.orders.transition(order.id, {
@@ -162,6 +203,8 @@ export function createOrderMovesStore(deps: OrderMovesDeps): OrderMovesStore {
     },
     reset() {
       epoch += 1;
+      for (const timer of timers.values()) clearTimeout(timer);
+      timers.clear();
       store.setState(initial());
     },
   };

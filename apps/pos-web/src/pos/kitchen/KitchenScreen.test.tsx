@@ -456,12 +456,57 @@ describe('the moves', () => {
       },
     });
     await waitFor(() => ticketOf('L-001'));
+    vi.useFakeTimers({
+      toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'],
+      now: NOW,
+    });
     fireEvent.click(
       within(ticketOf('L-001')).getByRole('button', { name: th['kitchen.move.ready'] }),
     );
-    await waitFor(() => expect(env.entities.getState().orders.get(uuid(1))?.status).toBe('ready'));
+    // UX-02: nothing is sent during the undo window, which counts down on the card.
+    expect(env.api.orders.transition).not.toHaveBeenCalled();
+    expect(
+      within(ticketOf('L-001')).getByRole('button', {
+        name: tr('kitchen.move.undo', { seconds: 5 }),
+      }),
+    ).toBeTruthy();
+    await act(() => vi.advanceTimersByTimeAsync(2_000));
+    expect(
+      within(ticketOf('L-001')).getByRole('button', {
+        name: tr('kitchen.move.undo', { seconds: 3 }),
+      }),
+    ).toBeTruthy();
+    await act(() => vi.advanceTimersByTimeAsync(3_000));
+    expect(env.api.orders.transition).toHaveBeenCalledWith(uuid(1), { to: 'ready' });
+    expect(env.entities.getState().orders.get(uuid(1))?.status).toBe('ready');
     expect(orderNos()).toEqual([]);
     expect(numbersIn('ready')).toEqual(['L-001']);
+  });
+
+  test('undo inside the window sends nothing and brings the done button back (UX-02)', async () => {
+    const env = await mount({ orders: [ticket(1, { status: 'preparing' })] });
+    await waitFor(() => ticketOf('L-001'));
+    vi.useFakeTimers({
+      toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'],
+      now: NOW,
+    });
+    fireEvent.click(
+      within(ticketOf('L-001')).getByRole('button', { name: th['kitchen.move.ready'] }),
+    );
+    expect(within(ticketOf('L-001')).getByRole('status').textContent).toBe(
+      tr('kitchen.move.undoHint', { seconds: 5 }),
+    );
+    fireEvent.click(
+      within(ticketOf('L-001')).getByRole('button', {
+        name: tr('kitchen.move.undo', { seconds: 5 }),
+      }),
+    );
+    await act(() => vi.advanceTimersByTimeAsync(10_000));
+    expect(env.api.orders.transition).not.toHaveBeenCalled();
+    expect(
+      within(ticketOf('L-001')).getByRole('button', { name: th['kitchen.move.ready'] }),
+    ).toBeTruthy();
+    expect(numbersIn('cooking')).toEqual(['L-001']);
   });
 
   test('a double tap sends one request', async () => {

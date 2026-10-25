@@ -11,6 +11,12 @@ import type { OrderDto, OrderStatus, PaymentDto, StaffRole } from '@sds/shared';
 import { elapsedMinutes, type OrderMove, orderMoves } from '../orders/order-board.ts';
 import { heldBackFromKitchen, promptpayOrderIds } from '../payments/pay-first-model.ts';
 
+/**
+ * How long a "ทำเสร็จ" tap waits before it is sent (UX-02). Marking ready pushes "food ready" to a
+ * LINE customer and the order machine has no way back, so a mis-tap gets this long to be undone.
+ */
+export const KITCHEN_UNDO_MS = 5_000;
+
 export interface KitchenQueue {
   /** New and preparing, oldest first: first in, first made. */
   toMake: OrderDto[];
