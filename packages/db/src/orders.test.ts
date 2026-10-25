@@ -174,7 +174,9 @@ describe('orders', () => {
     } finally {
       frozen.mockRestore();
     }
-  });
+    // 200 inserts and 100 reads: well under a second alone, but over the 5 s default on a loaded
+    // Windows laptop running every package in parallel (seen 5.9 s, 2026-10-25).
+  }, 30_000);
 
   test('lock, find and list', async () => {
     const day = '2032-05-05';
