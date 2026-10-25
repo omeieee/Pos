@@ -20,103 +20,111 @@
   --dl-speed: 1;
 }
 
-/* Your file: the reference's "Apple-harmonized" palette. Muted text lifted from 40% to 58% so it
-   passes AA on glass; warn and late added (the reference has none). */
-.dl-dir-reference {
+/* Graphite: the owner's second reference (a dark transit dashboard). Near-black with grey
+   cards, thin type, white lines; colour only for status (green done and paid, orange cooking or
+   waiting, red late or sold out). */
+.dl-dir-graphite {
   color-scheme: dark;
-  --lab-bg: #030608;
-  --canvas: #070e14;
-  --orb1: rgba(24, 54, 48, 0.95);
-  --orb2: rgba(75, 57, 66, 0.9);
-  --orb3: rgba(27, 46, 60, 0.95);
-  --orb4: rgba(110, 87, 95, 0.7);
-  --dots: rgba(255, 255, 255, 0.06);
-  --ink: #f5efe8;
-  --ink2: rgba(245, 239, 232, 0.74);
-  --ink3: rgba(245, 239, 232, 0.6);
-  --on-ink: #070e14;
-  --glass: rgba(22, 34, 44, 0.42);
-  --glass2: rgba(28, 42, 54, 0.66);
-  --glass-solid: #111c25;
-  --glass-solid2: #16232e;
-  --sunk: rgba(0, 0, 0, 0.24);
-  --control: rgba(0, 0, 0, 0.32);
-  --seg-on: rgba(255, 255, 255, 0.16);
-  --line: rgba(245, 239, 232, 0.16);
-  --hair: rgba(255, 255, 255, 0.1);
-  --edge-hi: rgba(255, 255, 255, 0.38);
-  --edge-lo: rgba(255, 255, 255, 0.07);
-  --edge-tint: rgba(148, 191, 162, 0.16);
-  --hi: rgba(255, 255, 255, 0.3);
-  --hi-side: rgba(255, 255, 255, 0.14);
-  --hi-wash: rgba(255, 255, 255, 0.05);
-  --shade: rgba(204, 212, 214, 0.12);
-  --hi-on-fill: rgba(255, 255, 255, 0.4);
-  --sh1: 0 4px 14px -2px rgba(0, 0, 0, 0.36);
-  --sh2: 0 22px 50px -14px rgba(3, 9, 14, 0.65), 0 4px 14px -2px rgba(0, 0, 0, 0.36);
-  --sheen: rgba(255, 255, 255, 0.13);
-  --sheen-tint: rgba(148, 191, 162, 0.05);
-  --caustic: rgba(255, 255, 255, 0.09);
-  --btn: rgba(255, 255, 255, 0.1);
-  --fill-primary: linear-gradient(180deg, #ecdccf, #d8bfae);
-  --on-primary: #10161b;
-  --glow-primary: rgba(228, 206, 191, 0.22);
-  --fill-money: linear-gradient(180deg, #a6cfb3, #88b597);
-  --on-money: #06141b;
-  --glow-money: rgba(148, 191, 162, 0.28);
-  --fill-start: linear-gradient(180deg, #ecdccf, #d8bfae);
-  --on-start: #10161b;
-  --fill-done: linear-gradient(180deg, #a6cfb3, #88b597);
-  --on-done: #06141b;
-  --st-new: #e4cebf;
-  --st-new-soft: rgba(228, 206, 191, 0.16);
-  --st-new-ink: #ecd9cc;
-  --st-cooking: #cfa59e;
-  --st-cooking-soft: rgba(207, 165, 158, 0.2);
-  --st-cooking-ink: #e8c6bf;
-  --st-ready: #94bfa2;
-  --st-ready-soft: rgba(148, 191, 162, 0.18);
-  --st-ready-ink: #b0d8bc;
-  --warn: #e6c27e;
-  --warn-soft: rgba(230, 194, 126, 0.16);
-  --warn-ink: #f0d6a2;
-  --late: #e8705f;
-  --late-soft: rgba(232, 112, 95, 0.2);
-  --late-ink: #f6b2a8;
-  --ok-ink: #b0d8bc;
-  --ok-soft: rgba(148, 191, 162, 0.16);
-  --info-ink: #c3d4e1;
-  --info-soft: rgba(88, 109, 125, 0.4);
-  --accent: #cfa59e;
-  --accent-soft: rgba(207, 165, 158, 0.38);
-  --compare: rgba(204, 208, 207, 0.45);
-  --series1: #cfa59e;
-  --series2: #94bfa2;
-  --series3: #e4cebf;
-  --series4: #7e95a6;
-  --heat1: rgba(148, 191, 162, 0.2);
-  --heat2: rgba(148, 191, 162, 0.46);
-  --heat3: #e4cebf;
-  --heat4: #cfa59e;
-  --on-heat1: #f5efe8;
-  --on-heat2: #f5efe8;
-  --on-heat3: #070e14;
-  --on-heat4: #070e14;
-  --tint-peach: linear-gradient(160deg, rgba(207, 120, 90, 0.45), rgba(60, 30, 24, 0.55));
-  --tint-gold: linear-gradient(160deg, rgba(214, 170, 90, 0.42), rgba(58, 42, 20, 0.55));
-  --tint-rose: linear-gradient(160deg, rgba(207, 140, 150, 0.45), rgba(58, 30, 38, 0.55));
-  --tint-sky: linear-gradient(160deg, rgba(110, 150, 190, 0.45), rgba(20, 34, 50, 0.55));
-  --tint-sand: linear-gradient(160deg, rgba(190, 160, 120, 0.42), rgba(50, 40, 28, 0.55));
-  --art-shadow: rgba(0, 0, 0, 0.45);
-  --off-filter: grayscale(0.9) brightness(0.55);
-  --stamp: #e05a47;
+  --lab-bg: #050506;
+  --canvas: #0c0d0f;
+  --orb1: rgba(255, 255, 255, 0.06);
+  --orb2: rgba(140, 150, 160, 0.08);
+  --orb3: rgba(255, 255, 255, 0.04);
+  --orb4: rgba(90, 96, 104, 0.1);
+  --dots: rgba(255, 255, 255, 0.045);
+  --ink: #f2f2f3;
+  --ink2: rgba(242, 242, 243, 0.66);
+  --ink3: rgba(242, 242, 243, 0.52);
+  --on-ink: #0c0d0f;
+  --frac: rgba(242, 242, 243, 0.42);
+  --glass: rgba(30, 31, 35, 0.74);
+  --glass2: rgba(38, 39, 44, 0.88);
+  --glass-solid: #1a1b1e;
+  --glass-solid2: #222327;
+  --sunk: rgba(255, 255, 255, 0.05);
+  --control: rgba(255, 255, 255, 0.07);
+  --seg-on: rgba(255, 255, 255, 0.14);
+  --line: rgba(255, 255, 255, 0.07);
+  --hair: rgba(255, 255, 255, 0.08);
+  --edge-hi: rgba(255, 255, 255, 0.22);
+  --edge-lo: rgba(255, 255, 255, 0.04);
+  --edge-tint: rgba(255, 255, 255, 0.08);
+  --hi: rgba(255, 255, 255, 0.1);
+  --hi-side: rgba(255, 255, 255, 0.05);
+  --hi-wash: rgba(255, 255, 255, 0.03);
+  --shade: rgba(0, 0, 0, 0.2);
+  --hi-on-fill: rgba(255, 255, 255, 0.5);
+  --sh1: 0 1px 2px rgba(0, 0, 0, 0.4), 0 10px 30px rgba(0, 0, 0, 0.35);
+  --sh2: 0 2px 4px rgba(0, 0, 0, 0.4), 0 24px 60px -12px rgba(0, 0, 0, 0.6);
+  --sheen: rgba(255, 255, 255, 0.08);
+  --sheen-tint: rgba(255, 255, 255, 0.02);
+  --caustic: rgba(255, 255, 255, 0.07);
+  --btn: rgba(255, 255, 255, 0.08);
+  --fill-primary: linear-gradient(180deg, #ffffff, #dcdcdf);
+  --on-primary: #0c0d0f;
+  --glow-primary: rgba(255, 255, 255, 0.12);
+  --fill-money: linear-gradient(180deg, #3ad46a, #28b455);
+  --on-money: #04140a;
+  --glow-money: rgba(48, 209, 88, 0.22);
+  --fill-start: linear-gradient(180deg, #ffffff, #dcdcdf);
+  --on-start: #0c0d0f;
+  --fill-done: linear-gradient(180deg, #3ad46a, #28b455);
+  --on-done: #04140a;
+  --st-new: #d8d8dc;
+  --st-new-soft: rgba(255, 255, 255, 0.08);
+  --st-new-ink: #f2f2f3;
+  --st-cooking: #ff9f0a;
+  --st-cooking-soft: rgba(255, 159, 10, 0.14);
+  --st-cooking-ink: #ffbe5c;
+  --st-ready: #30d158;
+  --st-ready-soft: rgba(48, 209, 88, 0.14);
+  --st-ready-ink: #6ee08d;
+  --warn: #ff9f0a;
+  --warn-soft: rgba(255, 159, 10, 0.14);
+  --warn-ink: #ffbe5c;
+  --late: #ff453a;
+  --late-soft: rgba(255, 69, 58, 0.16);
+  --late-ink: #ff8a80;
+  --ok-ink: #6ee08d;
+  --ok-soft: rgba(48, 209, 88, 0.14);
+  --info-ink: #9fc4ff;
+  --info-soft: rgba(100, 160, 255, 0.16);
+  --accent: #f2f2f3;
+  --accent-soft: rgba(242, 242, 243, 0.2);
+  --area-alpha: 0.1;
+  --line-w: 1.75;
+  --compare: rgba(242, 242, 243, 0.32);
+  --series1: #f2f2f3;
+  --series2: #8e8e93;
+  --series3: #ff9f0a;
+  --series4: #48484e;
+  --heat1: rgba(255, 255, 255, 0.06);
+  --heat2: rgba(255, 255, 255, 0.16);
+  --heat3: #8e8e93;
+  --heat4: #e5e5ea;
+  --on-heat1: #f2f2f3;
+  --on-heat2: #f2f2f3;
+  --on-heat3: #0c0d0f;
+  --on-heat4: #0c0d0f;
+  --tint-peach: linear-gradient(160deg, #35292a, #17181b);
+  --tint-gold: linear-gradient(160deg, #332d24, #17181b);
+  --tint-rose: linear-gradient(160deg, #34282c, #17181b);
+  --tint-sky: linear-gradient(160deg, #252b33, #17181b);
+  --tint-sand: linear-gradient(160deg, #302c27, #17181b);
+  --art-shadow: rgba(0, 0, 0, 0.5);
+  --off-filter: grayscale(1) brightness(0.5);
+  --stamp: #ff453a;
   --on-stamp: #ffffff;
   --stamp-edge: rgba(255, 255, 255, 0.85);
-  --switch-on: #94bfa2;
-  --knob: #ffffff;
-  --knob-shadow: rgba(0, 0, 0, 0.35);
-  --focus: #8fb8ff;
-  --scrim: rgba(0, 0, 0, 0.55);
+  --switch-on: #f2f2f3;
+  --knob: #0c0d0f;
+  --knob-shadow: rgba(0, 0, 0, 0.4);
+  --focus: #64a8ff;
+  --scrim: rgba(0, 0, 0, 0.62);
+}
+/* The soft light in the top-left corner of each graphite card. A tinted kitchen card keeps its own. */
+.dl-dir-graphite .dl-glass.dl-glass {
+  background-image: radial-gradient(120% 80% at 0% 0%, rgba(255, 255, 255, 0.07), transparent 60%);
 }
 
 /* Brand night: chili red, amber and jade on warm dark glass. Today's kitchen (.g-dk) is the
@@ -322,9 +330,9 @@
   background: rgba(0, 0, 0, 0.5);
 }
 /* The page behind the lab (seen around a device frame and under the phone's safe areas). */
-:root:has(.dl-dir-reference),
-:root:has(.dl-dir-reference) body {
-  background: #030608;
+:root:has(.dl-dir-graphite),
+:root:has(.dl-dir-graphite) body {
+  background: #050506;
 }
 :root:has(.dl-dir-ember),
 :root:has(.dl-dir-ember) body {
@@ -524,7 +532,7 @@ body:has(.dl),
 }
 
 /* ============================================================================================
-   3. Glass depth: flat, frost (today), liquid (the reference)
+   3. Glass depth: flat, frost (today), liquid (the first reference)
    ============================================================================================ */
 
 .dl-glass {
@@ -1340,7 +1348,7 @@ body:has(.dl),
 .dl-card-edge .dl-ticket {
   padding-left: 24px;
 }
-/* card style 2, tint (the reference) */
+/* card style 2, tint (the first reference) */
 .dl-card-tint .dl-ticket.dl-glass {
   background: linear-gradient(150deg, var(--st-soft) 0%, var(--glass) 72%);
 }
@@ -1598,7 +1606,7 @@ button.dl-kpi:active {
 }
 .dl-area-top {
   stop-color: var(--accent);
-  stop-opacity: 0.36;
+  stop-opacity: var(--area-alpha, 0.36);
 }
 .dl-area-bottom {
   stop-color: var(--accent);
@@ -1610,7 +1618,7 @@ button.dl-kpi:active {
 .dl-line {
   fill: none;
   stroke: var(--accent);
-  stroke-width: 3;
+  stroke-width: var(--line-w, 3);
   stroke-linecap: round;
   stroke-dasharray: 1;
   stroke-dashoffset: 0;
@@ -2363,7 +2371,46 @@ button.dl-toast {
 }
 
 /* ============================================================================================
-   11. Less motion
+   11. Graphite type: thin big numbers, satang and units dimmed ("78.3 %")
+   ============================================================================================ */
+
+.dl-frac,
+.dl-unit {
+  color: var(--frac, currentcolor);
+}
+.dl-unit {
+  margin-left: 0.08em;
+  font-size: 0.5em;
+}
+.dl-dir-graphite .dl-h1,
+.dl-dir-graphite .dl-big,
+.dl-dir-graphite .dl-kpi-num,
+.dl-dir-graphite .dl-gauge-num,
+.dl-dir-graphite .dl-amount {
+  font-weight: 300;
+}
+.dl-dir-graphite .dl-big {
+  font-size: 52px;
+}
+.dl-dir-graphite .dl-kpi-num {
+  font-size: 34px;
+}
+.dl-dir-graphite .dl-gauge-num {
+  font-size: 48px;
+}
+/* The kitchen stays readable from across the room: lighter, not thin. */
+.dl-dir-graphite .dl-ticket .dl-tk-no,
+.dl-dir-graphite .dl-ticket .dl-q {
+  font-weight: 500;
+}
+.dl-dir-graphite .dl-ticket .dl-nm,
+.dl-dir-graphite .dl-col-title,
+.dl-dir-graphite .dl-brand-name {
+  font-weight: 600;
+}
+
+/* ============================================================================================
+   12. Less motion
    ============================================================================================ */
 
 @media (prefers-reduced-motion: reduce) {

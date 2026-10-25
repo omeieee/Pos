@@ -34,7 +34,7 @@ import { POP, SMOOTH, type SpringEasing, springEasing } from './spring.ts';
 // Options the owner compares
 // ---------------------------------------------------------------------------------------------
 
-const DIRECTIONS = ['reference', 'ember', 'daylight'] as const;
+const DIRECTIONS = ['graphite', 'ember', 'daylight'] as const;
 const DEPTHS = ['flat', 'frost', 'liquid'] as const;
 const CARDS = ['edge', 'tint', 'timer'] as const;
 const FRAMES = ['full', 'ipad', 'iphone'] as const;
@@ -48,14 +48,14 @@ type Frame = (typeof FRAMES)[number];
 type Screen = (typeof SCREENS)[number];
 
 /**
- * The options, each with its first-visit value (the reference as sent: its palette, liquid
- * glass, tinted cards, full speed). A missing or unknown saved value falls back to that value.
+ * The options, each with its first-visit value (graphite, frosted glass, the time bar, full
+ * speed). A missing or unknown saved value, such as a look that was removed, falls back to it.
  */
 const optionsSchema = z.object({
-  direction: z.enum(DIRECTIONS).catch('reference'),
-  depth: z.enum(DEPTHS).catch('liquid'),
+  direction: z.enum(DIRECTIONS).catch('graphite'),
+  depth: z.enum(DEPTHS).catch('frost'),
   refract: z.boolean().catch(true),
-  card: z.enum(CARDS).catch('tint'),
+  card: z.enum(CARDS).catch('timer'),
   speed: z.union([z.literal(1), z.literal(0.5), z.literal(0.25)]).catch(1),
   frame: z.enum(FRAMES).catch('full'),
 });
@@ -97,9 +97,9 @@ interface Choice<T> {
 
 const DIRECTION_CHOICES: readonly Choice<Direction>[] = [
   {
-    value: 'reference',
-    label: 'Your file',
-    hint: 'Sage, rose and champagne from your file on deep blue-black glass.',
+    value: 'graphite',
+    label: 'Graphite',
+    hint: 'Near-black with grey cards, thin numbers and white lines; colour only for status.',
   },
   {
     value: 'ember',
@@ -119,13 +119,13 @@ const DEPTH_CHOICES: readonly Choice<Depth>[] = [
   {
     value: 'liquid',
     label: 'Liquid',
-    hint: 'Your file: gradient edge, light that follows the pointer, deeper shadow.',
+    hint: 'Your first file: gradient edge, light that follows the pointer, deeper shadow.',
   },
 ];
 
 const CARD_CHOICES: readonly Choice<Card>[] = [
   { value: 'edge', label: 'Stripe', hint: 'Today: a coloured stripe for each stage.' },
-  { value: 'tint', label: 'Tint', hint: 'Your file: the whole card takes the stage colour.' },
+  { value: 'tint', label: 'Tint', hint: 'Your first file: the whole card takes the stage colour.' },
   {
     value: 'timer',
     label: 'Time bar',
@@ -134,7 +134,7 @@ const CARD_CHOICES: readonly Choice<Card>[] = [
 ];
 
 const SPEED_CHOICES: readonly Choice<Speed>[] = [
-  { value: 1, label: '1×', hint: "Your file's spring: stiffness 280, damping 32, mass 1." },
+  { value: 1, label: '1×', hint: "Your first file's spring: stiffness 280, damping 32, mass 1." },
   { value: 0.5, label: '0.5×', hint: 'Half speed, to watch the motion.' },
   { value: 0.25, label: '0.25×', hint: 'Quarter speed.' },
 ];
@@ -1326,6 +1326,19 @@ function Delta({ text, down }: { text: string; down?: boolean }) {
   );
 }
 
+/** A baht amount with its satang dimmed, so the whole baht reads first (graphite: "฿92.65"). */
+function Money({ satang, auto }: { satang: number; auto?: boolean }) {
+  const text = formatBaht(satang, 'th', auto ? { decimals: 'auto' } : {});
+  const dot = text.lastIndexOf('.');
+  if (dot < 0) return <>{text}</>;
+  return (
+    <>
+      {text.slice(0, dot)}
+      <span className="dl-frac">{text.slice(dot)}</span>
+    </>
+  );
+}
+
 function Kpi({
   label,
   value,
@@ -1335,7 +1348,7 @@ function Kpi({
   attention,
 }: {
   label: string;
-  value: string;
+  value: ReactNode;
   note: string;
   extra?: ReactNode;
   onOpen?: () => void;
@@ -1418,7 +1431,9 @@ function SalesChart({
       <div className="dl-card-head">
         <div>
           <p className="dl-eyebrow">ยอดรับเงินรายชั่วโมง</p>
-          <p className="dl-big dl-num dl-tight">{baht(revenue)}</p>
+          <p className="dl-big dl-num dl-tight">
+            <Money satang={revenue} auto />
+          </p>
           <p className="dl-sub">
             <strong className="dl-up">{change >= 0 ? `+${change}%` : `${change}%`}</strong>{' '}
             เทียบอาทิตย์ที่แล้ว เวลาเดียวกัน
@@ -1611,7 +1626,7 @@ function OverviewScreen({ sample }: { sample: Sample }) {
       <div className="dl-kpis">
         <Kpi
           label="ยอดรับเงินแล้ว"
-          value={baht(revenue)}
+          value={<Money satang={revenue} auto />}
           note="เทียบอาทิตย์ที่แล้ว เวลาเดียวกัน"
           extra={<Delta text={`${change >= 0 ? '+' : ''}${change}%`} down={change < 0} />}
         />
@@ -1623,7 +1638,7 @@ function OverviewScreen({ sample }: { sample: Sample }) {
         />
         <Kpi
           label="เฉลี่ยต่อบิล"
-          value={baht(average)}
+          value={<Money satang={average} auto />}
           note={`อาทิตย์ที่แล้ว ${baht(averageBefore)}`}
           extra={
             <Delta
@@ -1660,7 +1675,10 @@ function OverviewScreen({ sample }: { sample: Sample }) {
               label={`ถึงเกณฑ์จด VAT แล้ว ${SAMPLE_VAT.percent}%`}
             />
             <div className="dl-gauge-read">
-              <span className="dl-gauge-num dl-num dl-tight">{SAMPLE_VAT.percent}%</span>
+              <span className="dl-gauge-num dl-num dl-tight">
+                {SAMPLE_VAT.percent}
+                <span className="dl-unit">%</span>
+              </span>
               <span className="dl-gauge-label">ของ {SAMPLE_VAT.limit}</span>
             </div>
           </div>
@@ -1925,7 +1943,9 @@ function PaySheet({
               <circle cx={32} cy={32} r={28} pathLength={1} />
               <path d="M19 33.5 L28 42 L45 23" pathLength={1} />
             </svg>
-            <p className="dl-amount dl-num dl-tight">{amount}</p>
+            <p className="dl-amount dl-num dl-tight">
+              <Money satang={claim.amount} />
+            </p>
             <p id="dl-pay-title" className="dl-paid-text">
               รับเงินแล้ว · {claim.orderNo} ส่งเข้าครัวแล้ว
             </p>
@@ -1949,7 +1969,9 @@ function PaySheet({
             <h2 id="dl-pay-title" className="dl-sheet-title">
               <span className="dl-num">{claim.orderNo}</span> · {claim.seed.lineName} · LINE
             </h2>
-            <p className="dl-amount dl-num dl-tight">{amount}</p>
+            <p className="dl-amount dl-num dl-tight">
+              <Money satang={claim.amount} />
+            </p>
             <dl className="dl-rows">
               <div>
                 <dt>วิธีชำระ</dt>
@@ -2191,10 +2213,11 @@ function Notes({ onClose }: { onClose: () => void }) {
       <h3>The three directions</h3>
       <ul>
         <li>
-          <strong>Your file.</strong> The reference palette (sage, rose, champagne on blue-black),
-          with muted text made brighter so it passes the contrast check on glass. It replaces the
-          chili-red primary button with champagne, which changes the approved brand (decision D-22),
-          so it would need a new decision.
+          <strong>Graphite.</strong> From your second file, the dark transit dashboard: near-black
+          with grey cards, thin large numbers with the decimals dimmed, white chart lines, and
+          colour only for status (green done and paid, orange cooking, red late). The main button is
+          white instead of chili red, which changes the approved brand (decision D-22), so it would
+          need a new decision.
         </li>
         <li>
           <strong>Brand night.</strong> The same liquid glass in your chili red, amber and jade on
@@ -2210,15 +2233,15 @@ function Notes({ onClose }: { onClose: () => void }) {
       <ul>
         <li>
           <strong>Glass.</strong> Flat has no blur and is the fastest on older iPads. Frost is
-          today's glass. Liquid is your file's look; it costs the most to draw, so try it on the
-          shop's iPad before choosing it.
+          today's glass. Liquid is your first file's look; it costs the most to draw, so try it on
+          the shop's iPad before choosing it.
         </li>
         <li>
           <strong>Kitchen card.</strong> Stripe is today's card. Tint colours the whole card by
           stage. Time bar shows the wait against the 12-minute limit.
         </li>
         <li>
-          <strong>Motion.</strong> Your file's spring, which can be slowed to 0.5× or 0.25× to
+          <strong>Motion.</strong> Your first file's spring, which can be slowed to 0.5× or 0.25× to
           inspect it. A device set to reduce motion gets no movement.
         </li>
         <li>
@@ -2240,11 +2263,12 @@ function Notes({ onClose }: { onClose: () => void }) {
           On <strong>เมนู</strong>, switch a dish off to see the sold-out stamp.
         </li>
       </ul>
-      <h3>Taken from your file</h3>
+      <h3>Taken from your files</h3>
       <p>
         Liquid glass surfaces, slow orbs and the dot grid, sliding pill tabs, cards that glide to
         the next column with a bell when ready, toast pills, the tick dial, the sold-out stamp, the
-        today-against-last-week chart and the busy-hours grid.
+        today-against-last-week chart and the busy-hours grid (first file); the graphite palette,
+        thin numbers with dimmed decimals and white chart lines (second file).
       </p>
       <h3>Left out, and why</h3>
       <ul>
