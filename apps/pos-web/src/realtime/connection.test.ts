@@ -2,7 +2,14 @@ import { SYNC_SAFETY_REVS, type SyncResponse, WS_CLOSE } from '@sds/shared';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { ApiClientError } from '../api/errors.ts';
 import { createFakeLifecycle, createFakeSockets } from '../test-support/fake-realtime.ts';
-import { alertFrame, itemFrame, orderFrame, settingsFrame, uuid } from '../test-support/frames.ts';
+import {
+  alertFrame,
+  govCopayFrame,
+  itemFrame,
+  orderFrame,
+  settingsFrame,
+  uuid,
+} from '../test-support/frames.ts';
 import { type ConnectionDeps, createConnection } from './connection.ts';
 import { createEntityStore } from './entity-store.ts';
 
@@ -104,7 +111,7 @@ describe('catch-up', () => {
 
   test('rewinds by the safety margin once, then follows nextSince page by page', async () => {
     const env = setup();
-    env.entities.apply(orderFrame(uuid(1), 1000));
+    env.entities.applySynced([orderFrame(uuid(1), 1000)]);
     env.fetchSync
       .mockResolvedValueOnce(page({ nextSince: 900, hasMore: true, serverRev: 1100 }))
       .mockResolvedValueOnce(page({ nextSince: 1100, hasMore: false, serverRev: 1100 }));
@@ -116,7 +123,7 @@ describe('catch-up', () => {
 
   test('never rewinds to 0 once the device holds rows: since=0 is the fresh-device bootstrap, which the server bounds to open and recent rows', async () => {
     const env = setup();
-    env.entities.apply(orderFrame(uuid(1), 50));
+    env.entities.applySynced([orderFrame(uuid(1), 50)]);
     await bringOnline(env, 50);
     expect(env.fetchSync.mock.calls[0]?.[0].since).toBe(1);
   });
@@ -156,7 +163,7 @@ describe('catch-up', () => {
 
   test('a server rev below ours means a restored database: the store is reset and synced from 0', async () => {
     const env = setup();
-    env.entities.apply(orderFrame(uuid(1), 800));
+    env.entities.applySynced([orderFrame(uuid(1), 800)]);
     await bringOnline(env, 40);
     expect(env.entities.getState().orders.size).toBe(0);
     expect(env.fetchSync.mock.calls[0]?.[0].since).toBe(0);
@@ -203,6 +210,46 @@ describe('catch-up', () => {
     env.sockets.last().receive({ type: 'order.upserted', id: 'x', rev: 1, data: {} });
     expect(env.entities.getState().orders.size).toBe(0);
     expect(env.connection.getState().status).toBe('online');
+  });
+});
+
+describe('REST answers do not move the sync cursor (POS-01)', () => {
+  test('a reload whose REST answer lands before the catch-up still syncs as a fresh device and gets the settings', async () => {
+    const env = setup();
+    // The Orders board loads by REST while the socket is still connecting.
+    env.entities.applyMany([orderFrame(uuid(1), 1000)]);
+    env.fetchSync.mockImplementationOnce(async ({ since }) =>
+      page({
+        changes: since === 0 ? [govCopayFrame(10), orderFrame(uuid(1), 1000)] : [],
+        nextSince: 1000,
+        serverRev: 1000,
+      }),
+    );
+    await bringOnline(env, 1000);
+    expect(env.fetchSync.mock.calls[0]?.[0].since).toBe(0);
+    expect(env.entities.getState().settings.has('gov_copay')).toBe(true);
+  });
+
+  test('a REST row newer than the cursor does not make the next catch-up skip older rows', async () => {
+    const env = setup();
+    env.fetchSync.mockResolvedValueOnce(page({ nextSince: 500, serverRev: 500 }));
+    await bringOnline(env, 500);
+    env.entities.apply(orderFrame(uuid(1), 1000));
+    expect(env.entities.getState().lastRev).toBe(500);
+    env.sockets.last().serverClose(1006);
+    await vi.advanceTimersByTimeAsync(1_000);
+    env.sockets.last().open();
+    env.sockets.last().receive({ type: 'ready', serverRev: 1000, heartbeatSeconds: 25 });
+    await flush();
+    expect(env.fetchSync.mock.calls[1]?.[0].since).toBe(500 - SYNC_SAFETY_REVS);
+  });
+
+  test('a live frame moves the cursor even when a REST answer already put that row in', async () => {
+    const env = setup();
+    await bringOnline(env);
+    env.entities.apply(orderFrame(uuid(1), 12));
+    env.sockets.last().receive(orderFrame(uuid(1), 12));
+    expect(env.entities.getState().lastRev).toBe(12);
   });
 });
 

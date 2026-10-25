@@ -32,7 +32,7 @@ describe('hydrating from a saved copy', () => {
     expect(store.getState().items.get(uuid(1))?.nameTh).toBe('ใหม่');
     const other = createEntityStore();
     other.hydrate([itemFrame(uuid(1), 40, { nameTh: 'เก่า' })]);
-    other.apply(itemFrame(uuid(1), 41, { nameTh: 'ใหม่' }));
+    other.applySynced([itemFrame(uuid(1), 41, { nameTh: 'ใหม่' })]);
     expect(other.getState().items.get(uuid(1))?.nameTh).toBe('ใหม่');
     expect(other.getState().lastRev).toBe(41);
   });
@@ -91,24 +91,46 @@ describe('the rev rule', () => {
 });
 
 describe('lastRev', () => {
-  test('is the highest rev applied and starts at 0', () => {
+  test('is the highest rev received through the sync and starts at 0', () => {
     const store = createEntityStore();
     expect(store.getState().lastRev).toBe(0);
-    store.apply(orderFrame(uuid(1), 12));
-    store.apply(orderFrame(uuid(2), 7));
+    store.applySynced([orderFrame(uuid(1), 12), orderFrame(uuid(2), 7)]);
     expect(store.getState().lastRev).toBe(12);
   });
 
   test('a stale frame does not move it', () => {
     const store = createEntityStore();
-    store.apply(orderFrame(uuid(1), 12));
-    store.apply(orderFrame(uuid(1), 3));
+    store.applySynced([orderFrame(uuid(1), 12)]);
+    store.applySynced([orderFrame(uuid(1), 3)]);
     expect(store.getState().lastRev).toBe(12);
+  });
+
+  test('REST answers (apply, applyMany) put rows in but never move it (POS-01)', () => {
+    const store = createEntityStore();
+    expect(store.apply(orderFrame(uuid(1), 40))).toBe(true);
+    store.applyMany([orderFrame(uuid(2), 50), settingsFrame('promptpay', 60, 2)]);
+    const state = store.getState();
+    expect(state.orders.size).toBe(2);
+    expect(state.promptpayRev).toBe(60);
+    expect(state.lastRev).toBe(0);
+  });
+
+  test('a synced frame for a row a REST answer already put in still moves it', () => {
+    const store = createEntityStore();
+    store.apply(orderFrame(uuid(1), 40));
+    store.applySynced([orderFrame(uuid(1), 40)]);
+    expect(store.getState().lastRev).toBe(40);
+  });
+
+  test('alerts received through the sync do not move it', () => {
+    const store = createEntityStore();
+    store.applySynced([alertFrame(uuid(1))]);
+    expect(store.getState().lastRev).toBe(0);
   });
 
   test('advance() moves it up only (the final nextSince of a catch-up)', () => {
     const store = createEntityStore();
-    store.apply(orderFrame(uuid(1), 12));
+    store.applySynced([orderFrame(uuid(1), 12)]);
     store.advance(30);
     expect(store.getState().lastRev).toBe(30);
     store.advance(20);
@@ -227,7 +249,6 @@ describe('notifications', () => {
     store.applyMany(frames);
     expect(listener).toHaveBeenCalledTimes(1);
     expect(store.getState().orders.get(uuid(1))?.status).toBe('preparing');
-    expect(store.getState().lastRev).toBe(7);
   });
 
   test('a map that did not change keeps its identity (cheap selectors)', () => {

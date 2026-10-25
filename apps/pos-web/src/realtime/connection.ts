@@ -5,6 +5,7 @@
  * wait for `ready`, then catch up while HOLDING any live frames, then apply what was held and go
  * live. The catch-up starts at `lastRev - SYNC_SAFETY_REVS` once (not per page) and follows each
  * page's `nextSince`; applying a frame twice is harmless because the store only takes newer revs.
+ * Only what arrives here moves the store's sync cursor (`applySynced`); REST answers do not.
  * If `ready.serverRev` is below our `lastRev` the database was restored from a backup: the store
  * is reset and the sync starts from 0.
  *
@@ -169,7 +170,7 @@ export function createConnection(deps: ConnectionDeps): Connection {
 
   function onFrame(frame: RealtimeFrame) {
     if (phase === 'live') {
-      deps.entities.apply(frame);
+      deps.entities.applySynced([frame]);
       return;
     }
     held.push(frame);
@@ -187,7 +188,7 @@ export function createConnection(deps: ConnectionDeps): Connection {
       for (;;) {
         const result = await deps.fetchSync({ since, limit: SYNC_MAX_LIMIT });
         if (attempt !== generation) return;
-        deps.entities.applyMany(result.changes);
+        deps.entities.applySynced(result.changes);
         last = result.nextSince;
         if (!result.hasMore) break;
         // A page that goes nowhere would loop forever.
@@ -205,7 +206,7 @@ export function createConnection(deps: ConnectionDeps): Connection {
     const frames = held;
     held = [];
     phase = 'live';
-    deps.entities.applyMany(frames);
+    deps.entities.applySynced(frames);
     attempts = 0;
     state.setState({ status: 'online', synced: true });
   }

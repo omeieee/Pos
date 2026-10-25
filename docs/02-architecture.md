@@ -195,7 +195,7 @@ The pending payment is cancelled and a new pending payment is created for the ne
 - **Write path:** client → REST → service → DB transaction → the synced row's `rev` = `nextval('rev_seq')` → commit → in-process event bus → WebSocket fan-out.
 - **Events:** `order.upserted`, `payment.upserted`, `menu.upserted`, `settings.updated`, `customer.upserted`, and `alert.new_order` (plays a sound). Each event carries `{id, rev, data}`.
 - **Audiences:** staff devices get every event their role allows. A customer's session gets only its own orders. The print agent gets `print_job.*` (P8).
-- **Client state:** a store keyed by id. Apply an event only if `event.rev` is greater than the stored `rev`. Track the highest `rev` seen as `lastRev`.
+- **Client state:** a store keyed by id. Apply an event only if `event.rev` is greater than the stored `rev`. Track the highest `rev` received through the sync (live frames and catch-up pages) as `lastRev`; rows from a REST answer update the store but never move `lastRev` (POS-01).
 - **Reconnect:** exponential backoff. On reconnect, call `GET /v1/sync?since=lastRev` (paged) before replaying live events. A ping/pong heartbeat every 25 s.
 - **Conflicts:** `PATCH` sends `expectedVersion`. A mismatch returns 409; the client reloads the entity and tells the user what changed.
 - **Duplicates:** `POST` sends an `Idempotency-Key`. The server stores `client_request_id` as unique, so a retry returns the original result.
