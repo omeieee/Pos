@@ -30,6 +30,7 @@ Slices 1-3 built 2026-10-22, **uncommitted, not deployed, no real printer yet** 
 - **Screens (slice 3):** Settings "Printing" section (switch plus recent jobs), Reprint button on order screens, `print_agent` device label.
 
 ## Log
+- 2026-10-26: flaky print-ticket privacy test fixed (9-digit check on the ticket only; test-only, branch `claude/brave-knuth-wgwts8`): see "2026-10-26 · P8 · Fix the flaky print-ticket privacy test" in PROGRESS.
 - 2026-10-25: kitchen tickets (and every other reader of order lines) now list dishes in cart order: see "2026-10-25 · Maintenance · Order items keep cart order (D-45)".
 - 2026-10-25: main merged into pay-first, M4 fixed, two stale/flaky tests fixed (branch `claude/compassionate-franklin-gaz2oh`, not deployed): see "2026-10-25 · P8 · Pay-first merged with main; M4 fixed" in PROGRESS.
 - 2026-10-25: pay-first / edit-merge / slip allocation / auto-cancel / payment pop-up / Telegram built (D-38 to D-42, uncommitted, migrations 0043-0044): see "2026-10-25 · P8 · Built: pay-first LINE orders". The print trigger for LINE PromptPay orders is now payment, not accept.

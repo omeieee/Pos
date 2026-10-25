@@ -20,6 +20,15 @@
 > - **Workflow (owner rule 2026-10-16):** after each completed part, ask the owner "save checkpoint or next step?" and wait for the answer (`CLAUDE.md` workflow, `3d8481c`).
 > - **Other agents (2026-10-25):** `AGENTS.md` lets Gemini/Antigravity follow the same rules and memory as Claude; their PROGRESS entries start with "(Gemini)".
 
+## 2026-10-26 · P8 · Fix the flaky print-ticket privacy test
+- **Summary:** `apps/api` print test "never holds a phone number, a customer id or money, even when the notes do" ran `/\d{9}/` over the whole claimed job, whose random UUIDv7 ids and `leaseToken` sometimes hold 9 digits in a row (failed about 1 run in 6, seen on `claude/festive-cori-9s1wna`). The 9-digit check now runs on `job.ticket` only (the ticket schema has no ids); every other assertion is unchanged. Test-only.
+- **Changed:** `apps/api/src/print/print.test.ts`.
+- **Verification:** `pnpm --filter @sds/api exec vitest run src/print/print.test.ts -t "never holds a phone number"` 20 times in a loop: 0 failures; full `print.test.ts` 32/32 passed; `pnpm lint` (Checked 1126 files, no fixes). Not run: `pnpm build`, the other test suites.
+- **Decisions:** none.
+- **Open issues:** this file holds about 45 entries; the oldest are due to move to the month archive.
+- **Next:** merge `claude/brave-knuth-wgwts8` into `main` when the owner asks; then the pay-first pre-deploy steps and the [11-review-findings](11-review-findings.md) fixes.
+- **Commit:** `0c8c592` on `claude/brave-knuth-wgwts8` (pushed, not on `main`); this entry uncommitted.
+
 ## 2026-10-26 · Maintenance · Delete the 53 leftover agent worktree folders from disk
 - **Summary:** Deleted all 53 `.claude/worktrees/agent-*` folders (each about 35,000 items with about 1,900 pnpm junctions). `.git/worktrees` was already empty, so only `git worktree prune` was left there. About 2.7 GB freed (C: free 20.52 GB to 23.24 GB, measured after the first test folder was already deleted). The earlier failure was not reproduced: plain `rmdir /s /q` worked on the test folder. Longest path was 270 characters (17 paths over 260); no read-only or system files; no open-handle check (handle.exe not installed).
 - **Changed:** nothing in the repo. Only local disk: `.claude/worktrees/` is now empty.
