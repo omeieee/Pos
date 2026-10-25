@@ -52,6 +52,7 @@ This is the **single source of truth for technology and design choices**. Other 
 | D-42 | Telegram alerts with customer data (amends CLAUDE.md rule 10); staff payment pop-up per device; customer sees "amount doesn't match" and instant "paid" (amends D-28) | **Proposed** (owner chose full content 2026-10-24) | 2026-10-24 |
 | D-43 | Move the API VM from the 1 GB Micro to an Always Free Ampere A1 (2 OCPU / 12 GB, arm64); reserved IP moves with it | **Accepted** (done 2026-10-25) | 2026-10-25 |
 | D-44 | Slip2Go is called only with the text of a slip QR read locally; no QR, no call (staff verify by hand); LINE slip reply is neutral and the result shows on the order page, no push | **Accepted** (owner chose QR-only and no push 2026-10-25) | 2026-10-25 |
+| D-45 | Order items keep cart order: `order_items.id` is a monotonic UUIDv7 made in the app on insert (no migration), instead of a new `position` column | **Accepted** (owner approved 2026-10-25) | 2026-10-25 |
 
 ---
 
@@ -445,3 +446,10 @@ This is the **single source of truth for technology and design choices**. Other 
 - **Privacy notice:** now says the picture is never sent to Slip2Go.
 - **Revisit if:** many real slips lack a readable QR (consider OCR keyword screening, then the picture), or the LINE quota allows a "paid" push.
 - **Addendum (owner, 2026-10-25):** in the LINE chat, a picture from a customer with no order waiting for payment is dropped in silence (not fetched, no reply, no check). A picture with no bank-slip QR is also dropped in silence (not kept, not claimed, no reply). If the QR reader fails, the picture is treated as a slip so a real one is never lost. Cost: a real slip with an unreadable QR gets no reply; the customer can still tap "โอนแล้ว" or use the app.
+
+## D-45 · Order items keep cart order through app-made monotonic UUIDv7 — Accepted 2026-10-25 (proposed by Claude, owner approved)
+- **Problem:** every reader of an order's lines (`loadOrderItems`, the sync feed's `attachOrderItems`) sorts by `order_items.id`. The SQL default `uuid_generate_v7()` puts the millisecond first and random bits after it, and `insertOrderItems` writes all lines in one statement, so they usually share a millisecond and came back in random order: kitchen tickets, the kitchen board, receipts, LINE Flex summaries and the Telegram alert showed dishes out of cart order (seen as a flaky Telegram notifier test, about 1 run in 3).
+- **Decision:** `order_items.id` gets a Drizzle `$defaultFn` that calls `uuidv7()` in `packages/db/src/uuid7.ts`: RFC 9562 method 1, a 12-bit counter after the timestamp, random start per millisecond, a clock step back keeps the last millisecond, and a full counter borrows the next millisecond. Drizzle fills the ids in array order, so one multi-row insert keeps the cart order. The SQL default stays (no migration; `db:generate` shows no change) and still serves raw SQL inserts. Readers are unchanged.
+- **Weighed against a `position smallint` column:** that needs a migration (expand/contract), writes in `createOrder`, the owner correction and the customer edit (D-39), a backfill that could only copy today's already random id order, and `ORDER BY position, id` in two readers. The id route fixes all of these writers at once, because each goes through `insertOrderItems` or a Drizzle insert.
+- **Limits:** order only holds within one API process (there is one). Orders saved before this change keep the order they were stored in; neither route can recover the cart order for them. A feature that lets staff reorder lines later would need the `position` column after all.
+- **Revisit if:** more than one API process writes order lines, or lines must be reorderable.

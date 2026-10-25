@@ -15,6 +15,7 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
+import { uuidv7 } from '../uuid7.ts';
 import { id, money, oneOf, sync, ts } from './columns.ts';
 import { menuItems } from './menu.ts';
 import { customers, devices, staff } from './people.ts';
@@ -146,7 +147,12 @@ export const orders = pgTable(
 export const orderItems = pgTable(
   'order_items',
   {
-    id: id(),
+    /**
+     * Made in the app on every ORM insert so the lines of one insert keep their cart order: readers
+     * sort by id, and the SQL default is random within a millisecond. The SQL default stays for
+     * raw inserts.
+     */
+    id: id().$defaultFn(() => uuidv7()),
     orderId: uuid('order_id')
       .notNull()
       .references(() => orders.id),
