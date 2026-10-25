@@ -171,6 +171,7 @@ Status as of 2026-09-29 (VM state verified by the P2 sessions; ✅ = done, the u
     6. `docker compose up -d --wait`, and check that the running image is the new tag and healthy;
     7. smoke-test `https://$API_HOST/healthz` from the runner;
     8. on failure **after the new image was switched in** (`deploy.sh apply` exit 10, or a failed smoke test), roll back to `PREVIOUS_API_IMAGE` (kept in `/opt/sds/.deploy-state`); a failure before the switch changes nothing and is not rolled back.
+  - **Dependency audit** (`audit.yml`, 2026-10-26, OPS-03): `pnpm audit --prod` on pushes to `main`, pull requests, weekly (Monday 09:23 Bangkok) and by hand. Not part of CI, so a new advisory shows red there but never stops a deploy.
   - **External check** (`external-check.yml`, weekly + manual): valid certificate on 443, http→https, and only 80/443 reachable from the internet.
 - **Migrations:** forward-only, and never edit one that has already been applied. Keep them backward-compatible across one deploy (expand → migrate → contract).
 - **Rollback:** `deploy.sh rollback` on the VM (previous image), or run `deploy-api.yml` with `image_tag=<older sha>`. Migrations are not reverted, and a database restore is needed only if a migration was destructive (avoid those). See [infra/RUNBOOK.md](../infra/RUNBOOK.md#rollback).
