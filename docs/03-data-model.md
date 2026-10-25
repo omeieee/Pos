@@ -4,6 +4,7 @@ PostgreSQL and Drizzle (see [D-03](decisions.md#d-03--database--open-q1)). This 
 
 ## 1. Conventions
 - **IDs:** UUIDv7 (`uuid`), which sort by time, from the portable `uuid_generate_v7()` SQL function (native `uuidv7()` needs PostgreSQL 18). People see `order_no`, never the UUID.
+  - `order_items.id` is made in the app on every ORM insert (`packages/db/src/uuid7.ts`, monotonic within a millisecond), so the lines of one order read back in cart order with `ORDER BY id` ([D-45](decisions.md#d-45--order-items-keep-cart-order-through-app-made-monotonic-uuidv7--proposed-2026-10-25)). The SQL function's bits after the timestamp are random, so it cannot keep that order.
 - **Money:** `bigint` in satang, with the suffix `_satang`. THB only. Round half up to 1 satang only in `packages/shared`.
 - **Time:** `timestamptz` (UTC). `business_date date` = local date in Asia/Bangkok minus the cutoff (default 04:00).
 - **Sync columns** on every table that is synced to clients:
