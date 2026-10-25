@@ -20,6 +20,15 @@
 > - **Workflow (owner rule 2026-10-16):** after each completed part, ask the owner "save checkpoint or next step?" and wait for the answer (`CLAUDE.md` workflow, `3d8481c`).
 > - **Other agents (2026-10-25):** `AGENTS.md` lets Gemini/Antigravity follow the same rules and memory as Claude; their PROGRESS entries start with "(Gemini)".
 
+## 2026-10-25 · Maintenance · Keep local tool files out of git and lint
+- **Summary:** (Gemini) Ignored local agent and editor tool paths in `.gitignore` (keeping `!.claude/skills/checkpoint/` tracked) so root `pnpm lint` (`biome check .`) skips local skills and settings, and committed the clean `payments-finance-engineer` and `pos-frontend-engineer` role memory files.
+- **Changed:** `.gitignore`; `.claude/agent-memory/payments-finance-engineer/{MEMORY.md,project_p7_tax_rules.md}`; `.claude/agent-memory/pos-frontend-engineer/{MEMORY.md,feedback_tooling_quirks.md}`.
+- **Verification:** `pnpm lint` (`biome check .`: Checked 1081 files, 0 errors); `git ls-files "*.key" "*.pem" ".env*" ".claude/skills/**"` (only `.claude/skills/checkpoint/SKILL.md`). Not run: `pnpm build`, `pnpm test` (no code changes).
+- **Decisions:** none.
+- **Open issues:** `docs/11-review-findings.md` left untracked per owner instruction.
+- **Next:** rebase `feat/pay-first-orders`; try a real slip and a non-slip photo on the test OA.
+- **Commit:** `406f1b1`, `3d44ae6` on `agy/gitignore-local-tools`.
+
 ## 2026-10-25 · Maintenance · AGENTS.md for non-Claude agents
 - **Summary:** owner wants to hand execution work to Gemini (Antigravity, "agy") to save Claude usage. Added `AGENTS.md`: read `CLAUDE.md` first (source of truth), the shared memory files, the 11 domain rules in brief, and by-hand versions of what Claude gets automatically (protect-files and format-typecheck hooks, role playbooks in `.claude/agents/`, `.claude/agent-memory/`, the checkpoint skill). Gemini entries start with "(Gemini)"; plans from Claude go in `docs/plans/`.
 - **Changed:** `AGENTS.md` (new); `CLAUDE.md` (one line: keep `AGENTS.md` in step); this file.
