@@ -29,5 +29,6 @@ Slices 1-3 built 2026-10-22, **uncommitted, not deployed, no real printer yet** 
 - **Screens (slice 3):** Settings "Printing" section (switch plus recent jobs), Reprint button on order screens, `print_agent` device label.
 
 ## Log
+- 2026-10-25: kitchen tickets (and every other reader of order lines) now list dishes in cart order: see "2026-10-25 · Maintenance · Order items keep cart order (D-45)".
 - 2026-10-22: phone alerts (Web Push) built: see "2026-10-22 · P8 · Phone alerts with Web Push".
 - 2026-10-22: P8 slices 1-3 built, uncommitted: see the PROGRESS entry "2026-10-22 · P8 · Print queue, ticket drawing, print agent, Printing screens".

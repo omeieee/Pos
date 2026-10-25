@@ -20,6 +20,15 @@
 > - **Workflow (owner rule 2026-10-16):** after each completed part, ask the owner "save checkpoint or next step?" and wait for the answer (`CLAUDE.md` workflow, `3d8481c`).
 > - **Other agents (2026-10-25):** `AGENTS.md` lets Gemini/Antigravity follow the same rules and memory as Claude; their PROGRESS entries start with "(Gemini)".
 
+## 2026-10-25 · Maintenance · Order items keep cart order (D-45)
+- **Summary:** an order's lines came back shuffled wherever they are read (kitchen tickets, kitchen board via sync, receipts, LINE Flex, Telegram alert): readers sort by `order_items.id`, and the SQL `uuid_generate_v7()` is random after the millisecond, so one multi-row insert lost the cart order (seen as a flaky Telegram notifier test, about 1 in 3). Chose app-made monotonic UUIDv7 over a `position` column: no migration, covers every Drizzle insert (create, owner correction, D-39 customer edit) and both readers unchanged.
+- **Changed:** `packages/db/src/uuid7.ts` (new, `uuidv7`: RFC 9562 method 1, 12-bit counter), `schema/orders.ts` (`order_items.id` `$defaultFn`; SQL default kept), `uuid7.test.ts` (new), `orders.test.ts` (12 items in one frozen millisecond read back in cart order 100 times), `docs/03-data-model.md`, `ARCHITECTURE.md` rows, D-45.
+- **Verification:** run this session: new test fails on run 1 with the old SQL default and passes 100/100 with the fix; `pnpm --filter @sds/db db:generate` "No schema changes"; `pnpm lint` clean (1083 files); `pnpm build` failed in parallel with "Exec format error" spawning children (environment), `turbo run typecheck build --concurrency=1` 16/16; tests db 346, api 1616 (one `realtime/ws.test.ts` failure in the parallel run, passed alone and in a full api re-run), shared 1206, pos-web 2294, liff-web 117, promptpay 1276, finance 223, ui 123, line 69, print-agent 35, i18n 26, escpos 22.
+- **Decisions:** D-45 added, accepted by the owner 2026-10-25.
+- **Open issues:** orders saved before this keep their stored (random) line order; order holds within one API process only; the notifier-test explicit-ids workaround is not on any pushed branch (likely local on `feat/pay-first-orders`): remove it after the rebase onto this fix.
+- **Next:** rebase `feat/pay-first-orders` onto main and drop that workaround; check `/healthz` shows the new sha after the deploy.
+- **Commit:** `df55f27` (fix) and this checkpoint, merged to `main` with the owner's OK.
+
 ## 2026-10-25 · Maintenance · AGENTS.md for non-Claude agents
 - **Summary:** owner wants to hand execution work to Gemini (Antigravity, "agy") to save Claude usage. Added `AGENTS.md`: read `CLAUDE.md` first (source of truth), the shared memory files, the 11 domain rules in brief, and by-hand versions of what Claude gets automatically (protect-files and format-typecheck hooks, role playbooks in `.claude/agents/`, `.claude/agent-memory/`, the checkpoint skill). Gemini entries start with "(Gemini)"; plans from Claude go in `docs/plans/`.
 - **Changed:** `AGENTS.md` (new); `CLAUDE.md` (one line: keep `AGENTS.md` in step); this file.
