@@ -23,3 +23,14 @@ playwright-report/
 # Print agent runtime state (apps/print-agent)
 printed-jobs.json
 printed-jobs.json.tmp
+
+# Local agent and editor tools
+.claude/skills/*
+!.claude/skills/checkpoint/
+.claude/settings.local.json
+.claude/worktrees/
+skills-lock.json
+.agents/
+.aider-desk/
+.claude/launch.json
+Sample_image/
