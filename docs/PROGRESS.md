@@ -19,6 +19,15 @@
 > - **Maintenance:** the architecture refactor (code moved, behaviour unchanged) is deployed; see the entry "2026-10-16 · Maintenance · Architecture refactor". Not yet checked on a real iPad/iPhone. The as-built code index `ARCHITECTURE.md` (verified at `7ff9951`) is committed (`070e0b4`) and pushed with the owner's OK; see the newest entry.
 > - **Workflow (owner rule 2026-10-16):** after each completed part, ask the owner "save checkpoint or next step?" and wait for the answer (`CLAUDE.md` workflow, `3d8481c`).
 
+## 2026-10-25 · Maintenance · D-44 deployed; pay-first branch rebased
+- **Summary:** D-44 (Slip2Go only for a real slip QR; silent drops in the LINE chat for no-order and non-slip pictures) was merged to `main` at `fa90320` after lint, typecheck, all package tests and the pos-web build passed. CI, Deploy API and Deploy web succeeded. `feat/pay-first-orders` was rebased onto it (8 commits, no history of its own lost) and pushed to `claude/nifty-ramanujan-c7obvx` for the owner to review; it is NOT merged.
+- **Changed (rebase):** docs and i18n conflicts merged (privacy text keeps "never the slip picture" plus the Telegram sentence); `line/handlers.ts` keeps the D-40/D-41 slip allocation and adds the silent drops; `looksLikeSlip` moved to `slips/checker.ts` (uses the installed QR reader); compose keeps `NODE_OPTIONS` and the Telegram variables; the stale slip-verify customer-stage test now follows D-42; flex snapshot updated.
+- **Verification:** my run on the rebased branch: biome 0 errors; typecheck all packages; tests shared 1206+, api 1709, pos-web 2294+, liff-web 148, line 69, others pass. Not run: real LINE/Slip2Go, `/healthz` sha after the deploy (not reachable from the session).
+- **Owner answers:** Slip2Go 1-month package, 88 tokens, 87.250 left, expires 2026-11-20 23:59; terminate `sds-pos-old` and its boot volume on 2026-11-01.
+- **Open issues:** pay-first review items H1/M1/M2 are not in the repo docs I read, so they are not fixed here; migrations 0043-0044 and the `TELEGRAM_*`/`PUBLIC_API_BASE_URL` variables must be in the VM `.env` before it is merged; branch `chore/a1-arm64-migration` can be deleted; renew Slip2Go before 2026-11-20.
+- **Next:** owner checks `/healthz`, a real slip and a non-slip photo; owner lists H1/M1/M2 (or says where they are); then merge pay-first.
+- **Commit:** `fa90320` on main (deployed); rebased work `f3dd03f` on `claude/nifty-ramanujan-c7obvx`.
+
 ## 2026-10-25 · P4 · Slip2Go pre-screen and neutral LINE slip reply
 - **Summary:** owner asked to stop non-slip images from spending Slip2Go calls. Owner chose QR-only screening and no LINE push (reply first, status on the order page). Slip2Go is now called only with the text of a slip QR our own `jsqr` check parsed; the picture is never sent.
 - **Changed:** `apps/api/src/slips/checker.ts` (`readVerify`: no QR means no call, stays `unchecked`), `slip-verify.test.ts` (1 rewritten, 3 removed, 1 renamed), LINE slip reply wording th/en, privacy notice th/en (picture no longer sent).
