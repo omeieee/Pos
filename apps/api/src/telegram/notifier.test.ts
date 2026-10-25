@@ -75,7 +75,10 @@ async function newOrder(
   const orderId = order?.id ?? '';
   const items = options.items ?? [{ menuItemId: menu.noodles, name: 'ก๋วยเตี๋ยวต้มยำ', qty: 2 }];
   await h.db.insert(schema.orderItems).values(
-    items.map((item) => ({
+    items.map((item, index) => ({
+      // Increasing ids keep the cart order: the database's v7 default is random within one
+      // millisecond, and items are read back by id.
+      id: `01900000-0000-7000-8000-${String(orderCounter * 100 + index).padStart(12, '0')}`,
       orderId,
       menuItemId: item.menuItemId,
       nameThSnapshot: item.name,
