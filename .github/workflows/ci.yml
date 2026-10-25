@@ -24,7 +24,8 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm audit --prod
+      # The dependency audit runs in its own workflow (audit.yml): a new advisory must never stop
+      # lint, build and test from gating a deploy (OPS-03).
       - run: pnpm lint
       - run: pnpm build
       - run: pnpm test

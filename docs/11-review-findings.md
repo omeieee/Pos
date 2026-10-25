@@ -170,6 +170,7 @@ Format: **ID · title**, then where it is, status, impact, proposed fix and owne
   - add a weekly non-blocking audit run
   - SEC-08: the ip-address issue is practically low risk; the rate-limit key is the parsed client IP, and the API is not behind Cloudflare (D-10)
 - **Owner:** no.
+- **Fixed:** the bumps in `05dba20`; on 2026-10-26 the audit left `ci.yml` for its own non-gating `.github/workflows/audit.yml` (push to main, PRs, weekly Monday 09:23 Bangkok, manual). `pnpm audit --prod` was clean that day.
 
 ### 4.2 Medium
 

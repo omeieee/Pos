@@ -1,0 +1,37 @@
+name: Dependency audit
+
+# `pnpm audit --prod` on its own (OPS-03). It used to be a CI step, so a new
+# advisory failed CI and the next push to main deployed nothing, not even an
+# urgent fix. Here a red run is a signal to bump the dependency, never a block:
+# the deploys wait only for the CI workflow (lint, build, test).
+# Runs on pushes to main, on pull requests, weekly on Monday 09:23 Asia/Bangkok
+# (catches advisories published with no push), or by hand.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "23 2 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: audit-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm audit --prod
