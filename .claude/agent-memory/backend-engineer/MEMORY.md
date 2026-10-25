@@ -1,1 +1,5 @@
 - [pnpm release-age gate](pnpm-release-age.md) — pnpm add may silently add minimumReleaseAgeExclude; revert yaml+lock, pin older
+- [WebSocket test quirks](ws-test-quirks.md) — injectWS autoPong/socket context/close timing; real-TCP tests; upgrade-URL log leak
+- [Windows shell traps](shell-traps-windows.md) — PowerShell 5.1 corrupts UTF-8 Thai; worktree guard refuses cd+heredoc
+- [Windows EOL and worktree base](windows-eol-and-worktree-base.md) — python writes CRLF (repo is LF); worktree may start behind main; no cd-out in git cmds
+- [Windows worktree tooling](windows-worktree-tooling.md) — Python writes CRLF, vitest needs --no-file-parallelism, embedded-postgres UTF8 flags

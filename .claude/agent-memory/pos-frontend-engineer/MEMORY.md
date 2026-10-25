@@ -1,0 +1,1 @@
+- [Worktree base may lag main](feedback_worktree_base.md) — ff-merge main before mirroring backend rules; Edit hook typechecks noisily
