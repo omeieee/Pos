@@ -1,7 +1,7 @@
 /**
  * Design lab: UX/UI options for the staff app, drawn from the owner's "liquid glass" reference
  * (2026-10-25). A dev-only page (`/design-lab.html`, never part of the production build) that
- * shows four directions on the kitchen board, the day's overview, the sold-out switches and the
+ * shows two directions on the kitchen board, the day's overview, the sold-out switches and the
  * payment pop-up, with made-up sample orders, so the owner can choose before a real screen changes.
  *
  * Made to be folded into the app later: no new libraries (motion is CSS and the Web Animations
@@ -34,7 +34,7 @@ import { POP, SMOOTH, type SpringEasing, springEasing } from './spring.ts';
 // Options the owner compares
 // ---------------------------------------------------------------------------------------------
 
-const DIRECTIONS = ['studio-dark', 'studio-light', 'ember', 'daylight'] as const;
+const DIRECTIONS = ['ember', 'daylight'] as const;
 const DEPTHS = ['flat', 'frost', 'liquid'] as const;
 const CARDS = ['edge', 'tint', 'timer'] as const;
 const FRAMES = ['full', 'ipad', 'iphone'] as const;
@@ -48,11 +48,11 @@ type Frame = (typeof FRAMES)[number];
 type Screen = (typeof SCREENS)[number];
 
 /**
- * The options, each with its first-visit value (Studio dark, frosted glass, the time bar, full
+ * The options, each with its first-visit value (Brand night, frosted glass, the time bar, full
  * speed). A missing or unknown saved value, such as a look that was removed, falls back to it.
  */
 const optionsSchema = z.object({
-  direction: z.enum(DIRECTIONS).catch('studio-dark'),
+  direction: z.enum(DIRECTIONS).catch('ember'),
   depth: z.enum(DEPTHS).catch('frost'),
   refract: z.boolean().catch(true),
   card: z.enum(CARDS).catch('timer'),
@@ -96,16 +96,6 @@ interface Choice<T> {
 }
 
 const DIRECTION_CHOICES: readonly Choice<Direction>[] = [
-  {
-    value: 'studio-dark',
-    label: 'Studio dark',
-    hint: 'Slate fading to black, frosted cards, white pills, thin numbers, a blue-violet line.',
-  },
-  {
-    value: 'studio-light',
-    label: 'Studio light',
-    hint: 'Soft grey and white, frosted cards, a black main button. The kitchen uses Studio dark.',
-  },
   {
     value: 'ember',
     label: 'Brand night',
@@ -1331,7 +1321,7 @@ function Delta({ text, down }: { text: string; down?: boolean }) {
   );
 }
 
-/** A baht amount with its satang dimmed, so the whole baht reads first (Studio: "฿92.65"). */
+/** A baht amount with its satang dimmed, so the whole baht reads first ("฿92.65"). */
 function Money({ satang, auto }: { satang: number; auto?: boolean }) {
   const text = formatBaht(satang, 'th', auto ? { decimals: 'auto' } : {});
   const dot = text.lastIndexOf('.');
@@ -2216,23 +2206,12 @@ function Notes({ onClose }: { onClose: () => void }) {
         </button>
       </div>
       <p>
-        Four looks on the same staff screens, with made-up orders. Nothing here touches real data or
-        the live app. Change the options in the panel; your choice is kept on this device.
+        Your two chosen looks on the same staff screens, with made-up orders. Nothing here touches
+        real data or the live app. Change the options in the panel; your choice is kept on this
+        device.
       </p>
-      <h3>The four looks</h3>
+      <h3>The two looks</h3>
       <ul>
-        <li>
-          <strong>Studio dark.</strong> From your Iconly references: slate at the top fading to
-          black, frosted cards with big rounded corners, a white pill for the active tab, thin large
-          numbers with the decimals dimmed, a blue-to-violet chart line, and colour only in small
-          status chips (green done and paid, orange cooking, red late).
-        </li>
-        <li>
-          <strong>Studio light.</strong> The same layout on soft grey and white, with a black main
-          button; the kitchen stays on Studio dark, as it stays dark today. Both Studio looks
-          replace the chili-red main button (white or black), which changes the approved brand
-          (decision D-22), so either would need a new decision.
-        </li>
         <li>
           <strong>Brand night.</strong> The same liquid glass in your chili red, amber and jade on
           warm dark glass, on every screen. It is today's kitchen look, extended. It keeps the D-22
@@ -2281,9 +2260,7 @@ function Notes({ onClose }: { onClose: () => void }) {
       <p>
         Liquid glass surfaces, slow orbs and the dot grid, sliding pill tabs, cards that glide to
         the next column with a bell when ready, toast pills, the tick dial, the sold-out stamp, the
-        today-against-last-week chart and the busy-hours grid (first file); thin numbers with dimmed
-        decimals (second file); the slate-to-black and soft-white grounds, white active pills, black
-        main button and blue-violet chart line (Iconly references).
+        today-against-last-week chart and the busy-hours grid.
       </p>
       <h3>Left out, and why</h3>
       <ul>
