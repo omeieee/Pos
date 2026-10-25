@@ -487,9 +487,10 @@ export async function latestRecipientForCustomer(
 // ---------- Unpaid timeout (D-41) ----------
 
 /**
- * LINE orders still `new` that were placed before `placedBefore`, oldest first and bounded: the
- * unpaid-timeout job's candidates. The job decides under the order lock whether each one is
- * really unpaid and pay-first.
+ * LINE orders still `new` with a `pending` PromptPay payment that were placed before
+ * `placedBefore`, oldest first and bounded: the unpaid-timeout job's candidates. The payment filter
+ * keeps LINE cash and co-pay orders (which wait in `new` for staff accept) from filling every batch
+ * (M4). The job decides under the order lock whether each one is really unpaid and pay-first.
  */
 export async function listNewLineOrdersPlacedBefore(
   db: Db,
@@ -500,7 +501,12 @@ export async function listNewLineOrdersPlacedBefore(
     .select()
     .from(orders)
     .where(
-      and(eq(orders.channel, 'line'), eq(orders.status, 'new'), lt(orders.placedAt, placedBefore)),
+      and(
+        eq(orders.channel, 'line'),
+        eq(orders.status, 'new'),
+        lt(orders.placedAt, placedBefore),
+        sql`exists (select 1 from payments p where p.order_id = ${orders.id} and p.method = 'promptpay' and p.status = 'pending')`,
+      ),
     )
     .orderBy(asc(orders.placedAt), asc(orders.id))
     .limit(limit);

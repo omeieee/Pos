@@ -650,4 +650,14 @@ describe('the unpaid timeout job (D-41)', () => {
     expect((await pays(order.id))[0]).toMatchObject({ status: 'cancelled', slip_image_key: null });
     expect(sent.slice(marker)).toHaveLength(0);
   });
+
+  test('cash orders waiting for staff accept do not starve PromptPay orders out of the batch (M4)', async () => {
+    const token = await customer();
+    for (let i = 0; i < 3; i += 1) await place(token, 50, 'cash');
+    const order = await place(token, 50);
+    at(61);
+    // A batch of 3: without the PromptPay filter it holds only the three older cash orders.
+    expect(await cancelUnpaidOrders(deps(), 3)).toMatchObject({ cancelled: 1 });
+    expect((await orderRow(order.id))?.status).toBe('cancelled');
+  });
 });
