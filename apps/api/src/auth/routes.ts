@@ -99,6 +99,8 @@ export async function registerAuthRoutes(
   app.post('/owner', { preHandler: ownerBucket, ...limit(10) }, async (request) => {
     const token = deviceToken(request);
     const device = token === undefined ? null : await authenticateDevice(ctx, token);
+    // Like /staff and /pin: the print agent's token never carries a person's session (SEC-01).
+    if (device) requireStaffDevice(device);
     const input = parse(ownerLoginInputSchema, request.body);
     return ownerLogin(ctx, device, input, meta(request));
   });

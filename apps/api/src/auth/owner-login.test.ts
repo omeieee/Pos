@@ -246,6 +246,21 @@ describe('POST /v1/auth/owner', () => {
     expect(bad.json()).toMatchObject({ code: 'DEVICE_UNREGISTERED' });
   });
 
+  test("refuses the print agent's device token before checking the password (SEC-01)", async () => {
+    await fresh();
+    const agent = await h.newDevice('print_agent');
+    const before = (await h.client.query('select count(*)::int as n from sessions')).rows[0];
+    const refused = await login(withTotp(owner), { 'x-device-token': agent.token });
+    expect(refused.statusCode).toBe(403);
+    expect(refused.json()).toMatchObject({ code: 'FORBIDDEN' });
+    expect((await h.client.query('select count(*)::int as n from sessions')).rows[0]).toEqual(
+      before,
+    );
+    // The TOTP code was not spent: the same sign-in works from an iPad.
+    const ipad = await h.newDevice('ipad');
+    expect((await login(withTotp(owner), { 'x-device-token': ipad.token })).statusCode).toBe(200);
+  });
+
   test('is rate limited per IP', async () => {
     await fresh();
     let limited = 0;

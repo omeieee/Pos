@@ -268,6 +268,7 @@ Format: **ID · title**, then where it is, status, impact, proposed fix and owne
 - **Impact:** owner actions are audited as the print notebook, revoking the notebook ends the owner session, and push subscriptions can attach to it. There is no privilege gain (password and TOTP are still needed).
 - **Fix:** call `requireStaffDevice(device)` when a token is sent. Test: 403 for a print_agent token, 200 for an iPad. **Do this before registering the print device.**
 - **Owner:** no.
+- **Fixed 2026-10-26:** `auth/routes.ts` `/owner` calls `requireStaffDevice` before the login; test in `auth/owner-login.test.ts` (403, no session, TOTP code not spent).
 
 **MAIN-01 · The Orders page says the system never auto-confirms from a slip, but D-27 auto-confirm is on**
 - **Where:**
