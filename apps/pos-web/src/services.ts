@@ -34,6 +34,7 @@ import { type CartStore, createCartStore } from './pos/cart/cart-store.ts';
 import { type CatalogueCache, createCatalogueCache } from './pos/cart/catalogue-cache.ts';
 import { createRecipientStore, type RecipientStore } from './pos/cart/recipient-store.ts';
 import { createNewOrderAlarm } from './pos/kitchen/new-order-alarm.ts';
+import { createReadyUndoStore, type ReadyUndoStore } from './pos/kitchen/ready-undo-store.ts';
 import { createOrderMovesStore, type OrderMovesStore } from './pos/orders/order-moves-store.ts';
 import { createOutboxStore, type OutboxStore } from './pos/outbox/outbox-store.ts';
 import {
@@ -91,6 +92,8 @@ export interface Services {
   adminEditor: AdminStore;
   /** The status moves of an order (order page and kitchen view): guarded, reconciled, epoch-safe. */
   orderMoves: OrderMovesStore;
+  /** The kitchen's 5-second undo of "done" (UX-02): the move to ready goes out when it ends. */
+  readyUndo: ReadyUndoStore;
   /** Reprint of an order and the recent print jobs (P8): online only, one reprint per order at a time. */
   print: PrintStore;
   /** Phone alerts of this device (P8): the on/off switch against the server and the browser's push (a platform seam). */
@@ -211,6 +214,7 @@ export function createServices(
   const recipients = createRecipientStore({ api, entities });
   const payments = createPaymentStore({ api, entities, activity, auth });
   const orderMoves = createOrderMovesStore({ api, entities });
+  const readyUndo = createReadyUndoStore({ moves: orderMoves, entities });
   const print = createPrintStore({ api, lifecycle });
   const pushAlerts = createPushAlertsStore({ api, push: options.push ?? createWebPush() });
   const menuEditor = createMenuEditorStore({
@@ -260,6 +264,7 @@ export function createServices(
     recipients,
     payments,
     orderMoves,
+    readyUndo,
     print,
     pushAlerts,
     menuEditor,
@@ -284,6 +289,7 @@ export function createServices(
           recipients.reset();
           payments.reset();
           orderMoves.reset();
+          readyUndo.reset();
           print.reset();
           pushAlerts.reset();
           paymentPopup.reset();

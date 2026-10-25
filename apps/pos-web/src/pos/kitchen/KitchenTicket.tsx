@@ -1,5 +1,5 @@
 import type { OrderDto, StaffRole } from '@sds/shared';
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import { errorText } from '../../api/errors.ts';
 import { clockTime } from '../../design/format.ts';
 import { Gi } from '../../design/icons.tsx';
@@ -81,10 +81,15 @@ export function LineWho({ line }: { line: NonNullable<OrderDto['line']> }) {
  * shared order machine allows this role (`kitchenMoves`), so a role never sees one the server would
  * refuse; the server still checks. The card changes when the answer comes (the store), not on the
  * tap. A refusal is shown on this card, for as long as the order is still where it was.
+ *
+ * "Done" tells a LINE customer at once and cannot be taken back, so its tap only starts a 5-second
+ * countdown (`readyUndo`); in its place the same big button reads "เลิกทำ · 5" and takes it back.
+ * The move goes out when the countdown ends, even if this screen has gone away by then.
  */
 function Moves({ order, role }: { order: OrderDto; role: StaffRole }) {
-  const { orderMoves } = useServices();
+  const { orderMoves, readyUndo } = useServices();
   const flow = useStoreState(orderMoves);
+  const undo = useStoreState(readyUndo);
   const tr = useT();
   const moves = kitchenMoves(order.status, role);
   if (moves.length === 0) return null;
@@ -93,19 +98,43 @@ function Moves({ order, role }: { order: OrderDto; role: StaffRole }) {
   const shown = failure && failure.from === order.status ? failure.error : null;
   return (
     <>
-      {moves.map((move) => (
-        <button
-          key={move.to}
-          type="button"
-          className={`g-btn g-btn-lg g-btn-block kb-go ${move.to === 'ready' ? 'kb-go-done' : 'kb-go-start'}`}
-          disabled={pending}
-          aria-busy={pending}
-          onClick={() => void orderMoves.transition(order, move.to)}
-        >
-          {move.to === 'ready' ? <Gi n="check" /> : null}
-          {move.to === 'ready' ? tr('kitchen.move.ready') : tr(`order.move.${move.to}`)}
-        </button>
-      ))}
+      {moves.map((move) => {
+        const countdown = move.to === 'ready' ? undo.waiting[order.id] : undefined;
+        if (countdown && countdown.from === order.status) {
+          return (
+            <Fragment key={move.to}>
+              <button
+                type="button"
+                className="g-btn g-btn-lg g-btn-block kb-go kb-go-undo g-num"
+                aria-describedby={`ku-${order.id}`}
+                onClick={() => readyUndo.undo(order.id)}
+              >
+                {tr('kitchen.undo', { seconds: countdown.secondsLeft })}
+              </button>
+              <span id={`ku-${order.id}`} className="visually-hidden">
+                {tr('kitchen.undoHint')}
+              </span>
+            </Fragment>
+          );
+        }
+        return (
+          <button
+            key={move.to}
+            type="button"
+            className={`g-btn g-btn-lg g-btn-block kb-go ${move.to === 'ready' ? 'kb-go-done' : 'kb-go-start'}`}
+            disabled={pending}
+            aria-busy={pending}
+            onClick={() =>
+              move.to === 'ready'
+                ? readyUndo.start(order)
+                : void orderMoves.transition(order, move.to)
+            }
+          >
+            {move.to === 'ready' ? <Gi n="check" /> : null}
+            {move.to === 'ready' ? tr('kitchen.move.ready') : tr(`order.move.${move.to}`)}
+          </button>
+        );
+      })}
       {shown ? (
         <p
           role="alert"
