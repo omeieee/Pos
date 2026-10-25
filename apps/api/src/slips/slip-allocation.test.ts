@@ -16,7 +16,7 @@ import { createLineRuntime, type LineRuntime } from '../line/runtime.ts';
 import { createHarness, type Harness, type Menu } from '../test-support/harness.ts';
 import { createSlipChecker, installSlipChecker, type SlipChecker } from './checker.ts';
 import type { SlipOcr } from './ocr.ts';
-import type { SlipQrReader } from './qr.ts';
+import { installSlipScreen, type SlipQrReader } from './qr.ts';
 import { createSlip2goVerifier } from './slip2go.ts';
 import { createMemorySlipStore, type SlipStore } from './store.ts';
 
@@ -623,13 +623,31 @@ describe('the unpaid timeout job (D-41)', () => {
     expect(slip2goCalls).toBe(0);
   });
 
-  test('after the 24 hour window the late slip is not kept (the usual neutral reply)', async () => {
+  test('after the 24 hour window the late slip is not kept and gets no reply (nothing waits, D-44)', async () => {
     const token = await customer();
     const order = await place(token, 50);
     at(61);
     await cancelUnpaidOrders(deps());
     at(61 + 25 * 60);
+    const marker = sent.length;
     await chatSlip(picture(50));
     expect((await pays(order.id))[0]?.slip_image_key).toBeNull();
+    expect(sent.slice(marker)).toHaveLength(0);
+  });
+
+  test('inside the window a chat picture with no bank-slip QR is still dropped in silence (D-44)', async () => {
+    const token = await customer();
+    const order = await place(token, 50);
+    at(61);
+    await cancelUnpaidOrders(deps());
+    const marker = sent.length;
+    installSlipScreen({ read: async () => null });
+    try {
+      await chatSlip(picture(50));
+    } finally {
+      installSlipScreen(null);
+    }
+    expect((await pays(order.id))[0]).toMatchObject({ status: 'cancelled', slip_image_key: null });
+    expect(sent.slice(marker)).toHaveLength(0);
   });
 });
