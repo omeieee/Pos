@@ -114,7 +114,7 @@ Format: **ID · title**, then where it is, status, impact, proposed fix and owne
   - `apps/pos-web/src/realtime/entity-store.ts:121-141` (`put()` raises `lastRev` for any applied frame)
   - `realtime/connection.ts:179-185` (catch-up from `lastRev − 200`)
   - REST callers: `pos/orders/use-load-orders.ts:25`, `pos/payments/payment-store.ts:245,275`, `pos/cart/cart-store.ts:419`
-- **Status:** Confirmed for the mechanism (repro against a fake `/v1/sync` modelled on the API filter). Whether REST beats the socket on the real network is Plausible.
+- **Status:** **Fixed 2026-10-26** on `claude/brave-knuth-wgwts8` (`c63871e`, `9d9945b`; not on `main`). Was: Confirmed for the mechanism (repro against a fake `/v1/sync` modelled on the API filter). Whether REST beats the socket on the real network is Plausible.
 - **Impact:** during the live co-pay round (1 Oct – 30 Nov), any reload on the Orders board or Kitchen view can disable co-pay on that device until sign-out. Reloads happen after every deploy and when iOS discards the app.
 - **Fix:** a separate sync cursor moved only by the catch-up's `nextSince` and by live frames. REST `apply` updates rows but not the cursor. Turn the 3 repros into regression tests.
 - **Owner:** no.
@@ -123,7 +123,7 @@ Format: **ID · title**, then where it is, status, impact, proposed fix and owne
 - **Where:**
   - `apps/pos-web/src/pos/kitchen/KitchenTicket.tsx:103` → `order-moves-store.ts:134` → `apps/api/src/orders/service.ts:368` → `apps/api/src/line/completion-push.ts:76-82`
   - no `ready → preparing` in `packages/shared/src/order-machine.ts`
-- **Status:** Code-traced.
+- **Status:** **Fixed 2026-10-26** (client undo, 500 ms double-tap guard) on `claude/brave-knuth-wgwts8` (`e3b976c`, `5dc8d99`; not on `main`). Was: Code-traced.
 - **Impact:** a mis-tap on a busy, wet-handed day sends the wrong customer downstairs, spends one of the 300 monthly pushes, and can't be moved back.
 - **Fix:** a 5-second client-side undo ("เลิกทำ · 5") that sends the PATCH only when the countdown ends. Test it with fake timers. A server-side variant (allow `ready → preparing` before the push) would need a decision entry.
 - **Owner:** no for the client undo.
@@ -159,7 +159,7 @@ Format: **ID · title**, then where it is, status, impact, proposed fix and owne
   - `.github/workflows/ci.yml:27` (`pnpm audit --prod` before lint)
   - deploys gate on CI success (`deploy-api.yml:53-59`, `deploy-web.yml:39-45`)
   - advisories: fastify <5.12.6 (GHSA-389g-gv7q-r4x8, low); ip-address ≤10.7.3 via `@fastify/rate-limit` (GHSA-rxp7-6hxx-x8q5, moderate)
-- **Status:** Confirmed (`pnpm audit --prod` exits 1; the last green CI predates the advisories).
+- **Status:** **Block cleared** by 2026-10-26: `pnpm audit --prod` reports no known vulnerabilities; the audit still gates CI (hardening open). Was: Confirmed (`pnpm audit --prod` exits 1; the last green CI predates the advisories).
 - **Impact:** an urgent payment or LINE hotfix silently doesn't deploy. The manual override also skips the test gate.
 - **Fix:**
   - bump fastify ≥5.12.6, and pull ip-address ≥10.7.4 (bump rate-limit or a pnpm override)
@@ -243,7 +243,7 @@ Format: **ID · title**, then where it is, status, impact, proposed fix and owne
   - `print/service.ts:74-87`
   - `server.ts:114,163,167-173` (no drain on shutdown)
   - `packages/db/src/print.ts:146-161`
-- **Status:** Confirmed: an order in `preparing` with 0 print jobs, and the silent check reports 0 waiting.
+- **Status:** **Fixed 2026-10-26** (job written in the order's transaction) on `claude/brave-knuth-wgwts8` (`5d3bd7c`; not on `main`). Was: Confirmed: an order in `preparing` with 0 print jobs, and the silent check reports 0 waiting.
 - **Fix:** insert the kitchen job in the order's own transaction (guarded by `currentPrintingEnabled(tx)`), or add a sweep job, and call `v1.idle()` on shutdown. D-37's wording would need a one-line update.
 - **Owner:** no.
 
@@ -261,7 +261,7 @@ Format: **ID · title**, then where it is, status, impact, proposed fix and owne
 
 **SEC-01 · Owner password sign-in accepts the print agent's device token**
 - **Where:** `apps/api/src/auth/routes.ts:98-104` (`/owner` calls `authenticateDevice` but not `requireStaffDevice`, unlike `/staff` and `/pin`); `owner-login.ts`.
-- **Status:** Confirmed.
+- **Status:** **Fixed 2026-10-26** on `claude/brave-knuth-wgwts8` (`e0a3ad1`; not on `main`). Was: Confirmed.
 - **Impact:** owner actions are audited as the print notebook, revoking the notebook ends the owner session, and push subscriptions can attach to it. There is no privilege gain (password and TOTP are still needed).
 - **Fix:** call `requireStaffDevice(device)` when a token is sent. Test: 403 for a print_agent token, 200 for an iPad. **Do this before registering the print device.**
 - **Owner:** no.

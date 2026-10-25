@@ -20,6 +20,15 @@
 > - **Workflow (owner rule 2026-10-16):** after each completed part, ask the owner "save checkpoint or next step?" and wait for the answer (`CLAUDE.md` workflow, `3d8481c`).
 > - **Other agents (2026-10-25):** `AGENTS.md` lets Gemini/Antigravity follow the same rules and memory as Claude; their PROGRESS entries start with "(Gemini)".
 
+## 2026-10-26 · P8 · Review fixes POS-01, UX-02, SEC-01, BE-01
+- **Summary:** Owner said to continue with the recommended steps unattended. Fixed four findings from [11-review-findings](11-review-findings.md), then a QA review (qa-security-reviewer: nothing blocking) and its follow-ups. **POS-01:** REST answers no longer move the pos-web sync cursor (`applyLive` for socket frames; restore check uses a new `seenRev`; a live echo raises the cursor). **UX-02:** kitchen "ทำเสร็จ" starts a 5 s "เลิกทำ" countdown (`ready-undo-store.ts`, 500 ms double-tap guard, dropped on sign-out or if the order moves elsewhere). **SEC-01:** `/v1/auth/owner` refuses a `print_agent` token (403). **BE-01:** `print/service.ts:sendToKitchen()` writes the kitchen job in the order's transaction (savepoint; `print.job_failed` on failure); `kitchen-queue.ts` removed. OPS-03's block is already gone (`pnpm audit --prod`: no known vulnerabilities).
+- **Changed:** `apps/pos-web/src/realtime/`, `pos/kitchen/`, `services.ts`; `packages/i18n` (`kitchen.undo`, `kitchen.undoHint`); `apps/api/src/{auth,print,orders,payments}`, `v1.ts`; D-37/D-38 wording; `ARCHITECTURE.md`; finding statuses in `11-review-findings.md`.
+- **Verification:** `pnpm --filter @sds/pos-web test` 2448 passed; `pnpm --filter @sds/api test -- --no-file-parallelism` 1715 passed; `@sds/i18n` 26 passed; per-package `typecheck` 0 errors; `pos-web` vite build OK; `pnpm lint` clean. `pnpm build` (turbo) fails in the cloud container with "Exec format error" before any task runs (environment). Not run: Playwright E2E (no browsers), real iPad/iPhone, real Postgres savepoint.
+- **Decisions:** D-37, D-38 wording amended (BE-01); no new decision.
+- **Open issues:** QA follow-ups not done: drop a countdown that wakes far past its end (owner question), a `busy` ready move is dropped silently, log the print-insert error class, Order page "ready" has no undo, `server.ts` shutdown does not wait for push/Telegram. BE-02 and the other no-owner findings remain.
+- **Next:** owner reviews and merges `claude/brave-knuth-wgwts8` into `main` (auto-deploys); owner decisions in [11-review-findings §5](11-review-findings.md); then BE-02, PAY-01/02, LINE-02/03/04.
+- **Commit:** `c63871e`, `e3b976c`, `e0a3ad1`, `5d3bd7c`, `9d9945b`, `5dc8d99` on `claude/brave-knuth-wgwts8` (pushed, not on `main`).
+
 ## 2026-10-26 · P8 · Fix the flaky print-ticket privacy test
 - **Summary:** `apps/api` print test "never holds a phone number, a customer id or money, even when the notes do" ran `/\d{9}/` over the whole claimed job, whose random UUIDv7 ids and `leaseToken` sometimes hold 9 digits in a row (failed about 1 run in 6, seen on `claude/festive-cori-9s1wna`). The 9-digit check now runs on `job.ticket` only (the ticket schema has no ids); every other assertion is unchanged. Test-only.
 - **Changed:** `apps/api/src/print/print.test.ts`.
@@ -27,7 +36,7 @@
 - **Decisions:** none.
 - **Open issues:** this file holds about 45 entries; the oldest are due to move to the month archive.
 - **Next:** merge `claude/brave-knuth-wgwts8` into `main` when the owner asks; then the pay-first pre-deploy steps and the [11-review-findings](11-review-findings.md) fixes.
-- **Commit:** `0c8c592` on `claude/brave-knuth-wgwts8` (pushed, not on `main`); this entry uncommitted.
+- **Commit:** `0c8c592` on `claude/brave-knuth-wgwts8` (pushed, not on `main`); entry committed in `9ea5e5a`.
 
 ## 2026-10-26 · Maintenance · Delete the 53 leftover agent worktree folders from disk
 - **Summary:** Deleted all 53 `.claude/worktrees/agent-*` folders (each about 35,000 items with about 1,900 pnpm junctions). `.git/worktrees` was already empty, so only `git worktree prune` was left there. About 2.7 GB freed (C: free 20.52 GB to 23.24 GB, measured after the first test folder was already deleted). The earlier failure was not reproduced: plain `rmdir /s /q` worked on the test folder. Longest path was 270 characters (17 paths over 260); no read-only or system files; no open-handle check (handle.exe not installed).
