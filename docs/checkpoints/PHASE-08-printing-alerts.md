@@ -25,11 +25,12 @@ Every order, whatever its source (LINE, storefront, Grab, LINE MAN), prints in t
 Slices 1-3 built 2026-10-22, **uncommitted, not deployed, no real printer yet** (rows in `ARCHITECTURE.md`):
 - **Queue (slice 1):** `print_jobs` (migration 0040); `GET|PATCH /v1/settings/printing` (`settings.view` / `settings.edit`, default off); `POST /v1/print/claim`, `POST /v1/print/jobs/:id/ack` (guard: non-revoked `print_agent` device token), `GET /v1/print/jobs`, `POST /v1/orders/:id/reprint` (`order.create`); event `order.sent_to_kitchen` (on entering `preparing`); schemas and ticket builder in `packages/shared/src/print.ts`.
 - **Drawing and agent (slice 2):** `packages/escpos` (fontkit + bundled Sarabun, own scanline filler, `renderTicket`); `apps/print-agent` (claim, render, TCP 9100, ack; printed-ids file; `--test-print`; README for Windows).
-- **Phone alerts (slice 4):** `push_subscriptions` (migration 0041); `GET /v1/push/config`, `GET|PUT|DELETE /v1/push/subscription`; `apps/api/src/push/` sends on `alert.new_order`; VAPID env `VAPID_PUBLIC_KEY/PRIVATE_KEY/SUBJECT`; pos-web `#/alerts` screen, `platform/push.ts`, `public/push-sw.js`.
+- **Phone alerts (slice 4):** `push_subscriptions` (migration 0041); `GET /v1/push/config`, `GET|PUT|DELETE /v1/push/subscription`; `apps/api/src/push/` sends on `alert.new_order`, and on warn/critical `alert.security` to active owner/manager devices (OPS-02, `45bcd99`); VAPID env `VAPID_PUBLIC_KEY/PRIVATE_KEY/SUBJECT`; pos-web `#/alerts` screen, `platform/push.ts`, `public/push-sw.js`.
 - **Pay-first (D-38 to D-42, built 2026-10-25):** committed and merged into `main`; deployed (live `/healthz` `e5a3de7`, 2026-10-25). Migrations 0043-0044; unpaid-timeout job, chat-slip allocation, late-slip keeper, payment pop-up, Telegram (`ARCHITECTURE.md` rows).
 - **Screens (slice 3):** Settings "Printing" section (switch plus recent jobs), Reprint button on order screens, `print_agent` device label.
 
 ## Log
+- 2026-10-26: review fix OPS-02 code part (security and ops alerts by Web Push to owner + manager devices), `45bcd99`: see "2026-10-26 · P8 · Review fix OPS-02".
 - 2026-10-26: review fix UX-02 (5 s undo on the kitchen "ทำเสร็จ" before the move and the LINE ready push), `c6eda7a`: see "2026-10-26 · P8 · Review fix UX-02".
 - 2026-10-26: review fix POS-01 (REST answers no longer move the pos-web sync cursor), `388dd8b` on the session branch: see "2026-10-26 · P8 · Review fix POS-01".
 - 2026-10-25: kitchen tickets (and every other reader of order lines) now list dishes in cart order: see "2026-10-25 · Maintenance · Order items keep cart order (D-45)".
