@@ -18,6 +18,16 @@
 > - **Before any push:** `pnpm lint` (CI gates on Biome, and a lint error skips the deploy), `pnpm build`, tests; `main` auto-deploys, so new env vars go into the VM `.env` first and migrations take the next free number. Check `/healthz` for the new sha after the push.
 > - **Maintenance:** the architecture refactor (code moved, behaviour unchanged) is deployed; see the entry "2026-10-16 · Maintenance · Architecture refactor". Not yet checked on a real iPad/iPhone. The as-built code index `ARCHITECTURE.md` (verified at `7ff9951`) is committed (`070e0b4`) and pushed with the owner's OK; see the newest entry.
 > - **Workflow (owner rule 2026-10-16):** after each completed part, ask the owner "save checkpoint or next step?" and wait for the answer (`CLAUDE.md` workflow, `3d8481c`).
+> - **Other agents (2026-10-25):** `AGENTS.md` lets Gemini/Antigravity follow the same rules and memory as Claude; their PROGRESS entries start with "(Gemini)".
+
+## 2026-10-25 · Maintenance · AGENTS.md for non-Claude agents
+- **Summary:** owner wants to hand execution work to Gemini (Antigravity, "agy") to save Claude usage. Added `AGENTS.md`: read `CLAUDE.md` first (source of truth), the shared memory files, the 11 domain rules in brief, and by-hand versions of what Claude gets automatically (protect-files and format-typecheck hooks, role playbooks in `.claude/agents/`, `.claude/agent-memory/`, the checkpoint skill). Gemini entries start with "(Gemini)"; plans from Claude go in `docs/plans/`.
+- **Changed:** `AGENTS.md` (new); `CLAUDE.md` (one line: keep `AGENTS.md` in step); this file.
+- **Verification:** commands named in `AGENTS.md` checked against `package.json` scripts and `packages/db` (`db:generate`). Not run: lint/build/tests (docs only); not tried with Gemini itself.
+- **Decisions:** none.
+- **Open issues:** Gemini CLI reads `GEMINI.md` by default (set `context.fileName` to include `AGENTS.md`); Antigravity's rules file not checked. `AGENTS.md` repeats the domain rules in brief, so it can drift from `CLAUDE.md`.
+- **Next:** rebase `feat/pay-first-orders`; try a real slip and a non-slip photo on the test OA.
+- **Commit:** `b213e05` (AGENTS.md), merged to `main` with this entry.
 
 ## 2026-10-25 · P4 · Slip2Go pre-screen and neutral LINE slip reply
 - **Summary:** owner asked to stop non-slip images from spending Slip2Go calls. Owner chose QR-only screening and no LINE push (reply first, status on the order page). Slip2Go is now called only with the text of a slip QR our own `jsqr` check parsed; the picture is never sent.

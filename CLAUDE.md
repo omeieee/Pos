@@ -11,6 +11,7 @@ A cloud POS for a made-to-order noodle restaurant inside a condominium.
 - **Current phase:** the header of [docs/PROGRESS.md](docs/PROGRESS.md). P1 Foundation built the packages; apps come in P2–P4.
 - **Stack and design choices:** [docs/decisions.md](docs/decisions.md). Don't restate them elsewhere, and don't change them silently. Propose a decision entry first.
 - **Open owner questions:** [docs/10-open-questions.md](docs/10-open-questions.md).
+- **Other agents (Gemini etc.):** [AGENTS.md](AGENTS.md) points them here. When the domain rules, workflow or commands in this file change, update `AGENTS.md` to match.
 
 ## Workflow
 **At the start of every session**
