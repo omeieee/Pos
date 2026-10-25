@@ -30,6 +30,7 @@ import {
 import type { Principal, RequestMeta } from '../auth/service.ts';
 import { ApiError, conflict, forbidden, notFound, versionConflict } from '../errors.ts';
 import { toOrderDto } from '../orders/dto.ts';
+import { sendToKitchen } from '../print/service.ts';
 import type { Emit } from '../tx.ts';
 import { toPaymentDto } from './dto.ts';
 
@@ -228,9 +229,9 @@ export const needsManualConfirmOf = (rows: readonly paymentsRepo.PaymentRow[]): 
  * not the values changed) and emits `order.upserted`. The caller holds the order lock.
  *
  * D-38: a pay-first order that is now `paid` and still `new` moves to `preparing` in the SAME
- * update (actor system, reason `paid`), and after the commit `order.sent_to_kitchen` prints its
- * ticket. The `new` check makes a second settle do nothing more. When a pay-first order first
- * becomes paid, `alert.payment {kind: 'paid'}` goes out (D-42). Only pay-first orders alert: a
+ * update (actor system, reason `paid`), and its kitchen ticket is queued in this same transaction
+ * (`print/service.ts:sendToKitchen()`, BE-01). The `new` check makes a second settle do nothing
+ * more. When a pay-first order first becomes paid, `alert.payment {kind: 'paid'}` goes out (D-42). Only pay-first orders alert: a
  * counter sale or a LINE cash order is paid by staff at the till, who need no pop-up for it.
  */
 export async function settleOrder(
@@ -262,7 +263,7 @@ export async function settleOrder(
   if (!updated) throw versionConflict(order.version); // cannot happen under the row lock
   const dto = await orderDto(tx, updated);
   emit({ type: 'order.upserted', id: updated.id, rev: updated.rev, data: dto });
-  if (startKitchen) emit({ type: 'order.sent_to_kitchen', orderId: updated.id });
+  if (startKitchen) await sendToKitchen(tx, emit, updated, now);
   if (payFirst && order.paymentStatus !== 'paid') {
     emit({ type: 'alert.payment', orderId: updated.id, orderNo: updated.orderNo, kind: 'paid' });
   }

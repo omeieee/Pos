@@ -24,7 +24,6 @@ import { registerMenuRoutes } from './menu/routes.ts';
 import { registerRecipientRoutes } from './orders/recipients.ts';
 import { registerOrderRoutes } from './orders/routes.ts';
 import { registerPaymentRoutes } from './payments/routes.ts';
-import { registerKitchenQueue } from './print/kitchen-queue.ts';
 import { registerPrintRoutes } from './print/routes.ts';
 import { type PushRuntime, registerPushNotifier } from './push/notifier.ts';
 import { registerPushRoutes } from './push/routes.ts';
@@ -112,7 +111,7 @@ export interface ModuleContext {
 
 /** What `registerV1` hands back: a way to wait for the background work an event started. */
 export interface V1Handle {
-  /** Resolves when the kitchen print queue and the phone alerts have finished what events started (tests). */
+  /** Resolves when the phone alerts have finished what events started (tests). */
   idle(): Promise<void>;
 }
 
@@ -132,8 +131,6 @@ export async function registerV1(app: FastifyInstance, deps: V1Deps): Promise<V1
   const receipts = deps.receipts ?? null;
   // One push per LINE order when staff complete it, through the quota-aware sender.
   registerCompletionPush({ db: deps.db, runtime: lineRuntime, events: deps.events, now: auth.now });
-  // One kitchen print job per order that reaches `preparing`, while the owner's switch is on.
-  const kitchenQueue = registerKitchenQueue({ db: deps.db, events: deps.events, now: auth.now });
   // One phone alert per new order, to every subscribed device that is not revoked (D-37).
   const pushNotifier = deps.push
     ? registerPushNotifier({
@@ -245,9 +242,6 @@ export async function registerV1(app: FastifyInstance, deps: V1Deps): Promise<V1
     { prefix: '/v1' },
   );
   return {
-    idle: () =>
-      Promise.all([kitchenQueue.idle(), pushNotifier?.idle(), telegramNotifier?.idle()]).then(
-        () => {},
-      ),
+    idle: () => Promise.all([pushNotifier?.idle(), telegramNotifier?.idle()]).then(() => {}),
   };
 }
