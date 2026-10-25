@@ -235,8 +235,9 @@ describe('enqueue', () => {
     expect(await jobsOf(order.id)).toEqual([]);
   });
 
-  test('a queue that cannot be written never breaks the order', async () => {
+  test('a queue that cannot be written never breaks the order, and staff are alerted (BE-01)', async () => {
     await setPrinting(true);
+    const alertsBefore = h.alerts.length;
     await h.client.query('alter table print_jobs rename to print_jobs_away');
     try {
       const res = await h.app.inject({
@@ -247,8 +248,44 @@ describe('enqueue', () => {
       });
       expect(res.statusCode).toBe(201);
       await h.settle();
+      const order = orderDtoSchema.parse(res.json());
+      expect(order.status).toBe('preparing');
+      const raised = h.alerts.slice(alertsBefore).filter((a) => a.kind === 'print.enqueue_failed');
+      expect(raised).toHaveLength(1);
+      expect(raised[0]).toMatchObject({
+        severity: 'warn',
+        subject: { orderId: order.id },
+        orderNo: order.orderNo,
+      });
     } finally {
       await h.client.query('alter table print_jobs_away rename to print_jobs');
+    }
+  });
+
+  test('the kitchen job is committed with the order, before sent_to_kitchen goes out (BE-01)', async () => {
+    await setPrinting(true);
+    // What a subscriber sees the moment the event is published: work started after the commit
+    // (and lost if the process stops) would not be there yet.
+    const seen: Promise<number>[] = [];
+    const stop = h.bus.subscribe((event) => {
+      if (event.type !== 'order.sent_to_kitchen') return;
+      seen.push(jobsOf(event.orderId).then((jobs) => jobs.length));
+    });
+    try {
+      const counter = await place();
+      const line = await place({ channel: 'line' });
+      const accepted = await h.app.inject({
+        method: 'POST',
+        url: `/v1/orders/${line.id}/transition`,
+        headers: bearer(staff.kitchen),
+        payload: { to: 'preparing' },
+      });
+      expect(accepted.statusCode).toBe(200);
+      await h.settle();
+      expect(await Promise.all(seen)).toEqual([1, 1]);
+      expect(await jobsOf(counter.id)).toHaveLength(1);
+    } finally {
+      stop();
     }
   });
 });

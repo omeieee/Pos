@@ -1,6 +1,7 @@
 /**
  * The kitchen print queue (P8). One job per order when it reaches `preparing` (only while the
- * owner's printing switch is on), one more per staff reprint. The print program on the shop's
+ * owner's printing switch is on; written in the order's own transaction by `kitchen.ts`), one more
+ * per staff reprint. The print program on the shop's
  * notebook PULLS: it claims a job (a 30 second lease), draws the ticket, sends it to the printer
  * and acks. A job becomes `printed` only through that ack.
  *
@@ -62,27 +63,6 @@ async function alertFailed(
       subject: { orderId: job.orderId },
       ...(order ? { orderNo: order.orderNo } : {}),
     }),
-  );
-}
-
-// ---------- Enqueue ----------
-
-/**
- * Creates the order's kitchen job, once. Does nothing while printing is off (the order is simply
- * skipped), and a second call for the same order changes nothing. Returns the job, or null.
- */
-export async function enqueueKitchenJob(
-  ctx: Pick<CoreContext, 'db' | 'now'>,
-  orderId: string,
-): Promise<printRepo.PrintJobRow | null> {
-  if (!(await currentPrintingEnabled(ctx.db))) return null;
-  return (
-    (await printRepo.insertJob(ctx.db, {
-      orderId,
-      kind: 'kitchen',
-      seq: 0,
-      now: ctx.now(),
-    })) ?? null
   );
 }
 

@@ -115,7 +115,7 @@ if (config.slipOcr || verifier) {
     }),
   );
 }
-await registerV1(app, {
+const v1 = await registerV1(app, {
   db,
   authSecretKey: config.authSecretKey,
   events,
@@ -182,6 +182,8 @@ async function shutdown(signal: string) {
   watchdog.stop();
   await jobs.stop();
   await app.close();
+  // Let phone and Telegram alerts already on their way finish (BE-01), but never hold a deploy up.
+  await Promise.race([v1.idle(), new Promise((resolve) => setTimeout(resolve, 5_000))]);
   await close();
   process.exit(0);
 }

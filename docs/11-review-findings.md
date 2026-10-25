@@ -249,6 +249,7 @@ Format: **ID · title**, then where it is, status, impact, proposed fix and owne
 - **Status:** Confirmed: an order in `preparing` with 0 print jobs, and the silent check reports 0 waiting.
 - **Fix:** insert the kitchen job in the order's own transaction (guarded by `currentPrintingEnabled(tx)`), or add a sweep job, and call `v1.idle()` on shutdown. D-37's wording would need a one-line update.
 - **Owner:** no.
+- **Fixed 2026-10-26:** `print/kitchen.ts:sendToKitchen()` writes the job in the order's transaction, in a savepoint (a queue that cannot be written still never breaks the order and now raises `print.enqueue_failed`); `kitchen-queue.ts` removed; `server.ts` waits up to 5 s for `v1.idle()` on shutdown; tests in `print/print.test.ts`. D-37 note added.
 
 **BE-02 · Writes that publish no event never reach a device that stayed connected (the 200-rev rewind doesn't cover them)**
 - **Where:**
