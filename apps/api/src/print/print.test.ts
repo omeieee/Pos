@@ -534,7 +534,8 @@ describe('the ticket', () => {
     );
     const job = await claimed();
     const text = JSON.stringify(job);
-    expect(text).not.toMatch(/\d{9}/);
+    // Only the ticket: the job's random ids and lease token can hold 9 digits in a row.
+    expect(JSON.stringify(job.ticket)).not.toMatch(/\d{9}/);
     expect(text).not.toContain('081-234');
     expect(text).not.toContain('0899999999');
     expect(text).not.toContain('Somchai');
