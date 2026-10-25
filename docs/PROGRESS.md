@@ -26,7 +26,8 @@
 - **Decisions:** D-44 added (Proposed).
 - **Open issues:** a real slip with an unreadable QR is no longer auto-verified (staff tick by hand); `verifyImage` in `slip2go.ts` is now unused by the checker; flaky push test and build need a clean re-run.
 - **Later the same day:** LINE chat now drops a picture silently when the sender has no order waiting for payment, or when it has no slip QR (`looksLikeSlip` in `slips/qr.ts`, `installSlipScreen` in `server.ts`, `line/handlers.ts:handleSlip`); tests in `line/ordering-chat.test.ts`; `vitest` line+slips+customer-app 431 passed, biome clean.
-- **Next:** owner confirms D-44; try a real slip and a non-slip photo on the test OA.
+- **Owner answers (2026-10-25):** merge D-44 to main (done after all packages passed: lint, typecheck, tests, pos-web build; the LINE flex snapshot was updated for the new privacy text). Slip2Go package: 1 month, 88 tokens; 87.250 remaining; expires 2026-11-20 23:59 (not in the repo or logs elsewhere). Old Micro VM `sds-pos-old`: terminate it and its boot volume on 2026-11-01. Next work: rebase `feat/pay-first-orders`.
+- **Next:** try a real slip and a non-slip photo on the test OA.
 - **Commit:** `6adcb29`, `65c578d` on `claude/nifty-ramanujan-c7obvx` (not merged); docs and privacy-text edits uncommitted.
 
 ## 2026-10-25 · Maintenance · API moved to an Ampere A1
