@@ -1,1 +1,2 @@
 - [Tooling quirks](feedback_tooling_quirks.md) — heredoc python fails in Bash tool; biome/crlf; Playwright mock lives in the page
+- [Worktree base may lag main](feedback_worktree_base.md) — ff-merge main before mirroring backend rules; Edit hook typechecks noisily
