@@ -1,0 +1,1 @@
+- [P7 tax rules findings](project_p7_tax_rules.md) — how to read RD Thai PDFs (render to PNG) and the verified 2569 tax facts

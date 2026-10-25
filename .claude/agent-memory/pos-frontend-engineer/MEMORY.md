@@ -1,0 +1,1 @@
+- [Tooling quirks](feedback_tooling_quirks.md) — heredoc python fails in Bash tool; biome/crlf; Playwright mock lives in the page
