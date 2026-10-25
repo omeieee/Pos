@@ -427,6 +427,81 @@ describe('findOtherSlipUse counts a payment in almost ANY status (D-27)', () => 
   });
 });
 
+describe('a late slip kept on a cancelled payment (D-41)', () => {
+  // The unpaid timeout cancelled order A; the customer's slip arrived afterwards and was written
+  // on A's cancelled payment (unchecked, auto-confirm blocked, never claimed).
+  const lateSlip = async (key: { slipImageHash?: string; slipQrHash?: string }) => {
+    const order = await newOrder();
+    const row = await repo.insertPayment(db, {
+      orderId: order.id,
+      method: 'promptpay',
+      status: 'pending',
+      amountSatang: 5000,
+      clientRequestId: unique(),
+      requestHash: unique(),
+    });
+    if (!row) throw new Error('payment not created');
+    const cancelled = await repo.updatePaymentIfVersion(db, row.id, row.version, {
+      status: 'cancelled',
+    });
+    if (!cancelled) throw new Error('payment not cancelled');
+    const kept = await repo.updatePaymentIfVersion(db, cancelled.id, cancelled.version, {
+      slipImageKey: `slips/${unique()}`,
+      slipVerify: 'unchecked',
+      slipUploadedAt: new Date('2026-10-01T03:00:00Z'),
+      slipAutoconfirmBlocked: true,
+      ...key,
+    });
+    if (!kept) throw new Error('late slip not kept');
+    return kept;
+  };
+
+  test.each([
+    ['slipImageHash', 'late-img'],
+    ['slipQrHash', 'late-qr'],
+  ] as const)(
+    'the same transfer on order B (matched by %s) is seen by both rules',
+    async (field, base) => {
+      const value = `${base}-${unique()}`;
+      const late = await lateSlip({ [field]: value });
+      const mine = await claimedPayment(null, { [field]: value });
+      // The strict rule (an automatic confirmation) must refuse.
+      expect(await repo.findOtherSlipUse(db, mine)).toMatchObject({ status: 'cancelled' });
+      // Staff see "used on #A" (the late slip came before the claim on B).
+      const order = await ordersRepo.findOrderById(db, late.orderId);
+      expect(await repo.findEarlierSlipUse(db, mine)).toMatchObject({
+        orderNo: order?.orderNo,
+        status: 'cancelled',
+        matchedBy: field === 'slipQrHash' ? 'qr' : 'image',
+      });
+    },
+  );
+
+  test('staff looking at the late slip see the claimed order that holds the same transfer', async () => {
+    const value = `late-view-${unique()}`;
+    const late = await lateSlip({ slipImageHash: value });
+    const claimed = await claimedPayment(null, { slipImageHash: value });
+    const claimedOrder = await ordersRepo.findOrderById(db, claimed.orderId);
+    // The claim (03:05) is after the late upload (03:00): nothing earlier than the late slip.
+    expect(await repo.findEarlierSlipUse(db, late)).toBeUndefined();
+    const later = await repo.updatePaymentIfVersion(db, late.id, late.version, {
+      slipUploadedAt: new Date('2026-10-01T04:00:00Z'),
+    });
+    expect(later && (await repo.findEarlierSlipUse(db, later))).toMatchObject({
+      orderNo: claimedOrder?.orderNo,
+      status: 'claimed',
+    });
+  });
+
+  test('a cancelled slip without the late-slip mark is still ignored by the staff hint', async () => {
+    const key = { slipImageHash: `plain-${unique()}` };
+    const mine = await claimedPayment(null, key);
+    const other = await claimedPayment(null, key);
+    await repo.updatePaymentIfVersion(db, other.id, other.version, { status: 'cancelled' });
+    expect(await repo.findEarlierSlipUse(db, mine)).toBeUndefined();
+  });
+});
+
 describe('bumpSlipVerifyAttempts', () => {
   test('counts an attempt on a pending row only, for that picture', async () => {
     const row = await claimedPayment(null, {
@@ -457,5 +532,54 @@ describe('daily Slip2Go usage', () => {
     expect(await repo.claimSlipVerifyAlert(db, date, 'account')).toBe(false);
     expect(await repo.claimSlipVerifyAlert(db, date, 'cap')).toBe(true);
     expect(await repo.claimSlipVerifyAlert(db, '2026-10-02', 'account')).toBe(true);
+  });
+});
+
+describe('one transfer can never be confirmed twice (PAY-06, D-40)', () => {
+  const confirm = (row: repo.PaymentRow) =>
+    repo.updatePaymentIfVersion(db, row.id, row.version, {
+      status: 'confirmed',
+      confirmedAt: new Date('2026-10-01T04:00:00Z'),
+      autoConfirmed: true,
+    });
+
+  test('two claimed payments may hold one QR key, but only one of them can be confirmed', async () => {
+    const key = `qr-twice-${unique()}`;
+    const first = await claimedPayment(null, { slipQrHash: key });
+    const second = await claimedPayment(null, { slipQrHash: key });
+    expect((await confirm(first))?.status).toBe('confirmed');
+    const error = await confirm(second).then(
+      () => null,
+      (e: unknown) => e,
+    );
+    expect(repo.isSlipTransferConflict(error)).toBe(true);
+    expect((await repo.findPaymentById(db, second.id))?.status).toBe('claimed');
+  });
+
+  test('a voided confirmation frees the key, and payments without a key are never in conflict', async () => {
+    const key = `qr-void-${unique()}`;
+    const first = await claimedPayment(null, { slipQrHash: key });
+    const confirmed = await confirm(first);
+    await repo.updatePaymentIfVersion(db, first.id, confirmed?.version ?? 0, {
+      status: 'voided',
+      voidReason: 'no money',
+    });
+    const other = await claimedPayment(null, { slipQrHash: key });
+    expect((await confirm(other))?.status).toBe('confirmed');
+    const a = await claimedPayment(null);
+    const b = await claimedPayment(null);
+    expect((await confirm(a))?.status).toBe('confirmed');
+    expect((await confirm(b))?.status).toBe('confirmed');
+  });
+
+  test('the auto-confirm block is never in the sync feed', async () => {
+    const row = await claimedPayment(null, { slipAutoconfirmBlocked: true });
+    expect(row.slipAutoconfirmBlocked).toBe(true);
+    const batch = await sync.readChanges(db, {
+      since: 0,
+      limit: 500,
+      include: { orders: false, payments: true, menu: false, settings: false, customers: false },
+    });
+    expect(JSON.stringify(batch)).not.toMatch(/autoconfirm/i);
   });
 });

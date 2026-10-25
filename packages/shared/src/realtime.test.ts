@@ -3,6 +3,7 @@ import {
   FRAME_TYPES,
   newOrderAlertFrameSchema,
   orderUpsertedFrameSchema,
+  paymentAlertFrameSchema,
   paymentUpsertedFrameSchema,
   realtimeFrameSchema,
   SYNC_DEFAULT_LIMIT,
@@ -193,6 +194,37 @@ describe('event frames carry {type, id, rev, data}', () => {
   });
 });
 
+describe('the payment alert (D-42)', () => {
+  const alert = (data: unknown) => ({ type: 'alert.payment', id: uuid(), data });
+
+  test('carries ids only, has no rev and is not a sync change', () => {
+    const frame = alert({ orderId: uuid(), orderNo: 'L-012', kind: 'paid' });
+    const parsed = paymentAlertFrameSchema.parse(frame);
+    expect('rev' in parsed).toBe(false);
+    expect(realtimeFrameSchema.safeParse(frame).success).toBe(true);
+    expect(syncChangeSchema.safeParse(frame).success).toBe(false);
+    expect(
+      paymentAlertFrameSchema.safeParse(
+        alert({ orderId: uuid(), orderNo: 'L-1', kind: 'slip_review' }),
+      ).success,
+    ).toBe(true);
+  });
+
+  test('refuses another kind, a missing id and extra personal fields', () => {
+    expect(
+      paymentAlertFrameSchema.safeParse(alert({ orderId: uuid(), orderNo: 'L-1', kind: 'x' }))
+        .success,
+    ).toBe(false);
+    expect(paymentAlertFrameSchema.safeParse(alert({ orderNo: 'L-1', kind: 'paid' })).success).toBe(
+      false,
+    );
+    const withName = paymentAlertFrameSchema.parse(
+      alert({ orderId: uuid(), orderNo: 'L-1', kind: 'paid', recipientName: 'ฟ้า' }),
+    );
+    expect(JSON.stringify(withName)).not.toContain('ฟ้า');
+  });
+});
+
 describe('settings frames', () => {
   const frame = (id: string, data: unknown, extra: Record<string, unknown> = {}) => ({
     type: 'settings.updated',
@@ -255,6 +287,7 @@ describe('the frame list', () => {
     expect([...FRAME_TYPES].sort()).toEqual(
       [
         'alert.new_order',
+        'alert.payment',
         'customer.upserted',
         'menu.upserted',
         'order.upserted',

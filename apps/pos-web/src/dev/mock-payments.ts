@@ -24,6 +24,7 @@ import {
   govCopayPatchInputSchema,
   govCopaySchemeSchema,
   isCopayAvailable,
+  isPayFirst,
   maskPromptpayId,
   type OrderDto,
   orderMachine,
@@ -169,10 +170,29 @@ export function createMockPayments(deps: Deps) {
     // The mock takes no slip pictures, so every claimed payment "says paid, no slip yet" (the
     // server derives the flag the same way: a claimed payment without a slip, `claimWithoutSlipOf`).
     const claimWithoutSlip = forOrder(order.id).some((p) => p.status === 'claimed');
+    // The method of the live payment, as the server derives it (`currentMethodOf`); the mock has no
+    // bank check, so no slip is ever held back (`needsManualConfirm` stays false).
+    const live = forOrder(order.id)
+      .filter((p) => p.status === 'pending' || p.status === 'claimed' || p.status === 'confirmed')
+      .at(-1);
+    const paymentMethod =
+      live && (live.method === 'cash' || live.method === 'promptpay' || live.method === 'gov_copay')
+        ? live.method
+        : null;
+    // D-38: the payment that makes a pay-first order paid also starts it (the server, actor system).
+    const startsByItself =
+      status === 'paid' &&
+      order.status === 'new' &&
+      isPayFirst({ channel: order.channel, paymentMethod });
     const next: OrderDto = {
       ...order,
+      ...(startsByItself
+        ? { status: 'preparing' as const, acceptedAt: new Date(deps.now()).toISOString() }
+        : {}),
       ...extra,
       paymentStatus: status,
+      paymentMethod,
+      needsManualConfirm: false,
       claimWithoutSlip,
       version: order.version + 1,
       rev: deps.nextRev(),
@@ -204,9 +224,23 @@ export function createMockPayments(deps: Deps) {
     to: OrderDto['status'],
     reason: string | undefined,
     caller: MockCaller,
+    startUnpaid = false,
   ): MockAnswer {
     const order = deps.orders.get(orderId);
     if (!order) return fail(404, 'NOT_FOUND');
+    // D-38: an unpaid pay-first order cannot be accepted; only a manager or owner starts it, with a reason.
+    if (
+      to === 'preparing' &&
+      order.status === 'new' &&
+      order.paymentStatus !== 'paid' &&
+      isPayFirst({ channel: order.channel, paymentMethod: order.paymentMethod ?? null })
+    ) {
+      if (!startUnpaid) {
+        return fail(409, 'PAYMENT_REQUIRED', { orderId, paymentStatus: order.paymentStatus });
+      }
+      if (caller.role !== 'owner' && caller.role !== 'manager') return fail(403, 'FORBIDDEN');
+      if (!reason?.trim()) return fail(400, 'REASON_REQUIRED');
+    }
     const verdict = orderMachine.transition(order.status, to, { actor: actorOf(caller), reason });
     if (!verdict.ok) return fromMachineError(verdict.error, order.status, to);
     const at = new Date(deps.now()).toISOString();
@@ -630,7 +664,7 @@ export function createMockPayments(deps: Deps) {
       if (method === 'POST' && what === 'transition') {
         const input = transitionOrderInputSchema.safeParse(body);
         return input.success
-          ? moveOrder(id, input.data.to, input.data.reason, caller)
+          ? moveOrder(id, input.data.to, input.data.reason, caller, input.data.startUnpaid === true)
           : fail(400, 'VALIDATION_ERROR');
       }
       if (method === 'POST' && what === 'cancel') {

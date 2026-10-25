@@ -21,7 +21,9 @@ import {
 } from '@sds/shared';
 import { securityAlert } from '../auth/service.ts';
 import { currentBusinessDate } from '../orders/business-day.ts';
+import { emitSlipReview } from '../payments/alerts.ts';
 import { toPaymentDto } from '../payments/dto.ts';
+import { needsManualConfirmOf, settleOrder } from '../payments/internal.ts';
 import { autoConfirmClaimedPayment } from '../payments/service.ts';
 import {
   currentBankAccount,
@@ -29,7 +31,7 @@ import {
   currentPromptpayId,
 } from '../settings/service.ts';
 import { type CoreContext, withTransaction } from '../tx.ts';
-import { imageSize } from './image.ts';
+import { imageSize, sniffSlip } from './image.ts';
 import type { SlipOcr } from './ocr.ts';
 import type { SlipQrReader } from './qr.ts';
 import type { SlipVerifier } from './slip2go.ts';
@@ -53,6 +55,13 @@ export interface SlipChecker {
   readonly wants: { readonly ocr: boolean; readonly verify: boolean };
   /** Reads the slip of this payment soon, one at a time. Never throws. */
   enqueue(paymentId: string): void;
+  /**
+   * The amount on a picture in satang, read here and now by the local reader (D-40), or null: no
+   * reader (SLIP_OCR off, so always in production today), an unusable picture, an unclear amount,
+   * a failure or the time budget. The QR carries no amount. Never throws; the text is dropped.
+   * It only CHOOSES which order a chat slip goes to and never confirms anything.
+   */
+  readLocalAmount(image: Buffer): Promise<number | null>;
   /** Reads the payments still marked pending (after a restart, or a full queue). Returns how many were read. */
   sweep(limit?: number): Promise<number>;
   /** Resolves when everything queued so far is done (tests, shutdown). */
@@ -195,6 +204,8 @@ export function createSlipChecker(args: {
    * timer fires each next call. Empty: no timers, the minute sweep drives the retries alone.
    */
   graceRetryDelaysMs?: readonly number[];
+  /** The most a local amount reading may take for a chat or app slip (default 8 s). */
+  localAmountTimeoutMs?: number;
   /** Counts and ids only: never the text. */
   log?: { warn(obj: Record<string, unknown>, msg: string): void };
 }): SlipChecker {
@@ -651,6 +662,16 @@ export function createSlipChecker(args: {
           rev: updated.rev,
           data: toPaymentDto(updated),
         });
+        // A staff recheck is staff already looking at it: no second alert (D-42).
+        if (order && !manual.has(paymentId)) emitSlipReview(emit, order, updated);
+        // A bank-valid slip the server did not confirm is staff's to tick: the order flag moves
+        // (and with it the order's rev), so every device shows it (D-42).
+        if (order) {
+          const now = await paymentsRepo.listPaymentsForOrder(tx, order.id);
+          if (needsManualConfirmOf(now) !== order.needsManualConfirm) {
+            await settleOrder(tx, order, emit, ctx.now());
+          }
+        }
       }
     });
     if (nextRetryMs !== null) armRetry(paymentId, nextRetryMs);
@@ -700,6 +721,32 @@ export function createSlipChecker(args: {
 
   return {
     wants: { ocr: Boolean(ocr), verify: Boolean(verifier) },
+    async readLocalAmount(image) {
+      if (!ocr || !sniffSlip(image)) return null;
+      const size = imageSize(image);
+      if (!size || size.width * size.height > MAX_OCR_PIXELS) return null;
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        const text = await Promise.race([
+          ocr.read(image),
+          new Promise<never>((_, reject) => {
+            timer = setTimeout(
+              () => reject(new Error('AMOUNT_TIMEOUT')),
+              args.localAmountTimeoutMs ?? 8000,
+            );
+          }),
+        ]);
+        return extractSlipAmount(text);
+      } catch (error) {
+        args.log?.warn(
+          { reason: error instanceof Error ? error.message : 'OCR_FAILED' },
+          'slip local amount',
+        );
+        return null;
+      } finally {
+        clearTimeout(timer);
+      }
+    },
     enqueue(paymentId) {
       // A new upload starts its own cycle: the old picture's timer must not call for it.
       clearRetry(paymentId);
@@ -759,3 +806,28 @@ export const installSlipChecker = (checker: SlipChecker | null): void => {
   installed = checker;
 };
 export const activeSlipChecker = (): SlipChecker | null => installed;
+
+/**
+ * The local QR reader, for a slip that is kept but never checked (a late slip, D-41): it only needs
+ * the duplicate key. Installed at start-up like the checker; null when `SLIP_QR` is off.
+ */
+let installedQr: SlipQrReader | null = null;
+export const installSlipQrReader = (reader: SlipQrReader | null): void => {
+  installedQr = reader;
+};
+export const activeSlipQrReader = (): SlipQrReader | null => installedQr;
+
+/** The duplicate key of a slip picture from its own QR, read locally; null when none (or on any failure). */
+export async function localSlipQrHash(bytes: Buffer): Promise<string | null> {
+  const reader = installedQr;
+  if (!reader) return null;
+  try {
+    const parsed = reader.readRaw
+      ? ((await reader.readRaw(bytes))?.qr ?? null)
+      : await reader.read(bytes);
+    const keyText = parsed ? slipQrKeyText(parsed.sendingBank, parsed.transRef) : null;
+    return keyText ? sha256(keyText) : null;
+  } catch {
+    return null;
+  }
+}

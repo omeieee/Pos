@@ -4,10 +4,21 @@
 import type { OrderDto } from '@sds/shared';
 import { Gi } from '../../design/icons.tsx';
 import { s } from '../../design/style.ts';
-import { useServices, useStoreState, useT } from '../../ui/hooks.ts';
+import { useEntities, useServices, useStoreState, useT } from '../../ui/hooks.ts';
 import { localName } from '../cart/names.ts';
 import { QueuedOrders } from '../outbox/QueuedOrders.tsx';
-import { NoSlipFlag, OrderStatusBadge, PaymentStatusBadge } from './StatusBadge.tsx';
+import {
+  awaitingCustomerPayment,
+  needsManualConfirm,
+  promptpayOrderIds,
+} from '../payments/pay-first-model.ts';
+import {
+  AwaitingPayBadge,
+  ManualConfirmFlag,
+  NoSlipFlag,
+  OrderStatusBadge,
+  PaymentStatusBadge,
+} from './StatusBadge.tsx';
 
 const WAITING = ['new', 'preparing', 'ready'] as const;
 export const isWaiting = (order: OrderDto) => (WAITING as readonly string[]).includes(order.status);
@@ -32,14 +43,28 @@ export function nextStep(order: OrderDto): 'review' | 'charge' | 'open' {
   return 'open';
 }
 
-/** The payment badge; a cancelled order shows that instead, because it owes nothing. */
+/**
+ * The payment badge; a cancelled order shows that instead, because it owes nothing. A pay-first
+ * LINE order that the customer has not paid yet shows a muted "รอชำระ" (the kitchen does not see it
+ * yet), and a claim with a slip that the shop must confirm by hand shows the icon next to it.
+ */
 export function StateBadge({ order }: { order: OrderDto }) {
+  const { payments } = useEntities();
   if (order.status === 'cancelled') return <OrderStatusBadge status="cancelled" />;
-  if (!order.claimWithoutSlip) return <PaymentStatusBadge status={order.paymentStatus} />;
+  // Cheap checks first: only a new, unpaid LINE order needs the payments looked at.
+  const waiting =
+    order.channel === 'line' &&
+    order.status === 'new' &&
+    order.paymentStatus === 'unpaid' &&
+    awaitingCustomerPayment(order, promptpayOrderIds(payments.values()));
+  const manual = needsManualConfirm(order);
+  const main = waiting ? <AwaitingPayBadge /> : <PaymentStatusBadge status={order.paymentStatus} />;
+  if (!order.claimWithoutSlip && !manual) return main;
   return (
     <span style={s('display:inline-flex;flex-direction:column;align-items:flex-end;gap:4px')}>
-      <PaymentStatusBadge status={order.paymentStatus} />
-      <NoSlipFlag />
+      {main}
+      {order.claimWithoutSlip ? <NoSlipFlag /> : null}
+      {manual ? <ManualConfirmFlag /> : null}
     </span>
   );
 }

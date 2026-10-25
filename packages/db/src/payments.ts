@@ -74,6 +74,32 @@ export function isOpenPaymentConflict(error: unknown): boolean {
   return false;
 }
 
+/** The partial unique index that lets one transfer (its QR key) back one confirmed payment (PAY-06). */
+export const SLIP_TRANSFER_INDEX = 'payments_slip_qr_confirmed_key';
+
+/** True when `error` is a unique violation of {@link SLIP_TRANSFER_INDEX}: a second confirmation of one transfer. */
+export function isSlipTransferConflict(error: unknown): boolean {
+  let current: unknown = error;
+  for (let depth = 0; depth < 3 && typeof current === 'object' && current !== null; depth += 1) {
+    const e = current as {
+      code?: unknown;
+      constraint?: unknown;
+      constraint_name?: unknown;
+      message?: unknown;
+      cause?: unknown;
+    };
+    if (e.code === '23505') {
+      const name = e.constraint ?? e.constraint_name;
+      if (name === SLIP_TRANSFER_INDEX) return true;
+      if (typeof e.message === 'string' && e.message.includes(`"${SLIP_TRANSFER_INDEX}"`)) {
+        return true;
+      }
+    }
+    current = e.cause;
+  }
+  return false;
+}
+
 /**
  * A new payment. There is no qr_payload here on purpose: the payload holds the PromptPay ID in
  * clear, so it is rebuilt from the current setting whenever the QR is shown and never stored
@@ -140,6 +166,8 @@ export interface PaymentPatch {
   slipBlockedAt?: Date | null;
   slipBlockReason?: string | null;
   slipReviewedAt?: Date | null;
+  /** D-40: the server never confirms this claim by itself; staff do. */
+  slipAutoconfirmBlocked?: boolean;
   /** Confirmed by the server itself after a valid bank check (D-27), not by a staff member. */
   autoConfirmed?: boolean;
 }
@@ -318,9 +346,21 @@ export async function claimSlipVerifyAlert(
 /**
  * Payment statuses whose slip counts as "already used" (D-26): a claim that is waiting, a
  * confirmed payment, and a refunded one (the transfer was real). Pending has no slip; cancelled
- * and voided payments were rejected or taken back, so their slips do not count.
+ * and voided payments were rejected or taken back, so their slips do not count. One exception: a
+ * late slip kept on a cancelled payment (D-41, `lateSlipKept`) is a transfer nobody has settled.
  */
 const SLIP_USED_STATUSES = ['claimed', 'confirmed', 'refunded'];
+
+/** A slip kept on a cancelled payment by the unpaid timeout (D-41): auto-confirm blocked, picture on it. */
+const lateSlipKept: SQL = sql`${and(
+  eq(payments.status, 'cancelled'),
+  eq(payments.slipAutoconfirmBlocked, true),
+  isNotNull(payments.slipImageKey),
+  isNull(payments.confirmedAt),
+)}`;
+
+/** When a slip counts as used: the claim, or for a late slip the upload (it was never claimed). */
+const slipUsedAt: SQL<Date> = sql`coalesce(${payments.claimedAt}, ${payments.slipUploadedAt})`;
 
 /** What made two slips look like one: the reference in the slip's QR is the strongest. */
 export type SlipMatch = 'qr' | 'ref' | 'image';
@@ -332,14 +372,19 @@ export type SlipMatch = 'qr' | 'ref' | 'image';
  */
 export async function findEarlierSlipUse(
   db: Db,
-  payment: Pick<PaymentRow, 'id' | 'claimedAt' | 'slipImageHash' | 'slipRefHash' | 'slipQrHash'>,
+  payment: Pick<PaymentRow, 'id' | 'claimedAt' | 'slipImageHash' | 'slipRefHash' | 'slipQrHash'> & {
+    slipUploadedAt?: Date | null;
+  },
 ): Promise<{ orderNo: string; status: PaymentStatus; matchedBy: SlipMatch } | undefined> {
   const same = [
     payment.slipImageHash ? eq(payments.slipImageHash, payment.slipImageHash) : undefined,
     payment.slipRefHash ? eq(payments.slipRefHash, payment.slipRefHash) : undefined,
     payment.slipQrHash ? eq(payments.slipQrHash, payment.slipQrHash) : undefined,
   ].filter((c) => c !== undefined);
-  if (same.length === 0 || payment.claimedAt === null) return undefined;
+  // A late slip (D-41) was never claimed: its upload time stands in, so staff see the other order too.
+  const since = payment.claimedAt ?? payment.slipUploadedAt ?? null;
+  if (same.length === 0 || since === null) return undefined;
+  const claimedAtText = since.toISOString();
   const [row] = await db
     .select({
       orderNo: orders.orderNo,
@@ -353,15 +398,15 @@ export async function findEarlierSlipUse(
     .where(
       and(
         ne(payments.id, payment.id),
-        inArray(payments.status, SLIP_USED_STATUSES),
+        or(inArray(payments.status, SLIP_USED_STATUSES), lateSlipKept),
         or(...same),
         or(
-          lt(payments.claimedAt, payment.claimedAt),
-          and(eq(payments.claimedAt, payment.claimedAt), lt(payments.id, payment.id)),
+          sql`${slipUsedAt} < ${claimedAtText}::timestamptz`,
+          and(sql`${slipUsedAt} = ${claimedAtText}::timestamptz`, lt(payments.id, payment.id)),
         ),
       ),
     )
-    .orderBy(asc(payments.claimedAt), asc(payments.id))
+    .orderBy(asc(slipUsedAt), asc(payments.id))
     .limit(1);
   if (!row) return undefined;
   const matchedBy: SlipMatch =
@@ -384,6 +429,8 @@ const abandonedUnchecked: SQL = sql`${and(
   or(isNull(payments.slipVerify), inArray(payments.slipVerify, ['unchecked', 'not_found'])),
   isNull(payments.confirmedAt),
   isNull(payments.slipBlockedAt),
+  // A late slip kept on the cancelled payment (D-41) is a real transfer picture waiting for staff.
+  eq(payments.slipAutoconfirmBlocked, false),
   sql`not exists (select 1 from ${paymentRefunds} where ${paymentRefunds.paymentId} = ${payments.id})`,
 )}`;
 

@@ -24,8 +24,10 @@ import {
   amountsOf,
   auditPayment,
   claimWithoutSlipOf,
+  currentMethodOf,
   emitPayment,
   moneyOf,
+  needsManualConfirmOf,
   refundedBy,
   snapshot,
   transitionFailure,
@@ -93,6 +95,8 @@ export async function retirePaymentsForOwnerChange(
 ): Promise<{
   paymentStatus: OrderPaymentStatus;
   claimWithoutSlip: boolean;
+  paymentMethod: ReturnType<typeof currentMethodOf>;
+  needsManualConfirm: boolean;
   refundedSatang: number;
 }> {
   const { rows: all, refunds } = await moneyOf(tx, order.id);
@@ -156,6 +160,8 @@ export async function retirePaymentsForOwnerChange(
   return {
     paymentStatus: derivePaymentStatus(satang(order.totalSatang), amountsOf(after)),
     claimWithoutSlip: claimWithoutSlipOf(after),
+    paymentMethod: currentMethodOf(after),
+    needsManualConfirm: needsManualConfirmOf(after),
     refundedSatang,
   };
 }

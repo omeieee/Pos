@@ -32,6 +32,7 @@ import { type RealtimeOptions, registerRealtimeRoutes, setupRealtime } from './r
 import { registerReportRoutes } from './reports/routes.ts';
 import { registerSettingsRoutes } from './settings/routes.ts';
 import { createMemorySlipStore, type SlipStore } from './slips/store.ts';
+import { registerTelegramNotifier, type TelegramRuntime } from './telegram/notifier.ts';
 
 export interface V1Deps {
   db: Db;
@@ -51,6 +52,8 @@ export interface V1Deps {
   receipts?: SlipStore;
   /** Web Push phone alerts (D-37). Omitted: the push routes answer 503 and nothing is sent. */
   push?: PushRuntime;
+  /** Telegram payment alerts to the staff group (D-42). Omitted: nothing is sent. */
+  telegram?: TelegramRuntime;
 }
 
 /**
@@ -139,6 +142,16 @@ export async function registerV1(app: FastifyInstance, deps: V1Deps): Promise<V1
         now: auth.now,
         log: app.log,
         runtime: deps.push,
+      })
+    : null;
+  // One Telegram message per payment alert (paid, or a slip to review), to the staff group (D-42).
+  const telegramNotifier = deps.telegram
+    ? registerTelegramNotifier({
+        db: deps.db,
+        events: deps.events,
+        now: auth.now,
+        log: app.log,
+        runtime: deps.telegram,
       })
     : null;
   // The WebSocket plugin lives on the root instance, ahead of the /v1 scope that declares /v1/ws.
@@ -231,5 +244,10 @@ export async function registerV1(app: FastifyInstance, deps: V1Deps): Promise<V1
     },
     { prefix: '/v1' },
   );
-  return { idle: () => Promise.all([kitchenQueue.idle(), pushNotifier?.idle()]).then(() => {}) };
+  return {
+    idle: () =>
+      Promise.all([kitchenQueue.idle(), pushNotifier?.idle(), telegramNotifier?.idle()]).then(
+        () => {},
+      ),
+  };
 }

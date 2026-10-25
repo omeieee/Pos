@@ -21,10 +21,17 @@ import { OrderCorrectionActions } from '../correction/OrderCorrection.tsx';
 import { LocalOrderScreen } from '../outbox/LocalOrderScreen.tsx';
 import { PaymentPanel } from '../payments/PaymentPanel.tsx';
 import { PageNote, PayPage } from '../payments/PayParts.tsx';
+import { needsManualConfirm } from '../payments/pay-first-model.ts';
 import { ReprintButton } from '../print/ReprintButton.tsx';
+import { cancelReasonText } from './cancel-reason.ts';
 import { OrderMoves } from './OrderMoves.tsx';
 import { OrderSummary, type SummaryLine } from './OrderSummary.tsx';
-import { NoSlipFlag, OrderStatusBadge, PaymentStatusBadge } from './StatusBadge.tsx';
+import {
+  ManualConfirmFlag,
+  NoSlipFlag,
+  OrderStatusBadge,
+  PaymentStatusBadge,
+} from './StatusBadge.tsx';
 
 type Load = { state: 'idle' | 'loading' | 'notFound' } | { state: 'error'; error: unknown };
 
@@ -133,6 +140,8 @@ export function OrderDetailScreen({ id }: { id: string }) {
 
   const role = auth.session?.staff.role;
   const to = deliveryLabel(order);
+  const why = order.status === 'cancelled' ? cancelReasonText(order.cancelReason) : null;
+  const cancelReasonLine = why ? tr(why.key, why.params) : null;
   const lines: SummaryLine[] = order.items.map((item) => {
     const menuItem = entities.items.get(item.menuItemId);
     return {
@@ -175,15 +184,12 @@ export function OrderDetailScreen({ id }: { id: string }) {
             <OrderStatusBadge status={order.status} />
             <PaymentStatusBadge status={order.paymentStatus} />
             {order.claimWithoutSlip && order.status !== 'cancelled' ? <NoSlipFlag /> : null}
+            {needsManualConfirm(order) ? <ManualConfirmFlag /> : null}
           </>
         }
         recipient={to ? { headline: to.headline, note: to.note } : null}
         member={<MemberLine member={order.member} />}
-        cancelReason={
-          order.status === 'cancelled' && order.cancelReason
-            ? tr('order.cancel.reasonShown', { reason: order.cancelReason })
-            : null
-        }
+        cancelReason={cancelReasonLine}
         lines={lines}
         orderNote={order.note}
         countText={tr('pos.orderEntry.itemsCount', { count })}

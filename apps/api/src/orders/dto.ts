@@ -39,6 +39,8 @@ export function toOrderDto(
     status: order.status,
     paymentStatus: order.paymentStatus,
     claimWithoutSlip: order.claimWithoutSlip,
+    paymentMethod: order.paymentMethod,
+    needsManualConfirm: order.needsManualConfirm,
     subtotalSatang: order.subtotalSatang,
     discountSatang: order.discountSatang,
     totalSatang: order.totalSatang,

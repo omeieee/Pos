@@ -28,6 +28,7 @@ describe('loadConfig', () => {
       slipDir: '/data/slips',
       r2: null,
       vapid: null,
+      telegram: null,
       slipOcr: null,
       slipQr: true,
       slipVerifier: null,
@@ -123,6 +124,51 @@ describe('loadConfig', () => {
       expect.unreachable();
     } catch (error) {
       expect(String(error)).not.toContain('SECRET-VALUE-NOT-REAL');
+    }
+  });
+
+  test('Telegram alerts are off by default; token, chat id and public URL go together (D-42)', () => {
+    const telegram = {
+      TELEGRAM_BOT_TOKEN: '123456789:AAFAKE_token_for_tests_only_0123456789ab',
+      TELEGRAM_CHAT_ID: '-1001234567890',
+      PUBLIC_API_BASE_URL: 'https://api.example.com',
+    };
+    expect(loadConfig(base).telegram).toBeNull();
+    expect(loadConfig({ ...base, ...telegram }).telegram).toEqual({
+      botToken: telegram.TELEGRAM_BOT_TOKEN,
+      chatId: '-1001234567890',
+      publicBaseUrl: 'https://api.example.com',
+    });
+    expect(
+      loadConfig({ ...base, TELEGRAM_BOT_TOKEN: '', TELEGRAM_CHAT_ID: '', PUBLIC_API_BASE_URL: '' })
+        .telegram,
+    ).toBeNull();
+    for (const missing of Object.keys(telegram)) {
+      expect(() => loadConfig({ ...base, ...telegram, [missing]: '' }), missing).toThrow(
+        /go together/,
+      );
+    }
+    // The photo base must be https, or Telegram cannot fetch the photos.
+    for (const url of [
+      'http://api.example.com',
+      'api.example.com',
+      'https://api.example.com/?a=1',
+    ]) {
+      expect(() => loadConfig({ ...base, ...telegram, PUBLIC_API_BASE_URL: url }), url).toThrow(
+        /PUBLIC_API_BASE_URL/,
+      );
+    }
+    expect(() => loadConfig({ ...base, ...telegram, TELEGRAM_BOT_TOKEN: 'nope' })).toThrow(
+      /TELEGRAM_BOT_TOKEN/,
+    );
+    expect(() => loadConfig({ ...base, ...telegram, TELEGRAM_CHAT_ID: 'my group' })).toThrow(
+      /TELEGRAM_CHAT_ID/,
+    );
+    // The error names variables and rules, never the token.
+    try {
+      loadConfig({ ...base, ...telegram, TELEGRAM_CHAT_ID: 'my group' });
+    } catch (error) {
+      expect(String(error)).not.toContain(telegram.TELEGRAM_BOT_TOKEN);
     }
   });
 

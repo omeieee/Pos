@@ -133,10 +133,14 @@ export const netBadge = (page: Page, state: 'online' | 'offline') =>
   page.locator(`.net.net--${state}`).filter({ hasText: tr(`net.${state}`) });
 
 /** Dev-only hook of the mock: another device sends an order (the kitchen should see it). */
-export async function simulateIncomingOrder(page: Page) {
-  await page.evaluate(() => {
-    (globalThis as unknown as { __sdsMock: { incomingOrder(): void } }).__sdsMock.incomingOrder();
-  });
+export async function simulateIncomingOrder(
+  page: Page,
+  options: { payFirst?: boolean } = {},
+): Promise<string> {
+  return page.evaluate((opts) => {
+    type Hook = { __sdsMock: { incomingOrder(o: { payFirst?: boolean }): { id: string } } };
+    return (globalThis as unknown as Hook).__sdsMock.incomingOrder(opts).id;
+  }, options);
 }
 
 export const dish = (page: Page, name: string) =>

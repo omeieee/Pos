@@ -38,6 +38,8 @@ import type {
   ReceiptSettings,
   ShopPatchInput,
   ShopSettings,
+  UnpaidTimeoutPatchInput,
+  UnpaidTimeoutSettings,
 } from '@sds/shared';
 import type { ApiClient } from '../api/client.ts';
 import { ApiClientError, isApiClientError } from '../api/errors.ts';
@@ -55,6 +57,8 @@ export interface SettingsResources {
   lineOrdering: { value: LineOrdering; input: LineOrderingPatchInput };
   /** Whether orders are sent to the print notebook. Manager and owner, no step-up. */
   printing: { value: PrintingSettings; input: PrintingPatchInput };
+  /** Cancel LINE orders not paid in time (D-41). Manager and owner, no step-up. */
+  unpaidTimeout: { value: UnpaidTimeoutSettings; input: UnpaidTimeoutPatchInput };
   /** Masked, always: the ID in clear never reaches the store (the client reduces it). */
   promptpay: { value: PromptpayMasked | null; input: PromptpayPatchInput };
   /** The tax ID and address on receipts. Owner only, step-up first. */
@@ -135,6 +139,7 @@ const initial = (): SettingsState => ({
     delivery: emptySlot(),
     lineOrdering: emptySlot(),
     printing: emptySlot(),
+    unpaidTimeout: emptySlot(),
     promptpay: emptySlot(),
     receipt: emptySlot(),
     bankAccount: emptySlot(),
@@ -180,6 +185,7 @@ export function createSettingsStore(deps: SettingsDeps): SettingsStore {
     delivery: resource(s.deliveryList),
     lineOrdering: resource(s.lineOrdering),
     printing: resource(s.printing),
+    unpaidTimeout: resource(s.unpaidTimeout),
     // Owner only, and the step-up comes first.
     promptpay: resource(s.promptpayMasked, true),
     receipt: resource(s.receipt, true),

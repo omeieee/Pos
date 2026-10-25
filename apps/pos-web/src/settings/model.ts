@@ -20,6 +20,10 @@ import {
   type PaymentsSettings,
   type ShopPatchInput,
   type ShopSettings,
+  UNPAID_TIMEOUT_MAX_MINUTES,
+  UNPAID_TIMEOUT_MIN_MINUTES,
+  type UnpaidTimeoutPatchInput,
+  type UnpaidTimeoutSettings,
   WEEKDAYS,
   type Weekday,
 } from '@sds/shared';
@@ -265,6 +269,43 @@ export function buildNumberingPatch(
   const cutoffMinutes = parseTimeText(form.cutoff);
   if (cutoffMinutes === null || cutoffMinutes === base.cutoffMinutes) return null;
   return { expectedVersion: version, cutoffMinutes };
+}
+
+// ---------- Cancel unpaid LINE orders (D-41) ----------
+
+export interface UnpaidTimeoutForm {
+  enabled: boolean;
+  minutes: string;
+}
+
+export const unpaidTimeoutFormFrom = (settings: UnpaidTimeoutSettings): UnpaidTimeoutForm => ({
+  enabled: settings.enabled,
+  minutes: String(settings.minutes),
+});
+
+/** Whole minutes only: digits, then the shared range. Null when the text is not that. */
+function parseMinutes(text: string): number | null {
+  const trimmed = text.trim();
+  if (!/^\d+$/.test(trimmed)) return null;
+  const minutes = Number(trimmed);
+  return minutes >= UNPAID_TIMEOUT_MIN_MINUTES && minutes <= UNPAID_TIMEOUT_MAX_MINUTES
+    ? minutes
+    : null;
+}
+
+export function validateUnpaidTimeoutForm(form: UnpaidTimeoutForm): 'minutes'[] {
+  return parseMinutes(form.minutes) === null ? ['minutes'] : [];
+}
+
+export function buildUnpaidTimeoutPatch(
+  base: UnpaidTimeoutSettings,
+  version: number,
+  form: UnpaidTimeoutForm,
+): UnpaidTimeoutPatchInput | null {
+  const minutes = parseMinutes(form.minutes);
+  if (minutes === null) return null;
+  if (form.enabled === base.enabled && minutes === base.minutes) return null;
+  return { expectedVersion: version, enabled: form.enabled, minutes };
 }
 
 // ---------- Payment methods ----------

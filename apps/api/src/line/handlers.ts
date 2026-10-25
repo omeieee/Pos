@@ -1,4 +1,4 @@
-import { type Db, lineRepo, ordersRepo, paymentsRepo } from '@sds/db';
+import { type Db, lineRepo, ordersRepo } from '@sds/db';
 import {
   botText,
   followGreeting,
@@ -15,12 +15,21 @@ import {
   type RoutedEvent,
 } from '@sds/line';
 import { type MyOrder, PRIVACY_NOTICE_VERSION } from '@sds/shared';
-import { claimPayment, selectPayment, viewOrder } from '../customer-app/service.ts';
+import {
+  claimPayment,
+  derivedRequestId,
+  selectPayment,
+  viewOrder,
+} from '../customer-app/service.ts';
 import { ApiError } from '../errors.ts';
 import type { EventBus } from '../events.ts';
 import { currentBusinessDate } from '../orders/business-day.ts';
+import { mergeOrders } from '../orders/customer-edit.ts';
 import { currentPromptpayId, lineOrderingNow } from '../settings/service.ts';
+import { openPromptpayCandidates, planChatSlip, slipFree } from '../slips/allocate.ts';
+import { activeSlipChecker } from '../slips/checker.ts';
 import { MAX_SLIP_BYTES } from '../slips/image.ts';
+import { keepLateSlip, LATE_SLIP_WINDOW_MS } from '../slips/late.ts';
 import { looksLikeSlip } from '../slips/qr.ts';
 import { attachSlip } from '../slips/service.ts';
 import type { SlipStore } from '../slips/store.ts';
@@ -265,11 +274,12 @@ async function handleClaim(
 }
 
 /**
- * A picture in the chat. When the sender has a PromptPay payment waiting (their latest open
+ * A picture in the chat. When the sender has a PromptPay payment waiting (D-40 picks which open
  * order), the picture is fetched from LINE, kept as the slip and the payment becomes `claimed`
  * (the same service as the app's upload and the "โอนแล้ว" button); staff still confirm. With no
  * such order, or when the picture is not a bank slip, it is dropped in silence (no reply). A
- * picture that cannot be fetched is not kept and the sender hears the usual reply. A fetch that failed for a reason that may pass is thrown, so the retry sweep tries again.
+ * picture that cannot be fetched is not kept and the sender hears the usual reply. A fetch that
+ * failed for a reason that may pass is thrown, so the retry sweep tries again.
  */
 async function handleSlip(
   ctx: HandlerContext,
@@ -279,8 +289,17 @@ async function handleSlip(
   const fetchContent = ctx.client?.getMessageContent?.bind(ctx.client);
   // No order waiting for a payment: nothing to check, nothing to say (no reply, no fetch, no call).
   if (!customer || !fetchContent) return;
-  const waiting = await waitingPromptpayOrder(ctx, customer.id);
-  if (!waiting) return;
+  const candidates = await openPromptpayCandidates(ctx.db, customer.id);
+  // No open order: a slip for an order the unpaid timeout just cancelled is kept for staff (D-41).
+  const late =
+    candidates.length === 0
+      ? await ordersRepo.findTimeoutCancelledOrderForCustomer(
+          ctx.db,
+          customer.id,
+          new Date(ctx.now().getTime() - LATE_SLIP_WINDOW_MS),
+        )
+      : undefined;
+  if (candidates.length === 0 && !late) return;
   const noOrder = () =>
     say(ctx, event.replyToken, [botText('lineBot.slip.reply')], {
       template: 'slip_received',
@@ -293,46 +312,71 @@ async function handleSlip(
     if (content.definite) return;
     throw new Error('slip image could not be fetched');
   }
-  // Not a bank slip (no slip QR): dropped without a trace, and without a reply.
+  // Not a bank slip (no slip QR): dropped without a trace, and without a reply (D-44).
   if (!(await looksLikeSlip(content.bytes))) return;
-  try {
-    const order = await attachSlip(core(ctx), ctx.slips, customer.id, waiting, content.bytes, {
-      ip: null,
-    });
-    await say(
+  const reply = (order: { id?: string; orderNo: string }) =>
+    say(
       ctx,
       event.replyToken,
       [botText('lineBot.claim.slipReceived', { orderNo: order.orderNo })],
       {
         template: 'payment_claimed',
         customerId: customer.id,
-        orderId: order.id,
+        ...(order.id ? { orderId: order.id } : {}),
       },
     );
+  try {
+    if (late) {
+      const kept = await keepLateSlip(core(ctx), ctx.slips, customer.id, late.id, content.bytes, {
+        ip: null,
+      });
+      if (!kept) return noOrder();
+      await reply({ id: late.id, orderNo: kept.orderNo });
+      return;
+    }
+    // D-40 (PAY-05): with several open PromptPay orders the amount on the picture, read here for
+    // free, chooses the order. It never confirms anything (that is the bank check, D-27).
+    let plan = await planChatSlip(
+      candidates,
+      async () => (await activeSlipChecker()?.readLocalAmount(content.bytes)) ?? null,
+    );
+    if (plan.kind === 'merge') {
+      try {
+        const seed = `chat-slip:${event.messageId}`;
+        await mergeOrders(
+          core(ctx),
+          { kind: 'system' },
+          plan.targetId,
+          plan.sourceIds,
+          undefined,
+          {
+            idempotencyKey: derivedRequestId(`${seed}:merge`),
+            paymentRequestId: derivedRequestId(`${seed}:payment`),
+          },
+          { ip: null },
+        );
+        plan = { kind: 'attach', orderId: plan.targetId, blocked: false };
+      } catch (error) {
+        // A merge that is not allowed any more (a discount, a payment that just arrived): staff decide.
+        if (!(error instanceof ApiError)) throw error;
+        const oldest = slipFree(candidates)[0];
+        if (!oldest) throw error;
+        plan = { kind: 'attach', orderId: oldest.order.id, blocked: true };
+      }
+    }
+    const order = await attachSlip(
+      core(ctx),
+      ctx.slips,
+      customer.id,
+      plan.orderId,
+      content.bytes,
+      { ip: null },
+      plan.blocked ? { autoConfirmBlocked: true } : {},
+    );
+    await reply(order);
   } catch (error) {
     await refuse(ctx, event.replyToken, error, customer.id);
   }
-}
-
-/** How many of the sender's latest orders are looked at; open orders are no longer capped at 3. */
-const WAITING_SLIP_SCAN = 20;
-
-/** The id of the sender's latest order that is open and has a PromptPay payment pending or claimed. */
-async function waitingPromptpayOrder(
-  ctx: HandlerContext,
-  customerId: string,
-): Promise<string | undefined> {
-  const rows = await ordersRepo.listOrdersForCustomer(ctx.db, customerId, WAITING_SLIP_SCAN);
-  for (const row of rows) {
-    if (row.status === 'completed' || row.status === 'cancelled') continue;
-    const payments = await paymentsRepo.listPaymentsForOrder(ctx.db, row.id);
-    if (
-      payments.some((p) => p.method === 'promptpay' && ['pending', 'claimed'].includes(p.status))
-    ) {
-      return row.id;
-    }
-  }
-  return undefined;
 }
 
 async function handleChangeMethod(

@@ -1,3 +1,4 @@
+import { PaymentArrivedPopup } from './pos/payments/PaymentArrivedPopup.tsx';
 import type { Services } from './services.ts';
 import { useApplyTokens } from './theme/apply-tokens.ts';
 import { AuthCard, AuthFrame } from './ui/AuthFrame.tsx';
@@ -39,6 +40,7 @@ export function App({ services }: { services: Services }) {
             to the screens, so it gets the scope from this wrapper (which has no box of its own). */}
         <div className="g-root" style={{ display: 'contents' }}>
           <Screen />
+          <PaymentArrivedPopup />
           <StepUpDialog />
         </div>
       </AuthContext.Provider>

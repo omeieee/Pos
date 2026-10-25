@@ -1,7 +1,7 @@
 import type { PGlite } from '@electric-sql/pglite';
 import { satang } from '@sds/shared';
 import { eq } from 'drizzle-orm';
-import { afterAll, beforeAll, describe, expect, test } from 'vitest';
+import { afterAll, beforeAll, describe, expect, test, vi } from 'vitest';
 import * as repo from './orders.ts';
 import * as paymentsRepo from './payments.ts';
 import { createPgliteDb, type PgliteDb } from './pglite.ts';
@@ -146,6 +146,34 @@ describe('orders', () => {
     expect(byOrder.get(a?.id ?? '')).toHaveLength(2);
     expect(byOrder.get(b?.id ?? '')).toHaveLength(1);
     expect((await repo.loadOrderItems(db, [])).size).toBe(0);
+  });
+
+  test('items inserted in the same millisecond read back in cart order, 100 times in a row', async () => {
+    const menuItemId = await anyMenuItem();
+    const cart = Array.from({ length: 12 }, (_, i) => ({
+      menuItemId,
+      nameThSnapshot: `จานที่ ${i + 1}`,
+      nameEnSnapshot: null,
+      unitPriceSatang: 5000,
+      unitCostSatang: null,
+      qty: 1,
+      modifiers: [],
+      note: null,
+      lineTotalSatang: 5000,
+    }));
+    const frozen = vi.spyOn(Date, 'now').mockReturnValue(Date.UTC(2026, 9, 25, 4, 0, 0));
+    try {
+      for (let run = 0; run < 100; run += 1) {
+        const order = await repo.insertOrder(db, newOrder());
+        const inserted = await repo.insertOrderItems(db, order?.id ?? '', cart);
+        // Every id carries the same millisecond, so only the order within it is being tested.
+        expect(new Set(inserted.map((item) => item.id.slice(0, 13))).size).toBe(1);
+        const read = (await repo.loadOrderItems(db, [order?.id ?? ''])).get(order?.id ?? '') ?? [];
+        expect(read.map((item) => item.nameThSnapshot)).toEqual(cart.map((c) => c.nameThSnapshot));
+      }
+    } finally {
+      frozen.mockRestore();
+    }
   });
 
   test('lock, find and list', async () => {

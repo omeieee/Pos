@@ -1,6 +1,6 @@
 import { formatBaht } from '@sds/i18n';
 import { orderPlacedText } from '@sds/line/order-text';
-import type { CheckoutInfo, PublicMenuResponse } from '@sds/shared';
+import type { AppOrderInput, CheckoutInfo, PublicMenuResponse } from '@sds/shared';
 import { useMemo, useRef, useState } from 'react';
 import { Gi } from '../design/icons.tsx';
 import { s } from '../design/style.ts';
@@ -20,9 +20,16 @@ import {
   NOTE_MAX,
   prefilled,
 } from '../model/checkout.ts';
+import {
+  type CheckoutWarning,
+  checkoutWarning,
+  type EditSession,
+  mergedItems,
+} from '../model/open-orders.ts';
 import { errorKey, useApp, useT } from './app-context.tsx';
 import { BarButton, Body, Dock, Header, Notice, SectionLabel } from './Chrome.tsx';
 import { DishThumb } from './DishThumb.tsx';
+import { OpenOrderSheet } from './order/sheets.tsx';
 import { METHOD_ORDER, PayRadio } from './PayOption.tsx';
 
 /**
@@ -37,6 +44,8 @@ export function CheckoutScreen({
   setCart,
   clearCart,
   refreshInfo,
+  editing = null,
+  endEdit = () => {},
 }: {
   menu: PublicMenuResponse;
   info: CheckoutInfo;
@@ -44,6 +53,10 @@ export function CheckoutScreen({
   setCart: (cart: Cart) => void;
   clearCart: () => void;
   refreshInfo: () => Promise<void>;
+  /** Set while the customer changes an unpaid order: this screen then saves the lines, nothing else. */
+  editing?: EditSession | null;
+  /** Leaves the change: puts back the cart the customer had before. */
+  endEdit?: () => void;
 }) {
   const tr = useT();
   const { api, platform, go, locale } = useApp();
@@ -53,6 +66,10 @@ export function CheckoutScreen({
   const requests = useRef(createRequestIds()).current;
   const problems = formProblems(form, info);
   const [tried, setTried] = useState(false);
+  /** The unpaid-order question: which order, and which of its two steps is showing. */
+  const [asking, setAsking] = useState<{ step: 'ask' | 'choose'; warning: CheckoutWarning } | null>(
+    null,
+  );
   const nameField = useRef<HTMLInputElement>(null);
   const buildingField = useRef<HTMLSelectElement>(null);
 
@@ -90,6 +107,29 @@ export function CheckoutScreen({
     if (problems.length > 0 || busy || form.method === '') return;
     setBusy(true);
     setError(null);
+    // An unpaid order of this customer is asked about first (in the app, never in the chat). If
+    // the list cannot be read the order goes on as usual: the warning is a help, not a gate.
+    let warning: CheckoutWarning | null = null;
+    try {
+      warning = checkoutWarning((await api.openOrders()).orders, cart, {
+        building: form.building,
+        name: form.name.trim(),
+      });
+    } catch {
+      warning = null;
+    }
+    if (warning) {
+      setAsking({ step: 'ask', warning });
+      setBusy(false);
+      return;
+    }
+    await place();
+  }
+
+  async function place() {
+    if (form.method === '') return;
+    setBusy(true);
+    setError(null);
     try {
       const result = await api.placeOrder({
         clientRequestId: requests.forSignature(signature),
@@ -112,13 +152,35 @@ export function CheckoutScreen({
     }
   }
 
+  /** Replace the lines of an unpaid order. No chat message: this is not a new order. */
+  async function saveLines(order: { id: string; version: number }, items: AppOrderInput['items']) {
+    setBusy(true);
+    setError(null);
+    try {
+      const body = { expectedVersion: order.version, items };
+      const key = requests.forSignature(JSON.stringify(['edit', order.id, order.version, items]));
+      await api.editOrder(order.id, body, key);
+      requests.reset();
+      if (editing) endEdit();
+      else clearCart();
+      go(`/orders/${order.id}`, { replace: true });
+    } catch (e) {
+      setError(tr(errorKey(e)));
+      setBusy(false);
+      setAsking(null);
+    }
+  }
+
   const back = <BarButton icon="chevronLeft" label={tr('liff.back')} onClick={() => go('/menu')} />;
+  const title = editing
+    ? tr('liff.edit.title', { orderNo: editing.orderNo })
+    : tr('liff.checkout.title');
 
   if (cart.length === 0) {
     return (
       <>
-        <Header left={back} title={tr('liff.checkout.title')} />
-        <Body label={tr('liff.checkout.title')}>
+        <Header left={back} title={title} />
+        <Body label={title}>
           <div
             className="g-glass g-rise"
             style={s(
@@ -140,8 +202,8 @@ export function CheckoutScreen({
 
   return (
     <>
-      <Header left={back} title={tr('liff.checkout.title')} />
-      <Body label={tr('liff.checkout.title')} bottom={132} fade={130}>
+      <Header left={back} title={title} />
+      <Body label={title} bottom={132} fade={130}>
         <div style={s('display:flex;flex-direction:column;gap:18px')}>
           <section className="g-rise" aria-labelledby="co-items" style={s('--d:.04s')}>
             <SectionLabel id="co-items">{tr('liff.checkout.items')}</SectionLabel>
@@ -180,6 +242,24 @@ export function CheckoutScreen({
             </div>
           </section>
 
+          {editing ? (
+            <>
+              <Notice icon="info">{tr('liff.edit.note')}</Notice>
+              <button
+                type="button"
+                className="g-btn g-btn-block"
+                disabled={busy}
+                onClick={() => {
+                  const id = editing.orderId;
+                  endEdit();
+                  go(`/orders/${id}`, { replace: true });
+                }}
+              >
+                {tr('liff.edit.discard')}
+              </button>
+            </>
+          ) : null}
+
           {gone.length > 0 ? (
             <Notice tone="bad" icon="warn" alert>
               <p style={s('margin:0 0 8px')}>{tr('liff.error.ORDER_INVALID')}</p>
@@ -193,118 +273,122 @@ export function CheckoutScreen({
             </Notice>
           ) : null}
 
-          <section className="g-rise" aria-labelledby="co-deliver" style={s('--d:.08s')}>
-            <SectionLabel id="co-deliver">{tr('liff.menu.deliverTitle')}</SectionLabel>
-            <div
-              className="g-glass"
-              style={s(
-                'border-radius:28px;padding:14px 16px;display:flex;flex-direction:column;gap:10px',
-              )}
-            >
-              {last ? (
-                <button
-                  type="button"
-                  className="g-btn g-btn-sm"
-                  style={s('align-self:flex-start;max-width:100%;overflow:hidden')}
-                  onClick={() => setForm({ ...form, ...prefilled(info), method: form.method })}
+          {editing ? null : (
+            <>
+              <section className="g-rise" aria-labelledby="co-deliver" style={s('--d:.08s')}>
+                <SectionLabel id="co-deliver">{tr('liff.menu.deliverTitle')}</SectionLabel>
+                <div
+                  className="g-glass"
+                  style={s(
+                    'border-radius:28px;padding:14px 16px;display:flex;flex-direction:column;gap:10px',
+                  )}
                 >
-                  <span style={s('overflow:hidden;text-overflow:ellipsis')}>
-                    {tr('liff.checkout.prefill', {
-                      building: last.building,
-                      name: last.recipientName,
-                    })}
-                  </span>
-                </button>
-              ) : null}
-              <label className="g-field" style={s('height:48px')}>
-                <Gi n="user" size="sm" />
-                <input
-                  ref={nameField}
-                  type="text"
-                  value={form.name}
-                  maxLength={NAME_MAX}
-                  autoComplete="off"
-                  aria-label={tr('liff.checkout.name')}
-                  placeholder={tr('liff.checkout.name')}
-                  onChange={(e) => setForm({ ...form, name: e.target.value })}
-                />
-              </label>
-              <label className="g-field" style={s('height:48px')}>
-                <Gi n="building" size="sm" />
-                <select
-                  ref={buildingField}
-                  value={form.building}
-                  aria-label={tr('liff.checkout.building')}
-                  data-empty={form.building === ''}
-                  onChange={(e) => setForm({ ...form, building: e.target.value })}
+                  {last ? (
+                    <button
+                      type="button"
+                      className="g-btn g-btn-sm"
+                      style={s('align-self:flex-start;max-width:100%;overflow:hidden')}
+                      onClick={() => setForm({ ...form, ...prefilled(info), method: form.method })}
+                    >
+                      <span style={s('overflow:hidden;text-overflow:ellipsis')}>
+                        {tr('liff.checkout.prefill', {
+                          building: last.building,
+                          name: last.recipientName,
+                        })}
+                      </span>
+                    </button>
+                  ) : null}
+                  <label className="g-field" style={s('height:48px')}>
+                    <Gi n="user" size="sm" />
+                    <input
+                      ref={nameField}
+                      type="text"
+                      value={form.name}
+                      maxLength={NAME_MAX}
+                      autoComplete="off"
+                      aria-label={tr('liff.checkout.name')}
+                      placeholder={tr('liff.checkout.name')}
+                      onChange={(e) => setForm({ ...form, name: e.target.value })}
+                    />
+                  </label>
+                  <label className="g-field" style={s('height:48px')}>
+                    <Gi n="building" size="sm" />
+                    <select
+                      ref={buildingField}
+                      value={form.building}
+                      aria-label={tr('liff.checkout.building')}
+                      data-empty={form.building === ''}
+                      onChange={(e) => setForm({ ...form, building: e.target.value })}
+                    >
+                      <option value="">{tr('liff.checkout.buildingPick')}</option>
+                      {info.buildings.map((b) => (
+                        <option key={b} value={b}>
+                          {b}
+                        </option>
+                      ))}
+                    </select>
+                    <Gi n="chevronDown" size="sm" />
+                  </label>
+                  <label className="g-field" style={s('height:48px')}>
+                    <Gi n="note" size="sm" />
+                    <input
+                      type="text"
+                      value={form.note}
+                      maxLength={NOTE_MAX}
+                      autoComplete="off"
+                      aria-label={tr('liff.checkout.note')}
+                      placeholder={tr('liff.checkout.notePlaceholder')}
+                      onChange={(e) => setForm({ ...form, note: e.target.value })}
+                    />
+                  </label>
+                  {tried && (problems.includes('building') || problems.includes('name')) ? (
+                    <Notice tone="bad" icon="warn" alert>
+                      {tr('liff.checkout.required')}
+                    </Notice>
+                  ) : null}
+                  <div
+                    className="g-t-c"
+                    style={s('display:flex;gap:7px;align-items:flex-start;line-height:1.5')}
+                  >
+                    <Gi n="info" style={{ width: 14, height: 14, marginTop: 3 }} />
+                    {tr('liff.checkout.deliverNote')}
+                  </div>
+                  <button
+                    type="button"
+                    className="g-btn g-btn-sm"
+                    style={s('align-self:flex-start')}
+                    onClick={() => go('/member')}
+                  >
+                    {tr('liff.member.link')}
+                  </button>
+                </div>
+              </section>
+
+              <section className="g-rise" aria-labelledby="co-pay" style={s('--d:.12s')}>
+                <SectionLabel id="co-pay">{tr('liff.checkout.payment')}</SectionLabel>
+                <div
+                  role="radiogroup"
+                  aria-labelledby="co-pay"
+                  style={s('display:flex;flex-direction:column;gap:10px')}
                 >
-                  <option value="">{tr('liff.checkout.buildingPick')}</option>
-                  {info.buildings.map((b) => (
-                    <option key={b} value={b}>
-                      {b}
-                    </option>
+                  {methods.map((method) => (
+                    <PayRadio
+                      key={method}
+                      method={method}
+                      checked={form.method === method}
+                      onChange={() => setForm({ ...form, method })}
+                    />
                   ))}
-                </select>
-                <Gi n="chevronDown" size="sm" />
-              </label>
-              <label className="g-field" style={s('height:48px')}>
-                <Gi n="note" size="sm" />
-                <input
-                  type="text"
-                  value={form.note}
-                  maxLength={NOTE_MAX}
-                  autoComplete="off"
-                  aria-label={tr('liff.checkout.note')}
-                  placeholder={tr('liff.checkout.notePlaceholder')}
-                  onChange={(e) => setForm({ ...form, note: e.target.value })}
-                />
-              </label>
-              {tried && (problems.includes('building') || problems.includes('name')) ? (
-                <Notice tone="bad" icon="warn" alert>
-                  {tr('liff.checkout.required')}
+                </div>
+              </section>
+
+              {problems.includes('closed') ? (
+                <Notice tone="warn" icon="clock">
+                  {tr('liff.error.SHOP_CLOSED')}
                 </Notice>
               ) : null}
-              <div
-                className="g-t-c"
-                style={s('display:flex;gap:7px;align-items:flex-start;line-height:1.5')}
-              >
-                <Gi n="info" style={{ width: 14, height: 14, marginTop: 3 }} />
-                {tr('liff.checkout.deliverNote')}
-              </div>
-              <button
-                type="button"
-                className="g-btn g-btn-sm"
-                style={s('align-self:flex-start')}
-                onClick={() => go('/member')}
-              >
-                {tr('liff.member.link')}
-              </button>
-            </div>
-          </section>
-
-          <section className="g-rise" aria-labelledby="co-pay" style={s('--d:.12s')}>
-            <SectionLabel id="co-pay">{tr('liff.checkout.payment')}</SectionLabel>
-            <div
-              role="radiogroup"
-              aria-labelledby="co-pay"
-              style={s('display:flex;flex-direction:column;gap:10px')}
-            >
-              {methods.map((method) => (
-                <PayRadio
-                  key={method}
-                  method={method}
-                  checked={form.method === method}
-                  onChange={() => setForm({ ...form, method })}
-                />
-              ))}
-            </div>
-          </section>
-
-          {problems.includes('closed') ? (
-            <Notice tone="warn" icon="clock">
-              {tr('liff.error.SHOP_CLOSED')}
-            </Notice>
-          ) : null}
+            </>
+          )}
           {error ? (
             <Notice tone="bad" icon="warn" alert>
               {error}
@@ -324,14 +408,50 @@ export function CheckoutScreen({
           type="button"
           className="g-btn g-btn-p g-btn-lg"
           style={s('height:56px')}
-          disabled={busy || problems.includes('closed') || gone.length > 0}
+          disabled={busy || (!editing && problems.includes('closed')) || gone.length > 0}
           aria-busy={busy}
-          onClick={() => void submit()}
+          onClick={() =>
+            editing
+              ? void saveLines(
+                  { id: editing.orderId, version: editing.version },
+                  toOrderItems(cart),
+                )
+              : void submit()
+          }
         >
-          {busy ? tr('liff.checkout.placing') : tr('liff.checkout.order')}
+          {editing
+            ? busy
+              ? tr('liff.edit.saving')
+              : tr('liff.edit.save')
+            : busy
+              ? tr('liff.checkout.placing')
+              : tr('liff.checkout.order')}
           <Gi n="chevronRight" size="sm" />
         </button>
       </Dock>
+      {asking ? (
+        <OpenOrderSheet
+          step={asking.step}
+          warning={asking.warning}
+          busy={busy}
+          onContinue={() => {
+            if (asking.warning.canMerge) setAsking({ ...asking, step: 'choose' });
+            else {
+              setAsking(null);
+              void place();
+            }
+          }}
+          onView={() => go(`/orders/${asking.warning.order.id}`)}
+          onMerge={() =>
+            void saveLines(asking.warning.order, mergedItems(asking.warning.order, cart))
+          }
+          onSeparate={() => {
+            setAsking(null);
+            void place();
+          }}
+          onClose={() => setAsking(null)}
+        />
+      ) : null}
     </>
   );
 }

@@ -294,7 +294,10 @@ export async function createPayment(
         originalStaffId,
       );
       const payment = emitPayment(emit, row);
-      return { result: { payment, order: await settleOrder(tx, order, emit) }, replay: false };
+      return {
+        result: { payment, order: await settleOrder(tx, order, emit, ctx.now()) },
+        replay: false,
+      };
     });
   } catch (error) {
     if (!(error instanceof DuplicateRequest)) {

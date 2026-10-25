@@ -1,9 +1,14 @@
 import { describe, expect, test } from 'vitest';
 import {
+  appOpenOrdersSchema,
+  appOrderCancelInputSchema,
+  appOrderEditInputSchema,
   appOrderInputSchema,
+  appOrderMergeInputSchema,
   customerSessionRequestSchema,
   customerSlipCheck,
   selectPaymentInputSchema,
+  slipNeedsCombineSchema,
 } from './customer-app.ts';
 
 const REQ = '0191a8f0-0000-7000-8000-000000000001';
@@ -84,10 +89,18 @@ describe('customerSlipCheck', () => {
     expect(customerSlipCheck({ hasSlip: true, slipVerify: 'pending' })).toBe('checking');
   });
 
-  test('every finished check, and a slip never marked for one, is the same staff_review', () => {
-    for (const slipVerify of [
-      'valid',
+  test('only a bank-checked amount mismatch is told apart', () => {
+    expect(customerSlipCheck({ hasSlip: true, slipVerify: 'amount_mismatch' })).toBe(
       'amount_mismatch',
+    );
+  });
+
+  test('a valid bank check on a payment that is still open waits for the shop (A2)', () => {
+    expect(customerSlipCheck({ hasSlip: true, slipVerify: 'valid' })).toBe('verified_waiting');
+  });
+
+  test('every other finished check, and a slip never marked for one, is the same staff_review', () => {
+    for (const slipVerify of [
       'receiver_mismatch',
       'date_mismatch',
       'not_found',
@@ -97,5 +110,64 @@ describe('customerSlipCheck', () => {
     ]) {
       expect(customerSlipCheck({ hasSlip: true, slipVerify })).toBe('staff_review');
     }
+  });
+});
+
+describe('edit, cancel, merge and open-order shapes (D-39)', () => {
+  const ORDER = '0191a8f0-0000-7000-8000-000000000003';
+  const items = [{ menuItemId: ITEM, qty: 1 }];
+
+  test('edit: a version and lines, nothing else, no prices', () => {
+    const parsed = appOrderEditInputSchema.parse({ expectedVersion: 2, items });
+    expect(parsed.items[0]?.modifierOptionIds).toEqual([]);
+    expect(appOrderEditInputSchema.safeParse({ items }).success).toBe(false);
+    expect(appOrderEditInputSchema.safeParse({ expectedVersion: 2, items: [] }).success).toBe(
+      false,
+    );
+    expect(
+      appOrderEditInputSchema.safeParse({ expectedVersion: 2, items, totalSatang: 1 }).success,
+    ).toBe(false);
+  });
+
+  test('cancel: only a version', () => {
+    expect(appOrderCancelInputSchema.safeParse({ expectedVersion: 1 }).success).toBe(true);
+    expect(appOrderCancelInputSchema.safeParse({}).success).toBe(false);
+    expect(appOrderCancelInputSchema.safeParse({ expectedVersion: 1, reason: 'x' }).success).toBe(
+      false,
+    );
+  });
+
+  test('merge: the target version, and one version per source', () => {
+    const ok = { expectedVersion: 1, sourceIds: [ORDER], expectedVersions: [3] };
+    expect(appOrderMergeInputSchema.safeParse(ok).success).toBe(true);
+    expect(appOrderMergeInputSchema.safeParse({ ...ok, expectedVersions: [] }).success).toBe(false);
+    expect(appOrderMergeInputSchema.safeParse({ ...ok, sourceIds: [] }).success).toBe(false);
+    expect(appOrderMergeInputSchema.safeParse({ ...ok, sourceIds: [ORDER, ORDER] }).success).toBe(
+      false,
+    );
+  });
+
+  test('open orders list carries what the checkout warning needs', () => {
+    const order = {
+      id: ORDER,
+      orderNo: 'L-001',
+      totalSatang: 5000,
+      version: 1,
+      businessDate: '2026-10-24',
+      deliveryBuilding: 'B1',
+      recipientName: 'ฟ้า',
+      placedAt: '2026-10-24T03:00:00.000Z',
+      items: [{ menuItemId: ITEM, nameTh: 'ก๋วยเตี๋ยว', nameEn: null, qty: 1, modifierOptionIds: [] }],
+    };
+    expect(appOpenOrdersSchema.safeParse({ orders: [order] }).success).toBe(true);
+    expect(
+      appOpenOrdersSchema.safeParse({ orders: [{ ...order, totalSatang: 1.5 }] }).success,
+    ).toBe(false);
+  });
+
+  test('the combine answer names the orders and the total', () => {
+    const answer = { orderNos: ['L-001', 'L-002'], orderIds: [ORDER, ITEM], totalSatang: 10000 };
+    expect(slipNeedsCombineSchema.safeParse(answer).success).toBe(true);
+    expect(slipNeedsCombineSchema.safeParse({ ...answer, orderNos: [] }).success).toBe(false);
   });
 });

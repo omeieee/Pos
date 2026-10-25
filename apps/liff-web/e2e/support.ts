@@ -105,6 +105,7 @@ function installFakeLiff(inClient: boolean) {
 }
 
 type SlipCheck = NonNullable<MyOrder['slipCheck']>;
+type CancelReason = NonNullable<MyOrder['cancelReason']>;
 
 export interface FakeOptions {
   /** The shop is not delivering right now. */
@@ -113,21 +114,68 @@ export interface FakeOptions {
   acknowledged?: boolean;
 }
 
+export interface FakeLine {
+  menuItemId: string;
+  qty: number;
+  optionIds: string[];
+  note: string | null;
+}
+
+/** One order the fake server holds. Tests read and change these fields directly. */
+export interface FakeOrder {
+  id: string;
+  no: string;
+  lines: FakeLine[];
+  building: string;
+  recipient: string;
+  deliveryNote: string | null;
+  method: 'cash' | 'promptpay';
+  version: number;
+  paymentId: string;
+  claimed: boolean;
+  paid: boolean;
+  hasSlip: boolean;
+  slipCheck: SlipCheck | null;
+  cancelled: { reason: CancelReason; mergedInto: string | null } | null;
+}
+
+const OPTION_DELTA: Record<string, number> = { [IDS.thin]: 0, [IDS.wide]: 1000 };
+const OPTION_NAME: Record<string, string> = { [IDS.thin]: THIN_NAME, [IDS.wide]: 'เส้นใหญ่' };
+const uuid = (prefix: string, n: number) =>
+  `0191a8f0-0000-7000-8000-0000000000${prefix}${n.toString(16)}`.slice(0, 36);
+
+const unit = (line: FakeLine) =>
+  DISH_PRICE + line.optionIds.reduce((sum, id) => sum + (OPTION_DELTA[id] ?? 0), 0);
+const totalOf = (o: FakeOrder) => o.lines.reduce((sum, l) => sum + unit(l) * l.qty, 0);
+/** Nothing sent, claimed or paid yet: the customer may still change or cancel it. */
+const editable = (o: FakeOrder) => o.cancelled === null && !o.paid && !o.claimed && !o.hasSlip;
+
 /**
- * The fake API of the customer app: it keeps one order in memory and answers like the real server
- * would, so the whole flow runs in the page. `calls` records what the page sent.
+ * The fake API of the customer app: it keeps the customer's orders in memory and answers like the
+ * real server would, so the whole flow runs in the page. `placed`, `slips` and the other logs
+ * record what the page sent.
  */
 export class FakeApi {
   placed: AppOrderInput[] = [];
-  slips: { contentType: string }[] = [];
+  slips: { contentType: string; query: string }[] = [];
   claims = 0;
+  /** Bodies of every `PUT /orders/:id/items`, with the order number and the idempotency key. */
+  edits: {
+    no: string;
+    body: { expectedVersion: number; items: AppOrderInput['items'] };
+    key: string | null;
+  }[] = [];
+  cancels: { no: string; body: { expectedVersion: number }; key: string | null }[] = [];
+  merges = 0;
+  orders: FakeOrder[] = [];
+  /**
+   * The amount the server reads off the next slip. When it is not this order's total but equals
+   * this order plus the customer's other editable orders, an upload without `combine` or `review`
+   * answers 409 NEEDS_COMBINE and stores nothing.
+   */
+  slipAmountSatang: number | null = null;
   private acknowledged: boolean;
-  private order: MyOrder | null = null;
-  private slipCheck: SlipCheck | null = null;
-  private paid = false;
-  private claimed = false;
-  private hasSlip = false;
-  private method: 'cash' | 'promptpay' = 'promptpay';
+  private paymentSeq = 0;
   private readonly closed: boolean;
 
   constructor(options: FakeOptions = {}) {
@@ -139,14 +187,70 @@ export class FakeApi {
     return this.acknowledged;
   }
 
+  /** The order the test is working with: the latest one made. */
+  get current(): FakeOrder {
+    const order = this.orders.at(-1);
+    if (!order) throw new Error('no order yet');
+    return order;
+  }
+
+  total(order: FakeOrder = this.current) {
+    return totalOf(order);
+  }
+
+  /** An earlier, unpaid order of this customer, as if placed in another visit. */
+  seedOrder(
+    over: Partial<Pick<FakeOrder, 'no' | 'lines' | 'building' | 'recipient' | 'method'>> = {},
+  ): FakeOrder {
+    const order: FakeOrder = {
+      id: this.orders.length === 0 ? IDS.order : uuid('a', this.orders.length + 1),
+      no: over.no ?? 'L-001',
+      lines: over.lines ?? [{ menuItemId: IDS.dish, qty: 1, optionIds: [IDS.wide], note: null }],
+      building: over.building ?? BUILDING,
+      recipient: over.recipient ?? RECIPIENT,
+      deliveryNote: null,
+      method: over.method ?? 'promptpay',
+      version: 1,
+      paymentId: this.nextPaymentId(),
+      claimed: false,
+      paid: false,
+      hasSlip: false,
+      slipCheck: null,
+      cancelled: null,
+    };
+    this.orders.push(order);
+    return order;
+  }
+
+  private nextPaymentId() {
+    this.paymentSeq += 1;
+    return this.paymentSeq === 1 ? IDS.payment : uuid('b', this.paymentSeq);
+  }
+
   /** The bank check ended and staff are to look at it (the neutral state). */
-  staffReview() {
-    this.slipCheck = 'staff_review';
+  staffReview(order: FakeOrder = this.current) {
+    order.slipCheck = 'staff_review';
+  }
+
+  /** The bank check found a different amount. */
+  amountMismatch(order: FakeOrder = this.current) {
+    order.slipCheck = 'amount_mismatch';
+  }
+
+  /** The bank check passed but the shop still has to confirm. */
+  verifiedWaiting(order: FakeOrder = this.current) {
+    order.slipCheck = 'verified_waiting';
   }
 
   /** Staff confirmed the money by hand: the order turns paid. */
-  confirmPaid() {
-    this.paid = true;
+  confirmPaid(order: FakeOrder = this.current) {
+    order.paid = true;
+  }
+
+  /** The server cancels the order (the unpaid-timeout job, for instance). */
+  cancel(reason: CancelReason, order: FakeOrder = this.current, mergedInto: string | null = null) {
+    order.cancelled = { reason, mergedInto };
+    order.version += 1;
   }
 
   private checkout(): CheckoutInfo {
@@ -164,56 +268,87 @@ export class FakeApi {
     };
   }
 
-  private view(): MyOrder {
-    const input = this.placed.at(-1);
-    if (!input) throw new Error('no order placed');
-    const total = DISH_PRICE * (input.items[0]?.qty ?? 1);
-    const promptpay = this.method === 'promptpay';
-    const open = promptpay && !this.paid;
-    const slipCheck = open && this.claimed ? (this.slipCheck ?? 'none') : undefined;
+  private view(o: FakeOrder): MyOrder {
+    const total = totalOf(o);
+    const promptpay = o.method === 'promptpay';
+    const cancelled = o.cancelled !== null;
+    const open = promptpay && !o.paid && !cancelled;
+    const slipCheck = open && o.claimed ? (o.slipCheck ?? 'none') : undefined;
     const payment: MyOrder['payment'] = promptpay
       ? {
-          id: IDS.payment,
+          id: o.paymentId,
           method: 'promptpay',
-          status: this.paid ? 'confirmed' : this.claimed ? 'claimed' : 'pending',
+          status: cancelled
+            ? 'cancelled'
+            : o.paid
+              ? 'confirmed'
+              : o.claimed
+                ? 'claimed'
+                : 'pending',
           amountSatang: total,
         }
       : null;
+    const canChange = editable(o);
     return {
-      id: IDS.order,
-      orderNo: 'S-001',
-      status: 'new',
-      paymentStatus: this.paid ? 'paid' : this.claimed ? 'awaiting_confirmation' : 'unpaid',
+      id: o.id,
+      orderNo: o.no,
+      status: cancelled ? 'cancelled' : 'new',
+      paymentStatus: o.paid ? 'paid' : o.claimed ? 'awaiting_confirmation' : 'unpaid',
       subtotalSatang: total,
       totalSatang: total,
-      items: [
-        {
-          nameTh: DISH_NAME,
-          nameEn: null,
-          qty: input.items[0]?.qty ?? 1,
-          modifiers: [{ nameTh: THIN_NAME, nameEn: null }],
-          note: null,
-          lineTotalSatang: total,
-        },
-      ],
-      deliveryBuilding: input.deliveryBuilding,
-      recipientName: input.recipientName,
-      deliveryNote: input.deliveryNote ?? null,
+      items: o.lines.map((l) => ({
+        nameTh: DISH_NAME,
+        nameEn: null,
+        qty: l.qty,
+        modifiers: l.optionIds.map((id) => ({ nameTh: OPTION_NAME[id] ?? '', nameEn: null })),
+        note: l.note,
+        lineTotalSatang: unit(l) * l.qty,
+      })),
+      deliveryBuilding: o.building,
+      recipientName: o.recipient,
+      deliveryNote: o.deliveryNote,
       note: null,
       placedAt: NOW,
       readyAt: null,
       completedAt: null,
-      cancelledAt: null,
+      cancelledAt: cancelled ? NOW : null,
+      cancelReason: o.cancelled?.reason ?? null,
+      mergedInto: o.cancelled?.mergedInto ?? null,
       payment,
-      hasSlip: this.hasSlip,
+      hasSlip: o.hasSlip,
       ...(slipCheck ? { slipCheck } : {}),
       actions: {
-        claim: open && !this.claimed,
-        changeMethod: open && !this.claimed,
+        claim: open && !o.claimed,
+        changeMethod: open && !o.claimed,
         showQr: open,
         attachSlip: open,
-        methods: open && !this.claimed ? ['cash'] : [],
+        methods: open && !o.claimed ? ['cash'] : [],
+        edit: canChange,
+        cancel: canChange,
       },
+    };
+  }
+
+  private openList() {
+    return {
+      orders: this.orders.filter(editable).map((o) => ({
+        id: o.id,
+        orderNo: o.no,
+        totalSatang: totalOf(o),
+        version: o.version,
+        businessDate: '2030-10-15',
+        deliveryBuilding: o.building,
+        recipientName: o.recipient,
+        placedAt: NOW,
+        items: o.lines.map((l) => ({
+          menuItemId: l.menuItemId,
+          nameTh: DISH_NAME,
+          nameEn: null,
+          qty: l.qty,
+          modifierOptionIds: l.optionIds,
+          note: l.note,
+        })),
+      })),
     };
   }
 
@@ -236,6 +371,7 @@ export class FakeApi {
             : {}),
         });
       const method = request.method();
+      const key = request.headers()['idempotency-key'] ?? null;
 
       if (path === '/v1/menu') return json(MENU);
       if (path === '/v1/app/session' && method === 'POST') {
@@ -251,39 +387,122 @@ export class FakeApi {
         this.acknowledged = true;
         return json({ privacyAcknowledged: true, privacyVersion: 'e2e' });
       }
+      if (path === '/v1/app/orders/open' && method === 'GET') return json(this.openList());
       if (path === '/v1/app/orders' && method === 'POST') {
         const input = request.postDataJSON() as AppOrderInput;
         this.placed.push(input);
-        this.method = input.paymentMethod === 'promptpay' ? 'promptpay' : 'cash';
-        this.order = this.view();
-        return json({ order: this.order, paymentError: null, replay: false }, 201);
+        const order = this.seedOrder({
+          no: `S-${String(this.placed.length).padStart(3, '0')}`,
+          lines: input.items.map((i) => ({
+            menuItemId: i.menuItemId,
+            qty: i.qty,
+            optionIds: [...i.modifierOptionIds],
+            note: i.note ?? null,
+          })),
+          building: input.deliveryBuilding,
+          recipient: input.recipientName,
+          method: input.paymentMethod === 'promptpay' ? 'promptpay' : 'cash',
+        });
+        order.deliveryNote = input.deliveryNote ?? null;
+        return json({ order: this.view(order), paymentError: null, replay: false }, 201);
       }
       if (path === '/v1/app/orders' && method === 'GET') {
-        return json({ orders: this.placed.length > 0 ? [this.view()] : [] });
+        return json({ orders: this.orders.map((o) => this.view(o)) });
       }
-      if (path === `/v1/app/orders/${IDS.order}` && method === 'GET') return json(this.view());
-      if (path === `/v1/app/orders/${IDS.order}/claim` && method === 'POST') {
-        this.claims += 1;
-        this.claimed = true;
-        return json(this.view());
+
+      const match = /^\/v1\/app\/orders\/([0-9a-f-]{36})(?:\/([a-z.]+))?$/.exec(path);
+      const order = match ? this.orders.find((o) => o.id === match[1]) : undefined;
+      const action = match?.[2] ?? '';
+      if (order) {
+        if (action === '' && method === 'GET') return json(this.view(order));
+        if (action === 'claim' && method === 'POST') {
+          this.claims += 1;
+          order.claimed = true;
+          return json(this.view(order));
+        }
+        if (action === 'items' && method === 'PUT') {
+          const body = request.postDataJSON() as {
+            expectedVersion: number;
+            items: AppOrderInput['items'];
+          };
+          this.edits.push({ no: order.no, body, key });
+          if (!editable(order)) return json({ code: 'ORDER_HAS_PAYMENT', message: 'x' }, 409);
+          if (body.expectedVersion !== order.version) {
+            return json({ code: 'VERSION_CONFLICT', message: 'x' }, 409);
+          }
+          order.lines = body.items.map((i) => ({
+            menuItemId: i.menuItemId,
+            qty: i.qty,
+            optionIds: [...i.modifierOptionIds],
+            note: i.note ?? null,
+          }));
+          order.version += 1;
+          order.paymentId = this.nextPaymentId();
+          return json(this.view(order));
+        }
+        if (action === 'cancel' && method === 'POST') {
+          const body = request.postDataJSON() as { expectedVersion: number };
+          this.cancels.push({ no: order.no, body, key });
+          if (!editable(order)) return json({ code: 'ORDER_HAS_PAYMENT', message: 'x' }, 409);
+          if (body.expectedVersion !== order.version) {
+            return json({ code: 'VERSION_CONFLICT', message: 'x' }, 409);
+          }
+          this.cancel('customer_cancel', order);
+          return json(this.view(order));
+        }
+        if (action === 'slip' && method === 'POST') {
+          const combine = url.searchParams.get('combine') === '1';
+          const review = url.searchParams.get('review') === '1';
+          const others = this.orders.filter((o) => o !== order && editable(o));
+          const sum = totalOf(order) + others.reduce((n, o) => n + totalOf(o), 0);
+          const amount = this.slipAmountSatang;
+          if (amount !== null && amount !== totalOf(order) && !combine && !review) {
+            if (amount === sum && others.length > 0) {
+              // The amount adds up to this order and the others: ask, and store nothing.
+              return json(
+                {
+                  code: 'NEEDS_COMBINE',
+                  message: 'x',
+                  details: {
+                    orderNos: [order.no, ...others.map((o) => o.no)],
+                    orderIds: [order.id, ...others.map((o) => o.id)],
+                    totalSatang: sum,
+                  },
+                },
+                409,
+              );
+            }
+          }
+          this.slips.push({
+            contentType: request.headers()['content-type'] ?? '',
+            query: url.search,
+          });
+          if (combine) {
+            // Merge into this order first (the others are cancelled `merged`), then attach.
+            for (const other of others) {
+              order.lines.push(...other.lines);
+              this.cancel('merged', other, order.no);
+            }
+            this.merges += 1;
+            order.version += 1;
+            order.paymentId = this.nextPaymentId();
+          }
+          order.hasSlip = true;
+          order.claimed = true;
+          order.slipCheck = 'checking';
+          return json(this.view(order));
+        }
+        if (action === 'slip' && method === 'GET') return png();
+        if (action === 'qr' && method === 'GET') {
+          return json({
+            url: `/v1/app/orders/${order.id}/qr.png?link=1`,
+            expiresAt: '2030-10-15T05:05:00.000Z',
+            amountSatang: totalOf(order),
+            promptpayId: MOCK_PROMPTPAY_ID,
+          });
+        }
+        if (action === 'qr.png') return png();
       }
-      if (path === `/v1/app/orders/${IDS.order}/slip` && method === 'POST') {
-        this.slips.push({ contentType: request.headers()['content-type'] ?? '' });
-        this.hasSlip = true;
-        this.claimed = true;
-        this.slipCheck = 'checking';
-        return json(this.view());
-      }
-      if (path === `/v1/app/orders/${IDS.order}/slip` && method === 'GET') return png();
-      if (path === `/v1/app/orders/${IDS.order}/qr` && method === 'GET') {
-        return json({
-          url: `/v1/app/orders/${IDS.order}/qr.png?link=1`,
-          expiresAt: '2030-10-15T05:05:00.000Z',
-          amountSatang: DISH_PRICE,
-          promptpayId: MOCK_PROMPTPAY_ID,
-        });
-      }
-      if (path === `/v1/app/orders/${IDS.order}/qr.png`) return png();
       // Anything else is a call the test did not expect: fail loudly instead of hanging.
       return json({ code: 'E2E_UNEXPECTED', message: `${method} ${path}` }, 404);
     });

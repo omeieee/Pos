@@ -87,4 +87,20 @@ export const thSettings = {
   'settings.delivery.error.last': 'ต้องเหลืออย่างน้อย 1 อาคาร',
   'settings.changedElsewhere': 'การตั้งค่านี้ถูกแก้จากเครื่องอื่นแล้ว ค่าที่เห็นอยู่อาจเก่า',
   'settings.reload': 'โหลดค่าล่าสุด',
+  // Cancel LINE orders that are not paid in time (D-41)
+  'settings.unpaidTimeout.title': 'ยกเลิกออเดอร์ที่ไม่ชำระ',
+  'settings.unpaidTimeout.desc': 'ยกเลิกออเดอร์จาก LINE ที่ลูกค้าไม่ชำระเงินภายในเวลาที่กำหนด',
+  'settings.unpaidTimeout.switch': 'ยกเลิกออเดอร์ที่ไม่ชำระอัตโนมัติ',
+  'settings.unpaidTimeout.switchHint':
+    'ออเดอร์จาก LINE ที่ยังไม่มีการแจ้งโอนหรือชำระ จะถูกยกเลิกเองเมื่อครบเวลา',
+  'settings.unpaidTimeout.minutes': 'ยกเลิกเมื่อครบกี่นาที',
+  'settings.unpaidTimeout.minutesHint': 'ตั้งได้ตั้งแต่ {min} ถึง {max} นาที นับจากเวลาที่ลูกค้าสั่ง',
+  'settings.unpaidTimeout.error': 'ใส่จำนวนนาทีเป็นตัวเลขเต็ม ระหว่าง {min} ถึง {max}',
+  'settings.unpaidTimeout.stateOn': 'ตอนนี้เปิดอยู่ ออเดอร์ที่ไม่ชำระภายใน {minutes} นาที จะถูกยกเลิก',
+  'settings.unpaidTimeout.stateOff': 'ตอนนี้ปิดอยู่ ออเดอร์ที่ไม่ชำระจะค้างอยู่จนกว่าพนักงานจะยกเลิก',
+  'settings.unpaidTimeout.explainAuto':
+    'ระบบยกเลิกให้เอง และไม่ส่งข้อความหาลูกค้า ลูกค้าจะเห็นสถานะ “ยกเลิก” เมื่อเปิดหน้าออเดอร์',
+  'settings.unpaidTimeout.explainClaimed': 'ออเดอร์ที่ลูกค้าแจ้งโอนแล้ว หรือมีการรับเงินแล้ว จะไม่ถูกยกเลิก',
+  'settings.unpaidTimeout.explainLate':
+    'ถ้าลูกค้าส่งสลิปมาหลังยกเลิก สลิปจะมาอยู่ในรายการให้พนักงานตรวจเอง ไม่ถูกทิ้ง',
 } as const;

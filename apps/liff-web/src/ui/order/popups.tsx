@@ -8,7 +8,7 @@ import type { SlipProgressPhase } from '../../model/slip-progress.ts';
 import { useT } from '../app-context.tsx';
 
 /** The bottom sheet every pop-up here uses: focus on open, Escape or the scrim closes it. */
-function PopupShell({
+export function PopupShell({
   titleId,
   onClose,
   children,
@@ -74,7 +74,8 @@ export function PaidPopup({ orderNo, onClose }: { orderNo: string; onClose: () =
 
 /**
  * Opens when the customer sends a slip and follows the check in the same pop-up: moving bar, then
- * "money received", or the neutral "the shop is checking". Never a failure or a reason. It can be
+ * "money received" (at once), "the amount does not match" (the one failure named), "the slip is
+ * valid, the shop is confirming", or the neutral "the shop is checking" for everything else. It can be
  * closed at any time; the check goes on and the page keeps showing the status.
  */
 export function SlipProgressPopup({
@@ -107,6 +108,26 @@ export function SlipProgressPopup({
             </p>
             <p className="g-num g-t-c" style={s('margin:0')}>
               {tr('liff.paidPopup.order', { orderNo })}
+            </p>
+          </>
+        ) : phase === 'amount_mismatch' ? (
+          <>
+            <Gi n="warn" size="lg" style={{ color: 'var(--ink2)' }} />
+            <h2 id="slip-progress-title" className="g-t-2" style={s('margin:0')}>
+              {tr('liff.slipProgress.mismatchTitle')}
+            </h2>
+            <p className="g-t-3" style={s('margin:0')}>
+              {tr('liff.slipProgress.mismatchBody')}
+            </p>
+          </>
+        ) : phase === 'verified_waiting' ? (
+          <>
+            <Gi n="check" size="lg" style={{ color: 'var(--ink2)' }} />
+            <h2 id="slip-progress-title" className="g-t-2" style={s('margin:0')}>
+              {tr('liff.slipProgress.waitingTitle')}
+            </h2>
+            <p className="g-t-3" style={s('margin:0')}>
+              {tr('liff.slipProgress.waitingBody')}
             </p>
           </>
         ) : phase === 'staff_review' ? (

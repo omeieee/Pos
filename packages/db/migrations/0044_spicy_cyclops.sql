@@ -1,0 +1,2 @@
+ALTER TABLE "payments" ADD COLUMN "slip_autoconfirm_blocked" boolean DEFAULT false NOT NULL;--> statement-breakpoint
+CREATE UNIQUE INDEX "payments_slip_qr_confirmed_key" ON "payments" USING btree ("slip_qr_hash") WHERE status = 'confirmed' and slip_qr_hash is not null;

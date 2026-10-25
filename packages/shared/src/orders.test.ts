@@ -71,6 +71,17 @@ describe('transition and cancel inputs', () => {
     expect(transitionOrderInputSchema.parse({ to: 'ready' })).toEqual({ to: 'ready' });
     expect(transitionOrderInputSchema.safeParse({ to: 'paid' }).success).toBe(false);
     expect(transitionOrderInputSchema.safeParse({}).success).toBe(false);
+    // The manager's override for a pay-first order that is not paid yet (D-38).
+    expect(
+      transitionOrderInputSchema.parse({ to: 'preparing', startUnpaid: true, reason: 'x' }),
+    ).toEqual({
+      to: 'preparing',
+      startUnpaid: true,
+      reason: 'x',
+    });
+    expect(
+      transitionOrderInputSchema.safeParse({ to: 'preparing', startUnpaid: 'yes' }).success,
+    ).toBe(false);
     expect(
       transitionOrderInputSchema.parse({
         to: 'cancelled',

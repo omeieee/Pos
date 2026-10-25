@@ -152,12 +152,16 @@ describe('the real /v1 routes', () => {
       'GET /v1/app/orders/:id',
       'GET /v1/app/orders/:id/qr',
       'GET /v1/app/orders/:id/slip',
+      'GET /v1/app/orders/open',
       'POST /v1/app/orders',
+      'POST /v1/app/orders/:id/cancel',
       'POST /v1/app/orders/:id/claim',
+      'POST /v1/app/orders/:id/merge',
       'POST /v1/app/orders/:id/payment',
       'POST /v1/app/orders/:id/slip',
       'POST /v1/app/privacy-ack',
       'PUT /v1/app/member',
+      'PUT /v1/app/orders/:id/items',
     ]);
     // None of them is also a staff route: one credential kind per route.
     expect(h.routes.filter((r) => r.customerGuarded && r.guarded)).toEqual([]);
@@ -214,6 +218,8 @@ describe('the real /v1 routes', () => {
       'GET /v1/print/jobs',
       'GET /v1/settings/printing',
       'PATCH /v1/settings/printing',
+      'GET /v1/settings/unpaid-timeout',
+      'PATCH /v1/settings/unpaid-timeout',
       'POST /v1/orders/:id/payments',
       'GET /v1/orders/:id/payments',
       'POST /v1/payments/:id/claim',

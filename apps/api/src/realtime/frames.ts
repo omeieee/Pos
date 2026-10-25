@@ -19,6 +19,7 @@ import {
   newOrderAlertFrameSchema,
   orderUpsertedFrameSchema,
   type Permission,
+  paymentAlertFrameSchema,
   paymentUpsertedFrameSchema,
   type RealtimeFrame,
   redactOrderForRole,
@@ -53,6 +54,8 @@ export const FRAME_PERMISSION: Record<FrameType, Permission | null> = {
   'customer.upserted': 'customer.view',
   // The kitchen needs the sound as much as the till.
   'alert.new_order': null,
+  // The payment pop-up is for every staff role; the frame carries ids only (D-42).
+  'alert.payment': null,
 };
 
 export function mayReceive(role: StaffRole, frame: { type: FrameType }): boolean {
@@ -150,6 +153,13 @@ export function frameFromEvent(event: AppEvent): FrameFromEvent {
           status: event.status,
           createdOnDeviceId: event.createdOnDeviceId,
         },
+      });
+    case 'alert.payment':
+      // The id is the order's; the same order can carry `slip_review` and then `paid`.
+      return build(paymentAlertFrameSchema, event.type, {
+        type: event.type,
+        id: event.orderId,
+        data: { orderId: event.orderId, orderNo: event.orderNo, kind: event.kind },
       });
     case 'alert.security':
     case 'session.ended':

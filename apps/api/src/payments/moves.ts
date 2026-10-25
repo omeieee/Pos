@@ -11,7 +11,7 @@ import {
   satang,
 } from '@sds/shared';
 import { hasFreshStepUp, type RequestMeta, securityAlert } from '../auth/service.ts';
-import { forbidden, notFound, stepUpRequired, versionConflict } from '../errors.ts';
+import { conflict, forbidden, notFound, stepUpRequired, versionConflict } from '../errors.ts';
 import { slipUploadRefusal } from '../slips/guard.ts';
 import { type CoreContext, withTransaction } from '../tx.ts';
 import { toPaymentDto } from './dto.ts';
@@ -22,6 +22,7 @@ import {
   claimWithoutSlipOf,
   emitPayment,
   isCustomer,
+  needsManualConfirmOf,
   offeredCopay,
   orderDto,
   type PaymentActor,
@@ -68,6 +69,8 @@ export interface MoveInput {
         onReplaced?: (oldKey: string) => void;
         ocr?: boolean;
         verify?: boolean;
+        /** D-40: the server must not confirm this claim by itself; staff do. */
+        autoConfirmBlocked?: boolean;
       }
     | undefined;
 }
@@ -116,13 +119,14 @@ export async function movePayment(
         if (row.slipImageKey) input.slip.onReplaced?.(row.slipImageKey);
         const payment = emitPayment(emit, swapped);
         // The first picture on a claim that had none clears the board flag: the order moves too.
-        const flag = claimWithoutSlipOf(await paymentsRepo.listPaymentsForOrder(tx, order.id));
+        const now = await paymentsRepo.listPaymentsForOrder(tx, order.id);
         return {
           payment,
           order:
-            flag === order.claimWithoutSlip
+            claimWithoutSlipOf(now) === order.claimWithoutSlip &&
+            needsManualConfirmOf(now) === order.needsManualConfirm
               ? await orderDto(tx, order)
-              : await settleOrder(tx, order, emit),
+              : await settleOrder(tx, order, emit, ctx.now()),
         };
       }
       return { payment: toPaymentDto(row), order: await orderDto(tx, order) };
@@ -185,7 +189,19 @@ export async function movePayment(
               ...(input.referenceNote ? { referenceNote: input.referenceNote } : {}),
             }
           : { status: spec.to, voidReason: reason ?? '' };
-    const updated = await paymentsRepo.updatePaymentIfVersion(tx, row.id, row.version, patch);
+    let updated: paymentsRepo.PaymentRow | undefined;
+    try {
+      updated = await paymentsRepo.updatePaymentIfVersion(tx, row.id, row.version, patch);
+    } catch (error) {
+      // PAY-06: another payment already holds this transfer as confirmed.
+      if (spec.to === 'confirmed' && paymentsRepo.isSlipTransferConflict(error)) {
+        throw conflict(
+          'SLIP_ALREADY_CONFIRMED',
+          'Another payment was already confirmed with this transfer',
+        );
+      }
+      throw error;
+    }
     if (!updated) throw versionConflict(row.version); // cannot happen under the row lock
 
     if (spec.audit) {
@@ -217,6 +233,6 @@ export async function movePayment(
       );
     }
     const payment = emitPayment(emit, updated);
-    return { payment, order: await settleOrder(tx, order, emit) };
+    return { payment, order: await settleOrder(tx, order, emit, ctx.now()) };
   });
 }

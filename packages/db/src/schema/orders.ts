@@ -15,6 +15,7 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
+import { uuidv7 } from '../uuid7.ts';
 import { id, money, oneOf, sync, ts } from './columns.ts';
 import { menuItems } from './menu.ts';
 import { customers, devices, staff } from './people.ts';
@@ -73,6 +74,19 @@ export const orders = pgTable(
      * the order gets a new rev and the change reaches every device. A boolean only: no key leaves.
      */
     claimWithoutSlip: boolean('claim_without_slip').notNull().default(false),
+    /**
+     * The method of the order's current payment (pending, claimed or confirmed; a PromptPay claim
+     * staff rejected still counts): `cash`, `promptpay`, `gov_copay`, ... or null when none (a LINE
+     * cash order has no record). Written with `paymentStatus` in `settleOrder`, so every device and
+     * the kitchen (which gets no payment frames) can tell a pay-first order apart (D-38).
+     */
+    paymentMethod: text('payment_method'),
+    /**
+     * True while a payment is `claimed` with a slip whose bank check said valid but the server did
+     * not confirm it (ceiling, flagged customer, blocked, auto-confirm off): staff must tick it.
+     * Written in the transaction that changes the payment, so the order gets a new rev (D-42).
+     */
+    needsManualConfirm: boolean('needs_manual_confirm').notNull().default(false),
     subtotalSatang: money('subtotal_satang').notNull(),
     discountSatang: money('discount_satang').notNull().default(0),
     discountReason: text('discount_reason'),
@@ -133,7 +147,12 @@ export const orders = pgTable(
 export const orderItems = pgTable(
   'order_items',
   {
-    id: id(),
+    /**
+     * Made in the app on every ORM insert so the lines of one insert keep their cart order: readers
+     * sort by id, and the SQL default is random within a millisecond. The SQL default stays for
+     * raw inserts.
+     */
+    id: id().$defaultFn(() => uuidv7()),
     orderId: uuid('order_id')
       .notNull()
       .references(() => orders.id),

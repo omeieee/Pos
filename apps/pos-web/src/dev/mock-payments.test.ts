@@ -331,3 +331,72 @@ describe('the dev shop: the PromptPay ID for the offline QR', () => {
     expect(made.payment.promptpayTargetMasked).toBe('******0000');
   });
 });
+
+describe('the dev shop: pay-first LINE PromptPay orders (D-38)', () => {
+  const start = (
+    call: ReturnType<typeof setup>['call'],
+    id: string,
+    body: Record<string, unknown>,
+    role: StaffRole,
+  ) => call('POST', `/v1/orders/${id}/transition`, { to: 'preparing', ...body }, role);
+  const codeOf = (answer: { body: unknown }) => (answer.body as { code: string }).code;
+
+  function lineOrderWith(method: 'promptpay' | 'cash') {
+    const { call, newOrder } = setup();
+    const order = newOrder('entrance_delivery', 'line');
+    expect(order).toMatchObject({ status: 'new', paymentMethod: null, needsManualConfirm: false });
+    const body =
+      method === 'cash'
+        ? { method, tendered: 5000, clientRequestId: requestId() }
+        : { method, clientRequestId: requestId() };
+    const payment = paymentResultSchema.parse(
+      call('POST', `/v1/orders/${order.id}/payments`, body).body,
+    );
+    return { call, order, payment };
+  }
+
+  test('an order carries the method of its live payment', () => {
+    const { payment } = lineOrderWith('promptpay');
+    expect(payment.order.paymentMethod).toBe('promptpay');
+    expect(payment.order.needsManualConfirm).toBe(false);
+  });
+
+  test('plain accept of an unpaid one is refused with PAYMENT_REQUIRED, for every role', () => {
+    const { call, order } = lineOrderWith('promptpay');
+    for (const role of ['cashier', 'kitchen', 'manager', 'owner'] as const) {
+      const answer = start(call, order.id, {}, role);
+      expect(answer.status, role).toBe(409);
+      expect(codeOf(answer), role).toBe('PAYMENT_REQUIRED');
+    }
+  });
+
+  test('startUnpaid: a cashier or the kitchen gets 403, a manager needs a reason, then it starts', () => {
+    const { call, order } = lineOrderWith('promptpay');
+    expect(start(call, order.id, { startUnpaid: true, reason: 'x' }, 'cashier').status).toBe(403);
+    expect(start(call, order.id, { startUnpaid: true, reason: 'x' }, 'kitchen').status).toBe(403);
+    const noReason = start(call, order.id, { startUnpaid: true }, 'manager');
+    expect(noReason.status).toBe(400);
+    expect(codeOf(noReason)).toBe('REASON_REQUIRED');
+    const ok = start(call, order.id, { startUnpaid: true, reason: 'ลูกค้าประจำ' }, 'owner');
+    expect(ok.status).toBe(200);
+    expect(orderDtoSchema.parse(ok.body).status).toBe('preparing');
+  });
+
+  test('confirming the payment starts the order by itself', () => {
+    const { call, order, payment } = lineOrderWith('promptpay');
+    call('POST', `/v1/payments/${payment.payment.id}/claim`, {});
+    const confirmed = paymentResultSchema.parse(
+      call('POST', `/v1/payments/${payment.payment.id}/confirm`, {}).body,
+    );
+    expect(confirmed.order).toMatchObject({ paymentStatus: 'paid', status: 'preparing' });
+    expect(order.status).toBe('new');
+  });
+
+  test('a LINE cash order, and an unpaid LINE order with no payment, accept as usual', () => {
+    const cash = lineOrderWith('cash');
+    expect(start(cash.call, cash.order.id, {}, 'cashier').status).toBe(200);
+    const { call, newOrder } = setup();
+    const bare = newOrder('entrance_delivery', 'line');
+    expect(start(call, bare.id, {}, 'cashier').status).toBe(200);
+  });
+});

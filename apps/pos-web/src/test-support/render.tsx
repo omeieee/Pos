@@ -30,6 +30,7 @@ import { createRecipientStore } from '../pos/cart/recipient-store.ts';
 import { createOrderMovesStore } from '../pos/orders/order-moves-store.ts';
 import { PROMPTPAY_CACHE_KEY, type SavedPromptpay } from '../pos/outbox/offline-promptpay-model.ts';
 import { createOutboxStore } from '../pos/outbox/outbox-store.ts';
+import { createPaymentPopupStore } from '../pos/payments/payment-popup-store.ts';
 import { createPaymentStore } from '../pos/payments/payment-store.ts';
 import { createPromptpayCache } from '../pos/payments/promptpay-cache.ts';
 import { createPrintStore } from '../pos/print/print-store.ts';
@@ -484,6 +485,9 @@ export function createTestServices(
     prefs: soundPrefs.prefs,
     lifecycle: life.lifecycle,
   });
+  const popupPrefs = createFakePrefs();
+  const paymentPopup = createPaymentPopupStore({ entities, prefs: popupPrefs.prefs });
+  const unbindPopup = paymentPopup.bind();
   const wake = createFakeWakeLock();
   // The clipboard double: copies succeed unless a test says the browser refused.
   const clipboard = { copyText: vi.fn(async (_text: string) => true) };
@@ -511,6 +515,7 @@ export function createTestServices(
     settingsEditor,
     adminEditor,
     sound,
+    paymentPopup,
     wakeLock: wake.wakeLock,
     clipboard,
     files,
@@ -545,6 +550,9 @@ export function createTestServices(
     sound,
     audio,
     soundPrefs,
+    paymentPopup,
+    popupPrefs,
+    unbindPopup,
     wake,
     clipboard,
     files,

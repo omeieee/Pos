@@ -15,7 +15,11 @@
 import { createHash } from 'node:crypto';
 import { customersRepo, type Db, lineRepo, ordersRepo, paymentsRepo } from '@sds/db';
 import {
+  type AppOpenOrders,
+  type AppOrderCancelInput,
+  type AppOrderEditInput,
   type AppOrderInput,
+  type AppOrderMergeInput,
   type AppOrderResult,
   type AppPayMethod,
   type CheckoutInfo,
@@ -32,12 +36,20 @@ import {
   myOrderSchema,
   PRIVACY_NOTICE_VERSION,
   type PrivacyAckResponse,
+  parseOrderReason,
   type SelectPaymentInput,
 } from '@sds/shared';
 import { z } from 'zod';
 import type { AuthContext, RequestMeta } from '../auth/service.ts';
 import { ApiError, conflict, notFound } from '../errors.ts';
 import type { LiffIdentity } from '../line/liff-verify.ts';
+import { currentBusinessDate } from '../orders/business-day.ts';
+import {
+  cancelByCustomer,
+  customerCanEdit,
+  editOrderItems,
+  mergeOrders,
+} from '../orders/customer-edit.ts';
 import { createOrder } from '../orders/service.ts';
 import {
   type CustomerActor,
@@ -234,6 +246,22 @@ async function ensureWaitingPromptpay(
   return after.find((p) => p.status === 'pending' || p.status === 'claimed');
 }
 
+/**
+ * Why a cancelled order was cancelled, in classes the app can explain (D-39, D-41). The stored
+ * reason can be a staff member's free text, which the customer never sees: that is `other`.
+ */
+function cancelledWhy(order: ordersRepo.OrderRow): Pick<MyOrder, 'cancelReason' | 'mergedInto'> {
+  if (order.status !== 'cancelled' || !order.cancelReason) {
+    return { cancelReason: null, mergedInto: null };
+  }
+  const why = parseOrderReason(order.cancelReason);
+  if (why.kind === 'merged') return { cancelReason: 'merged', mergedInto: why.orderNo };
+  if (why.kind === 'customer_cancel' || why.kind === 'unpaid_timeout') {
+    return { cancelReason: why.kind, mergedInto: null };
+  }
+  return { cancelReason: 'other', mergedInto: null };
+}
+
 /** The order as the customer sees it, with what they may do next decided here, not in the app. */
 export async function viewOrder(ctx: CoreContext, order: ordersRepo.OrderRow): Promise<MyOrder> {
   const items = (await ordersRepo.loadOrderItems(ctx.db, [order.id])).get(order.id) ?? [];
@@ -273,6 +301,7 @@ export async function viewOrder(ctx: CoreContext, order: ordersRepo.OrderRow): P
     readyAt: order.readyAt?.toISOString() ?? null,
     completedAt: order.completedAt?.toISOString() ?? null,
     cancelledAt: order.cancelledAt?.toISOString() ?? null,
+    ...cancelledWhy(order),
     paymentRejected: rejected,
     hasSlip: payment?.slipImageKey != null,
     // Only for the PromptPay payment that is still open, and only neutral words (never a verdict).
@@ -303,6 +332,9 @@ export async function viewOrder(ctx: CoreContext, order: ordersRepo.OrderRow): P
       showQr: !closed && (open?.method === 'promptpay' || rejected),
       attachSlip: slipOpen && !slipBlocked,
       methods: canChange ? await methodsOffered(ctx.db) : [],
+      // D-39: the same rule for both (`canCustomerEdit`): still `new`, nothing claimed, confirmed or sent.
+      edit: customerCanEdit(order, payments),
+      cancel: customerCanEdit(order, payments),
     },
   });
 }
@@ -524,4 +556,97 @@ export async function myQr(
     amountSatang: waiting.amountSatang,
     promptpayId: target.idValue,
   };
+}
+
+// ---------- Edit, cancel, merge (D-39) ----------
+
+/** The ids a write needs: the caller's `Idempotency-Key`, and a payment request id derived from it. */
+const idsFor = (key: string, what: string) => ({
+  idempotencyKey: key,
+  paymentRequestId: derivedRequestId(`${what}-payment:${key}`),
+});
+
+const savedModifiers = z.array(z.object({ optionId: z.string() }));
+
+/**
+ * The customer's unpaid LINE orders that they can still change (`canCustomerEdit`), oldest first:
+ * what the checkout warning lists and what a merge can fold together. Nothing they cannot act on.
+ */
+export async function listOpenOrders(
+  ctx: CoreContext,
+  customer: CustomerPrincipal,
+): Promise<AppOpenOrders> {
+  const today = await currentBusinessDate(ctx.db, ctx.now());
+  const rows = await ordersRepo.listNewLineOrdersForCustomer(ctx.db, customer.customerId);
+  const orders: AppOpenOrders['orders'] = [];
+  for (const row of rows) {
+    // The app cannot know the business date: an order from an earlier day is not offered.
+    if (row.businessDate !== today) continue;
+    const payments = await paymentsRepo.listPaymentsForOrder(ctx.db, row.id);
+    if (!customerCanEdit(row, payments)) continue;
+    const items = (await ordersRepo.loadOrderItems(ctx.db, [row.id])).get(row.id) ?? [];
+    orders.push({
+      id: row.id,
+      orderNo: row.orderNo,
+      totalSatang: row.totalSatang,
+      version: row.version,
+      businessDate: row.businessDate,
+      deliveryBuilding: row.deliveryBuilding,
+      recipientName: row.recipientName,
+      placedAt: row.placedAt.toISOString(),
+      items: items.map((item) => ({
+        menuItemId: item.menuItemId,
+        nameTh: item.nameThSnapshot,
+        nameEn: item.nameEnSnapshot,
+        qty: item.qty,
+        note: item.note,
+        modifierOptionIds: savedModifiers.parse(item.modifiers).map((m) => m.optionId),
+      })),
+    });
+  }
+  return { orders };
+}
+
+export async function editMyOrder(
+  ctx: CoreContext,
+  customerId: string,
+  orderId: string,
+  input: AppOrderEditInput,
+  key: string,
+  meta: RequestMeta,
+): Promise<MyOrder> {
+  const row = await editOrderItems(ctx, customerId, orderId, input, idsFor(key, 'edit'), meta);
+  return viewOrder(ctx, row);
+}
+
+export async function cancelMyOrder(
+  ctx: CoreContext,
+  customerId: string,
+  orderId: string,
+  input: AppOrderCancelInput,
+  key: string,
+  meta: RequestMeta,
+): Promise<MyOrder> {
+  return viewOrder(ctx, await cancelByCustomer(ctx, customerId, orderId, input, key, meta));
+}
+
+/** Folds the named orders into this one. Answers with the surviving order. */
+export async function mergeMyOrders(
+  ctx: CoreContext,
+  customerId: string,
+  targetId: string,
+  input: AppOrderMergeInput,
+  key: string,
+  meta: RequestMeta,
+): Promise<MyOrder> {
+  const row = await mergeOrders(
+    ctx,
+    actorOf(customerId),
+    targetId,
+    input.sourceIds,
+    { target: input.expectedVersion, sources: input.expectedVersions },
+    idsFor(key, 'merge'),
+    meta,
+  );
+  return viewOrder(ctx, row);
 }

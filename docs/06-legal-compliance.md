@@ -56,6 +56,7 @@
   5. **Security.** HTTPS, access control, audit log, encrypted backups. Slip images contain bank names and account numbers, so they sit in a private bucket and are deleted after 90 days.
   6. **Breach.** Notify the PDPC within **72 hours** of learning of a qualifying breach. Keep an incident log.
   7. **Transfer abroad.** The cloud servers (Oracle region, Cloudflare, Supabase) may be outside Thailand. Say so in the notice, and use providers with data-processing terms.
+  8. **Telegram staff alerts (D-42, 2026-10-24).** Telegram (Telegram Messenger Inc.) is a processor of an alert that carries the customer's LINE name and picture, the name given in the order, the building, the dishes and the total. Never the phone, room, notes or slip. It may hold the message outside Thailand, and the shop cannot choose the region. The privacy notice (th/en, app text and LINE summary) names Telegram, and `PRIVACY_NOTICE_VERSION` is 2026-10-24, so every customer acknowledges again before the next order. Shop duties: keep the group private and limited to people who need it; set the group's auto-delete to 1 month; remove a person who leaves the staff; delete the group's messages for a customer who asks for erasure (the 30-day order erasure does not reach Telegram).
 
 ## 7. Government co-pay scheme rules (ไทยช่วยไทย พลัส)
 - ✅ The QR is created in ถุงเงิน **per transaction**, for the full price, and expires. The customer scans it with เป๋าตัง **at the storefront**, with GPS. Hours are 06:00–23:00. Money is settled the next day into a Krungthai savings account.

@@ -152,7 +152,21 @@ Sources: [PRD merchant registration](https://www.prd.go.th/th/content/category/d
   - The API posts: title "ออเดอร์ใหม่ #L-012 (LINE)", the items, priority 5, tags, `Attach` (a thumbnail URL), and `Click` (a link to the order in the POS).
   - For instant iOS delivery through a self-hosted server, set `upstream-base-url: https://ntfy.sh`.
   - ✅ The public ntfy.sh free tier allows about 250 messages a day and 2 MB attachments. Fine for testing; self-hosting has no such limits ([config docs](https://docs.ntfy.sh/config/), [limits issue](https://github.com/binwiederhier/ntfy/issues/1167)).
-  - Keep customer names and phone numbers out of notifications.
+  - Keep customer names and phone numbers out of notifications. **Exception: the Telegram staff-group alert below (D-42, owner decision 2026-10-24), which may carry the LINE name and picture, the order name, building and dishes, never a phone, room, note or slip.** Web Push and ntfy stay ids only.
+
+### Telegram payment alerts (D-42)
+- **What it does:** when an order becomes paid, or a slip needs staff review (bus event `alert.payment`), the API sends one message to the owner's private Telegram group: `✅ ชำระแล้ว #L-012 · 62฿` or `🟡 ตรวจสลิป #L-012 · 62฿`, the LINE name, the name given in the order, the building, each dish with its quantity, and the total. The LINE picture and up to 9 dish photos go as an album when they exist. Plain text, no parse mode.
+- **Never sent:** phone number, room, delivery or order note, slip image, member profile.
+- **Cost:** the Bot API is free. ✅ Telegram's documented limits are about 1 message a second to one chat and about 20 messages a minute to one group ([bot FAQ](https://core.telegram.org/bots/faq#my-bot-is-hitting-limits-how-do-i-avoid-this)); a noodle shop stays far below. The notifier waits `retry_after` (at most 5 s) on a 429 and retries once.
+- **Set-up (owner, once):**
+  1. In Telegram open **@BotFather**, send `/newbot`, choose a name and a username ending in `bot`. It replies with the **bot token** (`123456789:AA...`). It is a secret: never paste it in chat, git or a ticket.
+  2. Create a **private group** for the owner and staff, then add the bot as a member. BotFather's default privacy mode is fine: the bot only sends and never reads. Keep `/setjoingroups` on until the bot is in the group; after that turn it off so nobody else can add it.
+  3. Find the **chat id**: send any message in the group, then open `https://api.telegram.org/bot<token>/getUpdates` in a browser on your own computer and read `message.chat.id`. A group id is negative (`-100...` for a supergroup). Do this only on a private machine, because the URL contains the token.
+  4. Put three lines in `/opt/sds/.env`, in this order: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `PUBLIC_API_BASE_URL` (the public `https://` address of the API, no trailing path; it makes dish photo paths absolute so Telegram can fetch them from `GET /v1/menu/items/:id/photo?v=`). All three or none. Then `./dc up -d --no-deps api`.
+  5. Check it with the made-up sample alert: `./dc run --rm --no-deps api node dist/telegram-test.js` (locally `pnpm --filter @sds/api telegram:test`). It never prints the token.
+- **If photos do not show:** Telegram fetches each photo URL itself, so the URL must be public https and the image under 5 MB. A bad photo never loses the alert: the text is sent alone.
+- **Group hygiene:** set the group's **auto-delete** timer (Telegram group info, 1 month) so customer names do not stay forever, and remove people who leave the staff.
+- Code: `apps/api/src/telegram/` (see ARCHITECTURE.md).
   - ⚠️ Android gives more alarm control (custom or repeating sounds for high priority) than iOS. For a loud kitchen alarm, an Android phone or tablet is more reliable. Test on the real devices.
 
 ## 6. Kitchen printer — Xprinter XP-80T (P8)

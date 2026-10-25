@@ -1,0 +1,169 @@
+/*
+ * The payment pop-up (D-42). Same rules as styles.css: every colour, size, space and radius comes
+ * from the --sds-* design tokens, every control is at least --tap tall, and nothing depends on
+ * hover. Made to be read at arm's length on an iPad at the counter and to fit an iPhone in
+ * portrait: the sheet never grows past the screen, the dishes scroll and the buttons stay in view.
+ * The two kinds are told apart by words and an icon as well as by colour.
+ */
+
+.overlay--payment {
+  z-index: 20;
+}
+.sheet--payment {
+  width: min(100%, 680px);
+  overflow: hidden;
+  gap: 0;
+  padding: 0;
+}
+
+.ppop {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  max-height: 100%;
+}
+.ppop__head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sds-space-sm) var(--sds-space-lg);
+  padding: var(--sds-space-lg) var(--sds-space-xl);
+}
+.ppop--paid .ppop__head {
+  background: var(--sds-color-success-subtle);
+  color: var(--sds-color-success-text);
+}
+.ppop--slip_review .ppop__head {
+  background: var(--sds-color-warning-subtle);
+  color: var(--sds-color-warning-text);
+}
+.ppop__title {
+  margin: 0;
+  flex: 1 1 auto;
+  font-size: var(--sds-font-size-xxl);
+  font-weight: var(--sds-font-weight-bold);
+  line-height: var(--sds-line-height-tight);
+}
+.ppop__no {
+  font-size: var(--sds-font-size-order-no);
+  font-weight: var(--sds-font-weight-bold);
+  line-height: var(--sds-line-height-tight);
+}
+.ppop__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sds-space-lg);
+  min-height: 0;
+  padding: var(--sds-space-lg) var(--sds-space-xl);
+  overflow-y: auto;
+}
+.ppop__hint {
+  margin: 0;
+  font-size: var(--sds-font-size-lg);
+}
+.ppop__who {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sds-space-xs);
+  font-size: var(--sds-font-size-xl);
+  font-weight: var(--sds-font-weight-bold);
+}
+.ppop__who .kb-line {
+  display: flex;
+  align-items: center;
+  gap: var(--sds-space-md);
+}
+.ppop__who .kb-pic {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--sds-radius-pill);
+  object-fit: cover;
+  background: var(--sds-color-surface-sunken);
+}
+.ppop__where {
+  color: var(--sds-color-text-muted);
+  font-size: var(--sds-font-size-lg);
+  font-weight: var(--sds-font-weight-medium);
+}
+.ppop__dishes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sds-space-md);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ppop__dish {
+  display: flex;
+  align-items: center;
+  gap: var(--sds-space-md);
+}
+.ppop__photo {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  overflow: hidden;
+  border-radius: var(--sds-radius-md);
+  background: var(--sds-color-surface-sunken);
+  color: var(--sds-color-text-muted);
+}
+.ppop__photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.ppop__qty {
+  flex: none;
+  min-width: 2.2em;
+  font-size: var(--sds-font-size-xl);
+  font-weight: var(--sds-font-weight-bold);
+}
+.ppop__dishname {
+  min-width: 0;
+  font-size: var(--sds-font-size-lg);
+  font-weight: var(--sds-font-weight-medium);
+  overflow-wrap: anywhere;
+}
+.ppop__total {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sds-space-md);
+  padding-top: var(--sds-space-md);
+  border-top: 1px solid var(--sds-color-border);
+  font-size: var(--sds-font-size-xl);
+  font-weight: var(--sds-font-weight-bold);
+}
+.ppop__total-amount {
+  font-size: var(--sds-font-size-xxl);
+}
+.ppop__more {
+  margin: 0;
+  color: var(--sds-color-text-muted);
+  font-size: var(--sds-font-size-md);
+}
+.ppop__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sds-space-md);
+  padding: var(--sds-space-lg) var(--sds-space-xl) max(var(--sds-space-lg), var(--safe-bottom));
+  border-top: 1px solid var(--sds-color-border);
+}
+.ppop__actions .g-btn {
+  flex: 1 1 160px;
+  justify-content: center;
+  min-height: var(--sds-touch-primary, var(--tap));
+}
+
+@media (max-width: 600px) {
+  .ppop__head,
+  .ppop__body,
+  .ppop__actions {
+    padding-inline: var(--sds-space-lg);
+  }
+  .ppop__no {
+    font-size: var(--sds-font-size-xl);
+  }
+}

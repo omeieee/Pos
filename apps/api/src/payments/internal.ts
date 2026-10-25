@@ -17,7 +17,11 @@ import {
   type GovCopayScheme,
   govCopaySchemeSchema,
   isCopayAvailable,
+  isPayFirst,
+  ORDER_REASONS,
+  type OrderChannel,
   type OrderDto,
+  orderMachine,
   type PaymentMethod,
   type PaymentStatus,
   satang,
@@ -180,24 +184,88 @@ export const claimWithoutSlipOf = (rows: readonly paymentsRepo.PaymentRow[]): bo
   rows.some((p) => p.status === 'claimed' && p.slipImageKey === null);
 
 /**
+ * The method of the order's current payment (`orders.payment_method`): the latest one that is
+ * pending, claimed or confirmed; failing that, PromptPay when staff rejected its claim (the
+ * customer may pay again). A customer who withdrew PromptPay to pay cash leaves a cancelled payment
+ * that was never claimed, so the method is null. Only the methods a device shows are returned.
+ */
+export function currentMethodOf(
+  payments: readonly paymentsRepo.PaymentRow[],
+): 'cash' | 'promptpay' | 'gov_copay' | null {
+  const shown = (m: string | undefined) =>
+    m === 'cash' || m === 'promptpay' || m === 'gov_copay' ? m : null;
+  const live = [...payments]
+    .reverse()
+    .find((p) => p.status === 'pending' || p.status === 'claimed' || p.status === 'confirmed');
+  if (live) return shown(live.method);
+  const last = payments.at(-1);
+  return last?.method === 'promptpay' && last.status === 'cancelled' && last.claimedAt !== null
+    ? 'promptpay'
+    : null;
+}
+
+/** Pay-first (D-38) as the order's payments show it: a LINE order whose current method is PromptPay. */
+export function payFirstOf(
+  order: Pick<ordersRepo.OrderRow, 'channel'>,
+  payments: readonly paymentsRepo.PaymentRow[],
+): boolean {
+  return isPayFirst({
+    channel: order.channel as OrderChannel,
+    paymentMethod: currentMethodOf(payments),
+  });
+}
+
+/**
+ * A claimed payment with a slip the bank check passed that the server did not confirm
+ * (`orders.needs_manual_confirm`, D-42): staff must tick it.
+ */
+export const needsManualConfirmOf = (rows: readonly paymentsRepo.PaymentRow[]): boolean =>
+  rows.some((p) => p.status === 'claimed' && p.slipImageKey !== null && p.slipVerify === 'valid');
+
+/**
  * Recomputes the order's payment status and its "claimed, no slip" flag from ALL its payments,
  * writes them in this transaction (the sync trigger bumps the order's version and rev, whether or
  * not the values changed) and emits `order.upserted`. The caller holds the order lock.
+ *
+ * D-38: a pay-first order that is now `paid` and still `new` moves to `preparing` in the SAME
+ * update (actor system, reason `paid`), and after the commit `order.sent_to_kitchen` prints its
+ * ticket. The `new` check makes a second settle do nothing more. When a pay-first order first
+ * becomes paid, `alert.payment {kind: 'paid'}` goes out (D-42). Only pay-first orders alert: a
+ * counter sale or a LINE cash order is paid by staff at the till, who need no pop-up for it.
  */
 export async function settleOrder(
   tx: Db,
   order: ordersRepo.OrderRow,
   emit: Emit,
+  now: Date = new Date(),
 ): Promise<OrderDto> {
   const { rows, amounts } = await moneyOf(tx, order.id);
   const status = derivePaymentStatus(satang(order.totalSatang), amounts);
-  const updated = await ordersRepo.updateOrderIfVersion(tx, order.id, order.version, {
+  const payFirst = status === 'paid' && payFirstOf(order, rows);
+  const patch: ordersRepo.OrderPatch = {
     paymentStatus: status,
     claimWithoutSlip: claimWithoutSlipOf(rows),
-  });
+    paymentMethod: currentMethodOf(rows),
+    needsManualConfirm: needsManualConfirmOf(rows),
+  };
+  const startKitchen = payFirst && order.status === 'new';
+  if (startKitchen) {
+    const move = orderMachine.transition('new', 'preparing', {
+      actor: { kind: 'system' },
+      reason: ORDER_REASONS.paid,
+    });
+    if (!move.ok) throw transitionFailure(move.error, 'new', 'preparing');
+    patch.status = 'preparing';
+    patch.acceptedAt = now;
+  }
+  const updated = await ordersRepo.updateOrderIfVersion(tx, order.id, order.version, patch);
   if (!updated) throw versionConflict(order.version); // cannot happen under the row lock
   const dto = await orderDto(tx, updated);
   emit({ type: 'order.upserted', id: updated.id, rev: updated.rev, data: dto });
+  if (startKitchen) emit({ type: 'order.sent_to_kitchen', orderId: updated.id });
+  if (payFirst && order.paymentStatus !== 'paid') {
+    emit({ type: 'alert.payment', orderId: updated.id, orderNo: updated.orderNo, kind: 'paid' });
+  }
   return dto;
 }
 

@@ -30,6 +30,7 @@ describe('who sees which card', () => {
       delivery: true,
       'line-ordering': true,
       printing: true,
+      'unpaid-timeout': true,
       promptpay: false,
       receipt: false,
       'gov-copay': false,
@@ -49,6 +50,16 @@ describe('who sees which card', () => {
     expect(idsFor('owner')).toContain('printing');
     expect(idsFor('cashier')).not.toContain('printing');
     expect(sectionById('printing')).toMatchObject({ view: 'settings.edit', edit: 'settings.edit' });
+  });
+
+  test('the unpaid-timeout section is for the manager and the owner, not the cashier', () => {
+    expect(idsFor('manager')).toContain('unpaid-timeout');
+    expect(idsFor('owner')).toContain('unpaid-timeout');
+    expect(idsFor('cashier')).not.toContain('unpaid-timeout');
+    expect(sectionById('unpaid-timeout')).toMatchObject({
+      view: 'settings.edit',
+      edit: 'settings.edit',
+    });
   });
 
   test('the kitchen sees nothing', () => {

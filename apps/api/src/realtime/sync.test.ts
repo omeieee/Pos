@@ -461,7 +461,12 @@ describe('catch-up and live frames agree', () => {
   test('for every entity that has both, the newest live frame equals the sync frame at that rev', async () => {
     const live = new Map<string, Record<string, unknown>>();
     for (const built of h.events.map((e: AppEvent) => frameFromEvent(e))) {
-      if (built.kind !== 'frame' || built.frame.type === 'alert.new_order') continue;
+      if (
+        built.kind !== 'frame' ||
+        built.frame.type === 'alert.new_order' ||
+        built.frame.type === 'alert.payment'
+      )
+        continue;
       const key = keyOf(built.frame as SyncChange);
       const previous = live.get(key);
       if (!previous || (built.frame.rev as number) >= (previous.rev as number)) {

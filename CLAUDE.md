@@ -89,6 +89,7 @@ A cloud POS for a made-to-order noodle restaurant inside a condominium.
 8. **Language:** Thai-first. All user-facing text goes through `packages/i18n` (th, en). Buddhist Era dates in the Thai locale.
 9. **Sensitive actions** (PromptPay ID, voids or refunds after confirmation, staff and devices, exports) need step-up auth and write `audit_log`.
 10. **No secrets or real customer data** in git, logs, notifications or tests.
+   - **One exception (owner decision 2026-10-24, D-42):** the Telegram payment alerts to the owner's private staff group may carry the customer's LINE name and picture, the name given in the order, the delivery building and the dishes. **Never** the phone number, room, any note, a slip image or the member profile. Web Push, ntfy and every log stay ids only, and the bot token is redacted.
 11. **Private keys:** never open, print, paste or commit them. That includes the Oracle SSH key at `~/.ssh/ssh-key-2026-09-28.key` (outside the repo). Refer to keys by path only. Commands that use a key must be read-only unless the owner has approved the change.
 
 ## Conventions

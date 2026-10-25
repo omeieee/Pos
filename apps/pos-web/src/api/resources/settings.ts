@@ -31,6 +31,8 @@ import {
   shopSettingsSchema,
   taxProfileResponseSchema,
   taxReportQuerySchema,
+  unpaidTimeoutPatchInputSchema,
+  unpaidTimeoutSettingsSchema,
 } from '@sds/shared';
 import type { z } from 'zod';
 import { checked, type Transport } from '../http.ts';
@@ -120,6 +122,12 @@ export function makeSettings({ get, patch, put }: Transport) {
     ),
     /** Whether orders are sent to the print notebook (manager and owner; no step-up). */
     printing: settingsResource('printing', printingSettingsSchema, printingPatchInputSchema),
+    /** Cancel LINE orders not paid in time (D-41; manager and owner, no step-up). */
+    unpaidTimeout: settingsResource(
+      'unpaid-timeout',
+      unpaidTimeoutSettingsSchema,
+      unpaidTimeoutPatchInputSchema,
+    ),
     promptpayMasked,
     /** What Grab and LINE MAN keep, in basis points (null: not set). Owner only, with a step-up. */
     platformCommission: settingsResource(

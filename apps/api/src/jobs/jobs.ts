@@ -15,6 +15,7 @@ import {
 } from './retention.ts';
 import { checkSlip2goAccount } from './slip2go.ts';
 import { checkStorageUsage } from './storage-usage.ts';
+import { cancelUnpaidOrders } from './unpaid-timeout.ts';
 
 /** What every job gets. Jobs are plain functions of this, so tests call them directly. */
 export type JobDeps = LineJobDeps & {
@@ -50,6 +51,8 @@ export const JOBS: readonly JobDefinition[] = [
   // Printing is on and a kitchen ticket has waited 3 minutes with no print program claiming it: one
   // warn alert, repeated only after 30 minutes or after the queue was clear (D-37). No-op when off.
   { name: 'print-agent-silent-check', cron: '*/2 * * * *', run: checkPrintAgentSilent },
+  // Unpaid pay-first LINE orders are cancelled after the setting's minutes (D-41). No LINE message.
+  { name: 'unpaid-timeout', cron: '*/5 * * * *', run: cancelUnpaidOrders },
   // Retention (owner decisions 2026-10-03), nightly, staggered. Each is idempotent and bounded.
   { name: 'retention-line-events', cron: '30 3 * * *', run: purgeLineEvents },
   { name: 'retention-orders', cron: '40 3 * * *', run: anonymizeOrders },

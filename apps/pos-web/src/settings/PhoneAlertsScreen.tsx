@@ -22,8 +22,9 @@ const PROBLEM_KEYS = {
  */
 export function PhoneAlertsScreen() {
   const tr = useT();
-  const { pushAlerts, lifecycle } = useServices();
+  const { pushAlerts, paymentPopup, lifecycle } = useServices();
   const state = useStoreState(pushAlerts);
+  const popup = useStoreState(paymentPopup);
   const hasSettings = useHasPermission('settings.view');
 
   // Read when the page opens, and again when the person comes back from the system settings
@@ -151,6 +152,17 @@ export function PhoneAlertsScreen() {
         </p>
       </header>
       {body()}
+      <FormCard>
+        <SwitchRow
+          label={tr('payPopup.switch')}
+          hint={tr('payPopup.switchHint')}
+          checked={popup.enabled}
+          onChange={(on) => void paymentPopup.setEnabled(on)}
+        />
+        <p className="g-t-s" style={s('margin:0;font-weight:500')} aria-live="polite">
+          {tr(popup.enabled ? 'payPopup.state.on' : 'payPopup.state.off')}
+        </p>
+      </FormCard>
     </SettingsPage>
   );
 }

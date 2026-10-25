@@ -140,6 +140,16 @@ export async function getSlipFlag(db: Db, customerId: string): Promise<SlipFlagR
   return row?.at ? { at: row.at, reason: row.reason ?? 'fraud', count: row.count } : null;
 }
 
+/** The privacy notice version the customer last acknowledged, or null (none, or no such customer). */
+export async function getPrivacyAckVersion(db: Db, customerId: string): Promise<string | null> {
+  const [row] = await db
+    .select({ version: customers.privacyAckVersion })
+    .from(customers)
+    .where(eq(customers.id, customerId))
+    .limit(1);
+  return row?.version ?? null;
+}
+
 /** Raises the flag (or raises it again), in the caller's transaction: the time, the reason, count + 1. */
 export async function raiseSlipFlag(
   db: Db,
@@ -272,6 +282,7 @@ export async function takeCustomerSlipKeys(
         slipUploadedAt: null,
         slipVerifyCycles: 0,
         slipStaffCalls: 0,
+        slipAutoconfirmBlocked: false,
       })
       .where(eq(payments.id, row.id));
     keys.push(row.key);

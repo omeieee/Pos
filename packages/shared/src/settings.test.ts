@@ -13,6 +13,7 @@ import {
   DEFAULT_DELIVERY_SETTINGS,
   DEFAULT_LINE_ORDERING,
   DEFAULT_PLATFORM_COMMISSION,
+  DEFAULT_UNPAID_TIMEOUT,
   deliveryPatchInputSchema,
   deliverySettingsSchema,
   govCopayPatchInputSchema,
@@ -32,6 +33,8 @@ import {
   serviceOpenAt,
   shopPatchInputSchema,
   shopSettingsSchema,
+  unpaidTimeoutPatchInputSchema,
+  unpaidTimeoutSettingsSchema,
 } from './settings.ts';
 
 describe('shop profile', () => {
@@ -539,5 +542,42 @@ describe('cash opening (D-35)', () => {
     expect(cashOpeningEarliest('2028-02-29')).toBe('2018-02-28');
     expect(cashOpeningEarliest('2026-10-21') <= '2016-10-21').toBe(true);
     expect('2016-10-20' < cashOpeningEarliest('2026-10-21')).toBe(true);
+  });
+});
+
+describe('unpaid timeout (D-41)', () => {
+  test('on at 60 minutes by default', () => {
+    expect(DEFAULT_UNPAID_TIMEOUT).toEqual({ enabled: true, minutes: 60 });
+    expect(unpaidTimeoutSettingsSchema.parse({})).toEqual(DEFAULT_UNPAID_TIMEOUT);
+  });
+
+  test('minutes stay between 15 and 240', () => {
+    for (const minutes of [15, 60, 240]) {
+      expect(unpaidTimeoutSettingsSchema.safeParse({ enabled: true, minutes }).success).toBe(true);
+    }
+    for (const minutes of [0, 14, 241, 60.5, -1]) {
+      expect(unpaidTimeoutSettingsSchema.safeParse({ enabled: true, minutes }).success).toBe(false);
+    }
+  });
+
+  test('the patch needs a version and both fields, and nothing else', () => {
+    expect(
+      unpaidTimeoutPatchInputSchema.safeParse({ expectedVersion: 0, enabled: false, minutes: 30 })
+        .success,
+    ).toBe(true);
+    expect(unpaidTimeoutPatchInputSchema.safeParse({ enabled: false, minutes: 30 }).success).toBe(
+      false,
+    );
+    expect(
+      unpaidTimeoutPatchInputSchema.safeParse({ expectedVersion: 0, enabled: false }).success,
+    ).toBe(false);
+    expect(
+      unpaidTimeoutPatchInputSchema.safeParse({
+        expectedVersion: 0,
+        enabled: true,
+        minutes: 30,
+        extra: 1,
+      }).success,
+    ).toBe(false);
   });
 });

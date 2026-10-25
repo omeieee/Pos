@@ -2,7 +2,7 @@
  * Order page: the two routes (one order, and the list of my orders).
  */
 import { formatBaht } from '@sds/i18n';
-import type { MyOrder } from '@sds/shared';
+import type { AppOpenOrder, MyOrder } from '@sds/shared';
 import { useEffect, useState } from 'react';
 import { Gi } from '../../design/icons.tsx';
 import { s } from '../../design/style.ts';
@@ -16,11 +16,14 @@ export function OrderScreen({
   id,
   flag,
   shopPhone,
+  onEdit,
 }: {
   id: string;
   flag: string | null;
   /** The shop's phone from the API, when it sends one. */
   shopPhone: string | null;
+  /** The customer wants to change the dishes: the app opens the menu with these lines. */
+  onEdit?: (order: AppOpenOrder) => void;
 }) {
   const tr = useT();
   const { platform } = useApp();
@@ -52,6 +55,7 @@ export function OrderScreen({
       flag={flag}
       shopPhone={shopPhone}
       onSlipSent={speedUp}
+      {...(onEdit ? { onEdit } : {})}
     />
   );
 }

@@ -57,6 +57,11 @@ export interface OrderMovesDeps {
 export interface OrderMovesStore extends ReadableStore<OrderMovesState> {
   transition(order: Pick<OrderDto, 'id' | 'status'>, to: MoveTarget): Promise<MoveOutcome>;
   cancel(order: Pick<OrderDto, 'id' | 'status'>, reason: string): Promise<MoveOutcome>;
+  /**
+   * Manager or owner: starts an unpaid pay-first order anyway (D-38). The reason is required and
+   * audited by the server; a cashier or the kitchen is refused (403).
+   */
+  startUnpaid(order: Pick<OrderDto, 'id' | 'status'>, reason: string): Promise<MoveOutcome>;
   /** Forgets one order's error (a dialog that was closed). */
   dismiss(orderId: string): void;
   /** Sign-out: forgets everything and makes every answer still on its way harmless. */
@@ -64,7 +69,15 @@ export interface OrderMovesStore extends ReadableStore<OrderMovesState> {
 }
 
 /** A refusal that means "the order is not where you thought": read it again. */
-const STALE_VIEW_CODES: readonly string[] = ['INVALID_TRANSITION', 'VERSION_CONFLICT'];
+/**
+ * PAYMENT_REQUIRED is one too: the order was unpaid and pay-first when the server looked, but the
+ * payment may have arrived since (the server then started it itself), or the method changed.
+ */
+const STALE_VIEW_CODES: readonly string[] = [
+  'INVALID_TRANSITION',
+  'VERSION_CONFLICT',
+  'PAYMENT_REQUIRED',
+];
 
 const orderFrame = (o: OrderDto): RealtimeFrame => ({
   type: 'order.upserted',
@@ -132,6 +145,14 @@ export function createOrderMovesStore(deps: OrderMovesDeps): OrderMovesStore {
     getState: store.getState,
     subscribe: store.subscribe,
     transition: (order, to) => run(order, to, () => deps.api.orders.transition(order.id, { to })),
+    startUnpaid: (order, reason) =>
+      run(order, 'preparing', () =>
+        deps.api.orders.transition(order.id, {
+          to: 'preparing',
+          startUnpaid: true,
+          reason: reason.trim(),
+        }),
+      ),
     cancel: (order, reason) =>
       run(order, 'cancelled', () => deps.api.orders.cancel(order.id, { reason })),
     dismiss(orderId) {
