@@ -1374,16 +1374,19 @@ describe('what the customer is told about the slip (neutral)', () => {
     ['200500'],
     ['401004'],
   ])(
-    'code %s: the customer sees the same staff_review and not a trace of the verdict',
+    'code %s: the customer sees only the neutral stage (D-42) and not a trace of the verdict',
     async (code) => {
       const { token, order } = await start();
       respond = () => ({ body: answer(code, currentAmountBaht) });
       const res = await upload(token, order.id, picture());
       await checker.idle();
       const mine = await call('GET', `/v1/app/orders/${order.id}`, token);
-      expect(mine.json().slipCheck).toBe('staff_review');
+      // D-42: a valid answer held back from auto-confirm and an amount mismatch have a stage of
+      // their own; every other code stays the same neutral staff_review.
+      const stage = { '200200': 'verified_waiting', '200402': 'amount_mismatch' }[code];
+      expect(mine.json().slipCheck).toBe(stage ?? 'staff_review');
       expect(mine.json().payment.status).toBe('claimed');
-      for (const body of [mine.body, res.body]) {
+      for (const body of [mine.body.replace(/"slipCheck":"[a-z_]+"/, ''), res.body]) {
         expect(body).not.toMatch(
           /verify|verdict|valid|mismatch|not_found|fraud|unchecked|\b\d{6}\b/i,
         );

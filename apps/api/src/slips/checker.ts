@@ -31,7 +31,7 @@ import {
   currentPromptpayId,
 } from '../settings/service.ts';
 import { type CoreContext, withTransaction } from '../tx.ts';
-import { imageSize } from './image.ts';
+import { imageSize, sniffSlip } from './image.ts';
 import type { SlipOcr } from './ocr.ts';
 import type { SlipQrReader } from './qr.ts';
 import type { SlipVerifier } from './slip2go.ts';
