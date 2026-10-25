@@ -154,6 +154,7 @@ Format: **ID · title**, then where it is, status, impact, proposed fix and owne
   - **owner, free, now:** a Sentry rule "tag `alert` is set" that fires on every event; test it with two labelled events
   - **code:** forward `warn`/`critical` alerts to owner and manager devices through the D-37 Web Push notifier (kind and ids only, no personal data)
 - **Owner:** yes. Change the Sentry rule, and approve alerts by Web Push.
+- **Code part fixed 2026-10-26:** warn/critical alerts go by Web Push to every subscribed device of an active owner or manager, each time (`push/notifier.ts`, `pushRepo.listDeliverableToRoles`, `securityAlertPayload`; tests in `push/push.test.ts`). Inactive until VAPID keys are set. The Sentry rule change is still the owner's.
 
 **OPS-03 (+ MAIN-04) · Today's two npm advisories fail CI, so the next push to `main` skips lint/build/test and deploys nothing**
 - **Severity:** raised from Medium; the block on the next push is certain.

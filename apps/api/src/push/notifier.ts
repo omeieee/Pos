@@ -1,11 +1,13 @@
 /**
  * Phone alerts (P8, D-37): when an order is created (`alert.new_order`, published after the order's
  * transaction committed) one Web Push goes to every subscribed device that is not revoked, except
- * the device the order was typed on. Background work only: a failure is logged by id and status and
+ * the device the order was typed on. A warn or critical security/ops alert (`alert.security`,
+ * OPS-02) goes to every subscribed device of an active owner or manager, each time it is raised
+ * (Sentry's "new issue" e-mail would mail only the first of a kind). Background work only: a failure is logged by id and status and
  * never reaches the order write.
  *
- * What a push may say is fixed in `payload.ts`: an order number, the channel, an item count and a
- * link. Never a name, phone, room, address or note.
+ * What a push may say is fixed in `payload.ts`: an order number, the channel, an item count, an
+ * alert kind and a link. Never a name, phone, room, address or note.
  *
  * Failure policy per subscription:
  * - 2xx: success, the failure count resets.
@@ -16,8 +18,8 @@
  */
 import { type Db, ordersRepo, pushRepo } from '@sds/db';
 import type { OrderChannel } from '@sds/shared';
-import type { EventBus } from '../events.ts';
-import { newOrderPayload } from './payload.ts';
+import type { EventBus, SecurityAlertEvent } from '../events.ts';
+import { newOrderPayload, securityAlertPayload } from './payload.ts';
 import {
   buildPushRequest,
   createFetchTransport,
@@ -59,6 +61,8 @@ export interface PushNotifier {
 }
 
 const NOT_COUNTED = new Set([400, 401, 403, 413]);
+/** Who gets security and ops alerts. */
+const ALERT_ROLES = ['owner', 'manager'] as const;
 const GONE = new Set([404, 410]);
 
 /** An error's class and code, never its message (a fetch error can name the endpoint). */
@@ -157,12 +161,23 @@ export function registerPushNotifier(deps: {
     await mapLimit(subscriptions, concurrency, (sub) => sendOne(sub, message));
   }
 
+  async function alertSecurity(event: SecurityAlertEvent) {
+    const message = JSON.stringify(securityAlertPayload(event));
+    const subscriptions = await pushRepo.listDeliverableToRoles(db, ALERT_ROLES);
+    await mapLimit(subscriptions, concurrency, (sub) => sendOne(sub, message));
+  }
+
   const pending = new Set<Promise<unknown>>();
   const stop = events.subscribe((event) => {
-    if (event.type !== 'alert.new_order') return;
-    const work = alertNewOrder(event.orderId, event.createdOnDeviceId).catch((error) =>
-      log.error(describeError(error), 'push alert failed'),
-    );
+    let started: Promise<void>;
+    if (event.type === 'alert.new_order') {
+      started = alertNewOrder(event.orderId, event.createdOnDeviceId);
+    } else if (event.type === 'alert.security' && event.severity !== 'info') {
+      started = alertSecurity(event);
+    } else {
+      return;
+    }
+    const work = started.catch((error) => log.error(describeError(error), 'push alert failed'));
     pending.add(work);
     void work.then(() => pending.delete(work));
   });

@@ -1,5 +1,6 @@
 import type { OrderDto, PushPayload } from '@sds/shared';
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'vitest';
+import type { SecurityAlertEvent } from '../events.ts';
 import {
   createFakePush,
   type FakeBrowser,
@@ -478,5 +479,92 @@ describe('what the push service answers', () => {
     await placeOrder();
     expect(fake.requests).toHaveLength(0);
     expect(await rows()).toEqual([]);
+  });
+});
+
+// ---------- security and ops alerts (OPS-02) ----------
+
+describe('security and ops alerts reach owner and manager devices (OPS-02)', () => {
+  const alert = (over: Partial<SecurityAlertEvent> = {}): SecurityAlertEvent => ({
+    type: 'alert.security',
+    kind: 'settings.promptpay_changed',
+    severity: 'warn',
+    at: '2030-01-01T05:30:00.000Z',
+    staffId: null,
+    deviceId: null,
+    ...over,
+  });
+  const raise = async (event: SecurityAlertEvent) => {
+    h.bus.publish(event);
+    await h.settle();
+  };
+  const decrypted = (browser: FakeBrowser) =>
+    fake.sentTo(browser.endpoint).map((request) => browser.decrypt(request) as PushPayload);
+
+  test('a warn alert goes to the manager and the owner, never to the cashier or the kitchen', async () => {
+    const onTill = await subscribe(staff.cashier);
+    const kitchen = await subscribe(staff.kitchen);
+    const manager = await subscribe(staff.manager);
+    const owner = await h.newOwner();
+    const ownerPhone = await h.newDevice('iphone');
+    const ownerBrowser = await subscribe(await h.ownerSession(owner, ownerPhone.token));
+
+    await raise(alert());
+
+    expect(fake.sentTo(onTill.endpoint)).toHaveLength(0);
+    expect(fake.sentTo(kitchen.endpoint)).toHaveLength(0);
+    for (const browser of [manager, ownerBrowser]) {
+      expect(decrypted(browser)).toEqual([
+        {
+          title: 'แจ้งเตือนระบบ',
+          body: 'settings.promptpay_changed',
+          url: '/#/settings',
+          tag: 'alert-settings.promptpay_changed-2030-01-01T05:30:00.000Z',
+        },
+      ]);
+    }
+  });
+
+  test('a critical alert about an order says so and opens that order; ids and the order number only', async () => {
+    const manager = await subscribe(staff.manager);
+    const orderId = crypto.randomUUID();
+    await raise(
+      alert({
+        kind: 'slip.fraud_blocked',
+        severity: 'critical',
+        subject: { orderId, paymentId: crypto.randomUUID() },
+        orderNo: 'L-042',
+        slip2go: { code: '200501' },
+      }),
+    );
+    const [payload] = decrypted(manager);
+    expect(payload).toEqual({
+      title: 'แจ้งเตือนด่วน',
+      body: 'slip.fraud_blocked · ออเดอร์ #L-042',
+      url: `/#/orders/${orderId}`,
+      tag: 'alert-slip.fraud_blocked-2030-01-01T05:30:00.000Z',
+    });
+  });
+
+  test('the same kind twice alerts twice (the Sentry "new issue" e-mail would not)', async () => {
+    const manager = await subscribe(staff.manager);
+    await raise(alert({ at: '2030-01-01T05:30:00.000Z' }));
+    await raise(alert({ at: '2030-01-02T05:30:00.000Z' }));
+    expect(decrypted(manager)).toHaveLength(2);
+  });
+
+  test('an info alert sends nothing', async () => {
+    await subscribe(staff.manager);
+    await raise(alert({ kind: 'device.registered', severity: 'info' }));
+    expect(fake.requests).toHaveLength(0);
+  });
+
+  test('a manager who was deactivated gets nothing', async () => {
+    const device = await h.newDevice('iphone');
+    const member = await h.newStaff('manager', '4821');
+    const browser = await subscribe(await h.pinSession(device.token, member.id, '4821'));
+    await h.client.query('update staff set active = false where id = $1', [member.id]);
+    await raise(alert());
+    expect(fake.sentTo(browser.endpoint)).toHaveLength(0);
   });
 });

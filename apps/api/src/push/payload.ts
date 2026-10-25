@@ -8,8 +8,15 @@
  */
 import { t } from '@sds/i18n';
 import type { OrderChannel, PushPayload } from '@sds/shared';
+import type { SecurityAlertEvent } from '../events.ts';
 
-const WORDS = { newOrder: 'ออเดอร์ใหม่', items: 'รายการ' } as const;
+const WORDS = {
+  newOrder: 'ออเดอร์ใหม่',
+  items: 'รายการ',
+  alert: 'แจ้งเตือนระบบ',
+  urgent: 'แจ้งเตือนด่วน',
+  order: 'ออเดอร์',
+} as const;
 
 export function newOrderPayload(
   order: { id: string; orderNo: string; channel: OrderChannel },
@@ -22,5 +29,20 @@ export function newOrderPayload(
     url: `/#/orders/${order.id}`,
     // A second alert for the same order replaces the first on the lock screen.
     tag: `order-${order.id}`,
+  };
+}
+
+/**
+ * What a security or ops alert push says (OPS-02): urgent or not, the alert kind as the code the
+ * Sentry e-mail also shows, and the order number when there is one. Built field by field like
+ * `alertReport`, so nothing else of the event (staff, device, Slip2Go details) can ride along.
+ */
+export function securityAlertPayload(event: SecurityAlertEvent): PushPayload {
+  return {
+    title: event.severity === 'critical' ? WORDS.urgent : WORDS.alert,
+    body: event.orderNo ? `${event.kind} · ${WORDS.order} #${event.orderNo}` : event.kind,
+    url: event.subject ? `/#/orders/${event.subject.orderId}` : '/#/settings',
+    // One per alert: a repeat of the same kind is a new notification, not a silent replace.
+    tag: `alert-${event.kind}-${event.at}`,
   };
 }

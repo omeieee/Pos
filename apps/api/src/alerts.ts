@@ -58,9 +58,10 @@ export function alertReport(event: SecurityAlertEvent): AlertReport {
 }
 
 /**
- * Until ntfy exists (P8), warn and critical security alerts reach the owner through Sentry's
- * e-mail alerts. In Sentry, give the project an alert rule that fires on every event tagged
- * `alert`; the default "new issue" rule would mail only the first occurrence of each kind.
+ * Warn and critical security alerts reach the owner through Sentry's e-mail alerts, and also by
+ * Web Push to owner and manager devices when push is set up (`push/notifier.ts`, OPS-02). In
+ * Sentry, give the project an alert rule that fires on every event tagged `alert`; the default
+ * "new issue" rule would mail only the first occurrence of each kind.
  */
 export function forwardAlerts(bus: EventBus, report: (report: AlertReport) => void): void {
   bus.subscribe((event) => {

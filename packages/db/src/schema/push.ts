@@ -15,7 +15,10 @@ export const pushSubscriptions = pgTable(
     deviceId: uuid('device_id')
       .notNull()
       .references(() => devices.id),
-    /** Who was signed in when the device subscribed (information only; the device is the key). */
+    /**
+     * Who was signed in when the device subscribed. The device is the key; this only decides who
+     * also gets security and ops alerts (an active owner or manager, OPS-02).
+     */
     staffId: uuid('staff_id').references(() => staff.id),
     endpoint: text('endpoint').notNull(),
     p256dh: text('p256dh').notNull(),

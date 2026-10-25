@@ -2,9 +2,9 @@
  * Queries for Web Push subscriptions (P8 phone alerts): one row per device. The endpoint and keys
  * leave this module only for the sender; no API route returns them.
  */
-import { and, eq, isNull, ne, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, ne, sql } from 'drizzle-orm';
 import type { Db } from './client.ts';
-import { devices, pushSubscriptions } from './schema.ts';
+import { devices, pushSubscriptions, staff } from './schema.ts';
 
 export interface PushSubscriptionRow {
   id: string;
@@ -98,6 +98,30 @@ export async function listDeliverable(db: Db): Promise<PushSubscriptionRow[]> {
     .from(pushSubscriptions)
     .innerJoin(devices, eq(devices.id, pushSubscriptions.deviceId))
     .where(isNull(devices.revokedAt));
+}
+
+/**
+ * The deliverable subscriptions made by an active member of one of `roles` (security and ops
+ * alerts go to the owner and managers only, OPS-02). A row with no `staffId` never matches.
+ */
+export async function listDeliverableToRoles(
+  db: Db,
+  roles: readonly string[],
+): Promise<PushSubscriptionRow[]> {
+  return db
+    .select({
+      id: pushSubscriptions.id,
+      deviceId: pushSubscriptions.deviceId,
+      endpoint: pushSubscriptions.endpoint,
+      p256dh: pushSubscriptions.p256dh,
+      auth: pushSubscriptions.auth,
+      failureCount: pushSubscriptions.failureCount,
+      lastSuccessAt: pushSubscriptions.lastSuccessAt,
+    })
+    .from(pushSubscriptions)
+    .innerJoin(devices, eq(devices.id, pushSubscriptions.deviceId))
+    .innerJoin(staff, eq(staff.id, pushSubscriptions.staffId))
+    .where(and(isNull(devices.revokedAt), eq(staff.active, true), inArray(staff.role, [...roles])));
 }
 
 export async function markSuccess(db: Db, id: string, now: Date): Promise<void> {
