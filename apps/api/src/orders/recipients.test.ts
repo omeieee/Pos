@@ -1,5 +1,11 @@
-import { type OrderDto, orderDtoSchema, recipientsResponseSchema } from '@sds/shared';
+import {
+  customerDtoSchema,
+  type OrderDto,
+  orderDtoSchema,
+  recipientsResponseSchema,
+} from '@sds/shared';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
+import { withFailingWrite } from '../test-support/fail-trigger.ts';
 import { createHarness, type Harness, type Menu } from '../test-support/harness.ts';
 
 let h: Harness;
@@ -358,5 +364,56 @@ describe('the customers feed', () => {
     expect(JSON.stringify(customer)).not.toMatch(
       /Feed Person|Feed-Note-Sentinel|building|recipient/i,
     );
+  });
+
+  test('each order publishes its customer (new count and rev) to the live feed after commit (BE-02)', async () => {
+    newDay();
+    const cashier = await sign('cashier');
+    const first = await place({ deliveryBuilding: 'C1', recipientName: 'Live Person' }, cashier);
+    const before = h.events.length;
+    await place({ deliveryBuilding: 'C1', recipientName: 'Live Person' }, cashier);
+    const events = h.events
+      .slice(before)
+      .filter((e) => e.type === 'customer.upserted' && e.id === first.customerId);
+    expect(events).toHaveLength(1);
+    const event = events[0];
+    if (event?.type !== 'customer.upserted') throw new Error('expected customer.upserted');
+    const row = await customerRow(String(first.customerId));
+    expect(event.rev).toBe(Number(row?.rev));
+    expect(customerDtoSchema.parse(event.data)).toMatchObject({
+      orderCount: 2,
+      version: row?.version,
+    });
+    expect(JSON.stringify(event)).not.toMatch(/Live Person|building|recipient/i);
+  });
+
+  test('an order with no customer publishes no customer event', async () => {
+    newDay();
+    const before = h.events.length;
+    await place({
+      channel: 'grab',
+      fulfillment: 'platform_delivery',
+      deliveryBuilding: undefined,
+      recipientName: undefined,
+    });
+    expect(h.events.slice(before).some((e) => e.type === 'customer.upserted')).toBe(false);
+  });
+
+  test('an order that rolls back publishes nothing, the customer neither', async () => {
+    newDay();
+    const cashier = await sign('cashier');
+    const first = await place({ deliveryBuilding: 'C1', recipientName: 'Undo Person' }, cashier);
+    const before = h.events.length;
+    const res = await withFailingWrite(h, { table: 'order_items', when: 'true' }, () =>
+      h.app.inject({
+        method: 'POST',
+        url: '/v1/orders',
+        headers: bearer(cashier),
+        payload: body({ deliveryBuilding: 'C1', recipientName: 'Undo Person' }),
+      }),
+    );
+    expect(res.statusCode).toBe(500);
+    expect(h.events.slice(before)).toEqual([]);
+    expect(await customerRow(String(first.customerId))).toMatchObject({ order_count: 1 });
   });
 });

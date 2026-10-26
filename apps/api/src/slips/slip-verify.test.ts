@@ -10,6 +10,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } fr
 import { LiffUnavailableError, type LiffVerifier } from '../line/liff-verify.ts';
 import { createLineRuntime } from '../line/runtime.ts';
 import { frameForRole, frameFromEvent } from '../realtime/frames.ts';
+import { withFailingWrite } from '../test-support/fail-trigger.ts';
 import { createHarness, type Harness, type Menu } from '../test-support/harness.ts';
 import { createSlipChecker, installSlipChecker, type SlipChecker } from './checker.ts';
 import type { SlipOcr } from './ocr.ts';
@@ -1968,6 +1969,41 @@ describe('a "fake slip" answer (200500)', () => {
     expect(audit).toHaveLength(1);
     expect(audit[0]).toMatchObject({ actorType: 'system' });
     expect(audit[0]?.after).toEqual({ reason: 'fraud', code: '200500' });
+  });
+
+  test('the flagged customer is published after commit (new rev), with no flag data (BE-02)', async () => {
+    const { token, order } = await start();
+    // Signing in and ordering publish the customer too; only the block's own event counts here.
+    const before = h.events.length;
+    respond = () => ({ body: answer('200500', currentAmountBaht) });
+    await upload(token, order.id, picture(1));
+    await checker.idle();
+    const flag = await flagOf(order.id);
+    const events = h.events
+      .slice(before)
+      .filter((e) => e.type === 'customer.upserted' && e.id === flag?.id);
+    expect(events).toHaveLength(1);
+    const rev = (
+      await h.client.query<{ rev: string }>('select rev from customers where id = $1', [flag?.id])
+    ).rows[0]?.rev;
+    expect(events[0]?.type === 'customer.upserted' && events[0].rev).toBe(Number(rev));
+    expect(JSON.stringify(events)).not.toMatch(/slipFlag|fraud|200500/i);
+  });
+
+  test('a block that rolls back flags nobody and publishes no customer (BE-02)', async () => {
+    const { token, order } = await start();
+    const before = h.events.length;
+    respond = () => ({ body: answer('200500', currentAmountBaht) });
+    await withFailingWrite(
+      h,
+      { table: 'audit_log', when: "new.action = 'payment.slip_blocked'" },
+      async () => {
+        await upload(token, order.id, picture(1));
+        await checker.idle();
+      },
+    );
+    expect((await flagOf(order.id))?.slip_flag_at).toBeNull();
+    expect(h.events.slice(before).some((e) => e.type === 'customer.upserted')).toBe(false);
   });
 
   test('the owner is alerted once per block, with the order number and no personal data', async () => {

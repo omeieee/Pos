@@ -26,6 +26,7 @@ import { ApiError } from '../errors.ts';
 import type { EventBus } from '../events.ts';
 import { currentBusinessDate } from '../orders/business-day.ts';
 import { mergeOrders } from '../orders/customer-edit.ts';
+import { emitRowUpserts } from '../realtime/upserts.ts';
 import { currentPromptpayId, lineOrderingNow } from '../settings/service.ts';
 import { openPromptpayCandidates, planChatSlip, slipFree } from '../slips/allocate.ts';
 import { activeSlipChecker } from '../slips/checker.ts';
@@ -34,7 +35,7 @@ import { keepLateSlip, LATE_SLIP_WINDOW_MS } from '../slips/late.ts';
 import { looksLikeSlip } from '../slips/qr.ts';
 import { attachSlip } from '../slips/service.ts';
 import type { SlipStore } from '../slips/store.ts';
-import type { CoreContext } from '../tx.ts';
+import { type CoreContext, withTransaction } from '../tx.ts';
 import { receiptItems } from './receipt.ts';
 import type { LineRuntime } from './runtime.ts';
 
@@ -120,8 +121,14 @@ const REFUSALS: Record<string, Parameters<typeof botText>[0]> = {
  */
 export async function handleEvent(ctx: HandlerContext, event: RoutedEvent): Promise<void> {
   switch (event.kind) {
+    // Follow, unfollow and the acknowledgement change the customer row (its rev moves), so each
+    // publishes it after commit for the devices that stay connected (BE-02).
     case 'follow': {
-      const customerId = await lineRepo.upsertFollower(ctx.db, event.userId);
+      const customerId = await withTransaction(ctx, async (tx, emit) => {
+        const id = await lineRepo.upsertFollower(tx, event.userId);
+        await emitRowUpserts(tx, emit, { customers: [id] });
+        return id;
+      });
       // Following is not acknowledging: the notice is shown and the customer taps to confirm.
       await ctx.sender.reply(
         event.replyToken,
@@ -135,15 +142,22 @@ export async function handleEvent(ctx: HandlerContext, event: RoutedEvent): Prom
       return;
     }
     case 'unfollow':
-      await lineRepo.markUnfollowed(ctx.db, event.userId, ctx.now());
+      await withTransaction(ctx, async (tx, emit) => {
+        const id = await lineRepo.markUnfollowed(tx, event.userId, ctx.now());
+        if (id) await emitRowUpserts(tx, emit, { customers: [id] });
+      });
       return;
     case 'ack_privacy': {
-      const customerId = await lineRepo.acknowledgePrivacy(
-        ctx.db,
-        event.userId,
-        ctx.now(),
-        PRIVACY_NOTICE_VERSION,
-      );
+      const customerId = await withTransaction(ctx, async (tx, emit) => {
+        const id = await lineRepo.acknowledgePrivacy(
+          tx,
+          event.userId,
+          ctx.now(),
+          PRIVACY_NOTICE_VERSION,
+        );
+        await emitRowUpserts(tx, emit, { customers: [id] });
+        return id;
+      });
       if (event.replyToken) {
         await ctx.sender.reply(event.replyToken, [privacyAcknowledged()], {
           template: 'privacy_ack',

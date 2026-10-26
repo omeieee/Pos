@@ -189,13 +189,14 @@ export async function customerExists(db: Db, customerId: string): Promise<boolea
 
 /**
  * Saves the member profile on a live customer, in the caller's transaction. Writes nothing when
- * nothing changed, so a repeated form does not bump the customer's rev and version.
+ * nothing changed, so a repeated form does not bump the customer's rev and version. Returns
+ * whether it wrote (the caller then publishes the customer).
  */
 export async function saveMemberProfile(
   db: Db,
   customerId: string,
   profile: MemberProfile,
-): Promise<void> {
+): Promise<boolean> {
   const saved = await getMemberProfile(db, customerId);
   if (
     saved.fullName === profile.fullName &&
@@ -203,9 +204,9 @@ export async function saveMemberProfile(
     saved.building === profile.building &&
     saved.phone === profile.phone
   ) {
-    return;
+    return false;
   }
-  await db
+  const written = await db
     .update(customers)
     .set({
       fullName: profile.fullName,
@@ -213,7 +214,9 @@ export async function saveMemberProfile(
       memberBuilding: profile.building,
       phone: profile.phone,
     })
-    .where(and(eq(customers.id, customerId), isNull(customers.anonymizedAt)));
+    .where(and(eq(customers.id, customerId), isNull(customers.anonymizedAt)))
+    .returning({ id: customers.id });
+  return written.length > 0;
 }
 
 export type AnonymizeResult =
@@ -245,14 +248,15 @@ export type AnonymizeResult =
 /**
  * Clears the slip image key of every payment on the customer's orders and returns the keys, so the
  * caller can delete the files once the transaction has committed (a customer's erasure includes
- * the pictures they sent: they show a bank name and account number), and the ids of the orders
- * whose board flag (`claim_without_slip`) changed, which the caller must publish. The orders are
+ * the pictures they sent: they show a bank name and account number), the ids of the payments it
+ * changed and of the orders whose board flag (`claim_without_slip`) changed, which the caller must
+ * publish. The orders are
  * locked before the payments (see `lockOrders`).
  */
 export async function takeCustomerSlipKeys(
   db: Db,
   customerId: string,
-): Promise<{ keys: string[]; changedOrderIds: string[] }> {
+): Promise<{ keys: string[]; changedOrderIds: string[]; paymentIds: string[] }> {
   await lockCustomerOrders(db, customerId);
   const held = await db
     .select({ id: payments.id, orderId: payments.orderId, key: payments.slipImageKey })
@@ -261,6 +265,7 @@ export async function takeCustomerSlipKeys(
     .where(and(eq(orders.customerId, customerId), isNotNull(payments.slipImageKey)))
     .for('update', { of: payments });
   const keys: string[] = [];
+  const paymentIds: string[] = [];
   const orderIds = new Set<string>();
   for (const row of held) {
     if (row.key === null) continue;
@@ -286,10 +291,11 @@ export async function takeCustomerSlipKeys(
       })
       .where(eq(payments.id, row.id));
     keys.push(row.key);
+    paymentIds.push(row.id);
     orderIds.add(row.orderId);
   }
   const changedOrderIds = await refreshClaimWithoutSlip(db, [...orderIds]);
-  return { keys, changedOrderIds };
+  return { keys, changedOrderIds, paymentIds };
 }
 
 async function lockCustomerOrders(db: Db, customerId: string): Promise<void> {

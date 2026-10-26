@@ -1,10 +1,12 @@
 import {
   ANONYMIZED_RECIPIENT_NAME,
   anonymizeCustomerResponseSchema,
+  customerDtoSchema,
   orderDtoSchema,
 } from '@sds/shared';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 import { createMemorySlipStore } from '../slips/store.ts';
+import { withFailingWrite } from '../test-support/fail-trigger.ts';
 import { createHarness, type Harness, type OwnerFixture } from '../test-support/harness.ts';
 
 const slipStore = createMemorySlipStore();
@@ -313,5 +315,111 @@ describe('POST /v1/customers/{id}/anonymize', () => {
     });
     expect(res.statusCode).toBe(422);
     expect(res.json()).toMatchObject({ code: 'UNKNOWN_CUSTOMER' });
+  });
+});
+
+describe('the live feed hears every row an erasure or a flag clear changes (BE-02)', () => {
+  const revOf = async (table: 'customers' | 'payments', id: string) =>
+    Number(
+      (await h.client.query<{ rev: string }>(`select rev from ${table} where id = $1`, [id]))
+        .rows[0]?.rev,
+    );
+
+  test('erasing publishes the erased customer and each payment that lost its slip, after commit', async () => {
+    const id = await seedCustomer();
+    const orderId = await seedEntranceOrder(id);
+    const key = 'e'.repeat(32);
+    await slipStore.put(key, Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]));
+    const [pay] = (
+      await h.client.query<{ id: string }>(
+        `insert into payments (order_id, method, status, amount_satang, client_request_id, slip_image_key)
+         values ($1, 'promptpay', 'claimed', 5000, gen_random_uuid(), $2) returning id`,
+        [orderId, key],
+      )
+    ).rows;
+    const paymentId = String(pay?.id);
+    const before = h.events.length;
+    expect((await anonymize(await admin(), id)).statusCode).toBe(200);
+    const events = h.events.slice(before);
+
+    const customer = events.filter((e) => e.type === 'customer.upserted' && e.id === id);
+    expect(customer).toHaveLength(1);
+    const c = customer[0];
+    if (c?.type !== 'customer.upserted') throw new Error('expected customer.upserted');
+    expect(c.rev).toBe(await revOf('customers', id));
+    expect(customerDtoSchema.parse(c.data)).toMatchObject({
+      id,
+      displayName: null,
+      nickname: null,
+      anonymized: true,
+      orderCount: 2,
+    });
+    const payment = events.filter((e) => e.type === 'payment.upserted' && e.id === paymentId);
+    expect(payment).toHaveLength(1);
+    expect(payment[0]?.type === 'payment.upserted' && payment[0].rev).toBe(
+      await revOf('payments', paymentId),
+    );
+    const text = JSON.stringify(events);
+    for (const gone of [NAME, NOTE, key, '0800000000']) expect(text).not.toContain(gone);
+  });
+
+  test('an erasure that rolls back publishes nothing', async () => {
+    const token = await admin();
+    const id = await seedCustomer();
+    await seedEntranceOrder(id);
+    const before = h.events.length;
+    const res = await withFailingWrite(
+      h,
+      { table: 'audit_log', when: "new.action = 'customer.anonymize'" },
+      () => anonymize(token, id),
+    );
+    expect(res.statusCode).toBe(500);
+    expect(h.events.slice(before)).toEqual([]);
+    expect(await customerRow(id)).toMatchObject({ anonymized_at: null, display_name: NAME });
+  });
+
+  async function flagged(): Promise<string> {
+    const id = await seedCustomer();
+    await h.client.query(
+      "update customers set slip_flag_at = now(), slip_flag_reason = 'fraud', slip_flag_count = 1 where id = $1",
+      [id],
+    );
+    return id;
+  }
+  const clearFlag = (token: string, id: string) =>
+    h.app.inject({
+      method: 'POST',
+      url: `/v1/customers/${id}/slip-flag/clear`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: { clientRequestId: crypto.randomUUID(), reason: 'checked with the bank' },
+      remoteAddress: h.nextIp(),
+    });
+
+  test('clearing a slip flag publishes the customer (new rev), without the flag', async () => {
+    const id = await flagged();
+    const before = h.events.length;
+    expect((await clearFlag(await admin(), id)).statusCode).toBe(200);
+    const events = h.events
+      .slice(before)
+      .filter((e) => e.type === 'customer.upserted' && e.id === id);
+    expect(events).toHaveLength(1);
+    expect(events[0]?.type === 'customer.upserted' && events[0].rev).toBe(
+      await revOf('customers', id),
+    );
+    expect(JSON.stringify(events)).not.toMatch(/slipFlag|fraud|checked with the bank/);
+  });
+
+  test('a flag clear that rolls back publishes nothing', async () => {
+    const id = await flagged();
+    const token = await admin();
+    const before = h.events.length;
+    const res = await withFailingWrite(
+      h,
+      { table: 'audit_log', when: "new.action = 'customer.slip_flag_clear'" },
+      () => clearFlag(token, id),
+    );
+    expect(res.statusCode).toBe(500);
+    expect(h.events.slice(before)).toEqual([]);
+    expect(await customerRow(id)).toMatchObject({ slip_flag_reason: 'fraud' });
   });
 });

@@ -60,6 +60,7 @@ import {
   paymentQrUrl,
   withdrawPendingPayment,
 } from '../payments/service.ts';
+import { emitRowUpserts } from '../realtime/upserts.ts';
 import {
   currentDeliverySettings,
   currentPaymentsSettings,
@@ -68,7 +69,7 @@ import {
   lineOrderingNow,
 } from '../settings/service.ts';
 import { orderSlipBlocked, orderSlipCooldown } from '../slips/guard.ts';
-import type { CoreContext } from '../tx.ts';
+import { type CoreContext, withTransaction } from '../tx.ts';
 import { CUSTOMER_SESSION_SECONDS, type CustomerPrincipal, signCustomerToken } from './session.ts';
 
 /** How many of their latest orders the app lists. */
@@ -94,9 +95,14 @@ export async function openSession(
   ctx: AuthContext,
   who: LiffIdentity,
 ): Promise<CustomerSessionResponse> {
-  const customer = await lineRepo.upsertLiffCustomer(ctx.db, who.userId);
-  // The name and picture LINE returned with the token, kept at most weekly (owner, 2026-10-12).
-  await lineRepo.saveLineProfile(ctx.db, who.userId, who, ctx.now());
+  const customer = await withTransaction(ctx, async (tx, emit) => {
+    const found = await lineRepo.upsertLiffCustomer(tx, who.userId);
+    // The name and picture LINE returned with the token, kept at most weekly (owner, 2026-10-12).
+    const saved = await lineRepo.saveLineProfile(tx, who.userId, who, ctx.now());
+    // A new customer, or a new LINE name (it is in the feed), reaches staff screens live (BE-02).
+    if (found.created || saved) await emitRowUpserts(tx, emit, { customers: [found.id] });
+    return found;
+  });
   const expires = Math.floor(ctx.now().getTime() / 1000) + CUSTOMER_SESSION_SECONDS;
   return {
     token: signCustomerToken(ctx.keys.customerSessionKey, customer.id, expires),
@@ -106,12 +112,24 @@ export async function openSession(
   };
 }
 
-/** Stores that the customer saw the current notice (time and version). The same call as the chat button. */
+/**
+ * Stores that the customer saw the current notice (time and version). The same call as the chat
+ * button. The acknowledgement is not in the feed, but the row gets a new rev and version, so the
+ * customer is published after commit (BE-02).
+ */
 export async function acknowledgePrivacy(
   ctx: CoreContext,
   customer: CustomerPrincipal,
 ): Promise<PrivacyAckResponse> {
-  await lineRepo.acknowledgePrivacy(ctx.db, customer.lineUserId, ctx.now(), PRIVACY_NOTICE_VERSION);
+  await withTransaction(ctx, async (tx, emit) => {
+    const id = await lineRepo.acknowledgePrivacy(
+      tx,
+      customer.lineUserId,
+      ctx.now(),
+      PRIVACY_NOTICE_VERSION,
+    );
+    await emitRowUpserts(tx, emit, { customers: [id] });
+  });
   return { privacyAcknowledged: true, privacyVersion: PRIVACY_NOTICE_VERSION };
 }
 
@@ -147,9 +165,12 @@ export async function saveMember(
       'Please read and accept the privacy notice first',
     );
   }
-  const merged = await ctx.db.transaction(async (tx) => {
+  const merged = await withTransaction(ctx, async (tx, emit) => {
     const next = mergeMember(await customersRepo.getMemberProfile(tx, customer.customerId), input);
-    await customersRepo.saveMemberProfile(tx, customer.customerId, next);
+    // A real change gives the row a new rev (the nickname is in the feed): publish it (BE-02).
+    if (await customersRepo.saveMemberProfile(tx, customer.customerId, next)) {
+      await emitRowUpserts(tx, emit, { customers: [customer.customerId] });
+    }
     return next;
   });
   return { member: memberOrNull(merged) };

@@ -6,9 +6,13 @@
  * Not proven here: real TCP and TLS (the sockets are Fastify's in-memory `injectWS`), a real
  * browser or Safari, Caddy's WebSocket proxying, and real-Postgres commit ordering.
  */
+import { ANONYMIZED_RECIPIENT_NAME } from '@sds/shared';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from 'vitest';
 import { peekSession } from '../auth/service.ts';
+import { anonymizeOrders } from '../jobs/retention.ts';
+import { createLineRuntime } from '../line/runtime.ts';
 import { signQrLink } from '../payments/qr.ts';
+import { createMemorySlipStore } from '../slips/store.ts';
 import { createHarness, type Harness, type OwnerFixture } from '../test-support/harness.ts';
 import {
   connect,
@@ -813,3 +817,60 @@ describe('shutdown', () => {
 
 // A helper kept at the end so the tests above read first.
 export type { Frame };
+
+describe('writes that used to publish nothing reach a device that stays connected (BE-02)', () => {
+  const NAME = 'Zzyx-Ws-Erase';
+
+  test('an erasure and a retention run arrive as frames with the erased DTO; the kitchen gets no customer', async () => {
+    const all = await everyone();
+    const [cust] = (
+      await h.client.query<{ id: string }>(
+        `insert into customers (line_user_id, display_name, nickname, order_count)
+         values ($1, $2, 'Zzyx-Nick', 1) returning id`,
+        [`U-test-${crypto.randomUUID()}`, NAME],
+      )
+    ).rows;
+    h.clock.advanceSeconds(31); // a TOTP code works once per 30-second step
+    const res = await call(
+      'POST',
+      `/v1/customers/${cust?.id}/anonymize`,
+      await h.steppedUpOwner(owner),
+      {},
+    );
+    expect(res.statusCode).toBe(200);
+    const isCustomer = (f: Frame) => f.type === 'customer.upserted' && f.id === cust?.id;
+    for (const who of ['cashier', 'manager', 'owner'] as const) {
+      const frame = await all[who].client.next(isCustomer);
+      expect(frame.data).toMatchObject({ displayName: null, nickname: null, anonymized: true });
+    }
+
+    // A finished order 31 days old: the nightly job erases the name, and the open sockets hear it.
+    const [ord] = (
+      await h.client.query<{ id: string }>(
+        `insert into orders (order_no, business_date, channel, fulfillment, delivery_building, recipient_name,
+           status, subtotal_satang, total_satang, client_request_id, completed_at)
+         values ('WS-R1', '2026-08-10', 'storefront', 'entrance_delivery', 'B1', $1,
+           'completed', 5000, 5000, gen_random_uuid(), $2) returning id`,
+        [NAME, new Date(h.clock.now().getTime() - 31 * 86_400_000).toISOString()],
+      )
+    ).rows;
+    await anonymizeOrders({
+      db: h.db,
+      events: h.bus,
+      now: h.clock.now,
+      line: createLineRuntime({ channelSecret: undefined, channelAccessToken: undefined }),
+      slips: createMemorySlipStore(),
+    });
+    const isOrder = (f: Frame) => f.type === 'order.upserted' && f.id === ord?.id;
+    for (const who of allRoles) {
+      const frame = await all[who].client.next(isOrder);
+      expect(frame.data).toMatchObject({ recipientName: ANONYMIZED_RECIPIENT_NAME });
+    }
+
+    await pause(80);
+    expect(all.kitchen.client.seen(isCustomer)).toEqual([]);
+    for (const who of allRoles) {
+      expect(JSON.stringify(all[who].client.frames)).not.toMatch(/Zzyx-Ws-Erase|Zzyx-Nick/);
+    }
+  });
+});

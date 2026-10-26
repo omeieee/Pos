@@ -324,6 +324,33 @@ describe('readChanges', () => {
     expect(orderEntry?.kind === 'order' && orderEntry.order.claimWithoutSlip).toBe(false);
   });
 
+  test('readRowsByIds: the same allow-listed rows readChanges sends, by id, oldest rev first (BE-02)', async () => {
+    const ids = {
+      orders: [world.order?.id ?? '', crypto.randomUUID()],
+      payments: [world.payment?.id ?? ''],
+      customers: [world.customer?.id ?? '', world.customer?.id ?? ''],
+    };
+    const entries = await sync.readRowsByIds(db, ids);
+    // The unknown id is skipped and a repeated id comes once.
+    expect(entries.map((e) => e.kind).sort()).toEqual(['customer', 'order', 'payment']);
+    const revs = entries.map((e) => e.rev);
+    expect(revs).toEqual([...revs].sort((a, b) => a - b));
+    // Each row is the very row the catch-up sends (items and cut-down modifiers included).
+    const feed = await sync.readChanges(db, { since: 0, limit: 500, include: all });
+    for (const entry of entries) {
+      expect(feed.entries).toContainEqual(entry);
+    }
+    const json = JSON.stringify(entries);
+    for (const [name, value] of Object.entries(SENTINELS)) {
+      expect(json, name).not.toContain(String(value));
+    }
+    expect(json).not.toContain('RECIPIENT-SENTINEL');
+    expect(json).not.toContain('MODIFIER-SENTINEL');
+    expect(await sync.readRowsByIds(db, {})).toEqual([]);
+    const tooMany = Array.from({ length: sync.ROWS_BY_IDS_MAX + 1 }, () => crypto.randomUUID());
+    await expect(sync.readRowsByIds(db, { orders: tooMany })).rejects.toThrow(/at most/);
+  });
+
   test('order lines come with their modifiers cut down to the known keys', async () => {
     const batch = await sync.readChanges(db, { since: 0, limit: 500, include: all });
     const entry = batch.entries.find((e) => e.kind === 'order');

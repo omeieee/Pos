@@ -129,8 +129,14 @@ export async function upsertFollower(db: Db, lineUserId: string): Promise<string
   return row.id;
 }
 
-export async function markUnfollowed(db: Db, lineUserId: string, at: Date): Promise<void> {
-  await db.update(customers).set({ unfollowedAt: at }).where(eq(customers.lineUserId, lineUserId));
+/** Marks the customer unfollowed. Returns its id, or null when this LINE user is not a customer. */
+export async function markUnfollowed(db: Db, lineUserId: string, at: Date): Promise<string | null> {
+  const [row] = await db
+    .update(customers)
+    .set({ unfollowedAt: at })
+    .where(eq(customers.lineUserId, lineUserId))
+    .returning({ id: customers.id });
+  return row?.id ?? null;
 }
 
 /**
@@ -163,6 +169,8 @@ export async function acknowledgePrivacy(
 export interface LiffCustomer {
   id: string;
   privacyAckVersion: string | null;
+  /** True when this call made the row (the caller publishes the new customer). */
+  created: boolean;
 }
 
 /**
@@ -171,16 +179,18 @@ export interface LiffCustomer {
  * privacy acknowledgement; `unfollowed_at` is not touched (using the app is not following).
  */
 export async function upsertLiffCustomer(db: Db, lineUserId: string): Promise<LiffCustomer> {
-  await db.insert(customers).values({ lineUserId }).onConflictDoNothing({
-    target: customers.lineUserId,
-  });
+  const inserted = await db
+    .insert(customers)
+    .values({ lineUserId })
+    .onConflictDoNothing({ target: customers.lineUserId })
+    .returning({ id: customers.id });
   const [row] = await db
     .select({ id: customers.id, privacyAckVersion: customers.privacyAckVersion })
     .from(customers)
     .where(eq(customers.lineUserId, lineUserId))
     .limit(1);
   if (!row) throw new Error('customer upsert returned no row');
-  return row;
+  return { ...row, created: inserted.length > 0 };
 }
 
 /** How long a saved LINE name and picture are kept before LINE is asked again (owner: rarely). */
@@ -195,22 +205,22 @@ export interface LineProfile {
  * Saves the LINE display name and picture LINE just gave for a verified user, on a live customer.
  * Written only when nothing was saved yet or the saved copy is older than a week, so a customer who
  * opens the app all day causes no write (and no sync revision). A blank name and a picture that is
- * not an https address are dropped.
+ * not an https address are dropped. Returns whether it wrote (the caller publishes the customer).
  */
 export async function saveLineProfile(
   db: Db,
   lineUserId: string,
   profile: { displayName?: string | null; pictureUrl?: string | null },
   at: Date,
-): Promise<void> {
+): Promise<boolean> {
   const displayName = profile.displayName?.trim().slice(0, 100) || null;
   const pictureUrl =
     profile.pictureUrl && /^https:\/\//.test(profile.pictureUrl) && profile.pictureUrl.length <= 500
       ? profile.pictureUrl
       : null;
-  if (displayName === null && pictureUrl === null) return;
+  if (displayName === null && pictureUrl === null) return false;
   const stale = new Date(at.getTime() - LINE_PROFILE_MAX_AGE_MS).toISOString();
-  await db
+  const written = await db
     .update(customers)
     .set({ displayName, pictureUrl, lineProfileAt: at })
     .where(
@@ -222,7 +232,9 @@ export async function saveLineProfile(
           sql`${customers.lineProfileAt} < ${stale}::timestamptz`,
         ),
       ),
-    );
+    )
+    .returning({ id: customers.id });
+  return written.length > 0;
 }
 
 /** The saved LINE name and picture of a live customer (nulls when none, or for an unknown id). */

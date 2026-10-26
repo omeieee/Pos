@@ -26,6 +26,7 @@ import { emitSlipReview } from '../payments/alerts.ts';
 import { toPaymentDto } from '../payments/dto.ts';
 import { needsManualConfirmOf, settleOrder } from '../payments/internal.ts';
 import { autoConfirmClaimedPayment } from '../payments/service.ts';
+import { emitRowUpserts } from '../realtime/upserts.ts';
 import {
   currentBankAccount,
   currentBankAccountNumber,
@@ -598,6 +599,8 @@ export function createSlipChecker(args: {
             patch.slipReviewedAt = null;
             if (order?.customerId) {
               await customersRepo.raiseSlipFlag(tx, order.customerId, ctx.now(), 'fraud');
+              // The flag is not in the feed, but the row has a new rev and version (BE-02).
+              await emitRowUpserts(tx, emit, { customers: [order.customerId] });
             }
             await insertAudit(tx, {
               actorType: 'system',

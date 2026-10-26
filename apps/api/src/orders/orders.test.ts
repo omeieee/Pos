@@ -780,8 +780,14 @@ describe('events after commit', () => {
 
     const order = orderDtoSchema.parse(res.json());
     const published = h.events.slice(before);
-    expect(published.map((e) => e.type)).toEqual(['order.upserted', 'alert.new_order']);
-    const [upserted, alert] = published;
+    // The remembered recipient's customer row changed too (count, last order): BE-02.
+    expect(published.map((e) => e.type)).toEqual([
+      'order.upserted',
+      'alert.new_order',
+      'customer.upserted',
+    ]);
+    const [upserted, alert, customer] = published;
+    expect(customer).toMatchObject({ type: 'customer.upserted', id: order.customerId });
     expect(upserted).toMatchObject({ type: 'order.upserted', id: order.id, rev: order.rev });
     expect(JSON.parse(JSON.stringify((upserted as { data: unknown }).data))).toEqual(
       JSON.parse(res.body),

@@ -6,7 +6,7 @@
  * This is the owner's request path. The nightly retention jobs (`jobs/retention.ts`) erase
  * remembered recipients 30 days after their last order on their own.
  */
-import { customersRepo, findAuditByRequestId, insertAudit, ordersRepo } from '@sds/db';
+import { customersRepo, findAuditByRequestId, insertAudit } from '@sds/db';
 import type {
   AnonymizeCustomerInput,
   AnonymizeCustomerResponse,
@@ -20,7 +20,7 @@ import {
   securityAlert,
 } from '../auth/service.ts';
 import { notFound } from '../errors.ts';
-import { toOrderDto } from '../orders/dto.ts';
+import { emitRowUpserts } from '../realtime/upserts.ts';
 import type { SlipStore } from '../slips/store.ts';
 import { withTransaction } from '../tx.ts';
 
@@ -69,19 +69,14 @@ export async function anonymizeCustomer(
         deviceId: actor.deviceId,
       }),
     );
-    // Screens that hold these orders must not keep showing the name until their next catch-up.
-    // ...and so must the ones whose "claimed, no slip" flag moved when their picture went.
-    for (const orderId of new Set([...result.orderIds, ...taken.changedOrderIds])) {
-      const order = await ordersRepo.findOrderById(tx, orderId);
-      if (!order) continue;
-      const items = await ordersRepo.loadOrderItems(tx, [orderId]);
-      emit({
-        type: 'order.upserted',
-        id: order.id,
-        rev: order.rev,
-        data: toOrderDto(order, items.get(orderId) ?? []),
-      });
-    }
+    // Screens that hold this customer or these orders must not keep showing the name until their
+    // next catch-up; nor the orders whose "claimed, no slip" flag moved when their picture went, nor
+    // the payments that lost it (new rev and version). Each goes out as it is now: erased (BE-02).
+    await emitRowUpserts(tx, emit, {
+      customers: [id],
+      orders: [...result.orderIds, ...taken.changedOrderIds],
+      payments: taken.paymentIds,
+    });
     return response;
   });
   // The files go after the commit: a failed delete leaves a stray file, never a lost key.
@@ -120,6 +115,8 @@ export async function clearSlipFlag(
     const before = await customersRepo.getSlipFlag(tx, id);
     if (!before) return;
     await customersRepo.clearSlipFlag(tx, id);
+    // The flag is not in the feed, but the row has a new rev and version (BE-02).
+    await emitRowUpserts(tx, emit, { customers: [id] });
     await insertAudit(tx, {
       actorType: 'staff',
       actorId: actor.staffId,

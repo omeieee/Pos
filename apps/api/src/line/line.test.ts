@@ -263,6 +263,47 @@ describe('follow, unfollow and privacy acknowledgement', () => {
     expect((await customer(u))?.privacy_ack_at).toEqual(first);
   });
 
+  test('follow, unfollow and the acknowledgement each publish the customer after commit (BE-02)', async () => {
+    const u = 'Utest-live-1';
+    const upserts = (from: number, id: string | undefined) =>
+      h.events.slice(from).filter((event) => event.type === 'customer.upserted' && event.id === id);
+
+    let marker = h.events.length;
+    await webhook(body(follow(u)));
+    await runtime.idle();
+    const id = (await customer(u))?.id;
+    expect(upserts(marker, id)).toHaveLength(1);
+
+    for (const next of [
+      { type: 'unfollow', webhookEventId: eventId(), source: { type: 'user', userId: u } },
+      postback(u, 'action=ack_privacy'),
+    ]) {
+      marker = h.events.length;
+      await webhook(body(next));
+      await runtime.idle();
+      const [event] = upserts(marker, id);
+      expect(event).toBeDefined();
+      const { rows } = await h.client.query<{ rev: string }>(
+        'select rev from customers where id = $1',
+        [id],
+      );
+      expect(event && 'rev' in event ? String(event.rev) : null).toBe(String(rows[0]?.rev));
+    }
+  });
+
+  test('an unfollow from someone who was never a customer publishes nothing', async () => {
+    const marker = h.events.length;
+    await webhook(
+      body({
+        type: 'unfollow',
+        webhookEventId: eventId(),
+        source: { type: 'user', userId: 'Utest-never-followed' },
+      }),
+    );
+    await runtime.idle();
+    expect(h.events.slice(marker).filter((e) => e.type === 'customer.upserted')).toHaveLength(0);
+  });
+
   test('an acknowledgement before any follow event still creates the customer', async () => {
     const u = 'Utest-ack-first';
     await webhook(body(postback(u, 'action=ack_privacy')));

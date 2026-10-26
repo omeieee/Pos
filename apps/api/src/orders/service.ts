@@ -45,6 +45,7 @@ import {
 import { payFirstOf } from '../payments/internal.ts';
 import { settlePaymentsForOrderCancel } from '../payments/service.ts';
 import { sendToKitchen } from '../print/service.ts';
+import { emitRowUpserts } from '../realtime/upserts.ts';
 import { currentDeliverySettings } from '../settings/service.ts';
 import { type CoreContext, type Emit, withTransaction } from '../tx.ts';
 import { currentBusinessDate, loadBusinessDay } from './business-day.ts';
@@ -185,11 +186,15 @@ export async function createOrder(
               input.customerId,
             )
           : (input.customerId ?? null);
+      // The customer row changes (order counter, last order, member profile): its new rev must
+      // reach the devices that hold it (BE-02), after this order's commit.
+      let customerChanged =
+        input.deliveryBuilding !== undefined && input.recipientName !== undefined;
       let profile =
         customerId === null ? null : await customersRepo.getMemberProfile(tx, customerId);
       if (customerId !== null && member !== undefined && profile !== null) {
         profile = mergeMember(profile, member);
-        await customersRepo.saveMemberProfile(tx, customerId, profile);
+        if (await customersRepo.saveMemberProfile(tx, customerId, profile)) customerChanged = true;
       }
       // A LINE order carries the customer's LINE name and picture as they are now (owner,
       // 2026-10-12), so the kitchen can tell who it is for. Other customers hold none.
@@ -263,6 +268,9 @@ export async function createOrder(
         status,
         createdOnDeviceId: actor?.deviceId ?? null,
       });
+      if (customerChanged && customerId !== null) {
+        await emitRowUpserts(tx, emit, { customers: [customerId] });
+      }
       // The kitchen ticket is queued in this transaction (BE-01); the event follows the commit.
       if (status === 'preparing') await sendToKitchen(tx, emit, row, now);
       return dto;
