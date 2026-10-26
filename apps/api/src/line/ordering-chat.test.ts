@@ -829,6 +829,83 @@ describe('a picture in the chat', () => {
     });
   });
 
+  describe('after staff reject a claim (LINE-04)', () => {
+    /** Staff find no money for the claim: `cancel-claimed`, as on the POS. */
+    async function rejectClaim(orderId: string) {
+      const [claimed] = (await paymentOf(orderId)).filter((p) => p.status === 'claimed');
+      const res = await call(
+        'POST',
+        `/v1/payments/${claimed?.id}/cancel-claimed`,
+        await staffSession(),
+        { reason: 'ไม่พบยอดเงินเข้า' },
+      );
+      expect(res.statusCode).toBe(200);
+      await runtime.idle();
+    }
+    const confirmedCount = async (orderId: string) =>
+      (
+        await h.client.query(
+          "select id from payments where order_id = $1 and status = 'confirmed'",
+          [orderId],
+        )
+      ).rows.length;
+
+    test('the slip the rejection message asks for is kept on a fresh PromptPay payment, claimed only, with one free reply', async () => {
+      const token = await signIn('id-token-a-0000000000000000000000');
+      const order = await place(token);
+      await deliver(image(U_A, '4301'));
+      await rejectClaim(order.id);
+      expect(await paymentOf(order.id)).toMatchObject([{ status: 'cancelled' }]);
+      sent.length = 0;
+
+      await deliver(image(U_A, '4302'));
+      expect(fetched).toContain('4302');
+      const rows = await paymentOf(order.id);
+      expect(rows).toMatchObject([
+        { method: 'promptpay', status: 'cancelled' },
+        { method: 'promptpay', status: 'claimed' },
+      ]);
+      const kept = (
+        await h.client.query<{ slip_image_key: string | null }>(
+          "select slip_image_key from payments where order_id = $1 and status = 'claimed'",
+          [order.id],
+        )
+      ).rows[0]?.slip_image_key;
+      expect(kept).toBeTruthy();
+      expect(await slipStore.get(kept as string)).toEqual(JPEG);
+      // Staff still confirm (rule 2): the picture never confirms anything.
+      expect(await confirmedCount(order.id)).toBe(0);
+      expect(replies()).toHaveLength(1);
+      expect(pushes()).toHaveLength(0);
+      expect(allText(lastReply())).toContain(order.orderNo);
+      expect(allText(lastReply())).toContain('ได้รับสลิป');
+
+      // A second picture replaces the slip on that payment: no third payment.
+      await deliver(image(U_A, '4302'));
+      expect(await paymentOf(order.id)).toHaveLength(2);
+    });
+
+    test('a rejected claim on an order that is closed, or on someone else’s order, still takes nothing', async () => {
+      const tokenA = await signIn('id-token-a-0000000000000000000000');
+      await signIn('id-token-b-0000000000000000000000');
+      const order = await place(tokenA);
+      await deliver(postback(U_A, `action=paid&order=${order.id}`));
+      await rejectClaim(order.id);
+      sent.length = 0;
+      fetched.length = 0;
+
+      // Another customer's picture finds nothing of A's.
+      await deliver(image(U_B, '4311'));
+      expect(fetched).toEqual([]);
+      expect(replies()).toHaveLength(0);
+
+      await h.client.query("update orders set status = 'cancelled' where id = $1", [order.id]);
+      await deliver(image(U_A, '4312'));
+      expect(await paymentOf(order.id)).toMatchObject([{ status: 'cancelled' }]);
+      expect(replies()).toHaveLength(0);
+    });
+  });
+
   test('a picture LINE would not hand over leaves the payment as it was; a failure that may pass is retried by the sweep', async () => {
     const token = await signIn('id-token-a-0000000000000000000000');
     const order = await place(token);

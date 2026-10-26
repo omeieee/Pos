@@ -204,7 +204,7 @@ const modifierNames = z.array(z.object({ nameTh: z.string(), nameEn: z.string().
  * payment is a PromptPay one that had been claimed and was cancelled (`cancel-claimed`). The
  * payments come in the order they last changed, so the last one is the latest move.
  */
-function claimRejected(
+export function claimRejected(
   payments: readonly paymentsRepo.PaymentRow[],
   order: ordersRepo.OrderRow,
 ): boolean {
