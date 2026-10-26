@@ -66,13 +66,15 @@ describe('createLineClient', () => {
         answer('{"message":"The API rate limit has been exceeded. Try again later."}'),
       ).c.push('U', MSGS),
     ).toEqual({ ok: false, definite: true, status: 429 });
-    // A 429 whose body cannot be read: a shop this size never meets the rate limit, so it is the month.
-    expect(await client(answer('not json')).c.push('U', MSGS)).toEqual({
-      ok: false,
-      definite: true,
-      status: 429,
-      capped: true,
-    });
+    // A 429 whose body cannot be read, or that does not name the monthly limit: a plain refusal,
+    // never a cap (a wrong cap would hold every push until the month ends).
+    for (const body of ['not json', '{"message":"Too Many Requests"}']) {
+      expect(await client(answer(body)).c.push('U', MSGS)).toEqual({
+        ok: false,
+        definite: true,
+        status: 429,
+      });
+    }
     // A reply is free and never capped, whatever LINE answers.
     expect(
       await client(answer('{"message":"You have reached your monthly limit."}')).c.reply(

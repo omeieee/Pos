@@ -11,8 +11,9 @@ export type LineSendResult =
 /**
  * LINE answers 429 both for the plan's monthly limit ("You have reached your monthly limit.") and
  * for too many calls a second ("The API rate limit has been exceeded..."), told apart only by the
- * body's `message`. A shop this size never meets the rate limit, so a 429 that does not say "rate
- * limit" (or whose body cannot be read) is taken as the month being used up.
+ * body's `message`. Only a body that names the monthly limit caps the month: any other 429 (the
+ * rate limit, a proxy, an unreadable body) is a plain refusal, because a wrong cap would hold every
+ * push until the month ends and there is no screen to lift it.
  */
 async function isMonthlyLimit(response: Response): Promise<boolean> {
   const text = await response.text().catch(() => '');
@@ -25,8 +26,7 @@ async function isMonthlyLimit(response: Response): Promise<boolean> {
   } catch {
     // Not JSON: decided below.
   }
-  if (/monthly limit/i.test(message)) return true;
-  return !/rate limit|concurrent/i.test(message);
+  return /monthly limit/i.test(message);
 }
 
 /** What the sender needs from LINE. Tests pass a fake; production passes `createLineClient`. */
