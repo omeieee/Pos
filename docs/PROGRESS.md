@@ -27,7 +27,7 @@
 - **Decisions:** none new (owner answers recorded).
 - **Open issues:** repo still public until the owner changes it; docs already say private.
 - **Next:** owner makes the repo private and says whether to merge this to `main`; remaining §5 questions (4, 5, 7-13).
-- **Commit:** see `git log` on `claude/brave-knuth-wgwts8` (not on `main`).
+- **Commit:** `7c8ebfe` (countdown), `8d3a8e7` (answers and this entry) on `claude/brave-knuth-wgwts8` (pushed, not on `main`).
 
 ## 2026-10-26 · P8 · Review fixes PAY-01, PAY-02, LINE-02, LINE-03, LINE-04, BE-02
 - **Summary:** Owner said "continue automatically". Fixed six more findings from [11-review-findings](11-review-findings.md). **PAY-01:** a Slip2Go `200200` auto-confirms only when its transfer time is at or after `notBefore` (`slip2goTransferDateCheck`; older = `date_mismatch`, missing/unreadable = `unchecked`; fail-closed). **PAY-02:** any final `unchecked` after a real call, and a failed daily account check, raise the once-a-day `slip2go.unavailable` alert (D-27 amended). **LINE-02:** LIFF names sold-out lines with a remove button, reloads the menu, keeps the cart 12 h on the phone (`cart-recovery.ts`). **LINE-03:** a monthly-limit 429 on a push marks the month capped, one `line.quota_capped` alert, pushes held until next month, replies still work; docs/04 corrected. **LINE-04:** a chat slip is accepted for an order whose claim staff rejected (existing `attachSlip`; D-27 unchanged). **BE-02:** `realtime/upserts.ts:emitRowUpserts()` publishes rows changed by retention, erasure, customer counters/profile, slip flag, customer-app sign-in/privacy and LINE follow/unfollow/privacy.
