@@ -36,6 +36,8 @@ export const enShell = {
   'kitchen.new.empty': 'No new orders',
   'kitchen.cooking.empty': 'Nothing is being made',
   'kitchen.move.ready': 'Done',
+  'kitchen.undo': 'Undo · {seconds}',
+  'kitchen.undoHint': 'The customer is told the food is ready when the time is up',
   'kitchen.pay.awaiting': 'Customer tapped “I have paid”',
   'kitchen.startedAt': 'Started {time}',
   'kitchen.waited': 'Waiting {time}',

@@ -69,7 +69,10 @@ test.describe('kitchen view', () => {
     await ticket.getByRole('button', { name: tr('order.move.preparing'), exact: true }).click();
     await expect(column(page, 'cooking').getByRole('article')).toHaveCount(1);
     await ticket.getByRole('button', { name: tr('kitchen.move.ready'), exact: true }).click();
-    await expect(column(page, 'ready').getByRole('article')).toHaveCount(1);
+    // UX-02: "done" first counts down 5 seconds with an undo on the same spot, then goes out.
+    await expect(ticket.getByRole('button', { name: /^เลิกทำ · \d$/ })).toBeVisible();
+    await expect(column(page, 'cooking').getByRole('article')).toHaveCount(1);
+    await expect(column(page, 'ready').getByRole('article')).toHaveCount(1, { timeout: 10_000 });
     await expect(column(page, 'cooking').getByRole('article')).toHaveCount(0);
     await expect(page.getByText(tr('kitchen.empty'))).toBeVisible();
     // Nothing more to tap on a ticket that waits for hand-over.

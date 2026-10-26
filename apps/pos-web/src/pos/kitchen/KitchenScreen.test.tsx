@@ -7,6 +7,7 @@ import { ApiClientError } from '../../api/errors.ts';
 import { orderDto, orderFrame, uuid } from '../../test-support/frames.ts';
 import { createTestAuth, createTestServices, renderScreen } from '../../test-support/render.tsx';
 import { KitchenScreen } from './KitchenScreen.tsx';
+import { READY_UNDO_SECONDS } from './ready-undo-store.ts';
 
 const th = catalogs.th;
 const tr = translator('th');
@@ -411,6 +412,17 @@ describe('live updates', () => {
   });
 });
 
+/** Fake timeouts too, from here on (the list is loaded with real ones), at the same clock. */
+function withClock() {
+  vi.useFakeTimers({
+    toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'],
+  });
+  vi.setSystemTime(NOW);
+}
+const tick = (ms: number) => act(async () => void (await vi.advanceTimersByTimeAsync(ms)));
+const undoButton = (orderNo: string) =>
+  within(ticketOf(orderNo)).getByRole('button', { name: /^เลิกทำ · \d$/ });
+
 describe('the moves', () => {
   test('a kitchen role starts a new order with one tap, and the card changes only when the server has answered', async () => {
     let answer!: (o: OrderDto) => void;
@@ -442,7 +454,7 @@ describe('the moves', () => {
     ).toBeTruthy();
   });
 
-  test('marking ready moves the order to the waiting-for-hand-over list', async () => {
+  test('marking ready moves the order to the waiting-for-hand-over list once the undo time is over', async () => {
     const env = await mount({
       orders: [ticket(1, { status: 'preparing' })],
       services: {
@@ -456,10 +468,12 @@ describe('the moves', () => {
       },
     });
     await waitFor(() => ticketOf('L-001'));
+    withClock();
     fireEvent.click(
       within(ticketOf('L-001')).getByRole('button', { name: th['kitchen.move.ready'] }),
     );
-    await waitFor(() => expect(env.entities.getState().orders.get(uuid(1))?.status).toBe('ready'));
+    await tick(READY_UNDO_SECONDS * 1000);
+    expect(env.entities.getState().orders.get(uuid(1))?.status).toBe('ready');
     expect(orderNos()).toEqual([]);
     expect(numbersIn('ready')).toEqual(['L-001']);
   });
@@ -684,5 +698,148 @@ describe('the sound control', () => {
     expect(within(group).getByText(th['kitchen.sound.state.unsupported'])).toBeTruthy();
     expect((switchOf() as HTMLInputElement).disabled).toBe(true);
     expect(within(group).getByText(th['kitchen.sound.hint.unsupported'])).toBeTruthy();
+  });
+});
+
+describe('the 5-second undo of “done” (UX-02)', () => {
+  const readyAnswer = async (id: string) => ({
+    ...ticket(Number(id.slice(-3)), { status: 'ready' as const, readyAt: ago(0) }),
+    rev: 90,
+    version: 3,
+  });
+
+  test('the tap shows “เลิกทำ · 5” counting down, and nothing is sent yet', async () => {
+    const env = await mount({
+      orders: [ticket(1, { status: 'preparing' })],
+      services: { orders: { transition: readyAnswer } },
+    });
+    await waitFor(() => ticketOf('L-001'));
+    withClock();
+    fireEvent.click(
+      within(ticketOf('L-001')).getByRole('button', { name: th['kitchen.move.ready'] }),
+    );
+    expect(undoButton('L-001').textContent).toContain(tr('kitchen.undo', { seconds: 5 }));
+    await tick(1_000);
+    expect(undoButton('L-001').textContent).toContain(tr('kitchen.undo', { seconds: 4 }));
+    await tick(2_000);
+    expect(undoButton('L-001').textContent).toContain(tr('kitchen.undo', { seconds: 2 }));
+    expect(env.api.orders.transition).not.toHaveBeenCalled();
+    // Still cooking: the card has not moved.
+    expect(numbersIn('cooking')).toEqual(['L-001']);
+  });
+
+  test('a fast double tap on “ทำเสร็จ” does not take it back at once', async () => {
+    const env = await mount({
+      orders: [ticket(1, { status: 'preparing' })],
+      services: { orders: { transition: readyAnswer } },
+    });
+    await waitFor(() => ticketOf('L-001'));
+    withClock();
+    fireEvent.click(
+      within(ticketOf('L-001')).getByRole('button', { name: th['kitchen.move.ready'] }),
+    );
+    await tick(200);
+    fireEvent.click(undoButton('L-001')); // the second tap lands on the undo button
+    expect(undoButton('L-001').textContent).toContain(tr('kitchen.undo', { seconds: 5 }));
+    await tick(5_000);
+    expect(env.api.orders.transition).toHaveBeenCalledTimes(1);
+  });
+
+  test('“เลิกทำ” takes it back: the done button returns and no request ever goes out', async () => {
+    const env = await mount({
+      orders: [ticket(1, { status: 'preparing' })],
+      services: { orders: { transition: readyAnswer } },
+    });
+    await waitFor(() => ticketOf('L-001'));
+    withClock();
+    fireEvent.click(
+      within(ticketOf('L-001')).getByRole('button', { name: th['kitchen.move.ready'] }),
+    );
+    await tick(3_000);
+    fireEvent.click(undoButton('L-001'));
+    expect(
+      within(ticketOf('L-001')).getByRole('button', { name: th['kitchen.move.ready'] }),
+    ).toBeTruthy();
+    await tick(30_000);
+    expect(env.api.orders.transition).not.toHaveBeenCalled();
+    expect(numbersIn('cooking')).toEqual(['L-001']);
+  });
+
+  test('no undo: one request after 5 seconds', async () => {
+    const env = await mount({
+      orders: [ticket(1, { status: 'preparing' })],
+      services: { orders: { transition: readyAnswer } },
+    });
+    await waitFor(() => ticketOf('L-001'));
+    withClock();
+    fireEvent.click(
+      within(ticketOf('L-001')).getByRole('button', { name: th['kitchen.move.ready'] }),
+    );
+    await tick(4_999);
+    expect(env.api.orders.transition).not.toHaveBeenCalled();
+    await tick(1);
+    expect(env.api.orders.transition).toHaveBeenCalledTimes(1);
+    expect(env.api.orders.transition).toHaveBeenCalledWith(uuid(1), { to: 'ready' });
+  });
+
+  test('two tickets count on their own', async () => {
+    const env = await mount({
+      orders: [
+        ticket(1, { status: 'preparing', placedAt: ago(5) }),
+        ticket(2, { status: 'preparing', placedAt: ago(4) }),
+      ],
+      services: { orders: { transition: readyAnswer } },
+    });
+    await waitFor(() => ticketOf('L-002'));
+    withClock();
+    fireEvent.click(
+      within(ticketOf('L-001')).getByRole('button', { name: th['kitchen.move.ready'] }),
+    );
+    await tick(2_000);
+    fireEvent.click(
+      within(ticketOf('L-002')).getByRole('button', { name: th['kitchen.move.ready'] }),
+    );
+    expect(undoButton('L-001').textContent).toContain(tr('kitchen.undo', { seconds: 3 }));
+    expect(undoButton('L-002').textContent).toContain(tr('kitchen.undo', { seconds: 5 }));
+    await tick(1_000); // past the double-tap guard
+    fireEvent.click(undoButton('L-002'));
+    await tick(10_000);
+    expect(env.api.orders.transition).toHaveBeenCalledTimes(1);
+    expect(env.api.orders.transition).toHaveBeenCalledWith(uuid(1), { to: 'ready' });
+  });
+
+  test('the order cancelled on another device during the countdown: nothing is sent', async () => {
+    const env = await mount({
+      orders: [ticket(1, { status: 'preparing' })],
+      services: { orders: { transition: readyAnswer } },
+    });
+    await waitFor(() => ticketOf('L-001'));
+    withClock();
+    fireEvent.click(
+      within(ticketOf('L-001')).getByRole('button', { name: th['kitchen.move.ready'] }),
+    );
+    act(() => {
+      env.entities.apply(
+        orderFrame(uuid(1), 80, { orderNo: 'L-001', status: 'cancelled', items: [dish(1)] }),
+      );
+    });
+    await tick(10_000);
+    expect(env.api.orders.transition).not.toHaveBeenCalled();
+    expect(screen.queryByRole('article', { name: 'L-001' })).toBeNull();
+  });
+
+  test('leaving the kitchen screen during the countdown still sends it when the time is up', async () => {
+    const env = await mount({
+      orders: [ticket(1, { status: 'preparing' })],
+      services: { orders: { transition: readyAnswer } },
+    });
+    await waitFor(() => ticketOf('L-001'));
+    withClock();
+    fireEvent.click(
+      within(ticketOf('L-001')).getByRole('button', { name: th['kitchen.move.ready'] }),
+    );
+    env.view.unmount();
+    await tick(READY_UNDO_SECONDS * 1000);
+    expect(env.api.orders.transition).toHaveBeenCalledTimes(1);
   });
 });

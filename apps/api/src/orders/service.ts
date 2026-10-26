@@ -44,6 +44,7 @@ import {
 } from '../errors.ts';
 import { payFirstOf } from '../payments/internal.ts';
 import { settlePaymentsForOrderCancel } from '../payments/service.ts';
+import { sendToKitchen } from '../print/service.ts';
 import { currentDeliverySettings } from '../settings/service.ts';
 import { type CoreContext, type Emit, withTransaction } from '../tx.ts';
 import { currentBusinessDate, loadBusinessDay } from './business-day.ts';
@@ -262,7 +263,8 @@ export async function createOrder(
         status,
         createdOnDeviceId: actor?.deviceId ?? null,
       });
-      if (status === 'preparing') emit({ type: 'order.sent_to_kitchen', orderId: row.id });
+      // The kitchen ticket is queued in this transaction (BE-01); the event follows the commit.
+      if (status === 'preparing') await sendToKitchen(tx, emit, row, now);
       return dto;
     });
     return { order, replay: false };
@@ -451,7 +453,7 @@ export async function transitionOrder(
     if (!updated) throw versionConflict(row.version); // cannot happen under the row lock
     const dto = await withItems(tx, updated);
     emitUpserted(emit, updated, dto);
-    if (input.to === 'preparing') emit({ type: 'order.sent_to_kitchen', orderId: updated.id });
+    if (input.to === 'preparing') await sendToKitchen(tx, emit, updated, ctx.now());
     return dto;
   });
 }

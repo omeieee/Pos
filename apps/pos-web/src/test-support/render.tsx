@@ -27,6 +27,7 @@ import { createMemoryTokenStore } from '../platform/tokenStore.ts';
 import { createCartStore } from '../pos/cart/cart-store.ts';
 import type { CatalogueState } from '../pos/cart/catalogue-cache.ts';
 import { createRecipientStore } from '../pos/cart/recipient-store.ts';
+import { createReadyUndoStore } from '../pos/kitchen/ready-undo-store.ts';
 import { createOrderMovesStore } from '../pos/orders/order-moves-store.ts';
 import { PROMPTPAY_CACHE_KEY, type SavedPromptpay } from '../pos/outbox/offline-promptpay-model.ts';
 import { createOutboxStore } from '../pos/outbox/outbox-store.ts';
@@ -449,6 +450,7 @@ export function createTestServices(
     },
   });
   const orderMoves = createOrderMovesStore({ api, entities });
+  const readyUndo = createReadyUndoStore({ moves: orderMoves, entities });
   const print = createPrintStore({ api, lifecycle: life.lifecycle });
   const pushBrowser = createFakePush(options.pushBrowser);
   const pushAlerts = createPushAlertsStore({ api, push: pushBrowser.platform });
@@ -509,6 +511,7 @@ export function createTestServices(
     recipients,
     payments,
     orderMoves,
+    readyUndo,
     print,
     pushAlerts,
     menuEditor,
@@ -538,6 +541,7 @@ export function createTestServices(
     recipients,
     payments,
     orderMoves,
+    readyUndo,
     print,
     pushAlerts,
     pushBrowser,

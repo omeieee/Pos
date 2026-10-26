@@ -1,8 +1,8 @@
 /**
- * The kitchen print queue (P8). One job per order when it reaches `preparing` (only while the
- * owner's printing switch is on), one more per staff reprint. The print program on the shop's
- * notebook PULLS: it claims a job (a 30 second lease), draws the ticket, sends it to the printer
- * and acks. A job becomes `printed` only through that ack.
+ * The kitchen print queue (P8). One job per order when it reaches `preparing`, written in the
+ * order's own transaction (only while the owner's printing switch is on), one more per staff
+ * reprint. The print program on the shop's notebook PULLS: it claims a job (a 30 second lease),
+ * draws the ticket, sends it to the printer and acks. A job becomes `printed` only through that ack.
  *
  * This is at-least-once. If the program prints and then dies before the ack arrives, the lease
  * runs out and the job is claimed again, so a ticket can come out twice. The print program keeps
@@ -68,22 +68,37 @@ async function alertFailed(
 // ---------- Enqueue ----------
 
 /**
- * Creates the order's kitchen job, once. Does nothing while printing is off (the order is simply
- * skipped), and a second call for the same order changes nothing. Returns the job, or null.
+ * An order has just reached `preparing` (created there, accepted by staff, or a pay-first order
+ * that became paid). Adds its one kitchen job IN THE ORDER'S OWN TRANSACTION (BE-01), so a crash
+ * after the commit can no longer lose the ticket, then emits `order.sent_to_kitchen` for after the
+ * commit. Nothing is added while printing is off (the order is skipped), and a second call for the
+ * same order adds nothing (unique order, kind, seq 0).
+ *
+ * The insert runs in a savepoint: a queue that cannot be written never undoes or blocks the order.
+ * Staff then hear that this ticket did not come out (`print.job_failed`, ids and order number
+ * only) and can reprint it.
  */
-export async function enqueueKitchenJob(
-  ctx: Pick<CoreContext, 'db' | 'now'>,
-  orderId: string,
-): Promise<printRepo.PrintJobRow | null> {
-  if (!(await currentPrintingEnabled(ctx.db))) return null;
-  return (
-    (await printRepo.insertJob(ctx.db, {
-      orderId,
-      kind: 'kitchen',
-      seq: 0,
-      now: ctx.now(),
-    })) ?? null
-  );
+export async function sendToKitchen(
+  tx: CoreContext['db'],
+  emit: Emit,
+  order: { id: string; orderNo: string },
+  now: Date,
+): Promise<void> {
+  if (await currentPrintingEnabled(tx)) {
+    try {
+      await tx.transaction((savepoint) =>
+        printRepo.insertJob(savepoint, { orderId: order.id, kind: 'kitchen', seq: 0, now }),
+      );
+    } catch {
+      emit(
+        securityAlert({ now: () => now }, 'print.job_failed', 'warn', {
+          subject: { orderId: order.id },
+          orderNo: order.orderNo,
+        }),
+      );
+    }
+  }
+  emit({ type: 'order.sent_to_kitchen', orderId: order.id });
 }
 
 // ---------- The print program ----------

@@ -107,7 +107,7 @@ export interface Harness {
     customerGuarded: boolean;
     printAgentGuarded: boolean;
   }[];
-  /** Waits for the background work events started (the kitchen print queue). */
+  /** Waits for the background work events started (phone alerts, Telegram). */
   settle(): Promise<void>;
   /** Menu rows for order tests (built by hand: seed() holds the test PromptPay ID). */
   newMenu(): Promise<Menu>;

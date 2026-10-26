@@ -1,5 +1,6 @@
 import {
   type ClaimPrintJobResponse,
+  createOrderInputSchema,
   type OrderDto,
   orderDtoSchema,
   PRINT_MAX_ATTEMPTS,
@@ -7,6 +8,9 @@ import {
   printJobDtoSchema,
 } from '@sds/shared';
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'vitest';
+import type { Principal } from '../auth/service.ts';
+import type { EventBus } from '../events.ts';
+import { createOrder, transitionOrder } from '../orders/service.ts';
 import { createHarness, type Harness, type Menu } from '../test-support/harness.ts';
 
 let h: Harness;
@@ -247,9 +251,99 @@ describe('enqueue', () => {
       });
       expect(res.statusCode).toBe(201);
       await h.settle();
+      // The ticket is in no queue, so staff are told it did not come out (ids and number only).
+      const order = orderDtoSchema.parse(res.json());
+      expect(
+        h.alerts.filter((a) => a.kind === 'print.job_failed' && a.subject?.orderId === order.id),
+      ).toMatchObject([
+        { severity: 'warn', orderNo: order.orderNo, staffId: null, deviceId: null },
+      ]);
     } finally {
       await h.client.query('alter table print_jobs_away rename to print_jobs');
     }
+  });
+});
+
+// BE-01: the process can die after the order commits and before any after-commit work runs (a
+// deploy, a crash, the VM restarting). The kitchen ticket must already be in the queue by then.
+describe('a crash between the commit and the after-commit work', () => {
+  // Nothing published after the commit ever reaches a subscriber: the process is gone.
+  const deadBus: EventBus = { publish: () => {}, subscribe: () => () => {} };
+  const crashed = () => ({ db: h.db, now: () => h.clock.now(), events: deadBus });
+  let cashier: Principal;
+  beforeAll(async () => {
+    const member = await h.newStaff('cashier', '4821');
+    cashier = {
+      sessionId: crypto.randomUUID(),
+      staffId: member.id,
+      displayName: 'Test Cashier',
+      role: 'cashier',
+      kind: 'pin',
+      deviceId: ipad.id,
+      expiresAt: new Date(Date.now() + 3_600_000),
+      stepUpUntil: null,
+    };
+  });
+  const statusOf = async (id: string) =>
+    (await h.client.query<{ status: string }>('select status from orders where id = $1', [id]))
+      .rows[0]?.status;
+
+  test('a counter order that commits in preparing already has its one kitchen job', async () => {
+    await setPrinting(true);
+    const { order } = await createOrder(
+      crashed(),
+      cashier,
+      createOrderInputSchema.parse(orderBody()),
+    );
+    expect(await statusOf(order.id)).toBe('preparing');
+    expect(await jobsOf(order.id)).toMatchObject([
+      { kind: 'kitchen', seq: 0, status: 'pending', attempts: 0 },
+    ]);
+    // The event still goes out after the commit as before; it adds nothing.
+    h.bus.publish({ type: 'order.sent_to_kitchen', orderId: order.id });
+    await h.settle();
+    expect(await jobsOf(order.id)).toHaveLength(1);
+  });
+
+  test('a LINE order accepted by staff already has its one kitchen job', async () => {
+    await setPrinting(true);
+    const order = await place({ channel: 'line' });
+    expect(await jobsOf(order.id)).toEqual([]);
+    await transitionOrder(crashed(), { ...cashier, role: 'kitchen' }, order.id, {
+      to: 'preparing',
+    });
+    expect(await statusOf(order.id)).toBe('preparing');
+    expect(await jobsOf(order.id)).toMatchObject([{ kind: 'kitchen', seq: 0, status: 'pending' }]);
+  });
+
+  test('while printing is off the order is still skipped', async () => {
+    await setPrinting(false);
+    const { order } = await createOrder(
+      crashed(),
+      cashier,
+      createOrderInputSchema.parse(orderBody()),
+    );
+    expect(await jobsOf(order.id)).toEqual([]);
+  });
+
+  test('the job rolls back with an order that does not commit', async () => {
+    await setPrinting(true);
+    const before = await h.client.query<{ n: string }>('select count(*) as n from print_jobs');
+    const input = createOrderInputSchema.parse(orderBody());
+    await h.client.query(
+      "create function fail_order_items() returns trigger language plpgsql as $$ begin raise exception 'boom'; end $$",
+    );
+    await h.client.query(
+      'create trigger fail_order_items before insert on order_items for each row execute function fail_order_items()',
+    );
+    try {
+      await expect(createOrder(crashed(), cashier, input)).rejects.toThrow();
+    } finally {
+      await h.client.query('drop trigger fail_order_items on order_items');
+      await h.client.query('drop function fail_order_items()');
+    }
+    const after = await h.client.query<{ n: string }>('select count(*) as n from print_jobs');
+    expect(after.rows[0]?.n).toBe(before.rows[0]?.n);
   });
 });
 
@@ -534,7 +628,8 @@ describe('the ticket', () => {
     );
     const job = await claimed();
     const text = JSON.stringify(job);
-    expect(text).not.toMatch(/\d{9}/);
+    // Only the ticket: the job's random ids and lease token can hold 9 digits in a row.
+    expect(JSON.stringify(job.ticket)).not.toMatch(/\d{9}/);
     expect(text).not.toContain('081-234');
     expect(text).not.toContain('0899999999');
     expect(text).not.toContain('Somchai');

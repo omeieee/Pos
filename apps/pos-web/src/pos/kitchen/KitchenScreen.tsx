@@ -52,6 +52,7 @@ const BOARD_CSS = `
 .kb-go{min-height:76px;font-size:28px;font-weight:800;border-radius:22px;color:#fff;border:0}
 .kb-go-start{background:var(--sky)!important}
 .kb-go-done{background:var(--jade)!important}
+.kb-go-undo{background:rgba(255,255,255,.16)!important;box-shadow:inset 0 0 0 3px var(--jade)}
 .kb-colhead{font-size:30px;font-weight:800;line-height:1.2}
 .kb-col-new .kb-colhead{color:var(--sky-ink)}
 .kb-col-cooking .kb-colhead{color:var(--amber-ink)}
