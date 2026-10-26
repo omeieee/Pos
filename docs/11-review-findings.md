@@ -387,12 +387,12 @@ Format: **ID · title**, then where it is, status, impact, proposed fix and owne
 
 ## 5. Owner decisions needed (one list)
 
-1. **Slip2Go:** package bought after 2026-10-19? If not, turn `SLIP_AUTOCONFIRM` off (PAY-02). Allow one live date-granularity probe when renewed (PAY-01).
-2. **Repo visibility:** intended to be public? (OPS-01)
-3. **Co-pay wording:** what "ส่ง" meant, and approve the face-to-face text. Hide co-pay outside the scheme window? (LINE-01)
+1. **Slip2Go:** package bought after 2026-10-19? If not, turn `SLIP_AUTOCONFIRM` off (PAY-02). Allow one live date-granularity probe when renewed (PAY-01). **Answered 2026-10-26:** BASIC-1 bought, active to 2026-11-20; auto-confirm stays on.
+2. **Repo visibility:** intended to be public? (OPS-01) **Answered 2026-10-26:** make it private (owner changes it in GitHub).
+3. **Co-pay wording:** what "ส่ง" meant, and approve the face-to-face text. Hide co-pay outside the scheme window? (LINE-01) **Answered 2026-10-26:** no new wording.
 4. **Ambiguous chat slip:** ask the customer, or never auto-confirm? (PAY-05)
 5. **Co-pay after 23:00** on the same night, and is co-pay on in production? (PAY-03)
-6. **Sentry rule** on every alert-tagged event, and alerts by Web Push to the owner's phone. (OPS-02)
+6. **Sentry rule** on every alert-tagged event, and alerts by Web Push to the owner's phone. (OPS-02) **Answered 2026-10-26:** no Sentry rule change.
 7. **Counter screen:** which one, and should it stay signed in up to 12 h? (POS-02) Keep-alive for the kitchen role only? (SEC-05)
 8. **Hand-over while unpaid:** allowed? (UX-03)
 9. **Deploy window** outside 10:00–24:00 for automatic deploys? (OPS-07)
