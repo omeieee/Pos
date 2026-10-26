@@ -172,13 +172,13 @@ Format: **ID · title**, then where it is, status, impact, proposed fix and owne
 
 **PAY-01 · Auto-confirm never checks the transfer date Slip2Go returns**
 - **Where:** `apps/api/src/slips/checker.ts:325-329,351-353,594-618`; `slips/slip2go.ts:165` parses `dateTime` and nothing reads it.
-- **Status:** **Fixed 2026-10-26** on `claude/brave-knuth-wgwts8` (`1cad55f`; not on `main`). Was: Confirmed: a `200200` answer dated 3 days before the order, or with no date, auto-confirms.
+- **Status:** **Fixed 2026-10-26** on `claude/brave-knuth-wgwts8` (`1cad55f`; deployed in `8bbf6d5`). Was: Confirmed: a `200200` answer dated 3 days before the order, or with no date, auto-confirms.
 - **Fix:** on `200200`, require `dateTime` ≥ `notBefore`; otherwise return verdict `date_mismatch`, or `valid` without auto-confirm. Add a missing-date case.
 - **Owner:** yes. When the package is renewed, run one live probe (about 0.5 token) to learn whether Slip2Go compares the date or the time. Bounded by the 1,000 THB ceiling.
 
 **PAY-02 · Slip2Go failures outside codes 401001–401007 are silent, and the daily account check never alerts**
 - **Where:** `packages/shared/src/slip-verify.ts:137-165`, `apps/api/src/slips/slip2go.ts:148-155,202`, `apps/api/src/jobs/slip2go.ts:20`.
-- **Status:** **Fixed 2026-10-26** on `claude/brave-knuth-wgwts8` (`1cad55f`; not on `main`). Was: Confirmed. Payments correctly stay `claimed` (fail-closed), but nobody is told that auto-confirm stopped.
+- **Status:** **Fixed 2026-10-26** on `claude/brave-knuth-wgwts8` (`1cad55f`; deployed in `8bbf6d5`). Was: Confirmed. Payments correctly stay `claimed` (fail-closed), but nobody is told that auto-confirm stopped.
 - **Fix:** raise the once-a-day `slip2go.unavailable` alert for any final `unchecked` with `called=true`, and alert when `accountInfo` fails.
 - **Owner:** yes. Was a package bought? See Fix-first #1.
 
@@ -192,7 +192,7 @@ Format: **ID · title**, then where it is, status, impact, proposed fix and owne
 **LINE-02 · A dish that goes หมด during checkout leaves the LIFF customer stuck**
 - **Problem:** an unnamed error, a stale menu, no remove button, and reopening loses the cart.
 - **Where:** `apps/liff-web` client and cart model (details in the LINE report).
-- **Status:** **Fixed 2026-10-26** on `claude/brave-knuth-wgwts8` (`6c67863`; not on `main`). Was: Confirmed by a script.
+- **Status:** **Fixed 2026-10-26** on `claude/brave-knuth-wgwts8` (`6c67863`; deployed in `8bbf6d5`). Was: Confirmed by a script.
 - **Fix:**
   - surface the server's failed line with a remove action
   - refresh the menu on the error
@@ -202,7 +202,7 @@ Format: **ID · title**, then where it is, status, impact, proposed fix and owne
 **LINE-03 · At LINE's real monthly limit every push fails silently**
 - **Problem:** the local unit is released and no alert fires; docs/04 claims a quota read that does not exist.
 - **Where:** `packages/line` sender and policy.
-- **Status:** **Fixed 2026-10-26** on `claude/brave-knuth-wgwts8` (`e221245`; not on `main`). Was: Confirmed against the real `createLineSender`.
+- **Status:** **Fixed 2026-10-26** on `claude/brave-knuth-wgwts8` (`e221245`; deployed in `8bbf6d5`). Was: Confirmed against the real `createLineSender`.
 - **Fix:**
   - treat LINE's 429 or monthly-limit answer as capped: raise a `line.quota_capped` alert and hold further pushes
   - optionally read LINE's quota endpoint once a day
@@ -211,7 +211,7 @@ Format: **ID · title**, then where it is, status, impact, proposed fix and owne
 
 **LINE-04 · After staff reject a claim, a slip the customer sends in chat is thrown away, although the rejection message asks for one**
 - **Where:** `apps/api/src/line/handlers.ts` slip path.
-- **Status:** **Fixed 2026-10-26** on `claude/brave-knuth-wgwts8` (`a1a2b97`; not on `main`). Was: Code-traced.
+- **Status:** **Fixed 2026-10-26** on `claude/brave-knuth-wgwts8` (`a1a2b97`; deployed in `8bbf6d5`). Was: Code-traced.
 - **Fix:** accept a chat slip for an order whose PromptPay payment was rejected (back to `claimed`), with a test.
 - **Owner:** no.
 
@@ -254,7 +254,7 @@ Format: **ID · title**, then where it is, status, impact, proposed fix and owne
   - `customer-app/service.ts:138`
   - `orders/service.ts:172-188`
   - `slips/checker.ts:570`
-- **Status:** **Fixed 2026-10-26** on `claude/brave-knuth-wgwts8` (`805bd71`; not on `main`). Was: Confirmed. One retention run changed 250 orders and sent 0 events.
+- **Status:** **Fixed 2026-10-26** on `claude/brave-knuth-wgwts8` (`805bd71`; deployed in `8bbf6d5`). Was: Confirmed. One retention run changed 250 orders and sent 0 events.
 - **Impact today:** erased names stay in device memory (not on screen), and rule 6 is broken.
 - **Fix:** publish events for these writers, or with POS-01 make the client's catch-up cursor independent of live frames.
 - **Owner:** no.
