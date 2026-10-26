@@ -299,3 +299,11 @@ Plan: `~/.claude/plans/pasted-content-id-2a22-i-suggest-goofy-walrus.md`; decisi
 - **Customer prompts:** only inside the ordering web app; the owner worries the 300 LINE messages a month are not enough, so this work adds no pushes.
 - **Staff pop-up and Telegram fire on:** paid, and slip needs review. Pop-up switch per device.
 - **Confirmed by the owner (2026-10-24):** A1 the checkout warning follows the plan but appears **only in the ordering web app, never in LINE chat**; A2 yes, and an **icon next to the order in the staff order list** shows that manual confirmation is needed; A3 the time limit is on, 60 minutes; A4 an edit replaces all items and is allowed only before any slip has been sent.
+
+## Review-findings answers · owner, 2026-10-26
+Answers to the five questions asked after the second review-fix deploy (`11-review-findings.md` §5 and the UX-02 follow-up).
+- **Slip2Go package (PAY-02, §5.1):** bought and active. Owner's screenshot (2026-10-26): BASIC-1, 86.750 tokens (chat 394 slips at 0.220, or API 347 slips at 0.250 token), QR quota 80, expires 20 Nov 2569 (2026-11-20) 23:59, 25 days left. `SLIP_AUTOCONFIRM` stays on. The PAY-01 live probe (about 0.5 token) may run on this package.
+- **Repo visibility (OPS-01, §5.2):** as Claude suggested: **make the GitHub repo private.** The owner changes it in GitHub (Settings → General → Danger Zone → Change visibility); Claude cannot. Private repos get 2,000 free Actions minutes a month (CI about 8 min plus deploys about 3 min per push to `main`).
+- **Co-pay wording (LINE-01, §5.3):** **no** new wording; the current text stays.
+- **Sentry rule on every alert (OPS-02, §5.6):** **no**; the rule stays on "new issue".
+- **Late kitchen countdown (UX-02 follow-up):** as Claude suggested: a "ทำเสร็จ" countdown that wakes more than 60 s after it ended is dropped, not sent; the order stays cooking (`ready-undo-store.ts` `READY_UNDO_LATE_MS`).
