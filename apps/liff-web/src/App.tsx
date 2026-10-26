@@ -3,6 +3,7 @@ import type { AppOpenOrder, CheckoutInfo, PublicMenuResponse } from '@sds/shared
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { type Api, createApi } from './api/client.ts';
 import type { Cart } from './model/cart.ts';
+import { browserStorage, readStoredCart, storeCart } from './model/cart-recovery.ts';
 import { shopPhoneOf } from './model/contact.ts';
 import { type EditSession, startEditSession } from './model/open-orders.ts';
 import { apiBaseUrl } from './platform/config.ts';
@@ -108,8 +109,13 @@ function Screens({ path }: { path: string }) {
   const { api, go } = useApp();
   const [menu, setMenu] = useState<PublicMenuResponse | null>(null);
   const [info, setInfo] = useState<CheckoutInfo | null>(null);
-  const [cart, setCart] = useState<Cart>([]);
+  // LINE-02: the cart is kept on this phone, so closing and reopening the app does not lose it.
+  const [cart, setCart] = useState<Cart>(() => readStoredCart(browserStorage(), new Date()));
   const [editing, setEditing] = useState<EditSession | null>(null);
+  // While an unpaid order is being changed the cart holds that order's lines; the customer's own
+  // cart is the stash, and that is what is kept.
+  const kept = editing ? editing.stash : cart;
+  useEffect(() => storeCart(browserStorage(), kept, new Date()), [kept]);
   const [failure, setFailure] = useState<unknown>(null);
 
   const refreshInfo = useCallback(async () => {
@@ -122,6 +128,10 @@ function Screens({ path }: { path: string }) {
     refreshInfo().catch(setFailure);
   }, [api, refreshInfo]);
   useEffect(load, [load]);
+  /** After the server refused a dish (หมด): the menu again, so it shows as gone. */
+  const refreshMenu = useCallback(async () => {
+    setMenu(await api.menu());
+  }, [api]);
 
   const [pathname, query] = path.split('?') as [string, string | undefined];
   const flag = new URLSearchParams(query ?? '').get('placed')
@@ -195,6 +205,7 @@ function Screens({ path }: { path: string }) {
         refreshInfo={refreshInfo}
         editing={editing}
         endEdit={endEdit}
+        refreshMenu={refreshMenu}
       />
     );
   }

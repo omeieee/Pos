@@ -21,6 +21,7 @@ import type {
   PublicMenuResponse,
   SlipNeedsCombine,
 } from '@sds/shared';
+import type { LineProblem } from '../model/cart-recovery.ts';
 
 /** `GET`/`PUT /v1/app/member`: the saved member profile. */
 export interface MemberResponse {
@@ -40,6 +41,8 @@ export class ApiFailure extends Error {
     readonly retryAfterSeconds?: number,
     /** From a 409 NEEDS_COMBINE: the orders the slip's amount adds up to. */
     readonly combine?: SlipNeedsCombine,
+    /** From a 422 ORDER_INVALID: the request lines the server refused (a dish that went หมด). */
+    readonly lines: readonly LineProblem[] = [],
   ) {
     super(`${status} ${code}`);
     this.name = 'ApiFailure';
@@ -69,6 +72,22 @@ function combineOf(details: Partial<SlipNeedsCombine> | undefined): SlipNeedsCom
   };
 }
 
+/** The failed lines of an ORDER_INVALID, kept only when shaped as the API sends them. */
+function linesOf(errors: unknown): LineProblem[] {
+  if (!Array.isArray(errors)) return [];
+  return errors.flatMap((e: unknown) => {
+    if (!e || typeof e !== 'object') return [];
+    const { code, lineIndex, menuItemId } = e as Record<string, unknown>;
+    return typeof code === 'string' &&
+      typeof lineIndex === 'number' &&
+      Number.isInteger(lineIndex) &&
+      lineIndex >= 0 &&
+      typeof menuItemId === 'string'
+      ? [{ code, lineIndex, menuItemId }]
+      : [];
+  });
+}
+
 /** How a slip upload is sent after the server asked whether to combine (D-40). */
 export type SlipMode = 'combine' | 'review';
 
@@ -92,17 +111,20 @@ export function createApi(options: ApiOptions) {
     let fields: string[] = [];
     let retry: unknown;
     let combine: SlipNeedsCombine | undefined;
+    let lines: LineProblem[] = [];
     try {
       const body = (await response.json()) as {
         code?: unknown;
         details?: {
           issues?: { path?: unknown }[];
           retryAfterSeconds?: unknown;
+          errors?: unknown;
         } & Partial<SlipNeedsCombine>;
       };
       if (typeof body.code === 'string') code = body.code;
       retry = body.details?.retryAfterSeconds;
       combine = code === 'NEEDS_COMBINE' ? combineOf(body.details) : undefined;
+      lines = code === 'ORDER_INVALID' ? linesOf(body.details?.errors) : [];
       fields = (body.details?.issues ?? []).flatMap((i) =>
         typeof i.path === 'string' ? [i.path] : [],
       );
@@ -116,6 +138,7 @@ export function createApi(options: ApiOptions) {
       fields,
       typeof retry === 'number' && retry > 0 ? retry : undefined,
       combine,
+      lines,
     );
   }
 
