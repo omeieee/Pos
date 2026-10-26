@@ -197,7 +197,10 @@ export function createSlip2goVerifier(
       } catch {
         parsed = accountInfoSchema.safeParse(undefined);
       }
-      if (!parsed.success) return { kind: 'failed' };
+      if (!parsed.success) {
+        config.log?.warn({ code: 'invalid_response', ms: reply.ms }, 'slip2go');
+        return { kind: 'failed' };
+      }
       config.log?.info({ code: parsed.data.code, ms: reply.ms }, 'slip2go');
       if (parsed.data.code !== '200001') return { kind: 'failed', code: parsed.data.code };
       return {

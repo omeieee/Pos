@@ -360,9 +360,43 @@ describe('slip2go-account-check (D-27)', () => {
     expect(await run()).toEqual({ checked: 1, failed: 0, alerts: 0 });
   });
 
-  test('an account call that fails is counted, never thrown, and raises no alert', async () => {
-    reply = { kind: 'failed', code: '401001' };
+  test('an account call that fails is counted, never thrown, and alerts the owner (PAY-02)', async () => {
+    h.clock.set('2028-09-01T01:00:00.000Z');
+    reply = { kind: 'failed', code: '401004' };
+    expect(await run()).toEqual({ checked: 0, failed: 1, alerts: 1 });
+    expect(h.alerts.filter((a) => a.kind.startsWith('slip2go.'))).toEqual([
+      expect.objectContaining({
+        kind: 'slip2go.unavailable',
+        severity: 'warn',
+        staffId: null,
+        deviceId: null,
+        slip2go: { code: '401004' },
+      }),
+    ]);
+    expect(h.alerts.at(-1)?.subject).toBeUndefined();
+  });
+
+  test('a failure with no code (network, unreadable answer) alerts with no code', async () => {
+    h.clock.set('2028-09-02T01:00:00.000Z');
+    reply = { kind: 'failed' };
+    expect(await run()).toEqual({ checked: 0, failed: 1, alerts: 1 });
+    expect(h.alerts.at(-1)).toMatchObject({ kind: 'slip2go.unavailable', slip2go: {} });
+  });
+
+  test('a code that is not 6 digits never reaches the alert (ids and codes only)', async () => {
+    h.clock.set('2028-09-03T01:00:00.000Z');
+    reply = { kind: 'failed', code: 'secret <html> text' };
+    expect(await run()).toEqual({ checked: 0, failed: 1, alerts: 1 });
+    expect(h.alerts.at(-1)?.slip2go).toEqual({});
+  });
+
+  test('once a business date: shared with the slip checks of that date', async () => {
+    h.clock.set('2028-09-04T01:00:00.000Z');
+    reply = { kind: 'failed', code: '500500' };
+    expect(await run()).toEqual({ checked: 0, failed: 1, alerts: 1 });
     expect(await run()).toEqual({ checked: 0, failed: 1, alerts: 0 });
-    expect(kinds()).toEqual([]);
+    expect(kinds()).toEqual(['slip2go.unavailable']);
+    h.clock.set('2028-09-05T01:00:00.000Z');
+    expect(await run()).toEqual({ checked: 0, failed: 1, alerts: 1 });
   });
 });

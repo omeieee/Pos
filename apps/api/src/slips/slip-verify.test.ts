@@ -96,7 +96,14 @@ let ownerFixture: Awaited<ReturnType<Harness['newOwner']>>;
 let ocrOn = false;
 let ocrText = '';
 
-/** The service's answer: `baht` is data.amount (a JSON number). */
+/** An instant in Slip2Go's live form: ISO with +07:00 (docs/plans/slip2go-integration.md section 11). */
+const bangkokIso = (at: Date) =>
+  `${new Date(at.getTime() + 7 * 3_600_000).toISOString().slice(0, 19)}+07:00`;
+
+/**
+ * The service's answer: `baht` is data.amount (a JSON number). The transfer time is "now" on the
+ * test clock (at or after the order, as a real fresh transfer); PAY-01 tests pass their own.
+ */
 const answer = (code: string, baht: number, data: Record<string, unknown> = {}) => ({
   code,
   message: 'synthetic',
@@ -104,7 +111,7 @@ const answer = (code: string, baht: number, data: Record<string, unknown> = {}) 
     referenceId: `REF-${code}`,
     transRef: remoteRef(),
     amount: baht,
-    dateTime: '2028-02-01T15:00:00+07:00',
+    dateTime: bangkokIso(h.clock.now()),
     sender: { bank: { id: '002' }, account: { name: 'PRIVATE SENDER NAME' } },
     ...data,
   },
@@ -672,7 +679,10 @@ describe('a new slip and the same slip', () => {
 
 describe('alerts and the daily cap', () => {
   test('an expired package alerts the owner once per business date and falls back to unchecked', async () => {
+    // A date of its own: other failures earlier in this file (PAY-02) alert on the default date.
+    h.clock.set('2028-06-10T08:00:00.000Z');
     respond = () => ({ body: { code: '401004', message: 'package expired' }, status: 401 });
+    const before = alertsOf('slip2go.unavailable').length;
     const first = await start();
     await upload(first.token, first.order.id, picture(1));
     await checker.idle();
@@ -686,23 +696,14 @@ describe('alerts and the daily cap', () => {
         status: 'claimed',
       });
     }
-    expect(alertsOf('slip2go.unavailable')).toHaveLength(1);
-    expect(alertsOf('slip2go.unavailable')[0]).toMatchObject({ severity: 'warn' });
+    expect(alertsOf('slip2go.unavailable')).toHaveLength(before + 1);
+    expect(alertsOf('slip2go.unavailable')[before]).toMatchObject({ severity: 'warn' });
 
-    h.clock.set('2028-02-02T08:00:00.000Z');
+    h.clock.set('2028-06-11T08:00:00.000Z');
     const third = await start();
     await upload(third.token, third.order.id, picture(3));
     await checker.idle();
-    expect(alertsOf('slip2go.unavailable')).toHaveLength(2);
-  });
-
-  test('a code that is not about the account does not alert', async () => {
-    const before = alertsOf('slip2go.unavailable').length;
-    respond = () => ({ body: { code: '400400', message: 'bad request' }, status: 400 });
-    const { token, order } = await start();
-    await upload(token, order.id, picture());
-    await checker.idle();
-    expect(alertsOf('slip2go.unavailable')).toHaveLength(before);
+    expect(alertsOf('slip2go.unavailable')).toHaveLength(before + 2);
   });
 
   test('above the daily cap the answer is unchecked without a call, with one alert; the next day starts again', async () => {
@@ -3406,5 +3407,250 @@ describe('pay-first LINE orders (D-38, D-42)', () => {
       expect(mine.json().slipCheck).toBe('amount_mismatch');
       expect((await orderRow(order.id))?.needs_manual_confirm).toBe(false);
     });
+  });
+});
+
+describe('the transfer date Slip2Go reports is checked here too (PAY-01)', () => {
+  interface DateRow {
+    status: string;
+    slip_verify: string | null;
+    slip_verify_code: string | null;
+    auto_confirmed: boolean;
+    slip_invalid_count: number;
+  }
+  const state = async (orderId: string) =>
+    (
+      await h.client.query<DateRow>(
+        `select status, slip_verify, slip_verify_code, auto_confirmed, slip_invalid_count
+           from payments where order_id = $1`,
+        [orderId],
+      )
+    ).rows[0];
+  const placedAt = async (orderId: string) =>
+    new Date(
+      String(
+        (
+          await h.client.query<{ placed_at: string }>(
+            'select placed_at from orders where id = $1',
+            [orderId],
+          )
+        ).rows[0]?.placed_at,
+      ),
+    );
+  /** Auto-confirm on; Slip2Go answers 200200 with `dateTime` (absent when undefined). */
+  async function sendDated(dateTime: (placed: Date) => string | undefined) {
+    autoConfirm = { maxSatang: 100_000 };
+    checker = buildChecker();
+    installSlipChecker(checker);
+    const { token, order } = await start();
+    const placed = await placedAt(order.id);
+    respond = () => {
+      const body = answer('200200', currentAmountBaht);
+      const when = dateTime(placed);
+      if (when === undefined) delete (body.data as { dateTime?: string }).dateTime;
+      else body.data.dateTime = when;
+      return { body };
+    };
+    await upload(token, order.id, picture());
+    await checker.idle();
+    return order;
+  }
+  const minutes = (n: number) => n * 60_000;
+
+  test('a 200200 dated 3 days before the order is date_mismatch: no auto-confirm, staff decide', async () => {
+    const order = await sendDated((placed) =>
+      bangkokIso(new Date(placed.getTime() - 3 * 86_400_000)),
+    );
+    expect(await state(order.id)).toMatchObject({
+      status: 'claimed',
+      slip_verify: 'date_mismatch',
+      slip_verify_code: '200200',
+      auto_confirmed: false,
+      // An old slip is an invalid result for the cooldown, like Slip2Go's own 200403.
+      slip_invalid_count: 1,
+    });
+    expect(calls).toHaveLength(1);
+    expect(await h.auditRows((await row(order.id))?.id ?? '')).not.toContainEqual(
+      expect.objectContaining({ action: 'payment.auto_confirm' }),
+    );
+  });
+
+  test('a 200200 with no date is unchecked: no auto-confirm, no cooldown count, the owner is told', async () => {
+    h.clock.set('2028-07-01T08:00:00.000Z');
+    const before = alertsOf('slip2go.unavailable').length;
+    const order = await sendDated(() => undefined);
+    expect(await state(order.id)).toMatchObject({
+      status: 'claimed',
+      slip_verify: 'unchecked',
+      slip_verify_code: '200200',
+      auto_confirmed: false,
+      slip_invalid_count: 0,
+    });
+    // Auto-confirm stopped working for a reason on Slip2Go's side: one owner alert (PAY-02).
+    expect(alertsOf('slip2go.unavailable')).toHaveLength(before + 1);
+  });
+
+  test.each([
+    ['empty', ''],
+    ['not a date', 'yesterday'],
+    ['an impossible date', '2028-02-30T15:00:00+07:00'],
+  ])('a 200200 with an unparseable date (%s) is unchecked and never confirms', async (_, text) => {
+    const order = await sendDated(() => text);
+    expect(await state(order.id)).toMatchObject({
+      status: 'claimed',
+      slip_verify: 'unchecked',
+      auto_confirmed: false,
+    });
+  });
+
+  test('a 200200 dated the same day, after the order, confirms', async () => {
+    const order = await sendDated((placed) => bangkokIso(new Date(placed.getTime() + minutes(2))));
+    expect(await state(order.id)).toMatchObject({
+      status: 'confirmed',
+      slip_verify: 'valid',
+      auto_confirmed: true,
+    });
+  });
+
+  test('the boundary: exactly notBefore (order time minus the 10-minute slack) confirms', async () => {
+    const order = await sendDated((placed) => {
+      const notBefore = new Date(placed.getTime() - minutes(10));
+      // The live form has whole seconds: round notBefore UP so the text is never before it.
+      return bangkokIso(new Date(Math.ceil(notBefore.getTime() / 1000) * 1000));
+    });
+    expect(await state(order.id)).toMatchObject({ status: 'confirmed', slip_verify: 'valid' });
+  });
+
+  test('the boundary: one second before notBefore is date_mismatch and stays claimed', async () => {
+    const order = await sendDated((placed) => {
+      const notBefore = new Date(placed.getTime() - minutes(10));
+      return bangkokIso(new Date(Math.floor(notBefore.getTime() / 1000) * 1000 - 1000));
+    });
+    expect(await state(order.id)).toMatchObject({
+      status: 'claimed',
+      slip_verify: 'date_mismatch',
+      auto_confirmed: false,
+    });
+  });
+
+  test('the date is read in its own zone: Bangkok wall time sent as UTC is 7 hours later, not earlier', async () => {
+    // The order's own wall time in Bangkok, labelled Z: that is 7 hours AFTER the order, so it is fine;
+    // the same wall time minus 8 hours labelled +07:00 is before it.
+    const late = await sendDated(
+      (placed) => `${new Date(placed.getTime() + 7 * 3_600_000).toISOString().slice(0, 19)}Z`,
+    );
+    expect((await state(late.id))?.status).toBe('confirmed');
+    const early = await sendDated(
+      (placed) => `${new Date(placed.getTime() - 3_600_000).toISOString().slice(0, 19)}+07:00`,
+    );
+    expect(await state(early.id)).toMatchObject({
+      status: 'claimed',
+      slip_verify: 'date_mismatch',
+    });
+  });
+});
+
+describe('every Slip2Go failure that leaves a slip unchecked alerts the owner once a day (PAY-02)', () => {
+  test('a non-account code (400400) after a real call: unchecked, claimed, one alert a business date', async () => {
+    h.clock.set('2028-08-01T08:00:00.000Z');
+    respond = () => ({ body: { code: '400400', message: 'bad request' }, status: 400 });
+    const before = alertsOf('slip2go.unavailable').length;
+    for (const fill of [41, 42]) {
+      const sent = await start();
+      await upload(sent.token, sent.order.id, picture(fill));
+      await checker.idle();
+      expect(await row(sent.order.id)).toMatchObject({
+        slip_verify: 'unchecked',
+        slip_verify_code: '400400',
+        status: 'claimed',
+      });
+    }
+    const raised = alertsOf('slip2go.unavailable').slice(before);
+    expect(raised).toHaveLength(1);
+    // Ids and the code only (rule 10): nothing about the customer, the slip or the key.
+    expect(raised[0]).toMatchObject({ severity: 'warn', slip2go: { code: '400400' } });
+    expect(raised[0]?.subject).toBeUndefined();
+    expect(JSON.stringify(raised[0])).not.toContain(KEY);
+    expect(JSON.stringify(raised[0])).not.toContain('PRIVATE SENDER NAME');
+  });
+
+  test('an answer that is not Slip2Go JSON: unchecked with one alert, no code in it', async () => {
+    h.clock.set('2028-08-02T08:00:00.000Z');
+    respond = () => ({ body: '<html>gateway</html>', status: 404 });
+    const before = alertsOf('slip2go.unavailable').length;
+    const { token, order } = await start();
+    await upload(token, order.id, picture());
+    await checker.idle();
+    expect(await row(order.id)).toMatchObject({ slip_verify: 'unchecked', status: 'claimed' });
+    const raised = alertsOf('slip2go.unavailable').slice(before);
+    expect(raised).toHaveLength(1);
+    expect(raised[0]?.slip2go).toEqual({});
+  });
+
+  test('network failures that use up the 3 attempts: unchecked, claimed, one alert', async () => {
+    h.clock.set('2028-08-03T08:00:00.000Z');
+    respond = () => new Error('connection reset');
+    const before = alertsOf('slip2go.unavailable').length;
+    const { token, order } = await start();
+    await upload(token, order.id, picture());
+    await checker.idle();
+    // Still retrying: nothing final, no alert yet.
+    expect(alertsOf('slip2go.unavailable')).toHaveLength(before);
+    for (let i = 0; i < 2; i++) {
+      await checker.sweep();
+      await checker.idle();
+    }
+    expect(await row(order.id)).toMatchObject({
+      slip_verify: 'unchecked',
+      slip_verify_attempts: 3,
+      status: 'claimed',
+    });
+    expect(alertsOf('slip2go.unavailable')).toHaveLength(before + 1);
+    // Published after the commit: the row already says unchecked when the alert is out.
+    expect(calls).toHaveLength(3);
+  });
+
+  test('a retried bank error code (5xxxxx) that keeps failing alerts with its code', async () => {
+    h.clock.set('2028-08-04T08:00:00.000Z');
+    respond = () => ({ body: { code: '500500', message: 'bank down' } });
+    const before = alertsOf('slip2go.unavailable').length;
+    const { token, order } = await start();
+    await upload(token, order.id, picture());
+    await checker.idle();
+    for (let i = 0; i < 2; i++) {
+      await checker.sweep();
+      await checker.idle();
+    }
+    expect(await row(order.id)).toMatchObject({ slip_verify: 'unchecked', status: 'claimed' });
+    const raised = alertsOf('slip2go.unavailable').slice(before);
+    expect(raised).toHaveLength(1);
+    expect(raised[0]?.slip2go).toEqual({ code: '500500' });
+  });
+
+  test('no call made (no slip QR, D-44): unchecked for staff, no alert', async () => {
+    h.clock.set('2028-08-05T08:00:00.000Z');
+    localQr = null;
+    const before = alertsOf('slip2go.unavailable').length;
+    const { token, order } = await start();
+    await upload(token, order.id, picture());
+    await checker.idle();
+    expect(calls).toHaveLength(0);
+    expect((await row(order.id))?.slip_verify).toBe('unchecked');
+    expect(alertsOf('slip2go.unavailable')).toHaveLength(before);
+  });
+
+  test('a definitive answer about the slip (not found, wrong amount) is no outage: no alert', async () => {
+    h.clock.set('2028-08-06T08:00:00.000Z');
+    const before = alertsOf('slip2go.unavailable').length;
+    for (const [code, fill] of [
+      ['200404', 51],
+      ['200402', 52],
+    ] as const) {
+      respond = () => ({ body: answer(code, currentAmountBaht) });
+      const sent = await start();
+      await upload(sent.token, sent.order.id, picture(fill));
+      await checker.idle();
+    }
+    expect(alertsOf('slip2go.unavailable')).toHaveLength(before);
   });
 });

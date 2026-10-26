@@ -16,6 +16,7 @@ import {
   type SlipVerifyVerdict,
   slip2goAutoConfirmReceivers,
   slip2goReceivers,
+  slip2goTransferDateCheck,
   slip2goVerdict,
   slipQrKeyText,
 } from '@sds/shared';
@@ -356,7 +357,18 @@ export function createSlipChecker(args: {
     // reports no amount, or another one, is not valid.
     const localAmountOk =
       result.code === '200200' ? result.amountSatang === row.amountSatang : null;
-    const decided = slip2goVerdict(result.code, localAmountOk);
+    let decided = slip2goVerdict(result.code, localAmountOk);
+    // PAY-01: a valid answer must also carry a transfer time at or after `notBefore` (the instant
+    // sent as `checkDate`), checked here and not only by Slip2Go. Fail closed: before it is a date
+    // mismatch (like Slip2Go's own 200403); missing, unreadable or straddling it is `unchecked`. Either
+    // way the payment stays claimed for staff and never auto-confirms (only `valid` can).
+    if (result.code === '200200' && decided.verdict === 'valid') {
+      const when = slip2goTransferDateCheck(result.dateTime, conditions.notBefore);
+      if (when !== 'ok') {
+        decided = { ...decided, verdict: when === 'too_old' ? 'date_mismatch' : 'unchecked' };
+        args.log?.warn({ reason: `date_${when}` }, 'slip2go date');
+      }
+    }
     const code = /^\d{6}$/.test(result.code) ? result.code : null;
     // The duplicate key, built exactly like the local one so that the two can meet.
     const keyText =
@@ -383,7 +395,10 @@ export function createSlipChecker(args: {
         ref: result.referenceId ? result.referenceId.slice(0, 100) : null,
         called: true,
         receiversOk: slip2goAutoConfirmReceivers(receivers),
-        alert: decided.alert ? 'account' : null,
+        // PAY-02: any final `unchecked` after a real call means the bank check (and with it the
+        // automatic confirmation) did not work: the owner hears once a business date, not only for
+        // the 401xxx account codes.
+        alert: decided.alert || decided.verdict === 'unchecked' ? 'account' : null,
       },
       qrHash,
     };
@@ -554,6 +569,15 @@ export function createSlipChecker(args: {
             patch.slipVerify = 'unchecked';
             patch.slipVerifyCode = outcome.code;
             patch.slipVerifiedAt = ctx.now();
+            // PAY-02: the calls were made and none got an answer (network, timeout, 429, 5xx, bank
+            // error): final `unchecked`, so the owner hears once a business date. After commit.
+            if (await paymentsRepo.claimSlipVerifyAlert(tx, done.businessDate, 'account')) {
+              emit(
+                securityAlert(ctx, 'slip2go.unavailable', 'warn', {
+                  slip2go: outcome.code ? { code: outcome.code } : {},
+                }),
+              );
+            }
           }
         } else {
           retryNotBefore.delete(gate);
