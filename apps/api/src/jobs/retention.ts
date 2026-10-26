@@ -1,7 +1,7 @@
-import { insertAudit, ordersRepo, retentionRepo } from '@sds/db';
+import { insertAudit, retentionRepo } from '@sds/db';
 import { RETENTION_DAYS } from '@sds/shared';
 import { currentBusinessDate } from '../orders/business-day.ts';
-import { toOrderDto } from '../orders/dto.ts';
+import { type ChangedRows, emitRowUpserts } from '../realtime/upserts.ts';
 import type { JobDeps } from './jobs.ts';
 
 /**
@@ -16,6 +16,16 @@ interface Bounds {
 }
 
 const cutoff = (deps: JobDeps, days: number) => new Date(deps.now().getTime() - days * 86_400_000);
+
+/**
+ * Publishes the synced rows a batch changed, once that batch has committed (BE-02): a device that
+ * stays connected hears of them only this way. One event per row, carrying the row as it is now
+ * (the erased DTO). A batch is at most `RETENTION_BATCH.size` rows, so a burst stays within what
+ * the realtime hub queues for one socket; a socket that still falls behind is dropped by the hub
+ * and catches up with `/v1/sync`.
+ */
+const publishChanged = (deps: JobDeps, changed: ChangedRows) =>
+  emitRowUpserts(deps.db, (event) => deps.events.publish(event), changed);
 
 /** Runs `batch` until it changes fewer rows than a full batch or the run's limit is reached. */
 async function drain(bounds: Bounds, batch: (limit: number) => Promise<number>): Promise<number> {
@@ -63,9 +73,15 @@ export async function purgeStaffInvites(deps: JobDeps, bounds: Bounds = {}) {
 /** Name and building on orders completed (or cancelled) more than 30 days ago. Amounts stay. */
 export async function anonymizeOrders(deps: JobDeps, bounds: Bounds = {}) {
   const before = cutoff(deps, RETENTION_DAYS.orderPersonalData);
-  const anonymized = await drain(bounds, (limit) =>
-    retentionRepo.anonymizeOrderSnapshotsBatch(deps.db, { before, limit, now: deps.now() }),
-  );
+  const anonymized = await drain(bounds, async (limit) => {
+    const result = await retentionRepo.anonymizeOrderSnapshotsBatch(deps.db, {
+      before,
+      limit,
+      now: deps.now(),
+    });
+    await publishChanged(deps, { orders: result.orderIds });
+    return result.anonymized;
+  });
   return { anonymized };
 }
 
@@ -81,6 +97,7 @@ export async function expireRecipients(deps: JobDeps, bounds: Bounds = {}) {
     });
     total.customers += result.customers;
     total.orders += result.orders;
+    await publishChanged(deps, { customers: result.customerIds, orders: result.orderIds });
     return result.customers;
   });
   return total;
@@ -97,6 +114,7 @@ export async function expireEmptyLineCustomers(deps: JobDeps, bounds: Bounds = {
       now: deps.now(),
     });
     customers += result.customers;
+    await publishChanged(deps, { customers: result.customerIds });
     return result.customers;
   });
   return { customers };
@@ -113,6 +131,7 @@ export async function expireMemberProfiles(deps: JobDeps, bounds: Bounds = {}) {
       now: deps.now(),
     });
     customers += result.customers;
+    await publishChanged(deps, { customers: result.customerIds });
     return result.customers;
   });
   return { customers };
@@ -191,19 +210,10 @@ export async function purgeSlips(deps: JobDeps, bounds: Bounds = {}) {
     }
     const result = await retentionRepo.clearSlipKeys(deps.db, { slips: gone, now: deps.now() });
     deleted += result.cleared;
-    // The batch has committed. An order whose "claimed, no slip" flag turned on got a new rev, so
-    // the screens that hold it must hear about it (the same event the erasure path publishes).
-    for (const orderId of result.changedOrderIds) {
-      const order = await ordersRepo.findOrderById(deps.db, orderId);
-      if (!order) continue;
-      const items = await ordersRepo.loadOrderItems(deps.db, [orderId]);
-      deps.events.publish({
-        type: 'order.upserted',
-        id: order.id,
-        rev: order.rev,
-        data: toOrderDto(order, items.get(orderId) ?? []),
-      });
-    }
+    // The batch has committed. Each payment that lost its slip got a new rev and version, and an
+    // order whose "claimed, no slip" flag turned on did too, so the screens that hold them must
+    // hear about it (the same events the erasure path publishes).
+    await publishChanged(deps, { orders: result.changedOrderIds, payments: result.paymentIds });
     if (gone.length < size) break;
   }
   return { deleted, failed };

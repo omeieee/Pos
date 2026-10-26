@@ -1,4 +1,4 @@
-import { type Db, lineRepo, ordersRepo } from '@sds/db';
+import { type Db, lineRepo, ordersRepo, paymentsRepo } from '@sds/db';
 import {
   botText,
   followGreeting,
@@ -17,6 +17,7 @@ import {
 import { type MyOrder, PRIVACY_NOTICE_VERSION } from '@sds/shared';
 import {
   claimPayment,
+  claimRejected,
   derivedRequestId,
   selectPayment,
   viewOrder,
@@ -25,6 +26,7 @@ import { ApiError } from '../errors.ts';
 import type { EventBus } from '../events.ts';
 import { currentBusinessDate } from '../orders/business-day.ts';
 import { mergeOrders } from '../orders/customer-edit.ts';
+import { emitRowUpserts } from '../realtime/upserts.ts';
 import { currentPromptpayId, lineOrderingNow } from '../settings/service.ts';
 import { openPromptpayCandidates, planChatSlip, slipFree } from '../slips/allocate.ts';
 import { activeSlipChecker } from '../slips/checker.ts';
@@ -33,7 +35,7 @@ import { keepLateSlip, LATE_SLIP_WINDOW_MS } from '../slips/late.ts';
 import { looksLikeSlip } from '../slips/qr.ts';
 import { attachSlip } from '../slips/service.ts';
 import type { SlipStore } from '../slips/store.ts';
-import type { CoreContext } from '../tx.ts';
+import { type CoreContext, withTransaction } from '../tx.ts';
 import { receiptItems } from './receipt.ts';
 import type { LineRuntime } from './runtime.ts';
 
@@ -119,8 +121,14 @@ const REFUSALS: Record<string, Parameters<typeof botText>[0]> = {
  */
 export async function handleEvent(ctx: HandlerContext, event: RoutedEvent): Promise<void> {
   switch (event.kind) {
+    // Follow, unfollow and the acknowledgement change the customer row (its rev moves), so each
+    // publishes it after commit for the devices that stay connected (BE-02).
     case 'follow': {
-      const customerId = await lineRepo.upsertFollower(ctx.db, event.userId);
+      const customerId = await withTransaction(ctx, async (tx, emit) => {
+        const id = await lineRepo.upsertFollower(tx, event.userId);
+        await emitRowUpserts(tx, emit, { customers: [id] });
+        return id;
+      });
       // Following is not acknowledging: the notice is shown and the customer taps to confirm.
       await ctx.sender.reply(
         event.replyToken,
@@ -134,15 +142,22 @@ export async function handleEvent(ctx: HandlerContext, event: RoutedEvent): Prom
       return;
     }
     case 'unfollow':
-      await lineRepo.markUnfollowed(ctx.db, event.userId, ctx.now());
+      await withTransaction(ctx, async (tx, emit) => {
+        const id = await lineRepo.markUnfollowed(tx, event.userId, ctx.now());
+        if (id) await emitRowUpserts(tx, emit, { customers: [id] });
+      });
       return;
     case 'ack_privacy': {
-      const customerId = await lineRepo.acknowledgePrivacy(
-        ctx.db,
-        event.userId,
-        ctx.now(),
-        PRIVACY_NOTICE_VERSION,
-      );
+      const customerId = await withTransaction(ctx, async (tx, emit) => {
+        const id = await lineRepo.acknowledgePrivacy(
+          tx,
+          event.userId,
+          ctx.now(),
+          PRIVACY_NOTICE_VERSION,
+        );
+        await emitRowUpserts(tx, emit, { customers: [id] });
+        return id;
+      });
       if (event.replyToken) {
         await ctx.sender.reply(event.replyToken, [privacyAcknowledged()], {
           template: 'privacy_ack',
@@ -276,7 +291,8 @@ async function handleClaim(
 /**
  * A picture in the chat. When the sender has a PromptPay payment waiting (D-40 picks which open
  * order), the picture is fetched from LINE, kept as the slip and the payment becomes `claimed`
- * (the same service as the app's upload and the "โอนแล้ว" button); staff still confirm. With no
+ * (the same service as the app's upload and the "โอนแล้ว" button); staff still confirm. With none
+ * waiting, an open order whose claim staff rejected takes it the same way (LINE-04). With no
  * such order, or when the picture is not a bank slip, it is dropped in silence (no reply). A
  * picture that cannot be fetched is not kept and the sender hears the usual reply. A fetch that
  * failed for a reason that may pass is thrown, so the retry sweep tries again.
@@ -290,16 +306,19 @@ async function handleSlip(
   // No order waiting for a payment: nothing to check, nothing to say (no reply, no fetch, no call).
   if (!customer || !fetchContent) return;
   const candidates = await openPromptpayCandidates(ctx.db, customer.id);
+  // LINE-04: staff rejected the claim ("ไม่พบยอดโอน") and the message asked for a slip. That order
+  // has no waiting payment, so it is only looked at when no other order is waiting.
+  const rejected = candidates.length === 0 ? await rejectedPromptpayOrders(ctx, customer.id) : [];
   // No open order: a slip for an order the unpaid timeout just cancelled is kept for staff (D-41).
   const late =
-    candidates.length === 0
+    candidates.length === 0 && rejected.length === 0
       ? await ordersRepo.findTimeoutCancelledOrderForCustomer(
           ctx.db,
           customer.id,
           new Date(ctx.now().getTime() - LATE_SLIP_WINDOW_MS),
         )
       : undefined;
-  if (candidates.length === 0 && !late) return;
+  if (candidates.length === 0 && rejected.length === 0 && !late) return;
   const noOrder = () =>
     say(ctx, event.replyToken, [botText('lineBot.slip.reply')], {
       template: 'slip_received',
@@ -332,6 +351,24 @@ async function handleSlip(
       });
       if (!kept) return noOrder();
       await reply({ id: late.id, orderNo: kept.orderNo });
+      return;
+    }
+    const [again, ...others] = rejected;
+    if (again) {
+      // The same attach as the app's upload: `claimPayment` opens a fresh PromptPay payment for the
+      // amount still due and makes it `claimed`. Staff confirm; the bank check (D-27) is the only
+      // automatic confirm. With several rejected orders the picture cannot say which: the oldest
+      // takes it with auto-confirm off, so staff decide.
+      const order = await attachSlip(
+        core(ctx),
+        ctx.slips,
+        customer.id,
+        again.id,
+        content.bytes,
+        { ip: null },
+        others.length > 0 ? { autoConfirmBlocked: true } : {},
+      );
+      await reply(order);
       return;
     }
     // D-40 (PAY-05): with several open PromptPay orders the amount on the picture, read here for
@@ -377,6 +414,30 @@ async function handleSlip(
   } catch (error) {
     await refuse(ctx, event.replyToken, error, customer.id);
   }
+}
+
+/** How many of the customer's latest orders are looked at for a rejected claim (as in D-40). */
+const REJECTED_SCAN = 20;
+
+/**
+ * The customer's open orders whose PromptPay claim staff rejected and that may be paid again
+ * (the same rule as the app's `paymentRejected`), oldest first.
+ */
+async function rejectedPromptpayOrders(
+  ctx: HandlerContext,
+  customerId: string,
+): Promise<ordersRepo.OrderRow[]> {
+  const rows = await ordersRepo.listOrdersForCustomer(ctx.db, customerId, REJECTED_SCAN);
+  const found: ordersRepo.OrderRow[] = [];
+  for (const order of rows) {
+    if (order.status === 'completed' || order.status === 'cancelled') continue;
+    if (claimRejected(await paymentsRepo.listPaymentsForOrder(ctx.db, order.id), order)) {
+      found.push(order);
+    }
+  }
+  return found.sort(
+    (a, b) => a.placedAt.getTime() - b.placedAt.getTime() || a.id.localeCompare(b.id),
+  );
 }
 
 async function handleChangeMethod(

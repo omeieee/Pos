@@ -20,6 +20,7 @@ import {
   slip2goAutoConfirmReceivers,
   slip2goReceivers,
   slip2goResponseSchema,
+  slip2goTransferDateCheck,
   slip2goVerdict,
   slipCooldownSeconds,
   slipQrKeyText,
@@ -389,5 +390,134 @@ describe('a re-send of the same picture after a final "not found" or "unchecked"
     expect(slipResendRechecks({ ...base, blockedAt: ago(5) }, now)).toBe(false);
     expect(slipResendRechecks({ ...base, reviewedAt: ago(5) }, now)).toBe(false);
     expect(slipResendRechecks({ ...base, verifiedAt: null }, now)).toBe(false);
+  });
+});
+
+describe('slip2goTransferDateCheck (PAY-01): the transfer must be at or after notBefore', () => {
+  // The order was placed at 15:10 Bangkok; notBefore is that minus the 10-minute slack = 15:00 Bangkok.
+  const notBefore = new Date('2028-02-01T08:00:00.000Z');
+
+  test('the live form (ISO with +07:00): at or after notBefore is ok', () => {
+    expect(slip2goTransferDateCheck('2028-02-01T15:00:00+07:00', notBefore)).toBe('ok');
+    expect(slip2goTransferDateCheck('2028-02-01T15:04:59+07:00', notBefore)).toBe('ok');
+    expect(slip2goTransferDateCheck('2028-02-01T08:00:00Z', notBefore)).toBe('ok');
+    expect(slip2goTransferDateCheck('2028-02-01T08:00:00.000Z', notBefore)).toBe('ok');
+  });
+
+  test('the boundary: exactly notBefore passes, one second (or one ms) before does not', () => {
+    expect(slip2goTransferDateCheck('2028-02-01T15:00:00+07:00', notBefore)).toBe('ok');
+    expect(slip2goTransferDateCheck('2028-02-01T14:59:59+07:00', notBefore)).toBe('too_old');
+    expect(slip2goTransferDateCheck('2028-02-01T14:59:59.999+07:00', notBefore)).toBe('too_old');
+    expect(slip2goTransferDateCheck('2028-02-01T15:00:00.001+07:00', notBefore)).toBe('ok');
+  });
+
+  test('3 days before the order is too old', () => {
+    expect(slip2goTransferDateCheck('2028-01-29T15:00:00+07:00', notBefore)).toBe('too_old');
+  });
+
+  test('Bangkok vs UTC: the same wall time read in the wrong zone would be 7 hours off', () => {
+    // 15:00 UTC is 22:00 Bangkok: after. 08:00 Bangkok is 01:00 UTC: before.
+    expect(slip2goTransferDateCheck('2028-02-01T15:00:00Z', notBefore)).toBe('ok');
+    expect(slip2goTransferDateCheck('2028-02-01T08:00:00+07:00', notBefore)).toBe('too_old');
+    expect(slip2goTransferDateCheck('2028-02-01T15:00:00+0700', notBefore)).toBe('ok');
+  });
+
+  test('missing, empty or unparseable is unknown (never ok)', () => {
+    for (const value of [
+      undefined,
+      null,
+      '',
+      ' ',
+      'yesterday',
+      '1738396800000',
+      '2028-02-01T15:00:00+07:00 ',
+      '2028-13-01T15:00:00+07:00',
+      '2028-02-30T15:00:00+07:00',
+      '2028-02-01T24:00:00+07:00',
+      '2028-02-01T15:60:00+07:00',
+      '2028-02-01T15:00:60+07:00',
+      '2028-02-01T15:00:00+15:00',
+      '2028-02-01T15:00:00+07:60',
+      '01/02/2028 15:00',
+    ]) {
+      expect(slip2goTransferDateCheck(value, notBefore)).toBe('unknown');
+    }
+  });
+
+  test('an invalid notBefore is unknown', () => {
+    expect(slip2goTransferDateCheck('2028-02-01T15:00:00+07:00', new Date(Number.NaN))).toBe(
+      'unknown',
+    );
+  });
+
+  test('minutes only: ok only when the whole minute is at or after notBefore', () => {
+    expect(slip2goTransferDateCheck('2028-02-01T15:00+07:00', notBefore)).toBe('ok');
+    expect(slip2goTransferDateCheck('2028-02-01T14:59+07:00', notBefore)).toBe('too_old');
+    // notBefore in the middle of the minute: the transfer could be either side.
+    const mid = new Date('2028-02-01T08:00:30.000Z');
+    expect(slip2goTransferDateCheck('2028-02-01T15:00+07:00', mid)).toBe('unknown');
+    expect(slip2goTransferDateCheck('2028-02-01T15:00:30+07:00', mid)).toBe('ok');
+  });
+
+  test('date only (Bangkok calendar day): ok only for a later day; the same day is unknown', () => {
+    expect(slip2goTransferDateCheck('2028-02-02', notBefore)).toBe('ok');
+    expect(slip2goTransferDateCheck('2028-02-01', notBefore)).toBe('unknown');
+    expect(slip2goTransferDateCheck('2028-01-31', notBefore)).toBe('too_old');
+    // notBefore at exactly 00:00 Bangkok: the whole day is at or after it.
+    expect(slip2goTransferDateCheck('2028-02-01', new Date('2028-01-31T17:00:00.000Z'))).toBe('ok');
+    // 23:59 UTC on 31 Jan is already 1 Feb in Bangkok: 31 Jan Bangkok is too old.
+    expect(slip2goTransferDateCheck('2028-01-31', new Date('2028-01-31T23:59:00.000Z'))).toBe(
+      'too_old',
+    );
+  });
+
+  test('no zone given: read both as Bangkok and as UTC; ok only when both are, too old only when both are', () => {
+    // 15:00 naive: 08:00Z if Bangkok (ok, boundary), 15:00Z if UTC (ok).
+    expect(slip2goTransferDateCheck('2028-02-01T15:00:00', notBefore)).toBe('ok');
+    // 08:00 naive: 01:00Z if Bangkok (old), 08:00Z if UTC (ok): could be either.
+    expect(slip2goTransferDateCheck('2028-02-01T08:00:00', notBefore)).toBe('unknown');
+    // 00:59 naive: old either way.
+    expect(slip2goTransferDateCheck('2028-02-01T00:59:59', notBefore)).toBe('too_old');
+    expect(slip2goTransferDateCheck('2028-02-01 15:00:00', notBefore)).toBe('ok');
+  });
+
+  test('property: never ok for any instant before notBefore, in every accepted form', () => {
+    const pad = (n: number, w = 2) => String(n).padStart(w, '0');
+    const forms = (ms: number): string[] => {
+      const utc = new Date(ms);
+      const bkk = new Date(ms + 7 * 3_600_000);
+      const ymd = (d: Date) =>
+        `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
+      const hms = (d: Date) =>
+        `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`;
+      const hm = (d: Date) => `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`;
+      return [
+        `${ymd(bkk)}T${hms(bkk)}+07:00`,
+        `${ymd(bkk)}T${hms(bkk)}.${pad(bkk.getUTCMilliseconds(), 3)}+07:00`,
+        `${ymd(utc)}T${hms(utc)}Z`,
+        `${ymd(bkk)}T${hm(bkk)}+07:00`,
+        `${ymd(bkk)}T${hms(bkk)}`,
+        `${ymd(utc)}T${hms(utc)}`,
+        ymd(bkk),
+      ];
+    };
+    // A deterministic spread of instants on both sides of notBefore (no randomness in CI).
+    let seed = 20280201;
+    const next = () => {
+      seed = (seed * 1_103_515_245 + 12_345) % 2_147_483_648;
+      return seed;
+    };
+    for (let i = 0; i < 2000; i++) {
+      const offset = (next() % (6 * 86_400_000)) - 3 * 86_400_000 + (next() % 1000);
+      const at = notBefore.getTime() + offset;
+      for (const text of forms(at)) {
+        const got = slip2goTransferDateCheck(text, notBefore);
+        if (at < notBefore.getTime()) expect([text, got]).not.toEqual([text, 'ok']);
+        // An exact instant (offset given, ms precision) is decided exactly.
+        if (text.includes('.') && text.endsWith('+07:00')) {
+          expect([text, got]).toEqual([text, at >= notBefore.getTime() ? 'ok' : 'too_old']);
+        }
+      }
+    }
   });
 });

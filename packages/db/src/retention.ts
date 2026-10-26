@@ -2,7 +2,9 @@
  * Retention (PDPA, owner decisions 2026-10-03). Each function does ONE bounded batch in ONE
  * transaction and returns what it changed; a batch that changed nothing writes nothing, so running
  * a job twice is harmless. A batch that changed something writes one `system` audit row with
- * counts and the retention period only: never a name, a building, a LINE id or a row id.
+ * counts and the retention period only: never a name, a building, a LINE id or a row id. A batch
+ * that changes synced rows (orders, customers, payments) also returns their ids, so the job can
+ * publish them to the live feed once the batch has committed (BE-02).
  *
  * - `purgeLineEventsBatch`: deletes `line_events` older than the cutoff.
  * - `anonymizeOrderSnapshotsBatch`: replaces recipient name, building and room number on
@@ -141,7 +143,7 @@ const roomAfter = sql`case when ${orders.fulfillment} = 'room_delivery' then ${A
 export async function anonymizeOrderSnapshotsBatch(
   db: Db,
   args: { before: Date; limit: number; now: Date },
-): Promise<number> {
+): Promise<{ anonymized: number; orderIds: string[] }> {
   return db.transaction(async (tx) => {
     const due = tx
       .select({ id: orders.id })
@@ -190,7 +192,7 @@ export async function anonymizeOrderSnapshotsBatch(
         after: { anonymized: changed.length, afterDays: RETENTION_DAYS.orderPersonalData },
       });
     }
-    return changed.length;
+    return { anonymized: changed.length, orderIds: changed.map((row) => row.id) };
   });
 }
 
@@ -202,7 +204,7 @@ export async function anonymizeOrderSnapshotsBatch(
 export async function expireRecipientsBatch(
   db: Db,
   args: { before: Date; limit: number; now: Date },
-): Promise<{ customers: number; orders: number }> {
+): Promise<{ customers: number; orders: number; customerIds: string[]; orderIds: string[] }> {
   return db.transaction(async (tx) => {
     const due = await tx
       .select({ id: customers.id })
@@ -224,15 +226,17 @@ export async function expireRecipientsBatch(
       .limit(args.limit)
       .for('update', { of: customers, skipLocked: true });
 
-    let rewritten = 0;
-    let erased = 0;
+    const customerIds: string[] = [];
+    const orderIds: string[] = [];
     for (const { id } of due) {
       const result = await anonymizeCustomer(tx, id, args.now);
       if (result.found && result.changed) {
-        erased += 1;
-        rewritten += result.orderIds.length;
+        customerIds.push(id);
+        orderIds.push(...result.orderIds);
       }
     }
+    const erased = customerIds.length;
+    const rewritten = orderIds.length;
     if (erased > 0) {
       await insertAudit(tx, {
         actorType: 'system',
@@ -241,7 +245,7 @@ export async function expireRecipientsBatch(
         after: { customers: erased, orders: rewritten, afterDays: RETENTION_DAYS.recipientBook },
       });
     }
-    return { customers: erased, orders: rewritten };
+    return { customers: erased, orders: rewritten, customerIds, orderIds };
   });
 }
 
@@ -254,7 +258,7 @@ export async function expireRecipientsBatch(
 export async function expireEmptyLineCustomersBatch(
   db: Db,
   args: { before: Date; limit: number; now: Date },
-): Promise<{ customers: number }> {
+): Promise<{ customers: number; customerIds: string[] }> {
   return db.transaction(async (tx) => {
     const due = await tx
       .select({ id: customers.id })
@@ -271,11 +275,12 @@ export async function expireEmptyLineCustomersBatch(
       .orderBy(asc(customers.id))
       .limit(args.limit)
       .for('update', { of: customers, skipLocked: true });
-    let erased = 0;
+    const customerIds: string[] = [];
     for (const { id } of due) {
       const result = await anonymizeCustomer(tx, id, args.now);
-      if (result.found && result.changed) erased += 1;
+      if (result.found && result.changed) customerIds.push(id);
     }
+    const erased = customerIds.length;
     if (erased > 0) {
       await insertAudit(tx, {
         actorType: 'system',
@@ -284,7 +289,7 @@ export async function expireEmptyLineCustomersBatch(
         after: { customers: erased, afterDays: RETENTION_DAYS.recipientBook },
       });
     }
-    return { customers: erased };
+    return { customers: erased, customerIds };
   });
 }
 
@@ -300,7 +305,7 @@ export async function expireEmptyLineCustomersBatch(
 export async function expireMemberProfilesBatch(
   db: Db,
   args: { before: Date; limit: number; now: Date },
-): Promise<{ customers: number }> {
+): Promise<{ customers: number; customerIds: string[] }> {
   return db.transaction(async (tx) => {
     const due = await tx
       .select({ id: customers.id })
@@ -321,7 +326,7 @@ export async function expireMemberProfilesBatch(
       .orderBy(asc(customers.id))
       .limit(args.limit)
       .for('update', { of: customers, skipLocked: true });
-    if (due.length === 0) return { customers: 0 };
+    if (due.length === 0) return { customers: 0, customerIds: [] };
     const changed = await tx
       .update(customers)
       .set({ fullName: null, nickname: null, phone: null, memberBuilding: null })
@@ -338,7 +343,7 @@ export async function expireMemberProfilesBatch(
       entity: 'customers',
       after: { customers: changed.length, afterDays: RETENTION_DAYS.memberProfile },
     });
-    return { customers: changed.length };
+    return { customers: changed.length, customerIds: changed.map((row) => row.id) };
   });
 }
 
@@ -393,8 +398,8 @@ export async function findReferencedSlipKeys(db: Db, keys: string[]): Promise<Se
 export async function clearSlipKeys(
   db: Db,
   args: { slips: { id: string; key: string }[]; now: Date },
-): Promise<{ cleared: number; changedOrderIds: string[] }> {
-  if (args.slips.length === 0) return { cleared: 0, changedOrderIds: [] };
+): Promise<{ cleared: number; changedOrderIds: string[]; paymentIds: string[] }> {
+  if (args.slips.length === 0) return { cleared: 0, changedOrderIds: [], paymentIds: [] };
   return db.transaction(async (tx) => {
     // Lock the orders first, in id order: `settleOrder` takes the order and then its payment, so
     // taking them in the other order here (payment, then the order's flag) could deadlock.
@@ -408,7 +413,7 @@ export async function clearSlipKeys(
         ),
       );
     await lockOrders(tx, [...new Set(owners.map((r) => r.orderId))]);
-    let cleared = 0;
+    const paymentIds: string[] = [];
     const orderIds = new Set<string>();
     for (const slip of args.slips) {
       const done = await tx
@@ -438,11 +443,14 @@ export async function clearSlipKeys(
         })
         .where(and(eq(payments.id, slip.id), eq(payments.slipImageKey, slip.key)))
         .returning({ id: payments.id, orderId: payments.orderId });
-      cleared += done.length;
-      for (const row of done) orderIds.add(row.orderId);
+      for (const row of done) {
+        paymentIds.push(row.id);
+        orderIds.add(row.orderId);
+      }
     }
     // A claimed payment that lost its picture now counts as "no slip" on its order's board flag.
     const changedOrderIds = await refreshClaimWithoutSlip(tx, [...orderIds]);
+    const cleared = paymentIds.length;
     if (cleared > 0) {
       await insertAudit(tx, {
         actorType: 'system',
@@ -451,6 +459,6 @@ export async function clearSlipKeys(
         after: { deleted: cleared, afterDays: RETENTION_DAYS.slipImages },
       });
     }
-    return { cleared, changedOrderIds };
+    return { cleared, changedOrderIds, paymentIds };
   });
 }

@@ -1,5 +1,11 @@
-import { ANONYMIZED_BUILDING, ANONYMIZED_RECIPIENT_NAME, orderDtoSchema } from '@sds/shared';
+import {
+  ANONYMIZED_BUILDING,
+  ANONYMIZED_RECIPIENT_NAME,
+  customerDtoSchema,
+  orderDtoSchema,
+} from '@sds/shared';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from 'vitest';
+import type { AppEvent } from '../events.ts';
 import { createLineRuntime } from '../line/runtime.ts';
 import {
   type AccountInfoResult,
@@ -7,6 +13,7 @@ import {
   type SlipVerifier,
 } from '../slips/slip2go.ts';
 import { createMemorySlipStore } from '../slips/store.ts';
+import { withFailingWrite } from '../test-support/fail-trigger.ts';
 import { createHarness, type Harness } from '../test-support/harness.ts';
 import { JOBS, type JobDeps } from './jobs.ts';
 import { purgeLineEvents, purgeStaffInvites, RETENTION_BATCH } from './retention.ts';
@@ -275,6 +282,50 @@ describe('retention jobs', () => {
     expect(h.events.length).toBe(after);
   });
 
+  test('the slip purge also publishes payment.upserted for each payment that lost its slip (BE-02)', async () => {
+    const [ord] = (
+      await h.client.query<{ id: string }>(
+        `insert into orders (order_no, business_date, channel, fulfillment, status, subtotal_satang,
+           total_satang, client_request_id)
+         values ($1, '2026-09-10', 'storefront', 'pickup', 'completed', 8000, 8000, gen_random_uuid())
+         returning id`,
+        [`JP-${Math.floor(Math.random() * 1e9)}`],
+      )
+    ).rows;
+    const key = 'p'.repeat(32);
+    // The sync trigger stamps updated_at; replica mode skips it so the payment can be old.
+    await h.client.query("set session_replication_role = 'replica'");
+    const [pay] = await h.client
+      .query<{ id: string }>(
+        `insert into payments (order_id, method, status, amount_satang, slip_image_key, void_reason,
+           client_request_id, updated_at)
+         values ($1, 'promptpay', 'cancelled', 8000, $2, 'test', gen_random_uuid(), $3) returning id`,
+        [ord?.id, key, daysAgo(120)],
+      )
+      .then((r) => r.rows)
+      .finally(() => h.client.query("set session_replication_role = 'origin'"));
+    await slips.put(key, Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]));
+    const before = h.events.length;
+
+    await job('retention-slips').run(deps);
+
+    const events = h.events
+      .slice(before)
+      .filter((e) => e.type === 'payment.upserted' && e.id === pay?.id);
+    expect(events).toHaveLength(1);
+    const event = events[0];
+    if (event?.type !== 'payment.upserted') throw new Error('expected payment.upserted');
+    const row = (
+      await h.client.query<{ rev: string; version: number }>(
+        'select rev, version from payments where id = $1',
+        [pay?.id],
+      )
+    ).rows[0];
+    expect(event.rev).toBe(Number(row?.rev));
+    expect(event.data.version).toBe(row?.version);
+    expect(JSON.stringify(event)).not.toContain(key);
+  });
+
   test('the default bounds are finite', () => {
     expect(RETENTION_BATCH.size).toBeGreaterThan(0);
     expect(RETENTION_BATCH.maxBatches).toBeGreaterThan(0);
@@ -360,9 +411,215 @@ describe('slip2go-account-check (D-27)', () => {
     expect(await run()).toEqual({ checked: 1, failed: 0, alerts: 0 });
   });
 
-  test('an account call that fails is counted, never thrown, and raises no alert', async () => {
-    reply = { kind: 'failed', code: '401001' };
+  test('an account call that fails is counted, never thrown, and alerts the owner (PAY-02)', async () => {
+    h.clock.set('2028-09-01T01:00:00.000Z');
+    reply = { kind: 'failed', code: '401004' };
+    expect(await run()).toEqual({ checked: 0, failed: 1, alerts: 1 });
+    expect(h.alerts.filter((a) => a.kind.startsWith('slip2go.'))).toEqual([
+      expect.objectContaining({
+        kind: 'slip2go.unavailable',
+        severity: 'warn',
+        staffId: null,
+        deviceId: null,
+        slip2go: { code: '401004' },
+      }),
+    ]);
+    expect(h.alerts.at(-1)?.subject).toBeUndefined();
+  });
+
+  test('a failure with no code (network, unreadable answer) alerts with no code', async () => {
+    h.clock.set('2028-09-02T01:00:00.000Z');
+    reply = { kind: 'failed' };
+    expect(await run()).toEqual({ checked: 0, failed: 1, alerts: 1 });
+    expect(h.alerts.at(-1)).toMatchObject({ kind: 'slip2go.unavailable', slip2go: {} });
+  });
+
+  test('a code that is not 6 digits never reaches the alert (ids and codes only)', async () => {
+    h.clock.set('2028-09-03T01:00:00.000Z');
+    reply = { kind: 'failed', code: 'secret <html> text' };
+    expect(await run()).toEqual({ checked: 0, failed: 1, alerts: 1 });
+    expect(h.alerts.at(-1)?.slip2go).toEqual({});
+  });
+
+  test('once a business date: shared with the slip checks of that date', async () => {
+    h.clock.set('2028-09-04T01:00:00.000Z');
+    reply = { kind: 'failed', code: '500500' };
+    expect(await run()).toEqual({ checked: 0, failed: 1, alerts: 1 });
     expect(await run()).toEqual({ checked: 0, failed: 1, alerts: 0 });
-    expect(kinds()).toEqual([]);
+    expect(kinds()).toEqual(['slip2go.unavailable']);
+    h.clock.set('2028-09-05T01:00:00.000Z');
+    expect(await run()).toEqual({ checked: 0, failed: 1, alerts: 1 });
+  });
+});
+
+describe('retention publishes what it changed, after commit (BE-02)', () => {
+  const NAME = 'Zzyx-Retention-Name';
+  const NOTE = 'Zzyx-Retention-Note';
+  const since = (marker: number, type: AppEvent['type'], id: string | undefined) =>
+    h.events.slice(marker).filter((e) => e.type === type && 'id' in e && e.id === id);
+  const revOf = async (table: 'orders' | 'customers', id: string | undefined) =>
+    Number(
+      (await h.client.query<{ rev: string }>(`select rev from ${table} where id = $1`, [id]))
+        .rows[0]?.rev,
+    );
+
+  async function finishedOrder(customerId: string | null, days: number) {
+    const [row] = (
+      await h.client.query<{ id: string }>(
+        `insert into orders (order_no, business_date, channel, fulfillment, delivery_building, recipient_name,
+           delivery_note, customer_id, status, subtotal_satang, total_satang, client_request_id, completed_at)
+         values ($1, '2026-08-10', 'storefront', 'entrance_delivery', 'D7', $2, $3, $4,
+           'completed', 8000, 8000, gen_random_uuid(), $5) returning id`,
+        [`JR-${Math.floor(Math.random() * 1e9)}`, NAME, NOTE, customerId, daysAgo(days)],
+      )
+    ).rows;
+    return row?.id as string;
+  }
+
+  test('retention-orders: one order.upserted per erased order, with the erased DTO; a rerun sends nothing', async () => {
+    const id = await finishedOrder(null, 34);
+    const marker = h.events.length;
+    await job('retention-orders').run(deps);
+    const events = since(marker, 'order.upserted', id);
+    expect(events).toHaveLength(1);
+    const event = events[0];
+    if (event?.type !== 'order.upserted') throw new Error('expected order.upserted');
+    expect(event.rev).toBe(await revOf('orders', id));
+    expect(orderDtoSchema.parse(event.data)).toMatchObject({
+      recipientName: ANONYMIZED_RECIPIENT_NAME,
+      deliveryBuilding: ANONYMIZED_BUILDING,
+      deliveryNote: null,
+      totalSatang: 8000,
+    });
+    expect(JSON.stringify(event)).not.toContain(NAME);
+    expect(JSON.stringify(event)).not.toContain(NOTE);
+
+    const again = h.events.length;
+    await job('retention-orders').run(deps);
+    expect(since(again, 'order.upserted', id)).toEqual([]);
+  });
+
+  test('retention-orders: a batch that rolls back publishes nothing', async () => {
+    const id = await finishedOrder(null, 35);
+    const marker = h.events.length;
+    await expect(
+      withFailingWrite(
+        h,
+        { table: 'audit_log', when: "new.action = 'retention.orders.anonymize'" },
+        () => job('retention-orders').run(deps),
+      ),
+    ).rejects.toThrow();
+    expect(h.events.slice(marker)).toEqual([]);
+    const row = await h.client.query('select recipient_name from orders where id = $1', [id]);
+    expect(row.rows[0]).toEqual({ recipient_name: NAME });
+    // The next run does it, and tells the feed.
+    await job('retention-orders').run(deps);
+    expect(since(marker, 'order.upserted', id)).toHaveLength(1);
+  });
+
+  test('retention-recipients: the erased customer and their rewritten orders are published', async () => {
+    const [cust] = (
+      await h.client.query<{ id: string }>(
+        `insert into customers (building, recipient_name, recipient_key, display_name, last_order_at, order_count)
+         values ('D7', $1, $2, $1, $3, 1) returning id`,
+        [NAME, `zzyx-${crypto.randomUUID()}`, daysAgo(40)],
+      )
+    ).rows;
+    // An order finished only 20 days ago: the orders job leaves it, the recipients job erases it.
+    const orderId = await finishedOrder(cust?.id ?? null, 20);
+    const marker = h.events.length;
+    await job('retention-recipients').run(deps);
+
+    const customer = since(marker, 'customer.upserted', cust?.id);
+    expect(customer).toHaveLength(1);
+    const c = customer[0];
+    if (c?.type !== 'customer.upserted') throw new Error('expected customer.upserted');
+    expect(c.rev).toBe(await revOf('customers', cust?.id));
+    expect(customerDtoSchema.parse(c.data)).toMatchObject({
+      id: cust?.id,
+      displayName: null,
+      anonymized: true,
+    });
+    const orders = since(marker, 'order.upserted', orderId);
+    expect(orders).toHaveLength(1);
+    expect(JSON.stringify(h.events.slice(marker))).not.toContain(NAME);
+  });
+
+  test('retention-recipients: a batch that rolls back publishes nothing', async () => {
+    const [cust] = (
+      await h.client.query<{ id: string }>(
+        `insert into customers (building, recipient_name, recipient_key, last_order_at, order_count)
+         values ('D7', $1, $2, $3, 1) returning id`,
+        [NAME, `zzyx-${crypto.randomUUID()}`, daysAgo(40)],
+      )
+    ).rows;
+    const marker = h.events.length;
+    await expect(
+      withFailingWrite(
+        h,
+        { table: 'audit_log', when: "new.action = 'retention.recipients.expire'" },
+        () => job('retention-recipients').run(deps),
+      ),
+    ).rejects.toThrow();
+    expect(h.events.slice(marker)).toEqual([]);
+    const row = await h.client.query('select anonymized_at from customers where id = $1', [
+      cust?.id,
+    ]);
+    expect(row.rows[0]).toEqual({ anonymized_at: null });
+    await job('retention-recipients').run(deps);
+  });
+
+  test('retention-line-customers: the erased app visitor is published', async () => {
+    const visitor = await h.client.query<{ id: string }>(
+      'insert into customers (line_user_id, display_name, first_seen_at) values ($1, $2, $3) returning id',
+      [`Utest-be02-${crypto.randomUUID()}`, NAME, daysAgo(41)],
+    );
+    const id = visitor.rows[0]?.id;
+    const marker = h.events.length;
+    await job('retention-line-customers').run(deps);
+    const events = since(marker, 'customer.upserted', id);
+    expect(events).toHaveLength(1);
+    expect(
+      customerDtoSchema.parse(events[0]?.type === 'customer.upserted' && events[0].data),
+    ).toMatchObject({ displayName: null, anonymized: true });
+    expect(JSON.stringify(events)).not.toContain(NAME);
+    expect(JSON.stringify(events)).not.toContain('Utest-be02');
+  });
+
+  test('retention-member-profiles: the customer is published without the cleared nickname', async () => {
+    const [row] = (
+      await h.client.query<{ id: string }>(
+        `insert into customers (line_user_id, last_order_at, full_name, nickname, phone, member_building)
+         values ($1, $2, $3, 'Zzyx-Nick', '0800000009', 'D9') returning id`,
+        [`Utest-be02-m-${crypto.randomUUID()}`, daysAgo(800), NAME],
+      )
+    ).rows;
+    const marker = h.events.length;
+    await job('retention-member-profiles').run(deps);
+    const events = since(marker, 'customer.upserted', row?.id);
+    expect(events).toHaveLength(1);
+    const event = events[0];
+    if (event?.type !== 'customer.upserted') throw new Error('expected customer.upserted');
+    expect(event.rev).toBe(await revOf('customers', row?.id));
+    expect(customerDtoSchema.parse(event.data)).toMatchObject({ nickname: null });
+    const text = JSON.stringify(event);
+    for (const gone of ['Zzyx-Nick', NAME, '0800000009']) expect(text).not.toContain(gone);
+  });
+
+  test('retention-member-profiles: a batch that rolls back publishes nothing', async () => {
+    await h.client.query(
+      `insert into customers (line_user_id, last_order_at, nickname) values ($1, $2, 'Zzyx-Nick2')`,
+      [`Utest-be02-r-${crypto.randomUUID()}`, daysAgo(800)],
+    );
+    const marker = h.events.length;
+    await expect(
+      withFailingWrite(
+        h,
+        { table: 'audit_log', when: "new.action = 'retention.member_profiles.expire'" },
+        () => job('retention-member-profiles').run(deps),
+      ),
+    ).rejects.toThrow();
+    expect(h.events.slice(marker)).toEqual([]);
+    await job('retention-member-profiles').run(deps);
   });
 });

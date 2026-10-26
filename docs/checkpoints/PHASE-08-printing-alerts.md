@@ -30,7 +30,8 @@ Slices 1-3 built 2026-10-22, **uncommitted, not deployed, no real printer yet** 
 - **Screens (slice 3):** Settings "Printing" section (switch plus recent jobs), Reprint button on order screens, `print_agent` device label.
 
 ## Log
-- 2026-10-26: BE-01 (kitchen job written in the order's transaction; `kitchen-queue.ts` removed) and SEC-01 (owner sign-in refuses the print agent token) fixed, plus POS-01 and UX-02; branch `claude/brave-knuth-wgwts8`, not deployed: see "2026-10-26 · P8 · Review fixes POS-01, UX-02, SEC-01, BE-01" in PROGRESS.
+- 2026-10-26: PAY-01, PAY-02, LINE-02, LINE-03, LINE-04 and BE-02 fixed on `claude/brave-knuth-wgwts8` (not on `main`): see "2026-10-26 · P8 · Review fixes PAY-01, PAY-02, LINE-02, LINE-03, LINE-04, BE-02" in PROGRESS.
+- 2026-10-26: BE-01 (kitchen job written in the order's transaction; `kitchen-queue.ts` removed) and SEC-01 (owner sign-in refuses the print agent token) fixed, plus POS-01 and UX-02; merged to `main` `8d07563` and deployed 2026-10-26: see "2026-10-26 · P8 · Review fixes POS-01, UX-02, SEC-01, BE-01" in PROGRESS.
 - 2026-10-26: flaky print-ticket privacy test fixed (9-digit check on the ticket only; test-only, branch `claude/brave-knuth-wgwts8`): see "2026-10-26 · P8 · Fix the flaky print-ticket privacy test" in PROGRESS.
 - 2026-10-25: kitchen tickets (and every other reader of order lines) now list dishes in cart order: see "2026-10-25 · Maintenance · Order items keep cart order (D-45)".
 - 2026-10-25: main merged into pay-first, M4 fixed, two stale/flaky tests fixed (branch `claude/compassionate-franklin-gaz2oh`, not deployed): see "2026-10-25 · P8 · Pay-first merged with main; M4 fixed" in PROGRESS.

@@ -10,8 +10,6 @@
  */
 import type { syncRepo } from '@sds/db';
 import {
-  type CustomerDto,
-  customerDtoSchema,
   customerUpsertedFrameSchema,
   type FrameType,
   hasPermission,
@@ -28,6 +26,7 @@ import {
   settingsUpdatedFrameSchema,
 } from '@sds/shared';
 import type { z } from 'zod';
+import { toCustomerDto } from '../customers/dto.ts';
 import type { AppEvent } from '../events.ts';
 import { toCategory, toGroup, toItem, toOption } from '../menu/service.ts';
 import { toOrderDto } from '../orders/dto.ts';
@@ -177,22 +176,6 @@ export function frameFromEvent(event: AppEvent): FrameFromEvent {
 }
 
 // ---------- Sync rows to frames ----------
-
-export function toCustomerDto(row: syncRepo.SyncCustomerRow): CustomerDto {
-  return customerDtoSchema.parse({
-    id: row.id,
-    displayName: row.displayName,
-    nickname: row.nickname,
-    roomNo: row.roomNo,
-    firstSeenAt: row.firstSeenAt.toISOString(),
-    lastOrderAt: row.lastOrderAt ? row.lastOrderAt.toISOString() : null,
-    orderCount: row.orderCount,
-    totalSpentSatang: row.totalSpentSatang,
-    anonymized: row.anonymizedAt !== null,
-    version: row.version,
-    rev: row.rev,
-  });
-}
 
 /**
  * The frame for one row of a catch-up page, built by the same mappers the live events use, so a

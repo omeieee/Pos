@@ -118,7 +118,7 @@ describe('the 30-day retention of the member snapshot', () => {
       limit: 100,
       now: NOW,
     });
-    expect(first).toBeGreaterThanOrEqual(2);
+    expect(first.anonymized).toBeGreaterThanOrEqual(2);
     for (const orderId of [plain, half]) {
       expect(await memberOf(orderId)).toEqual({ a: null, b: null, c: null, d: null });
     }
@@ -127,7 +127,7 @@ describe('the 30-day retention of the member snapshot', () => {
       limit: 100,
       now: NOW,
     });
-    expect(second).toBe(0);
+    expect(second.anonymized).toBe(0);
   });
 });
 

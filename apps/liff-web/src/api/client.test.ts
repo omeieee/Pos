@@ -319,4 +319,40 @@ describe('the customer API client', () => {
       expect((failure as ApiFailure).combine).toEqual(expected);
     }
   });
+
+  test('a 422 ORDER_INVALID carries the failed lines the server named; junk entries are dropped (LINE-02)', async () => {
+    const details = {
+      errors: [
+        { code: 'ITEM_UNAVAILABLE', lineIndex: 1, menuItemId: 'm-2' },
+        { code: 'OPTION_UNAVAILABLE', lineIndex: 0, menuItemId: 'm-1', optionId: 'o-9' },
+        { code: 'ITEM_UNAVAILABLE', lineIndex: 'x', menuItemId: 'm-3' },
+        'nonsense',
+      ],
+    };
+    const { fetcher } = server((call) =>
+      call.url.endsWith('/session')
+        ? session('tok-1')
+        : { status: 422, body: { code: 'ORDER_INVALID', details } },
+    );
+    const api = createApi({
+      baseUrl: 'https://api.example.test',
+      credential: () => ({ idToken: 'x' }),
+      fetch: fetcher,
+    });
+    const failure = await api
+      .placeOrder({
+        clientRequestId: 'r',
+        items: [],
+        deliveryBuilding: 'A1',
+        recipientName: 'x',
+        paymentMethod: 'cash',
+      })
+      .catch((e: unknown) => e);
+    expect(failure).toBeInstanceOf(ApiFailure);
+    expect((failure as ApiFailure).code).toBe('ORDER_INVALID');
+    expect((failure as ApiFailure).lines).toEqual([
+      { code: 'ITEM_UNAVAILABLE', lineIndex: 1, menuItemId: 'm-2' },
+      { code: 'OPTION_UNAVAILABLE', lineIndex: 0, menuItemId: 'm-1' },
+    ]);
+  });
 });

@@ -149,7 +149,9 @@ describe('purgeLineEventsBatch', () => {
 describe('anonymizeOrderSnapshotsBatch', () => {
   const cutoff = () => new Date(NOW.getTime() - RETENTION_DAYS.orderPersonalData * 86_400_000);
   const run = (limit = 100) =>
-    retention.anonymizeOrderSnapshotsBatch(db, { before: cutoff(), limit, now: NOW });
+    retention
+      .anonymizeOrderSnapshotsBatch(db, { before: cutoff(), limit, now: NOW })
+      .then((r) => r.anonymized);
 
   test('replaces name and building 30 days after completion and keeps amounts', async () => {
     const old = await order({ completedDaysAgo: 31, note: 'leave at the desk, room 12' });
@@ -174,6 +176,22 @@ describe('anonymizeOrderSnapshotsBatch', () => {
       delivery_building: 'B1',
       delivery_note: 'keep me',
     });
+  });
+
+  test('returns the ids of the orders it changed, for the live feed (BE-02)', async () => {
+    const a = await order({ completedDaysAgo: 45 });
+    const b = await order({ completedDaysAgo: 46 });
+    const result = await retention.anonymizeOrderSnapshotsBatch(db, {
+      before: cutoff(),
+      limit: 100,
+      now: NOW,
+    });
+    expect(result.orderIds).toEqual(expect.arrayContaining([a, b]));
+    expect(result.orderIds).toHaveLength(result.anonymized);
+    expect(
+      (await retention.anonymizeOrderSnapshotsBatch(db, { before: cutoff(), limit: 100, now: NOW }))
+        .orderIds,
+    ).toEqual([]);
   });
 
   test('a cancelled order counts from its cancellation; an open order is never touched', async () => {
@@ -327,7 +345,7 @@ describe('expireRecipientsBatch', () => {
     ];
     const total = (await run(2)).customers + (await run(2)).customers;
     expect(total).toBeGreaterThanOrEqual(3);
-    expect(await run(2)).toEqual({ customers: 0, orders: 0 });
+    expect(await run(2)).toEqual({ customers: 0, orders: 0, customerIds: [], orderIds: [] });
     for (const id of ids) expect((await cust(id))?.anonymized_at).not.toBeNull();
     const audits = JSON.stringify(
       await q(
@@ -392,7 +410,7 @@ describe('expireEmptyLineCustomersBatch', () => {
     );
     const stale = await liff({ firstSeenDaysAgo: 60 });
     await run();
-    expect(await run()).toEqual({ customers: 0 });
+    expect(await run()).toEqual({ customers: 0, customerIds: [] });
     expect((await state(counter[0]?.id as string))?.anonymized_at).toBeNull();
     const audits = JSON.stringify(
       await q(
@@ -487,7 +505,7 @@ describe('expireMemberProfilesBatch', () => {
     const stale = await member({ lastOrderDaysAgo: 900 });
     await run();
     const version = (await state(stale))?.version;
-    expect(await run()).toEqual({ customers: 0 });
+    expect(await run()).toEqual({ customers: 0, customerIds: [] });
     expect((await state(stale))?.version).toBe(version);
   });
 
@@ -623,6 +641,7 @@ describe('slip images', () => {
     expect(await retention.clearSlipKeys(db, { slips: [], now: NOW })).toEqual({
       cleared: 0,
       changedOrderIds: [],
+      paymentIds: [],
     });
   });
 

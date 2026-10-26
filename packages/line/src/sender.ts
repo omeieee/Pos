@@ -21,6 +21,12 @@ export interface QuotaStore {
   >;
   /** Gives the unit back and removes the log row (LINE definitely refused the push). */
   releasePush(args: { month: string; logId: string }): Promise<void>;
+  /**
+   * LINE itself said the month's messages are used up (its count includes what we never see, such
+   * as OA Manager broadcasts): raise the month's count to `limit`, so `reservePush` answers
+   * `capped` until the month ends or the limit is raised. Never lowers the count.
+   */
+  markCapped(args: { month: string; limit: number }): Promise<void>;
   logReply(args: { template: string; customerId?: string; orderId?: string }): Promise<void>;
   /**
    * Atomically claims the owner alert for this month and level. True only for the first caller, so
@@ -50,7 +56,8 @@ export interface SenderOptions {
   now?: () => Date;
   /**
    * Called once per month as usage reaches the warning level and once at the limit, and only
-   * after a push that was kept (sent, or possibly delivered). Never for a push LINE refused.
+   * after a push that was kept (sent, or possibly delivered), or when LINE answered that the
+   * month's messages are used up (`cap`). Never for any other push LINE refused.
    */
   onThreshold?: (level: 'warn' | 'cap', used: number, limit: number) => void;
 }
@@ -135,6 +142,17 @@ export function createLineSender(options: SenderOptions): LineSender {
           policy.monthlyLimit,
         );
         return { sent: true };
+      }
+      // LINE's own monthly limit (LINE-03): nothing was sent, so the unit goes back, but the month
+      // is full: further pushes are held until it ends and the owner hears once (`cap`). Replies,
+      // which are free, are not touched.
+      if (result.capped) {
+        await options.store.releasePush({ month, logId: reserved.logId }).catch(() => undefined);
+        await options.store
+          .markCapped({ month, limit: policy.monthlyLimit })
+          .catch(() => undefined);
+        await raise(month, ['cap'], policy.monthlyLimit, policy.monthlyLimit);
+        return { sent: false, reason: 'quota_exhausted' };
       }
       // A 4xx means LINE did not send it: give the unit back, and say nothing (the count did not
       // move). A timeout or 5xx may have been delivered, so the unit stays spent (the count errs

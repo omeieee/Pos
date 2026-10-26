@@ -662,3 +662,53 @@ export async function readChanges(
   await attachMenuExtras(db, page);
   return { entries: page, hasMore: merged.length > limit };
 }
+
+/** The most ids `readRowsByIds` takes per family in one call (one `IN` list each). */
+export const ROWS_BY_IDS_MAX = 500;
+
+/**
+ * The orders (with their live lines), payments and customers with these ids, as they are now, in
+ * the feed's allow-listed shape (the same columns `readChanges` sends), oldest rev first. For a
+ * writer that changed rows without holding their DTOs (a retention batch, an erasure, a customer
+ * counter) and must publish them live (BE-02): the live event and a later catch-up then carry the
+ * same thing. An id with no row is skipped. At most `ROWS_BY_IDS_MAX` ids per family.
+ */
+export async function readRowsByIds(
+  db: Db,
+  ids: {
+    orders?: readonly string[];
+    payments?: readonly string[];
+    customers?: readonly string[];
+  },
+): Promise<SyncEntry[]> {
+  const orderIds = [...new Set(ids.orders ?? [])];
+  const paymentIds = [...new Set(ids.payments ?? [])];
+  const customerIds = [...new Set(ids.customers ?? [])];
+  if (
+    orderIds.length > ROWS_BY_IDS_MAX ||
+    paymentIds.length > ROWS_BY_IDS_MAX ||
+    customerIds.length > ROWS_BY_IDS_MAX
+  ) {
+    throw new Error(`readRowsByIds takes at most ${ROWS_BY_IDS_MAX} ids per family`);
+  }
+  const [orderRows, paymentRows, customerRows] = await Promise.all([
+    orderIds.length > 0
+      ? db.select(orderColumns).from(orders).where(inArray(orders.id, orderIds))
+      : [],
+    paymentIds.length > 0
+      ? db.select(paymentColumns).from(payments).where(inArray(payments.id, paymentIds))
+      : [],
+    customerIds.length > 0
+      ? db.select(customerColumns).from(customers).where(inArray(customers.id, customerIds))
+      : [],
+  ]);
+  const entries: SyncEntry[] = [
+    ...orderRows.map((order): SyncEntry => ({ kind: 'order', rev: order.rev, order, items: [] })),
+    ...paymentRows.map((payment): SyncEntry => ({ kind: 'payment', rev: payment.rev, payment })),
+    ...customerRows.map(
+      (customer): SyncEntry => ({ kind: 'customer', rev: customer.rev, customer }),
+    ),
+  ].sort((a, b) => a.rev - b.rev);
+  await attachOrderItems(db, entries);
+  return entries;
+}

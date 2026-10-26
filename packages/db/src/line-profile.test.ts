@@ -133,10 +133,11 @@ describe('the LINE profile on an order', () => {
       limit: 100,
       now: T0,
     });
-    expect(first).toBeGreaterThanOrEqual(1);
+    expect(first.anonymized).toBeGreaterThanOrEqual(1);
     expect(await lineOf(orderId)).toEqual({ a: null, b: null });
-    expect(await retention.anonymizeOrderSnapshotsBatch(db, { before, limit: 100, now: T0 })).toBe(
-      0,
-    );
+    expect(
+      (await retention.anonymizeOrderSnapshotsBatch(db, { before, limit: 100, now: T0 }))
+        .anonymized,
+    ).toBe(0);
   });
 });

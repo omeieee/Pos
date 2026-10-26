@@ -121,8 +121,10 @@ export interface SessionEndedEvent {
 
 /**
  * A customer row changed (02 §5 `customer.upserted`). `data` is parsed through the shared
- * customer schema before it reaches a device, so it need not be trusted to be small. Nothing
- * publishes it until the customer module exists (P4).
+ * customer schema before it reaches a device, so it need not be trusted to be small. Published
+ * with `realtime/upserts.ts:emitRowUpserts()` by the writers of a customer row (BE-02): orders,
+ * app sign-in, member profile, the app's privacy notice, slip flag, erasure, retention and the LINE
+ * chat handlers (follow, unfollow, the chat's privacy button).
  */
 export interface CustomerUpsertedEvent {
   type: 'customer.upserted';

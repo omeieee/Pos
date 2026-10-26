@@ -2,16 +2,11 @@ import { formatBaht } from '@sds/i18n';
 import { orderPlacedText } from '@sds/line/order-text';
 import type { AppOrderInput, CheckoutInfo, PublicMenuResponse } from '@sds/shared';
 import { useMemo, useRef, useState } from 'react';
+import { ApiFailure } from '../api/client.ts';
 import { Gi } from '../design/icons.tsx';
 import { s } from '../design/style.ts';
-import {
-  type Cart,
-  estimateTotal,
-  findItem,
-  missingLines,
-  toOrderItems,
-  unitEstimate,
-} from '../model/cart.ts';
+import { type Cart, estimateTotal, findItem, toOrderItems, unitEstimate } from '../model/cart.ts';
+import { removeLines, type UnavailableLine, unavailableLines } from '../model/cart-recovery.ts';
 import {
   type CheckoutForm,
   createRequestIds,
@@ -46,6 +41,7 @@ export function CheckoutScreen({
   refreshInfo,
   editing = null,
   endEdit = () => {},
+  refreshMenu = async () => {},
 }: {
   menu: PublicMenuResponse;
   info: CheckoutInfo;
@@ -57,6 +53,8 @@ export function CheckoutScreen({
   editing?: EditSession | null;
   /** Leaves the change: puts back the cart the customer had before. */
   endEdit?: () => void;
+  /** Reads the menu again (after the server said a dish is no longer available). */
+  refreshMenu?: () => Promise<void>;
 }) {
   const tr = useT();
   const { api, platform, go, locale } = useApp();
@@ -66,6 +64,8 @@ export function CheckoutScreen({
   const requests = useRef(createRequestIds()).current;
   const problems = formProblems(form, info);
   const [tried, setTried] = useState(false);
+  /** Lines the server refused (a dish that went หมด), named from the menu the customer saw. */
+  const [refused, setRefused] = useState<UnavailableLine[]>([]);
   /** The unpaid-order question: which order, and which of its two steps is showing. */
   const [asking, setAsking] = useState<{ step: 'ask' | 'choose'; warning: CheckoutWarning } | null>(
     null,
@@ -92,7 +92,7 @@ export function CheckoutScreen({
     return <PrivacyGate refreshInfo={refreshInfo} />;
   }
 
-  const gone = missingLines(cart, menu);
+  const unavailable = unavailableLines(cart, menu, [], refused);
   const total = formatBaht(estimateTotal(cart, menu), locale);
   const methods = METHOD_ORDER.filter((m) => info.methods.includes(m));
 
@@ -147,13 +147,39 @@ export function CheckoutScreen({
       });
     } catch (e) {
       // The same request id stays, so pressing the button again can never make a second order.
-      setError(tr(errorKey(e)));
+      failed(e, true);
       setBusy(false);
     }
   }
 
+  /**
+   * A refused order. ORDER_INVALID (LINE-02): the lines the server named are shown with a remove
+   * action and the menu is read again, so a dish that went หมด shows as gone. Any other error: its
+   * text. `fromCart`: the request's lines were the cart's, in order, so the indexes match.
+   */
+  function failed(e: unknown, fromCart: boolean) {
+    if (e instanceof ApiFailure && e.code === 'ORDER_INVALID') {
+      const named = fromCart ? unavailableLines(cart, menu, e.lines, refused) : [];
+      setRefused(named);
+      setError(named.length > 0 ? null : tr(errorKey(e)));
+      void refreshMenu().catch(() => undefined);
+      return;
+    }
+    setError(tr(errorKey(e)));
+  }
+
+  function removeUnavailable(key: string) {
+    setCart(removeLines(cart, [key]));
+    setRefused(refused.filter((l) => l.key !== key));
+    setError(null);
+  }
+
   /** Replace the lines of an unpaid order. No chat message: this is not a new order. */
-  async function saveLines(order: { id: string; version: number }, items: AppOrderInput['items']) {
+  async function saveLines(
+    order: { id: string; version: number },
+    items: AppOrderInput['items'],
+    fromCart = false,
+  ) {
     setBusy(true);
     setError(null);
     try {
@@ -165,7 +191,7 @@ export function CheckoutScreen({
       else clearCart();
       go(`/orders/${order.id}`, { replace: true });
     } catch (e) {
-      setError(tr(errorKey(e)));
+      failed(e, fromCart);
       setBusy(false);
       setAsking(null);
     }
@@ -260,17 +286,8 @@ export function CheckoutScreen({
             </>
           ) : null}
 
-          {gone.length > 0 ? (
-            <Notice tone="bad" icon="warn" alert>
-              <p style={s('margin:0 0 8px')}>{tr('liff.error.ORDER_INVALID')}</p>
-              <button
-                type="button"
-                className="g-btn g-btn-sm"
-                onClick={() => setCart(cart.filter((l) => !gone.some((g) => g.key === l.key)))}
-              >
-                {tr('liff.cart.remove')}
-              </button>
-            </Notice>
+          {unavailable.length > 0 ? (
+            <UnavailableNotice lines={unavailable} onRemove={removeUnavailable} />
           ) : null}
 
           {editing ? null : (
@@ -408,13 +425,14 @@ export function CheckoutScreen({
           type="button"
           className="g-btn g-btn-p g-btn-lg"
           style={s('height:56px')}
-          disabled={busy || (!editing && problems.includes('closed')) || gone.length > 0}
+          disabled={busy || (!editing && problems.includes('closed')) || unavailable.length > 0}
           aria-busy={busy}
           onClick={() =>
             editing
               ? void saveLines(
                   { id: editing.orderId, version: editing.version },
                   toOrderItems(cart),
+                  true,
                 )
               : void submit()
           }
@@ -453,6 +471,51 @@ export function CheckoutScreen({
         />
       ) : null}
     </>
+  );
+}
+
+/**
+ * The cart lines that cannot be ordered (LINE-02): each by name (or "a dish no longer available"
+ * when the name is not known any more) with its own remove button.
+ */
+export function UnavailableNotice({
+  lines,
+  onRemove,
+}: {
+  lines: readonly UnavailableLine[];
+  onRemove: (key: string) => void;
+}) {
+  const tr = useT();
+  const { locale } = useApp();
+  const nameOf = (line: UnavailableLine) =>
+    line.name
+      ? locale === 'en' && line.name.nameEn
+        ? line.name.nameEn
+        : line.name.nameTh
+      : tr('liff.cart.unavailableItem');
+  return (
+    <Notice tone="bad" icon="warn" alert>
+      <p style={s('margin:0 0 8px')}>{tr('liff.cart.unavailableTitle')}</p>
+      <ul
+        style={s('margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:8px')}
+      >
+        {lines.map((line) => (
+          <li key={line.key} style={s('display:flex;align-items:center;gap:10px')}>
+            <span style={s('flex-grow:1;min-width:0;overflow-wrap:anywhere')}>
+              {`${nameOf(line)} ×${line.qty}`}
+            </span>
+            <button
+              type="button"
+              className="g-btn g-btn-sm"
+              aria-label={tr('liff.cart.removeNamed', { name: nameOf(line) })}
+              onClick={() => onRemove(line.key)}
+            >
+              {tr('liff.cart.remove')}
+            </button>
+          </li>
+        ))}
+      </ul>
+    </Notice>
   );
 }
 

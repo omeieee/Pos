@@ -9,6 +9,7 @@ import { promptpayPayload } from '@sds/promptpay';
 import {
   ANONYMIZED_BUILDING,
   ANONYMIZED_RECIPIENT_NAME,
+  customerDtoSchema,
   type MyOrder,
   myOrderSchema,
   PRIVACY_NOTICE_VERSION,
@@ -22,6 +23,7 @@ import { LiffUnavailableError, type LiffVerifier } from '../line/liff-verify.ts'
 import { createLineRuntime } from '../line/runtime.ts';
 import { qrPng } from '../payments/qr.ts';
 import { movePayment } from '../payments/service.ts';
+import { withFailingWrite } from '../test-support/fail-trigger.ts';
 import {
   createHarness,
   type Harness,
@@ -1037,6 +1039,52 @@ describe('the LINE name on an order (owner, 2026-10-12)', () => {
     expect(JSON.stringify(json.order)).not.toContain('Tee Test');
   });
 
+  test('signing in publishes a new customer, or a new LINE name, after commit; a repeat sign-in publishes nothing (BE-02)', async () => {
+    PROFILES[TOKEN_A] = {
+      displayName: 'Zzyx Live Name',
+      pictureUrl: 'https://profile.line-scdn.net/z',
+    };
+    const before = h.events.length;
+    await signIn(TOKEN_A);
+    const id = (
+      await h.client.query<{ id: string; rev: string }>(
+        'select id, rev from customers where line_user_id = $1',
+        [U_A],
+      )
+    ).rows[0];
+    const events = h.events
+      .slice(before)
+      .filter((e) => e.type === 'customer.upserted' && e.id === id?.id);
+    expect(events).toHaveLength(1);
+    const event = events[0];
+    if (event?.type !== 'customer.upserted') throw new Error('expected customer.upserted');
+    expect(event.rev).toBe(Number(id?.rev));
+    expect(customerDtoSchema.parse(event.data)).toMatchObject({ displayName: 'Zzyx Live Name' });
+    // The picture and the LINE id stay out of the feed.
+    expect(JSON.stringify(event)).not.toMatch(/line-scdn|Utest/);
+
+    const again = h.events.length;
+    await signIn(TOKEN_A);
+    expect(h.events.slice(again).filter((e) => e.type === 'customer.upserted')).toEqual([]);
+  });
+
+  test('a sign-in that rolls back makes no customer and publishes nothing (BE-02)', async () => {
+    PROFILES[TOKEN_B] = {
+      displayName: 'Zzyx Undo Name',
+      pictureUrl: 'https://profile.line-scdn.net/u',
+    };
+    const before = h.events.length;
+    const res = await withFailingWrite(
+      h,
+      { table: 'customers', op: 'update', when: "new.display_name = 'Zzyx Undo Name'" },
+      () => call('POST', '/v1/app/session', undefined, { idToken: TOKEN_B }),
+    );
+    expect(res.statusCode).toBe(500);
+    expect(h.events.slice(before)).toEqual([]);
+    const rows = await h.client.query('select id from customers where line_user_id = $1', [U_B]);
+    expect(rows.rows).toEqual([]);
+  });
+
   test('a customer LINE gave no name for has an order with none', async () => {
     delete PROFILES[TOKEN_B];
     const token = await customer(TOKEN_B);
@@ -1226,6 +1274,68 @@ describe('the member page: GET and PUT /v1/app/member', () => {
     expect((await call('GET', '/v1/app/member', token)).json()).toEqual({ member: null });
     await acknowledge(token);
     expect((await put(token, MEMBER)).statusCode).toBe(200);
+  });
+
+  test('a saved change publishes the customer after commit (BE-02); the same form again, or a rollback, publishes nothing', async () => {
+    const token = await customer(TOKEN_A);
+    const id = (
+      await h.client.query<{ id: string; rev: string }>(
+        'select id from customers where line_user_id = $1',
+        [U_A],
+      )
+    ).rows[0]?.id;
+    const before = h.events.length;
+    expect((await put(token, MEMBER)).statusCode).toBe(200);
+    const events = h.events
+      .slice(before)
+      .filter((e) => e.type === 'customer.upserted' && e.id === id);
+    expect(events).toHaveLength(1);
+    const event = events[0];
+    if (event?.type !== 'customer.upserted') throw new Error('expected customer.upserted');
+    const row = (
+      await h.client.query<{ rev: string }>('select rev from customers where id = $1', [id])
+    ).rows[0];
+    expect(event.rev).toBe(Number(row?.rev));
+    // The feed shape only: the nickname is in it, the full name, phone and building are not.
+    expect(customerDtoSchema.parse(event.data)).toMatchObject({ nickname: MEMBER.nickname });
+    const text = JSON.stringify(event);
+    for (const hidden of [MEMBER.fullName, '0812345678', U_A]) expect(text).not.toContain(hidden);
+
+    const same = h.events.length;
+    expect((await put(token, MEMBER)).statusCode).toBe(200);
+    expect(h.events.slice(same)).toEqual([]);
+
+    const failed = await withFailingWrite(
+      h,
+      { table: 'customers', op: 'update', when: "new.nickname = 'ล้ม'" },
+      () => put(token, { nickname: 'ล้ม' }),
+    );
+    expect(failed.statusCode).toBe(500);
+    expect(h.events.slice(same)).toEqual([]);
+  });
+
+  test('acknowledging the notice publishes the customer (new rev) after commit (BE-02)', async () => {
+    const token = await signIn(TOKEN_A);
+    const before = h.events.length;
+    expect((await acknowledge(token)).statusCode).toBe(200);
+    const id = (
+      await h.client.query<{ id: string }>('select id from customers where line_user_id = $1', [
+        U_A,
+      ])
+    ).rows[0]?.id;
+    const events = h.events
+      .slice(before)
+      .filter((e) => e.type === 'customer.upserted' && e.id === id);
+    expect(events).toHaveLength(1);
+    expect(JSON.stringify(events)).not.toMatch(/privacy|Utest/i);
+
+    const failed = await withFailingWrite(
+      h,
+      { table: 'customers', op: 'update', when: 'new.privacy_ack_version is not null' },
+      () => acknowledge(token),
+    );
+    expect(failed.statusCode).toBe(500);
+    expect(h.events.slice(before + events.length)).toEqual([]);
   });
 
   test("one customer never sees or changes another's profile", async () => {

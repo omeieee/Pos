@@ -91,6 +91,7 @@ export function dbQuotaStore(db: Db, now: () => Date = () => new Date()): QuotaS
   return {
     reservePush: (args) => lineRepo.reservePush(db, args),
     releasePush: (args) => lineRepo.releasePush(db, args),
+    markCapped: (args) => lineRepo.markQuotaCapped(db, args),
     logReply: (args) => lineRepo.logReply(db, args),
     claimAlert: (args) => lineRepo.claimQuotaAlert(db, { ...args, at: now() }),
   };

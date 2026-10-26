@@ -55,6 +55,10 @@ export const enLiff = {
   'liff.cart.inc': 'More',
   'liff.cart.dec': 'Fewer',
   'liff.cart.remove': 'Remove',
+  'liff.cart.unavailableTitle':
+    'This dish is sold out or no longer available. Remove it to go on with your order.',
+  'liff.cart.unavailableItem': 'A dish no longer available',
+  'liff.cart.removeNamed': 'Remove {name} from the cart',
   'liff.cart.estimate': 'About {amount}. The shop works out the real price when you order.',
   'liff.cart.checkout': 'Go to checkout',
   'liff.checkout.title': 'Checkout',

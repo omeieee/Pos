@@ -164,6 +164,108 @@ export function slip2goVerdict(code: string, localAmountOk: boolean | null): Sli
   }
 }
 
+/** Whether the transfer time Slip2Go reports is at or after the order's `notBefore` (PAY-01). */
+export type SlipTransferDateCheck = 'ok' | 'too_old' | 'unknown';
+
+const BANGKOK_OFFSET_MS = 7 * 3_600_000;
+const SLIP_DATE_ONLY = /^(\d{4})-(\d{2})-(\d{2})$/;
+const SLIP_DATE_TIME =
+  /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,9}))?)?(Z|[+-]\d{2}:?\d{2})?$/;
+
+/** Milliseconds since the epoch of a calendar date and wall time read as UTC, or null when it does not exist. */
+function wallClockUtc(
+  y: number,
+  mo: number,
+  d: number,
+  h = 0,
+  mi = 0,
+  s = 0,
+  ms = 0,
+): number | null {
+  if (mo < 1 || mo > 12 || d < 1 || h > 23 || mi > 59 || s > 59) return null;
+  const at = Date.UTC(y, mo - 1, d, h, mi, s, ms);
+  const back = new Date(at);
+  return back.getUTCFullYear() === y && back.getUTCMonth() === mo - 1 && back.getUTCDate() === d
+    ? at
+    : null;
+}
+
+/**
+ * Checks Slip2Go's `data.dateTime` against `notBefore` (the same instant sent as `checkDate`), on our
+ * side, so that a `200200` never auto-confirms on Slip2Go's date check alone (PAY-01).
+ *
+ * Rule (fail closed): the text is turned into the RANGE of instants it can mean, at the granularity
+ * it gives, and
+ * - `ok` only when the EARLIEST of them is at or after `notBefore` (the boundary passes);
+ * - `too_old` only when the LATEST of them is before `notBefore`;
+ * - `unknown` otherwise: missing, unparseable, an impossible date, or a range that straddles it.
+ *
+ * Accepted forms (live: ISO with `+07:00`, docs/plans/slip2go-integration.md section 11):
+ * `YYYY-MM-DDTHH:MM[:SS[.fff]]` with `Z` or `±HH:MM` / `±HHMM` (a space may replace `T`); without a
+ * zone it is read both as Asia/Bangkok and as UTC (the range covers both); a bare `YYYY-MM-DD` is a
+ * Bangkok calendar day. Minutes only means the whole minute; digits past milliseconds are dropped
+ * (the range then spans that millisecond). Pure: no clock, no locale.
+ */
+export function slip2goTransferDateCheck(
+  dateTime: string | null | undefined,
+  notBefore: Date,
+): SlipTransferDateCheck {
+  const limit = notBefore.getTime();
+  if (!dateTime || Number.isNaN(limit)) return 'unknown';
+  let earliest: number;
+  let latest: number;
+  const dateOnly = SLIP_DATE_ONLY.exec(dateTime);
+  const full = dateOnly ? null : SLIP_DATE_TIME.exec(dateTime);
+  if (dateOnly) {
+    const day = wallClockUtc(Number(dateOnly[1]), Number(dateOnly[2]), Number(dateOnly[3]));
+    if (day === null) return 'unknown';
+    earliest = day - BANGKOK_OFFSET_MS;
+    latest = earliest + 86_400_000 - 1;
+  } else if (full) {
+    const [, y, mo, d, h, mi, s, frac, zone] = full;
+    const ms = frac ? Number(frac.slice(0, 3).padEnd(3, '0')) : 0;
+    const wall = wallClockUtc(
+      Number(y),
+      Number(mo),
+      Number(d),
+      Number(h),
+      Number(mi),
+      s === undefined ? 0 : Number(s),
+      ms,
+    );
+    if (wall === null) return 'unknown';
+    // How much later the true instant can be than the text, at the precision given.
+    const unit =
+      s === undefined
+        ? 60_000
+        : frac === undefined
+          ? 1000
+          : frac.length >= 3
+            ? 1
+            : 10 ** (3 - frac.length);
+    if (zone === undefined) {
+      earliest = wall - BANGKOK_OFFSET_MS;
+      latest = wall + unit - 1;
+    } else {
+      let offsetMs = 0;
+      if (zone !== 'Z') {
+        const digits = zone.slice(1).replace(':', '');
+        const oh = Number(digits.slice(0, 2));
+        const om = Number(digits.slice(2));
+        if (oh > 14 || om > 59) return 'unknown';
+        offsetMs = (zone[0] === '-' ? -1 : 1) * (oh * 60 + om) * 60_000;
+      }
+      earliest = wall - offsetMs;
+      latest = earliest + unit - 1;
+    }
+  } else {
+    return 'unknown';
+  }
+  if (earliest >= limit) return 'ok';
+  if (latest < limit) return 'too_old';
+  return 'unknown';
+}
+
 /**
  * The part of Slip2Go's answer we keep. Everything else (names, account numbers, receiver and
  * sender details) is dropped by the parse and never reaches memory beyond it.
