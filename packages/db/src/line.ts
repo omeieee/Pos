@@ -372,6 +372,24 @@ export async function releasePush(db: Db, args: { month: string; logId: string }
 }
 
 /**
+ * LINE answered that the plan's messages for the month are used up (its count also holds what we
+ * never see, such as OA Manager broadcasts). The month's count is raised to `limit`, never lowered,
+ * so `reservePush` answers `capped` until the month ends or the limit is raised.
+ */
+export async function markQuotaCapped(
+  db: Db,
+  args: { month: string; limit: number },
+): Promise<void> {
+  await db
+    .insert(lineQuotaMonths)
+    .values({ month: args.month, used: args.limit })
+    .onConflictDoUpdate({
+      target: lineQuotaMonths.month,
+      set: { used: sql`greatest(${lineQuotaMonths.used}, ${args.limit})`, updatedAt: sql`now()` },
+    });
+}
+
+/**
  * Claims the owner alert for a month and level (`warn` or `cap`). True for the first caller only;
  * one atomic upsert, so concurrent senders and restarts cannot raise it twice.
  */

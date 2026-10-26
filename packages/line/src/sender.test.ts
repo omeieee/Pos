@@ -11,14 +11,23 @@ import { createLineSender, type QuotaStore } from './sender.ts';
 
 const TEXT = [{ type: 'text' as const, text: 'x' }];
 
+const MONTH = '2026-10';
+
 function fakeStore(limitUsed = 0) {
-  let used = limitUsed;
+  // Counted per month, like `line_quota_months`.
+  const usedBy = new Map<string, number>([[MONTH, limitUsed]]);
   const orders = new Set<string>();
   const alerted = new Set<string>();
-  const store: QuotaStore & { replies: number; released: number; used(): number } = {
+  const store: QuotaStore & {
+    replies: number;
+    released: number;
+    cappedMarks: number;
+    used(month?: string): number;
+  } = {
     replies: 0,
     released: 0,
-    used: () => used,
+    cappedMarks: 0,
+    used: (month = MONTH) => usedBy.get(month) ?? 0,
     async claimAlert(a) {
       const key = `${a.month}|${a.level}`;
       if (alerted.has(key)) return false;
@@ -31,13 +40,18 @@ function fakeStore(limitUsed = 0) {
         if (orders.has(key)) return { status: 'duplicate' };
         orders.add(key);
       }
+      const used = store.used(a.month);
       if (used >= a.limit) return { status: 'capped' };
-      used += 1;
-      return { status: 'reserved', used, logId: `log-${used}` };
+      usedBy.set(a.month, used + 1);
+      return { status: 'reserved', used: used + 1, logId: `log-${used + 1}` };
     },
-    async releasePush() {
-      used -= 1;
+    async releasePush(a) {
+      usedBy.set(a.month, store.used(a.month) - 1);
       store.released += 1;
+    },
+    async markCapped(a) {
+      usedBy.set(a.month, Math.max(store.used(a.month), a.limit));
+      store.cappedMarks += 1;
     },
     async logReply() {
       store.replies += 1;
@@ -60,12 +74,13 @@ function sender(opts: {
   store?: ReturnType<typeof fakeStore>;
   policy?: LinePolicy;
   onThreshold?: (l: 'warn' | 'cap', u: number, n: number) => void;
+  now?: () => Date;
 }) {
   return createLineSender({
     client: opts.client === undefined ? fakeClient() : opts.client,
     store: opts.store ?? fakeStore(),
     getPolicy: async () => opts.policy ?? policy(),
-    now: () => new Date('2026-10-15T05:00:00Z'),
+    now: opts.now ?? (() => new Date('2026-10-15T05:00:00Z')),
     ...(opts.onThreshold ? { onThreshold: opts.onThreshold } : {}),
   });
 }
@@ -247,6 +262,82 @@ describe('push', () => {
     });
     await s.push('U1', TEXT, { template: 'a', essential: true });
     expect(calls).toEqual([['cap', 10]]);
+  });
+
+  describe("LINE's own monthly limit (LINE-03)", () => {
+    const capped: LineSendResult = { ok: false, definite: true, status: 429, capped: true };
+
+    test('LINE saying the month is used up holds every push until the month ends and alerts once; replies still go', async () => {
+      const store = fakeStore(42); // our count is lower than LINE's (OA Manager broadcasts share it)
+      const client = fakeClient(capped);
+      const calls: [string, number, number][] = [];
+      const onThreshold = (level: 'warn' | 'cap', used: number, limit: number) =>
+        calls.push([level, used, limit]);
+      const s = sender({ client, store, policy: policy({ monthlyLimit: 300 }), onThreshold });
+
+      expect(await s.push('U1', TEXT, { template: 'a', essential: true })).toEqual({
+        sent: false,
+        reason: 'quota_exhausted',
+      });
+      // The refused message is not counted as sent, and the month is now full.
+      expect(store.released).toBe(1);
+      expect(store.cappedMarks).toBe(1);
+      expect(store.used()).toBe(300);
+      expect(calls).toEqual([['cap', 300, 300]]);
+
+      // Held: LINE is not called again this month, by this sender or another, and no second alert.
+      client.push.mockClear();
+      for (const each of [s, sender({ client, store, onThreshold })]) {
+        expect(await each.push('U1', TEXT, { template: 'b', essential: true })).toEqual({
+          sent: false,
+          reason: 'quota_exhausted',
+        });
+      }
+      expect(client.push).not.toHaveBeenCalled();
+      expect(calls).toHaveLength(1);
+
+      // Replies are free and keep working.
+      client.reply.mockResolvedValueOnce({ ok: true });
+      expect(await s.reply('rt', TEXT, { template: 'greeting' })).toEqual({ sent: true });
+
+      // A new month starts again.
+      client.push.mockResolvedValueOnce({ ok: true });
+      const next = sender({ client, store, now: () => new Date('2026-11-01T01:00:00Z') });
+      expect(await next.push('U1', TEXT, { template: 'c', essential: true })).toEqual({
+        sent: true,
+      });
+      expect(client.push).toHaveBeenCalledOnce();
+    });
+
+    test('a rate-limit 429 gives the unit back and holds nothing', async () => {
+      const store = fakeStore();
+      const calls: string[] = [];
+      const s = sender({
+        client: fakeClient({ ok: false, definite: true, status: 429 }),
+        store,
+        onThreshold: (level) => calls.push(level),
+      });
+      expect(await s.push('U1', TEXT, { template: 'a', essential: true })).toEqual({
+        sent: false,
+        reason: 'failed',
+      });
+      expect(store.used()).toBe(0);
+      expect(store.cappedMarks).toBe(0);
+      expect(calls).toEqual([]);
+    });
+
+    test('raising the limit (a paid plan) lets pushes go again the same month', async () => {
+      const store = fakeStore();
+      await sender({ client: fakeClient(capped), store }).push('U1', TEXT, {
+        template: 'a',
+        essential: true,
+      });
+      expect(store.used()).toBe(300);
+      const paid = sender({ store, policy: policy({ monthlyLimit: 15_000 }) });
+      expect(await paid.push('U1', TEXT, { template: 'b', essential: true })).toEqual({
+        sent: true,
+      });
+    });
   });
 
   test('without LINE_* settings nothing is sent and nothing is spent', async () => {

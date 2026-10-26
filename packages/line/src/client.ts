@@ -2,8 +2,32 @@ import type { LineMessage } from './flex.ts';
 
 export type LineSendResult =
   | { ok: true }
-  /** `definite`: LINE answered with a 4xx, so nothing was sent. Otherwise it may have been. */
-  | { ok: false; definite: boolean; status?: number };
+  /**
+   * `definite`: LINE answered with a 4xx, so nothing was sent. Otherwise it may have been.
+   * `capped` (push only): LINE refused because the plan's messages for the month are used up.
+   */
+  | { ok: false; definite: boolean; status?: number; capped?: true };
+
+/**
+ * LINE answers 429 both for the plan's monthly limit ("You have reached your monthly limit.") and
+ * for too many calls a second ("The API rate limit has been exceeded..."), told apart only by the
+ * body's `message`. A shop this size never meets the rate limit, so a 429 that does not say "rate
+ * limit" (or whose body cannot be read) is taken as the month being used up.
+ */
+async function isMonthlyLimit(response: Response): Promise<boolean> {
+  const text = await response.text().catch(() => '');
+  let message = '';
+  try {
+    const body: unknown = JSON.parse(text);
+    if (body && typeof body === 'object' && 'message' in body) {
+      message = String((body as { message: unknown }).message);
+    }
+  } catch {
+    // Not JSON: decided below.
+  }
+  if (/monthly limit/i.test(message)) return true;
+  return !/rate limit|concurrent/i.test(message);
+}
 
 /** What the sender needs from LINE. Tests pass a fake; production passes `createLineClient`. */
 export interface LineClient {
@@ -43,6 +67,7 @@ export function createLineClient(options: LineClientOptions): LineClient {
     path: string,
     body: unknown,
     extraHeaders: Record<string, string> = {},
+    counted = false,
   ): Promise<LineSendResult> {
     try {
       const response = await doFetch(`${base}${path}`, {
@@ -58,6 +83,10 @@ export function createLineClient(options: LineClientOptions): LineClient {
       if (response.ok) return { ok: true };
       // A 409 on a retry key means LINE already accepted that push: the first one went out.
       if (response.status === 409) return { ok: true };
+      // Only a counted message (a push) can meet the month's limit; a reply is free.
+      if (counted && response.status === 429 && (await isMonthlyLimit(response))) {
+        return { ok: false, definite: true, status: 429, capped: true };
+      }
       return {
         ok: false,
         definite: response.status >= 400 && response.status < 500,
@@ -117,6 +146,7 @@ export function createLineClient(options: LineClientOptions): LineClient {
         '/v2/bot/message/push',
         { to, messages },
         retryKey ? { 'x-line-retry-key': retryKey } : {},
+        true,
       ),
   };
 }

@@ -41,7 +41,7 @@ Sources: [LINE pricing](https://developers.line.biz/en/docs/messaging-api/pricin
 
 Budget arithmetic: about 1 push per LINE order means **about 300 LINE orders a month (about 10 a day) on the free plan**.
 
-The quota tracker reads LINE's quota and consumption endpoints, logs each push in `line_message_log`, warns at 80%, and switches the policy to `off` at 100%. Customers can still see status on the live status page and with the "สถานะ" button, both of which are free.
+The quota-aware sender (`packages/line/src/sender.ts`) keeps **our own count**: each push is logged in `line_message_log` and counted in `line_quota_months` (Bangkok calendar month). It does **not** read LINE's quota or consumption endpoints. It alerts the owner once at the warning level (`line.quota_warning`, default 80%) and once at the limit (`line.quota_capped`), and at the limit it holds every push for the rest of the month (the `line_policy` setting is not changed). Our count can be lower than LINE's, because LINE also counts what we never see (OA Manager broadcasts and messages). So when LINE itself refuses a push with HTTP 429 for the monthly limit ("You have reached your monthly limit."), the sender treats the month as full: the refused message is not counted as sent, the month's count is raised to the limit, `line.quota_capped` is raised once (ids only), and pushes are held until the next month or until the owner raises `monthlyLimit` (a paid plan). A 429 for the per-second rate limit is a plain refusal and holds nothing. Replies are free and are never held. **Owner:** on the free plan, avoid OA Manager broadcasts; they use the same 300. Customers can still see status on the live status page and with the "สถานะ" button, both of which are free.
 
 ### 1.3 Webhook handling (`api/line`)
 1. Check `X-Line-Signature`: HMAC-SHA256 of the **raw** body with the channel secret, base64-encoded. Reject if it doesn't match.
@@ -54,7 +54,7 @@ The quota tracker reads LINE's quota and consumption endpoints, logs each push i
 | `follow` | Upsert the customer; reply with a greeting |
 | `unfollow` | Mark the customer as unfollowed |
 | `message:text` | Order-confirmation pattern, or keywords (`เมนู`, `สถานะ`, `ติดต่อ`) → reply |
-| `message:image` | If the customer has an unpaid PromptPay order: download the content now, store it as the slip, set the payment to `claimed`, alert staff, reply |
+| `message:image` | If the customer has an unpaid PromptPay order (including one whose claim staff rejected, LINE-04): download the content now, store it as the slip, set the payment to `claimed`, alert staff, reply |
 | `postback` | Change payment method · cancel · "โอนแล้ว" |
 
 5. Other chat messages are left for staff, who answer in OA Manager.

@@ -54,6 +54,34 @@ describe('createLineClient', () => {
     expect(await boom.c.push('U', MSGS)).toEqual({ ok: false, definite: false });
   });
 
+  test("a 429 for the month's message limit is capped; a rate-limit 429 is a plain refusal", async () => {
+    const answer = (body: string) => () => new Response(body, { status: 429 });
+    // LINE's documented body when the plan's monthly messages are used up.
+    expect(
+      await client(answer('{"message":"You have reached your monthly limit."}')).c.push('U', MSGS),
+    ).toEqual({ ok: false, definite: true, status: 429, capped: true });
+    // Too many calls a second: nothing was sent, but the month is not over.
+    expect(
+      await client(
+        answer('{"message":"The API rate limit has been exceeded. Try again later."}'),
+      ).c.push('U', MSGS),
+    ).toEqual({ ok: false, definite: true, status: 429 });
+    // A 429 whose body cannot be read: a shop this size never meets the rate limit, so it is the month.
+    expect(await client(answer('not json')).c.push('U', MSGS)).toEqual({
+      ok: false,
+      definite: true,
+      status: 429,
+      capped: true,
+    });
+    // A reply is free and never capped, whatever LINE answers.
+    expect(
+      await client(answer('{"message":"You have reached your monthly limit."}')).c.reply(
+        'rt',
+        MSGS,
+      ),
+    ).toEqual({ ok: false, definite: true, status: 429 });
+  });
+
   test('a 409 on a retry key means LINE already accepted that push', async () => {
     expect(await client(() => new Response('', { status: 409 })).c.push('U', MSGS, 'k')).toEqual({
       ok: true,

@@ -608,6 +608,59 @@ describe('quota-aware push through the real books', () => {
     await h.client.query(`delete from settings where key = 'line_policy'`);
   });
 
+  test("LINE's own monthly limit (429): one line.quota_capped alert, pushes held until the month ends, replies still free (LINE-03)", async () => {
+    const month = quotaMonth(h.clock.now());
+    await h.client.query('delete from line_quota_months where month = $1', [month]);
+    await h.client.query("delete from settings where key = 'line_policy'");
+    const pushed: string[] = [];
+    let replied = 0;
+    const rt = createLineRuntime(
+      { channelSecret: SECRET, channelAccessToken: undefined },
+      {
+        client: {
+          reply: async () => {
+            replied += 1;
+            return { ok: true };
+          },
+          push: async (to) => {
+            pushed.push(to);
+            return { ok: false, definite: true, status: 429, capped: true };
+          },
+        },
+      },
+    );
+    const sender = () => buildSender({ db: h.db, runtime: rt, events: h.bus, now: h.clock.now });
+    const msg = [{ type: 'text' as const, text: 'ready' }];
+    const alertsBefore = h.alerts.length;
+
+    // Our books say 0 of 300; LINE says the month is used up (OA Manager broadcasts share it).
+    expect(await sender().push('U', msg, { template: 'cap-a', essential: true })).toEqual({
+      sent: false,
+      reason: 'quota_exhausted',
+    });
+    expect(await lineRepo.getMonthUsage(h.db, month)).toBe(300);
+    const log = await h.client.query<{ n: number }>(
+      "select count(*)::int as n from line_message_log where kind = 'push' and template like 'cap-%'",
+    );
+    expect(log.rows[0]?.n).toBe(0); // nothing went out, nothing is logged as sent
+
+    // Held: a later sender (another webhook batch) does not call LINE, and no second alert.
+    expect(await sender().push('U', msg, { template: 'cap-b', essential: true })).toEqual({
+      sent: false,
+      reason: 'quota_exhausted',
+    });
+    expect(pushed).toHaveLength(1);
+    const alerts = h.alerts.slice(alertsBefore);
+    expect(alerts.map((a) => a.kind)).toEqual(['line.quota_capped']);
+    // Ids only: the alert carries no customer, LINE user or message.
+    expect(JSON.stringify(alerts)).not.toMatch(/Utest|ready|"U"/);
+
+    // Replies are free and keep working.
+    expect(await sender().reply('rt', msg, { template: 'cap-reply' })).toEqual({ sent: true });
+    expect(replied).toBe(1);
+    await h.client.query('delete from line_quota_months where month = $1', [month]);
+  });
+
   test('concurrent reservations never pass the limit', async () => {
     const month = '2099-01';
     const results = await Promise.all(

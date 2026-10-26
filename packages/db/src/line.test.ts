@@ -132,3 +132,23 @@ describe('claimQuotaAlert', () => {
     expect(await lineRepo.getMonthUsage(db, '2027-01')).toBe(1);
   });
 });
+
+describe('markQuotaCapped (LINE said the month is used up)', () => {
+  test('raises the month to the limit so reservePush answers capped; never lowers it; a higher limit opens it again', async () => {
+    await lineRepo.reservePush(db, { month: '2027-02', limit: 300, template: 't' });
+    await lineRepo.markQuotaCapped(db, { month: '2027-02', limit: 300 });
+    expect(await lineRepo.getMonthUsage(db, '2027-02')).toBe(300);
+    expect(await lineRepo.reservePush(db, { month: '2027-02', limit: 300, template: 't' })).toEqual(
+      { status: 'capped' },
+    );
+    // A lower limit later never lowers the count; a month with no row yet gets one.
+    await lineRepo.markQuotaCapped(db, { month: '2027-02', limit: 10 });
+    expect(await lineRepo.getMonthUsage(db, '2027-02')).toBe(300);
+    await lineRepo.markQuotaCapped(db, { month: '2027-03', limit: 300 });
+    expect(await lineRepo.getMonthUsage(db, '2027-03')).toBe(300);
+    // The owner moved to a paid plan: the same month takes pushes again.
+    expect(
+      (await lineRepo.reservePush(db, { month: '2027-02', limit: 15_000, template: 't' })).status,
+    ).toBe('reserved');
+  });
+});
