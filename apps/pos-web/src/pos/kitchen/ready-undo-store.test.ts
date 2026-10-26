@@ -5,6 +5,7 @@ import { createOrderMovesStore, type OrderMovesDeps } from '../orders/order-move
 import {
   createReadyUndoStore,
   READY_UNDO_GUARD_MS,
+  READY_UNDO_LATE_MS,
   READY_UNDO_SECONDS,
 } from './ready-undo-store.ts';
 
@@ -142,6 +143,18 @@ describe('the 5-second undo of “done”', () => {
     vi.setSystemTime(Date.now() + 30_000);
     await vi.advanceTimersByTimeAsync(1_000);
     expect(api.orders.transition).toHaveBeenCalledTimes(1);
+  });
+
+  test('a page that wakes more than a minute after the countdown ended sends nothing (owner, 2026-10-26)', async () => {
+    const { undo, api } = setup();
+    expect(READY_UNDO_LATE_MS).toBe(60_000);
+    undo.start(cooking(A));
+    // Asleep for 2 minutes: "food ready" would reach the customer long after the cook tapped.
+    vi.setSystemTime(Date.now() + 120_000);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(undo.getState().waiting[A]).toBeUndefined();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(api.orders.transition).not.toHaveBeenCalled();
   });
 });
 

@@ -9,8 +9,10 @@
  * - An undo in the first `READY_UNDO_GUARD_MS` is ignored: it is the second tap of a double tap on
  *   "ทำเสร็จ", whose place the undo button has just taken.
  * - The time left is read from the clock (`Date.now()`), not counted tick by tick, so a page whose
- *   timers were held back (iOS in the background) sends as soon as it runs again, never later
- *   than the cook could expect and never twice.
+ *   timers were held back (iOS in the background) sends as soon as it runs again, and never twice.
+ *   A page that wakes more than `READY_UNDO_LATE_MS` after the countdown ended sends nothing (owner,
+ *   2026-10-26): "food ready" would reach the customer long after the cook tapped. The order stays
+ *   cooking and the card shows it, so the cook taps again.
  * - The order changed underneath: while something waits, this store follows the entity store. When
  *   an order leaves the status it was tapped in (cancelled, or made ready by another device) its
  *   countdown ends and nothing is sent; the card already shows the real state. A change that keeps
@@ -37,6 +39,8 @@ export const READY_UNDO_SECONDS = 5;
  * would land on it: an undo this soon after the start is ignored.
  */
 export const READY_UNDO_GUARD_MS = 500;
+/** A countdown that ends this long before the page runs again is dropped, not sent. */
+export const READY_UNDO_LATE_MS = 60_000;
 
 export interface ReadyCountdown {
   /** The status the order was in at the tap; the move is dropped if it is not there any more. */
@@ -122,6 +126,11 @@ export function createReadyUndoStore(deps: ReadyUndoDeps): ReadyUndoStore {
     const entry = entries.get(id);
     if (!entry) return;
     const remaining = entry.endsAt - Date.now();
+    if (remaining < -READY_UNDO_LATE_MS) {
+      drop(id);
+      publish();
+      return;
+    }
     if (remaining <= 0) {
       send(id);
       return;
