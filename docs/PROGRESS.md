@@ -26,8 +26,8 @@
 - **Verification:** `pnpm --filter @sds/pos-web test` 2449 passed (kitchen 98); `pnpm --filter @sds/pos-web typecheck` 0 errors; `pnpm lint` clean.
 - **Decisions:** none new (owner answers recorded).
 - **Open issues:** repo still public until the owner changes it; docs already say private.
-- **Next:** owner makes the repo private and says whether to merge this to `main`; remaining §5 questions (4, 5, 7-13).
-- **Commit:** `7c8ebfe` (countdown), `8d3a8e7` (answers and this entry) on `claude/brave-knuth-wgwts8` (pushed, not on `main`).
+- **Next:** owner makes the repo private; remaining §5 questions (5, 7-13; 4 is answered by D-40).
+- **Commit:** `7c8ebfe` (countdown), `8d3a8e7` (answers and this entry); merged to `main` as `54fd1a1` on the owner's request and **deployed** 2026-10-26: CI run 109, Deploy web (`40320427380`) success; Deploy API (`40320427328`) success in 10 s (web-only change, nothing for the API).
 
 ## 2026-10-26 · P8 · Review fixes PAY-01, PAY-02, LINE-02, LINE-03, LINE-04, BE-02
 - **Summary:** Owner said "continue automatically". Fixed six more findings from [11-review-findings](11-review-findings.md). **PAY-01:** a Slip2Go `200200` auto-confirms only when its transfer time is at or after `notBefore` (`slip2goTransferDateCheck`; older = `date_mismatch`, missing/unreadable = `unchecked`; fail-closed). **PAY-02:** any final `unchecked` after a real call, and a failed daily account check, raise the once-a-day `slip2go.unavailable` alert (D-27 amended). **LINE-02:** LIFF names sold-out lines with a remove button, reloads the menu, keeps the cart 12 h on the phone (`cart-recovery.ts`). **LINE-03:** a monthly-limit 429 on a push marks the month capped, one `line.quota_capped` alert, pushes held until next month, replies still work; docs/04 corrected. **LINE-04:** a chat slip is accepted for an order whose claim staff rejected (existing `attachSlip`; D-27 unchanged). **BE-02:** `realtime/upserts.ts:emitRowUpserts()` publishes rows changed by retention, erasure, customer counters/profile, slip flag, customer-app sign-in/privacy and LINE follow/unfollow/privacy.
