@@ -9,6 +9,7 @@ describe('loadConfig', () => {
     expect(config.printer).toEqual({
       host: '192.168.1.50',
       port: 9100,
+      usbPath: null,
       widthDots: 576,
       timeoutMs: 12_000,
       statusCheck: false,
@@ -16,6 +17,20 @@ describe('loadConfig', () => {
     expect(config.pollIntervalMs).toBe(2_000);
     expect(config.apiBaseUrl).toBeNull();
     expect(() => requireApi(config)).toThrow(ConfigError);
+  });
+
+  it('supports USB mode via PRINTER_HOST=usb or PRINTER_USB_PATH', () => {
+    const autoUsb = loadConfig({ PRINTER_HOST: 'usb' });
+    expect(autoUsb.printer).toMatchObject({ host: 'usb', usbPath: 'auto' });
+
+    const explicitUsb = loadConfig({
+      PRINTER_USB_PATH:
+        '\\\\?\\usb#vid_1fc9&pid_2016#5d720f6e3157#{28d78fad-5a12-11d1-ae5b-0000f803a8c2}',
+    });
+    expect(explicitUsb.printer).toMatchObject({
+      host: 'usb',
+      usbPath: '\\\\?\\usb#vid_1fc9&pid_2016#5d720f6e3157#{28d78fad-5a12-11d1-ae5b-0000f803a8c2}',
+    });
   });
 
   it('reads the API settings and trims a trailing slash', () => {

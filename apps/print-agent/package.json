@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "node build.ts",
+    "setup": "node dist/agent.mjs --setup",
     "start": "node --env-file-if-exists=.env dist/agent.mjs",
     "test-print": "node --env-file-if-exists=.env dist/agent.mjs --test-print",
     "typecheck": "tsc -p tsconfig.json",

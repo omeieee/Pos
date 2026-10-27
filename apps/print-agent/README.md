@@ -2,24 +2,27 @@
 
 A small Node program on the shop's Windows 11 notebook. It asks the POS server for tickets over
 HTTPS (no inbound ports, nothing to open on the router) and sends each one to the Xprinter XP-80T
-on the LAN as raw ESC/POS on port 9100. Thai text is drawn as a picture, so tone marks and vowels
-print correctly.
+as raw ESC/POS — either directly over **USB** (`PRINTER_HOST=usb`) or over **LAN** (TCP port 9100).
+Thai text is drawn as a picture, so tone marks and vowels print correctly.
 
 ## One-time setup
 
-1. **Printer:** connect the XP-80T to the router by LAN cable. In the AIS router, give it a fixed IP
-   (DHCP reservation), for example `192.168.1.50`. Printing its self-test page (hold FEED while
-   switching on) shows its current IP.
+1. **Printer:**
+   - **USB (recommended when plugged into the notebook):** plug the XP-80T into the notebook's USB port and switch it on. Windows automatically attaches `USB Printing Support` (`usbprint.sys`) — no extra driver is needed. Keep `PRINTER_HOST=usb` in `.env`.
+   - **LAN (alternative):** connect the XP-80T to the router by LAN cable, give it a fixed IP in the router (for example `192.168.1.50`), and set `PRINTER_HOST=192.168.1.50`.
 2. **Node.js:** install Node.js 24 or newer on the notebook from nodejs.org (Windows installer).
-3. **Device token:** the owner registers a device of kind `print_agent` (API `POST /v1/auth/device`
-   with `{"name": "Print notebook", "kind": "print_agent"}`, owner sign-in plus step-up). The answer
-   holds the device token **once**; copy it then. There is no POS screen for this yet, so ask the
-   developer to issue it.
-4. **Files:** on the developer machine run `pnpm --filter @sds/print-agent build`. Copy the two
-   files `apps/print-agent/dist/agent.mjs` and `apps/print-agent/.env.example` to a folder on the
-   notebook, for example `C:\print-agent`. Rename `.env.example` to `.env` and fill in
-   `PRINT_API_URL`, `PRINT_DEVICE_TOKEN` and `PRINTER_HOST`.
-5. **Test the printer:** open PowerShell in that folder and run
+3. **Files & Device token:** on the developer machine run `pnpm --filter @sds/print-agent build`.
+   Copy `apps/print-agent/dist/agent.mjs` to a folder on the notebook (for example `C:\print-agent`,
+   or run directly from `apps/print-agent` in the repo). Then run the interactive setup:
+
+   ```
+   node agent.mjs --setup
+   ```
+
+   *(or `pnpm --filter @sds/print-agent setup` inside the repo)*. It signs in as the owner, performs
+   step-up, registers `"Print notebook"` (`kind: "print_agent"`), saves `.env` with the one-time
+   device token and `PRINTER_HOST=usb`, and optionally switches kitchen printing **on** in POS Settings.
+4. **Test the printer:** open PowerShell in that folder and run
 
    ```
    node --env-file=.env agent.mjs --test-print
@@ -32,9 +35,15 @@ print correctly.
 
 In POS Settings, switch **printing on**. Orders that reach the kitchen are then printed.
 
-## Keep it running (pick one)
+## Keep it running (Windows launcher & auto-start)
 
-### Task Scheduler (no extra software)
+`pnpm --filter @sds/print-agent build` (or `node build.ts`) also compiles a silent Windows launcher
+`dist\SaapDonSenPrintAgent.exe` (`windows\SaapDonSenPrintAgent.cs`).
+- **Single-click start:** double-click the **Saap Don Sen Print Agent** shortcut on the Desktop (or `dist\SaapDonSenPrintAgent.exe`). A named mutex ensures clicking it again never opens a duplicate instance.
+- **Auto-start on boot:** registered in the Windows Startup folder (`shell:startup\Saap Don Sen Print Agent.lnk`) and Windows Task Scheduler (`SaapDonSenPrintAgent`).
+- **Keep-alive & End Task:** if the Node worker ever crashes, `SaapDonSenPrintAgent.exe` restarts it after 3 seconds and writes to `agent.log` (rotated at 1 MB). Ending **Saap Don Sen Print Agent** (`SaapDonSenPrintAgent.exe`) in Task Manager (**End Task**) automatically closes its child `node.exe` process immediately via a Windows Job Object.
+
+### Manual Task Scheduler setup (alternative)
 
 1. Open **Task Scheduler**, **Create Task**.
 2. **General:** name `Print agent`; tick *Run whether user is logged on or not* and

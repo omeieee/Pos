@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { PrinterError, sendToPrinter } from './printer.ts';
+import { PrinterError, sendToPrinter, sendToUsbPrinter } from './printer.ts';
 import { closedPort, type FakePrinter, startFakePrinter } from './test-support.ts';
 
 const open: FakePrinter[] = [];
@@ -86,6 +86,43 @@ describe('sendToPrinter', () => {
       const started = Date.now();
       await sendToPrinter(Uint8Array.of(0x41), target(printer.port, { statusCheck: true }));
       expect(Date.now() - started).toBeLessThan(2_500);
+    });
+  });
+
+  describe('USB mode', () => {
+    it('pipes base64 bytes to the helper and resolves on exit 0', async () => {
+      const bytes = Uint8Array.of(0x1b, 0x40, 0x41);
+      await expect(
+        sendToUsbPrinter(bytes, 'auto', 3_000, {
+          file: process.execPath,
+          args: [
+            '-e',
+            `let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{if(Buffer.from(d,'base64').length===3 && process.env.SDS_USB_PATH==='auto')process.exit(0);process.exit(1);});`,
+          ],
+        }),
+      ).resolves.toBeUndefined();
+    });
+
+    it('reports PRINTER_OFFLINE when no USB printer is present or open fails', async () => {
+      expect(
+        await codeOf(
+          sendToUsbPrinter(Uint8Array.of(1), 'auto', 3_000, {
+            file: process.execPath,
+            args: ['-e', 'process.stderr.write("PRINTER_OFFLINE\\n");process.exit(10);'],
+          }),
+        ),
+      ).toBe('PRINTER_OFFLINE');
+    });
+
+    it('reports TIMEOUT when the USB helper hangs', async () => {
+      expect(
+        await codeOf(
+          sendToUsbPrinter(Uint8Array.of(1), 'auto', 300, {
+            file: process.execPath,
+            args: ['-e', 'setTimeout(()=>{}, 5000)'],
+          }),
+        ),
+      ).toBe('TIMEOUT');
     });
   });
 });

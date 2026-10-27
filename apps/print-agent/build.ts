@@ -3,11 +3,10 @@
  * so the notebook needs only Node.js and this one file.
  *   node build.ts
  */
-import { mkdirSync, rmSync } from 'node:fs';
+import { mkdirSync } from 'node:fs';
 import { build } from 'esbuild';
 
 const outdir = 'dist';
-rmSync(outdir, { recursive: true, force: true });
 mkdirSync(outdir, { recursive: true });
 
 await build({
@@ -25,3 +24,26 @@ await build({
     js: "import { createRequire as __sdsCreateRequire } from 'node:module'; const require = __sdsCreateRequire(import.meta.url);",
   },
 });
+
+if (process.platform === 'win32') {
+  const { existsSync } = await import('node:fs');
+  const { execFileSync } = await import('node:child_process');
+  const csc = 'C:\\Windows\\Microsoft.NET\\Framework64\\v4.0.30319\\csc.exe';
+  if (existsSync(csc) && existsSync('windows\\SaapDonSenPrintAgent.cs')) {
+    try {
+      execFileSync(
+        csc,
+        [
+          '/nologo',
+          '/target:winexe',
+          `/out:${outdir}\\SaapDonSenPrintAgent.exe`,
+          '/reference:System.Windows.Forms.dll',
+          'windows\\SaapDonSenPrintAgent.cs',
+        ],
+        { stdio: 'inherit' },
+      );
+    } catch {
+      // If SaapDonSenPrintAgent.exe is currently running, Windows locks the .exe file; keep the existing one.
+    }
+  }
+}

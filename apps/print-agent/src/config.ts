@@ -13,6 +13,8 @@ export interface AgentConfig {
   printer: {
     host: string;
     port: number;
+    /** USB mode: `'auto'` (first connected USB printer) or a specific device path (`\\?\usb#...`), or `null` for LAN TCP. */
+    usbPath: string | null;
     widthDots: (typeof SUPPORTED_WIDTHS)[number];
     /** Covers connecting and sending one ticket. */
     timeoutMs: number;
@@ -49,8 +51,9 @@ const schema = z.object({
     }, 'must be https (http only for localhost)')
     .optional(),
   PRINT_DEVICE_TOKEN: z.string().min(16).optional(),
-  PRINTER_HOST: z.string().min(1),
+  PRINTER_HOST: z.string().min(1).optional(),
   PRINTER_PORT: z.coerce.number().int().min(1).max(65535).default(9100),
+  PRINTER_USB_PATH: z.string().min(1).optional(),
   PRINTER_WIDTH_DOTS: z.coerce
     .number()
     .refine((value): value is (typeof SUPPORTED_WIDTHS)[number] =>
@@ -77,12 +80,18 @@ export function loadConfig(env: Record<string, string | undefined>): AgentConfig
     throw new ConfigError(`Invalid or missing settings: ${names.join(', ')}`);
   }
   const value = parsed.data;
+  const host = value.PRINTER_HOST ?? '';
+  const usbPath = value.PRINTER_USB_PATH ?? (host.toLowerCase() === 'usb' ? 'auto' : null);
+  if (!usbPath && !host) {
+    throw new ConfigError('Invalid or missing settings: PRINTER_HOST');
+  }
   return {
     apiBaseUrl: value.PRINT_API_URL ? value.PRINT_API_URL.replace(/\/+$/, '') : null,
     deviceToken: value.PRINT_DEVICE_TOKEN ?? null,
     printer: {
-      host: value.PRINTER_HOST,
+      host: usbPath ? 'usb' : host,
       port: value.PRINTER_PORT,
+      usbPath,
       widthDots: value.PRINTER_WIDTH_DOTS,
       timeoutMs: value.PRINTER_TIMEOUT_MS,
       statusCheck: value.PRINTER_STATUS_CHECK,

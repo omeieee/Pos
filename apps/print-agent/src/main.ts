@@ -2,6 +2,7 @@
  * Entry point.
  *   node --env-file=.env agent.mjs               run the agent
  *   node --env-file=.env agent.mjs --test-print  print one sample ticket (no API needed) and exit
+ *   node agent.mjs --setup                       interactive owner sign-in + device token setup
  */
 import { renderTicket, SAMPLE_TICKET } from '@sds/escpos';
 import { createAgent } from './agent.ts';
@@ -9,9 +10,14 @@ import { createPrintApi } from './api.ts';
 import { ConfigError, loadConfig, requireApi } from './config.ts';
 import { consoleLogger as log } from './log.ts';
 import { PrinterError, sendToPrinter } from './printer.ts';
+import { runInteractiveSetup } from './setup.ts';
 import { openPrintedStore } from './store.ts';
 
 async function main(): Promise<number> {
+  if (process.argv.includes('--setup')) {
+    return runInteractiveSetup();
+  }
+
   let config: ReturnType<typeof loadConfig>;
   try {
     config = loadConfig(process.env);

@@ -1,9 +1,11 @@
 /**
- * Raw ESC/POS over TCP to the printer (default port 9100): no Windows driver, nothing installed.
- * A job counts as sent when every byte has been handed to the network and our side closed
- * cleanly. A TCP success does not prove paper came out (a printer can be out of paper while its
- * network card still answers); the optional status check narrows that gap.
+ * Raw ESC/POS to the printer over LAN TCP (default port 9100) or Windows USB (`usbprint.sys`
+ * device interface): no Windows spooler driver needed.
+ * A job counts as sent when every byte has been handed to the network or USB port and closed
+ * cleanly. A TCP/USB success does not prove paper came out (a printer can be out of paper while its
+ * interface still answers); the optional status check narrows that gap on LAN.
  */
+import { spawn } from 'node:child_process';
 import { connect, type Socket } from 'node:net';
 import {
   concatBytes,
@@ -26,6 +28,7 @@ export class PrinterError extends Error {
 export interface PrinterTarget {
   host: string;
   port: number;
+  usbPath?: string | null;
   timeoutMs: number;
   statusCheck: boolean;
 }
@@ -76,8 +79,157 @@ function readProblem(socket: Socket): Promise<PrintAckErrorCode | null> {
   });
 }
 
-export const sendToPrinter: SendToPrinter = (bytes, target) =>
-  new Promise<void>((resolve, reject) => {
+const USB_PS_SCRIPT = `
+$ErrorActionPreference = 'Stop'
+Add-Type -TypeDefinition @"
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Runtime.InteropServices;
+using Microsoft.Win32.SafeHandles;
+
+public static class SdsUsbPrinter {
+    private static Guid GUID_DEVINTERFACE_USBPRINT = new Guid("28d78fad-5a12-11d1-ae5b-0000f803a8c2");
+    private const int DIGCF_PRESENT = 0x02;
+    private const int DIGCF_DEVICEINTERFACE = 0x10;
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct SP_DEVICE_INTERFACE_DATA {
+        public int cbSize;
+        public Guid InterfaceClassGuid;
+        public int Flags;
+        public IntPtr Reserved;
+    }
+
+    [DllImport("setupapi.dll", CharSet = CharSet.Auto, SetLastError = true)]
+    public static extern IntPtr SetupDiGetClassDevs(ref Guid ClassGuid, IntPtr Enumerator, IntPtr hwndParent, int Flags);
+
+    [DllImport("setupapi.dll", SetLastError = true)]
+    public static extern bool SetupDiEnumDeviceInterfaces(IntPtr DeviceInfoSet, IntPtr DeviceInfoData, ref Guid InterfaceClassGuid, int MemberIndex, ref SP_DEVICE_INTERFACE_DATA DeviceInterfaceData);
+
+    [DllImport("setupapi.dll", CharSet = CharSet.Auto, SetLastError = true)]
+    public static extern bool SetupDiGetDeviceInterfaceDetail(IntPtr DeviceInfoSet, ref SP_DEVICE_INTERFACE_DATA DeviceInterfaceData, IntPtr DeviceInterfaceDetailData, int DeviceInterfaceDetailDataSize, out int RequiredSize, IntPtr DeviceInfoData);
+
+    [DllImport("setupapi.dll", SetLastError = true)]
+    public static extern bool SetupDiDestroyDeviceInfoList(IntPtr DeviceInfoSet);
+
+    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Auto)]
+    public static extern SafeFileHandle CreateFile(string lpFileName, uint dwDesiredAccess, uint dwShareMode, IntPtr lpSecurityAttributes, uint dwCreationDisposition, uint dwFlagsAndAttributes, IntPtr hTemplateFile);
+
+    public static List<string> FindPaths() {
+        var list = new List<string>();
+        var guid = GUID_DEVINTERFACE_USBPRINT;
+        IntPtr hDevInfo = SetupDiGetClassDevs(ref guid, IntPtr.Zero, IntPtr.Zero, DIGCF_PRESENT | DIGCF_DEVICEINTERFACE);
+        if (hDevInfo == new IntPtr(-1)) return list;
+        try {
+            int index = 0;
+            var data = new SP_DEVICE_INTERFACE_DATA();
+            data.cbSize = Marshal.SizeOf(data);
+            while (SetupDiEnumDeviceInterfaces(hDevInfo, IntPtr.Zero, ref guid, index, ref data)) {
+                int reqSize = 0;
+                SetupDiGetDeviceInterfaceDetail(hDevInfo, ref data, IntPtr.Zero, 0, out reqSize, IntPtr.Zero);
+                IntPtr detail = Marshal.AllocHGlobal(reqSize);
+                try {
+                    Marshal.WriteInt32(detail, IntPtr.Size == 8 ? 8 : (4 + Marshal.SystemDefaultCharSize));
+                    if (SetupDiGetDeviceInterfaceDetail(hDevInfo, ref data, detail, reqSize, out reqSize, IntPtr.Zero)) {
+                        IntPtr pPath = new IntPtr(detail.ToInt64() + 4);
+                        list.Add(Marshal.PtrToStringAuto(pPath));
+                    }
+                } finally {
+                    Marshal.FreeHGlobal(detail);
+                }
+                index++;
+            }
+        } finally {
+            SetupDiDestroyDeviceInfoList(hDevInfo);
+        }
+        return list;
+    }
+
+    public static void WriteBytes(string path, byte[] bytes) {
+        using (SafeFileHandle handle = CreateFile(path, 0x40000000u, 3u, IntPtr.Zero, 3u, 0u, IntPtr.Zero)) {
+            if (handle.IsInvalid) {
+                int err = Marshal.GetLastWin32Error();
+                throw new IOException("CreateFile failed: " + err, err);
+            }
+            using (var stream = new FileStream(handle, FileAccess.Write)) {
+                stream.Write(bytes, 0, bytes.Length);
+                stream.Flush();
+            }
+        }
+    }
+}
+"@
+
+$b64 = [Console]::In.ReadToEnd().Trim()
+$bytes = [Convert]::FromBase64String($b64)
+$reqPath = $env:SDS_USB_PATH
+if ([string]::IsNullOrWhiteSpace($reqPath) -or $reqPath -eq 'auto') {
+    $paths = [SdsUsbPrinter]::FindPaths()
+    if ($paths.Count -eq 0) {
+        [Console]::Error.WriteLine('PRINTER_OFFLINE')
+        exit 10
+    }
+    $reqPath = $paths[0]
+}
+try {
+    [SdsUsbPrinter]::WriteBytes($reqPath, $bytes)
+} catch {
+    [Console]::Error.WriteLine('PRINTER_OFFLINE')
+    exit 10
+}
+`;
+
+export function sendToUsbPrinter(
+  bytes: Uint8Array,
+  usbPath: string,
+  timeoutMs: number,
+  runCommand?: { file: string; args: string[] },
+): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    const cmd = runCommand ?? {
+      file: 'powershell.exe',
+      args: ['-NoProfile', '-NonInteractive', '-Command', USB_PS_SCRIPT],
+    };
+    const child = spawn(cmd.file, cmd.args, {
+      env: { ...process.env, SDS_USB_PATH: usbPath },
+      stdio: ['pipe', 'ignore', 'pipe'],
+      windowsHide: true,
+    });
+    let settled = false;
+    let stderr = '';
+    const settle = (error?: PrinterError) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (error) reject(error);
+      else resolve();
+    };
+    const timer = setTimeout(() => {
+      child.kill();
+      settle(new PrinterError('TIMEOUT'));
+    }, timeoutMs);
+
+    child.stderr.on('data', (chunk: Buffer) => {
+      stderr += chunk.toString('utf8');
+    });
+    child.on('error', () => settle(new PrinterError('OTHER')));
+    child.on('close', (code) => {
+      if (code === 0) return settle();
+      if (code === 10 || stderr.includes('PRINTER_OFFLINE'))
+        return settle(new PrinterError('PRINTER_OFFLINE'));
+      settle(new PrinterError('OTHER'));
+    });
+    child.stdin.on('error', () => {});
+    child.stdin.end(Buffer.from(bytes).toString('base64'));
+  });
+}
+
+export const sendToPrinter: SendToPrinter = (bytes, target) => {
+  if (target.usbPath) {
+    return sendToUsbPrinter(bytes, target.usbPath, target.timeoutMs);
+  }
+  return new Promise<void>((resolve, reject) => {
     const socket = connect({ host: target.host, port: target.port });
     socket.setNoDelay(true);
     let settled = false;
@@ -113,3 +265,4 @@ export const sendToPrinter: SendToPrinter = (bytes, target) =>
       })();
     });
   });
+};
