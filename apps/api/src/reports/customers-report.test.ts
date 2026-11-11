@@ -21,7 +21,9 @@ afterAll(async () => {
 
 const uid = () => crypto.randomUUID();
 const DAY = 86_400_000;
-const ago = (days: number) => new Date(Date.now() - days * DAY);
+// From the harness clock, not the wall clock: the report's "now" is `h.clock`, and mixing the two
+// made the 61-day-old customer drift below the lapse threshold as real time passed it (2026-11-01).
+const ago = (days: number) => new Date(h.clock.now().getTime() - days * DAY);
 
 const get = (token: string | undefined) =>
   h.app.inject({

@@ -47,7 +47,8 @@ describe('formatDate', () => {
     const d = new Date('2026-09-28T17:30:00Z');
     expect(formatDate(d, 'th')).toMatch(/^29 /);
     expect(formatDate(d, 'en')).toMatch(/^29 /);
-    expect(formatDate(d, 'th', 'time')).toBe('00:30');
+    // ICU 79 (Node 24.22/26) adds the Thai o'clock suffix; older ICU data dropped it.
+    expect(formatDate(d, 'th', 'time')).toBe('00:30 น.');
     expect(formatDate(d, 'en', 'dateTime')).toMatch(/00:30/);
   });
 
