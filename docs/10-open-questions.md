@@ -307,3 +307,9 @@ Answers to the five questions asked after the second review-fix deploy (`11-revi
 - **Co-pay wording (LINE-01, §5.3):** **no** new wording; the current text stays.
 - **Sentry rule on every alert (OPS-02, §5.6):** **no**; the rule stays on "new issue".
 - **Late kitchen countdown (UX-02 follow-up):** as Claude suggested: a "ทำเสร็จ" countdown that wakes more than 60 s after it ended is dropped, not sent; the order stays cooking (`ready-undo-store.ts` `READY_UNDO_LATE_MS`).
+
+## Security pass · asked and answered 2026-11-11
+- **Question:** May the next session apply the three header fixes — add `https://profile.line-scdn.net` to the CSP `img-src` in `apps/pos-web/public/_headers`, send HSTS from the staff app, and add a `Permissions-Policy` — and read the VM's Caddyfile over SSH (read-only, no change) to settle how client IPs reach the rate limiter? Should the 22 dev-only dependency advisories be bumped in the same pass?
+- **Why it matters:** the CSP fix needs a rebuild and a push to `main`, which auto-deploys; the Caddyfile decides whether the per-IP rate limits are real or shared/spoofable.
+- **Answer (2026-11-11):** **yes to all three header fixes** and the read-only Caddyfile look; **push to `main` after a green gate** (lint, build, tests), then check `/healthz` for the new sha. The **22 dev-only advisories wait for a separate task.** Also answered: **generate the VAPID keys now** so the real-phone alert check can happen; the **P8 printer/notebook checks have no fixed date** and must not block other work (they stay open).
+- **Outcome:** headers fixed and tested; Caddyfile settled from the deployed artefact (no SSH path from the Mac) and needs no change — see "2026-11-11 · Security · Header fixes, Caddyfile check and VAPID keys" in `PROGRESS.md`.
