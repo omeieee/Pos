@@ -4,10 +4,16 @@
 # .github/workflows/deploy-web.yml after the build, and the deploy fails if it
 # is still there. Add anything new the app loads (fonts, CDNs, Sentry ingest,
 # push services) to the matching directive below, or the browser will block it.
+# Pages always serves this app over HTTPS; HSTS keeps every device on it once it has seen one page.
+# Nothing in the staff app asks for the permissions below, so they are disabled outright.
+# Wake lock (kitchen display), clipboard-write and fullscreen stay at their default "self".
+# profile.line-scdn.net serves the LINE avatars on kitchen tickets and the payment pop-up.
 /*
   X-Content-Type-Options: nosniff
   Referrer-Policy: no-referrer
-  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://__API_HOST__; font-src 'self'; connect-src 'self' https://__API_HOST__ wss://__API_HOST__; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=(), serial=(), bluetooth=(), hid=(), midi=(), display-capture=()
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://__API_HOST__ https://profile.line-scdn.net; font-src 'self'; connect-src 'self' https://__API_HOST__ wss://__API_HOST__; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
 # The service worker file must always be revalidated, or a new version is found late.
 /sw.js
   Cache-Control: no-cache
