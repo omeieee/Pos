@@ -1,2 +1,4 @@
 - [Local lint tools](reference_local_lint_tools.md) — no docker/shellcheck/actionlint locally; download to scratchpad; compose `config`, caddy, chrome CSP test recipes
 - [GitHub plan limits](project_github_plan_limits.md) — private repo, likely Free: no env secrets/branch protection; owner steps must be plan-conditional
+- [Mac mini setup](machine-setup-macos.md) — the repo moved to an external SSD: Node 24/26 + pnpm 12.6.0, ICU 79 Thai-time trap, harness-clock test trap, own GitHub SSH key (id_ed25519_github) since 2026-11-10
+- [Local-only skills](local-only-skills.md) — only `.claude/skills/checkpoint` is in git; the other 62 folders, settings.local.json and ~/.dsh state do not travel, and browser skills need their host

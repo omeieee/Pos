@@ -37,3 +37,6 @@ skills-lock.json
 .claude/launch.json
 Sample_image/
 TargetFile.tsx
+
+# macOS
+.DS_Store
